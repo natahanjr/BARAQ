@@ -1,0 +1,79 @@
+{
+  "framework": "MITRE ATT&CK",
+  "version": "v15.1",
+  "note": "Curated Enterprise technique subset used by SentinelSOC detection rules.",
+  "techniques": [
+    {
+      "id": "T1110",
+      "name": "Brute Force",
+      "tactic": "Credential Access",
+      "description": "Adversaries may use brute-force techniques to gain access to accounts when passwords are unknown or when password hashes are obtained. SentinelSOC flags repeated authentication failures from the same account or source within a short window.",
+      "data_sources": "Windows Security Event Log 4625, 4624; Active Directory logon events",
+      "detection": "Monitor for many failed logons (4625) to the same account within a short time interval, especially from the same source IP. Watch for outlier volume of login failures.",
+      "recommendation": "Block the offending source IP, enforce account lockout policies, enable multi-factor authentication, and review the affected account for further compromise."
+    },
+    {
+      "id": "T1059.001",
+      "name": "PowerShell",
+      "tactic": "Execution",
+      "description": "Adversaries may abuse PowerShell to execute arbitrary commands. SentinelSOC monitors script block logging (Event 4104) for encoded commands, download-cradles and hidden execution flags.",
+      "data_sources": "PowerShell Operational Event 4104 (script block logging), 4103 (module logging), Sysmon Event 1",
+      "detection": "Enable PowerShell script block and module logging. Flag -EncodedCommand, Invoke-Expression, IEX, Net.WebClient, download strings and hidden/NoProfile execution.",
+      "recommendation": "Investigate the executed command, inspect the parent process, isolate the host, and restrict PowerShell to Constrained Language Mode with signed execution policy."
+    },
+    {
+      "id": "T1068",
+      "name": "Exploitation for Privilege Escalation",
+      "tactic": "Privilege Escalation",
+      "description": "Adversaries may exploit a vulnerability to gain higher privileges. SentinelSOC flags creation of new accounts and membership changes that elevate privileges to administrative groups (Events 4720, 4732, 4728).",
+      "data_sources": "Windows Security Event Log 4720, 4728, 4732, 4672",
+      "detection": "Monitor account creation (4720) and privileged group membership additions (4732/4728) for unexpected accounts or out-of-band changes.",
+      "recommendation": "Disable or remove the unauthorized account, verify the change request, reset passwords, and audit administrative membership regularly."
+    },
+    {
+      "id": "T1547",
+      "name": "Boot or Logon Autostart Execution",
+      "tactic": "Persistence",
+      "description": "Adversaries may configure system settings to automatically run programs at boot or logon, maintaining persistence. SentinelSOC monitors new services (7045), scheduled tasks (4698) and Run registry keys.",
+      "data_sources": "System Event Log 7045; Security Event Log 4698; Sysmon Event 1, 12, 13",
+      "detection": "Watch for new services or scheduled tasks with suspicious binaries in temp/appdata folders, or registry Run-key writes by non-approved processes.",
+      "recommendation": "Remove the persistence entry, terminate the malicious process, restore from clean state and harden startup locations with allow-lists."
+    },
+    {
+      "id": "T1046",
+      "name": "Network Service Discovery",
+      "tactic": "Discovery",
+      "description": "Adversaries may scan for network services to map the environment. SentinelSOC detects port-scanning behaviour such as many distinct ports probed from a single source in a short window.",
+      "data_sources": "Netflow; endpoint connection telemetry (Sysmon Event 3, psutil connection table)",
+      "detection": "Monitor outbound connection attempts: an elevated number of distinct remote ports / failed (SYN) states to one or many hosts from a single process or host.",
+      "recommendation": "Block the scanning source at the firewall, inspect the initiating process, and hunt for follow-on activity."
+    },
+    {
+      "id": "T1136.001",
+      "name": "Local Account",
+      "tactic": "Persistence",
+      "description": "Adversaries may create a local account to maintain access. Local accounts may persist across reboots and grant elevated privileges.",
+      "data_sources": "Windows Security Event Log 4720, 4722",
+      "detection": "Monitor for new local account creation, especially accounts not matching the organization's naming policy.",
+      "recommendation": "Delete the rogue account and review the creation source."
+    },
+    {
+      "id": "T1078",
+      "name": "Valid Accounts",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries may obtain and abuse credentials of existing accounts to gain initial access, persistence or evasion.",
+      "data_sources": "Windows Security Event Log 4624, 4625",
+      "detection": "Monitor unusual logon patterns: off-hours logons, new accounts logging in, or accounts with never-reset passwords.",
+      "recommendation": "Enforce MFA, reset the credential, and review sessions for lateral movement."
+    },
+    {
+      "id": "T1059",
+      "name": "Command and Scripting Interpreter",
+      "tactic": "Execution",
+      "description": "Adversaries may abuse command and script interpreters (cmd, PowerShell, WMI, script hosts) to execute code.",
+      "data_sources": "Process creation telemetry; script block logs",
+      "detection": "Monitor suspicious parent-child process chains involving scripting interpreters.",
+      "recommendation": "Restrict scripting interpreters, validate the invocation, and investigate the parent process."
+    }
+  ]
+}
