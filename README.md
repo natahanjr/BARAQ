@@ -55,7 +55,7 @@ SentinelSOC/
 
 ## Requirements
 
-- **Windows 10/11** (target: Windows 11, Intel i5, 12 GB RAM, any SSD)
+- **Windows 10/11** (target: Windows 11, Intel i5, minimum 8GB RAM, any SSD)
 - **Python 3.11+** (tested with 3.14)
 - **Node.js 18+** (tested with 24) — only required for the dashboard
 - Optional: `pywin32` for full Windows Event Log access (installed automatically on Windows)
