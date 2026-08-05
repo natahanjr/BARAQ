@@ -15,8 +15,16 @@ if _TEST_DB.exists():
         _TEST_DB.unlink()
     except PermissionError:  # another process may still hold a stale handle
         pass
+_TEST_ML_META = Path(tempfile.gettempdir()) / "sentinel_model_meta.json"
+if _TEST_ML_META.exists():
+    try:
+        _TEST_ML_META.unlink()
+    except PermissionError:
+        pass
+
 os.environ["SENTINEL_DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"
 os.environ["SENTINEL_INTERVAL"] = "60"
+os.environ["SENTINEL_ML_META_FILE"] = _TEST_ML_META.as_posix()
 # Deterministic test runs: never spawn the background scheduler thread and use
 # the fully-local assistant engine (no dependence on a live AI endpoint).
 os.environ["SENTINEL_NO_SCHEDULER"] = "1"

@@ -15,6 +15,7 @@ from backend.database.models import Alert, AlertEventLink, NormalizedEvent
 from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
 from backend.ml.anomaly import event_feature_vector, get_detector
 from backend.risk.scoring import hybrid_risk, risk_descriptor, risk_level
+from backend.config import ALERT_ESCALATE_AFTER, SEVERITY_LADDER
 
 logger = logging.getLogger("sentinel.detection.alerting")
 
@@ -132,11 +133,17 @@ class AlertingService:
             if alert:
                 alert.evidence = result.evidence
                 alert.event_count = max(alert.event_count or 0, len(result.event_ids))
+                alert.trigger_count = (alert.trigger_count or 1) + 1
+                escalated = self._escalate(alert, result)
                 alert.risk_score = risk_score
                 alert.risk_level = risk_level_value
                 alert.detection_method = method
                 alert.updated_at = datetime.now(timezone.utc)
-                logger.info("Updated existing alert #%s", alert.id)
+                logger.info(
+                    "Updated existing alert #%s (trigger #%s%s)",
+                    alert.id, alert.trigger_count,
+                    " -> severity %s" % escalated if escalated else "",
+                )
             else:
                 alert = Alert(
                     name=result.name,
@@ -165,9 +172,39 @@ class AlertingService:
                     risk_descriptor(risk_level_value),
                 )
 
+            if alert in created:
+                try:
+                    from backend.notify import notify_alert
+
+                    notify_alert(alert.to_dict())
+                except Exception:  # noqa: BLE001
+                    pass
+
             link_events(alert.id, result.event_ids)
         self.session.commit()
         return created
+
+    @staticmethod
+    def _escalate(alert: Alert, result) -> str:
+        """Escalate severity after repeated re-triggers of the same alert.
+
+        Repeat detections indicate the adversary kept trying (or the
+        containment failed); escalation surfaces that in the severity
+        distribution and the security-score penalty.
+        """
+        if (alert.trigger_count or 1) < ALERT_ESCALATE_AFTER:
+            return ""
+        try:
+            current = SEVERITY_LADDER.index(alert.severity)
+        except ValueError:
+            return ""
+        if current >= len(SEVERITY_LADDER) - 1:
+            return ""
+        new_severity = SEVERITY_LADDER[current + 1]
+        alert.severity = new_severity
+        alert.score = SEVERITY_SCORES.get(new_severity, alert.score)
+        alert.confidence = max(alert.confidence or 0.0, result.confidence)
+        return new_severity
 
     @staticmethod
     def _signature_matches(alert: Alert, result, key: str) -> bool:

@@ -86,6 +86,24 @@ PORT_SCAN_WINDOW_SECONDS = 120
 HONEYPOT_ACCOUNT_PREFIXES = ("administrator", "admin", "sa", "root")
 
 # --------------------------------------------------------------------------
+# Alert aggregation / escalation
+# --------------------------------------------------------------------------
+#: How many re-triggers of the same open alert escalate its severity.
+ALERT_ESCALATE_AFTER = 5
+#: Severity ladder used for repeat-trigger escalation.
+SEVERITY_LADDER = ("low", "medium", "high", "critical")
+
+# --------------------------------------------------------------------------
+# ML lifecycle (retraining / staleness)
+# --------------------------------------------------------------------------
+ML_RETRAIN_AFTER_HOURS = 24          # model older than this is stale
+ML_RETRAIN_MIN_NEW_EVENTS = 200      # ...or more new events since training
+ML_META_FILE = Path(os.environ.get(
+    "SENTINEL_ML_META_FILE",
+    (PROJECT_ROOT / "database" / "model_meta.json").as_posix(),
+))
+
+# --------------------------------------------------------------------------
 # ML tuning
 # --------------------------------------------------------------------------
 ML_CONTAMINATION = 0.05
@@ -141,6 +159,20 @@ API_KEYS: dict[str, str] = {**_DEFAULT_API_KEYS, **{str(k): str(v) for k, v in _
 # --------------------------------------------------------------------------
 ORGANIZATION_NAME = "SentinelSOC Prototype Lab"
 ANALYST_NAME = "SentinelSOC Analyst"
+
+# --------------------------------------------------------------------------
+# Notifications (opt-in)
+# --------------------------------------------------------------------------
+# Generic webhook URL (JSON POST) and/or SMTP relay. Leave empty to disable.
+# NOTIFY_MIN_SEVERITY: low | medium | high | critical
+WEBHOOK_URL = os.environ.get("SENTINEL_WEBHOOK_URL", "")
+SMTP_HOST = os.environ.get("SENTINEL_SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("SENTINEL_SMTP_PORT", "587"))
+SMTP_USERNAME = os.environ.get("SENTINEL_SMTP_USERNAME", "")
+SMTP_PASSWORD = os.environ.get("SENTINEL_SMTP_PASSWORD", "")
+SMTP_FROM = os.environ.get("SENTINEL_SMTP_FROM", "sentinel@localhost")
+SMTP_TO = os.environ.get("SENTINEL_SMTP_TO", "")
+NOTIFY_MIN_SEVERITY = os.environ.get("SENTINEL_NOTIFY_MIN_SEVERITY", "high")
 
 # --------------------------------------------------------------------------
 # AI assistant

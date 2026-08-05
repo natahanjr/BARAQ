@@ -11,6 +11,7 @@ from backend.collectors.malware import MalwareFileCollector
 from backend.collectors.network import NetworkCollector
 from backend.collectors.powershell import PowerShellCollector
 from backend.collectors.process import ProcessCollector
+from backend.collectors.sysmon import SysmonCollector
 from backend.collectors.usb import UsbCollector
 
 logger = logging.getLogger("sentinel.collectors")
@@ -25,6 +26,7 @@ class CollectorManager:
             PowerShellCollector(),
             ProcessCollector(),
             NetworkCollector(),
+            SysmonCollector(),
             DnsHttpCollector(),
             EmailCollector(),
             UsbCollector(),

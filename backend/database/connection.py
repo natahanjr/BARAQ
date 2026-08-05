@@ -20,6 +20,7 @@ _ADDITIVE_MIGRATIONS = {
         ("detection_method", "VARCHAR(16) DEFAULT 'rule'"),
         ("risk_score", "REAL"),
         ("risk_level", "VARCHAR(16) DEFAULT 'MEDIUM'"),
+        ("trigger_count", "INTEGER DEFAULT 1"),
     ],
     "network_connections": [
         ("bytes_sent", "INTEGER DEFAULT 0"),

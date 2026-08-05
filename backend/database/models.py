@@ -88,6 +88,7 @@ class Alert(Base):
     evidence: Mapped[str] = mapped_column(Text, default="")
     rule: Mapped[str] = mapped_column(String(64), index=True, default="")
     event_count: Mapped[int] = mapped_column(Integer, default=0)
+    trigger_count: Mapped[int] = mapped_column(Integer, default=1)
     detection_method: Mapped[str] = mapped_column(String(16), index=True, default="rule")
     risk_score: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     risk_level: Mapped[str] = mapped_column(String(16), index=True, default="MEDIUM")
@@ -123,6 +124,7 @@ class Alert(Base):
             "evidence": self.evidence,
             "rule": self.rule,
             "event_count": self.event_count,
+            "trigger_count": self.trigger_count,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         if include_events:

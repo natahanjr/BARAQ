@@ -29,7 +29,7 @@
 
 ### 1.2 Limited Rule Coverage
 
-**Limitation:** Only 7 detection rules implemented (5 original + 2 new lateral movement/data staging).
+**Limitation:** 12 detection rules implemented (7 core + lateral movement, data staging, malware file, email phishing, DNS/HTTP exfiltration, USB).
 
 **Attack Techniques Not Covered:**
 - **Credential Access (T1110 variants):** Only covers brute force; missing:

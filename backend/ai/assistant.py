@@ -41,6 +41,10 @@ class SecurityAssistant:
         self._vectorizer = None
         self._intent_matrix = None
         self._index_built = False
+        self._rag_vectorizer = None
+        self._rag_matrix = None
+        self._rag_docs: list[Alert] = []
+        self._rag_indexed = 0
 
     # ------------------------------------------------------------------
     # Knowledge retrieval
@@ -118,16 +122,62 @@ class SecurityAssistant:
         return None
 
     # ------------------------------------------------------------------
-    # Response generation
+    # RAG: retrieval over resolved past incidents
+    # ------------------------------------------------------------------
+    def similar_resolved_alerts(self, query: str, limit: int = 2) -> list[Alert]:
+        """Return past *resolved* alerts most similar to ``query``.
+
+        Lightweight RAG: a TF-IDF retrieval corpus is built lazily over
+        closed alerts (their name + evidence + recommendation), so the
+        assistant can ground answers in how similar incidents were handled.
+        """
+        if not HAS_SKLEARN or not query.strip():
+            return []
+        rows = list(
+            self.session.scalars(
+                select(Alert).where(Alert.status != "open").order_by(Alert.updated_at.desc())
+            )
+        )
+        if not rows:
+            return []
+        if self._rag_docs != rows or len(rows) != self._rag_indexed:
+            corpus = [
+                str(a.name or "") + " " + str(a.evidence or "")[:500]
+                + " " + str(a.recommendation or "")[:300]
+                for a in rows
+            ]
+            vec = TfidfVectorizer(lowercase=True, stop_words="english", ngram_range=(1, 2))
+            self._rag_matrix = vec.fit_transform(corpus)
+            self._rag_vectorizer = vec
+            self._rag_docs = rows
+            self._rag_indexed = len(rows)
+        try:
+            q = self._rag_vectorizer.transform([query])
+            scores = cosine_similarity(q, self._rag_matrix)[0]
+        except Exception:  # noqa: BLE001
+            return []
+        best = scores.argsort()[::-1][:limit]
+        return [rows[int(i)] for i in best if scores[int(i)] > 0.15]
+
     # ------------------------------------------------------------------
     def _alert_explanation(self, alert: Alert) -> str:
-        return (
+        base = (
             f"Alert #{alert.id} - {alert.name} ({alert.severity} severity, "
             f"MITRE {alert.mitre_id} / {alert.mitre_tactic}).\n"
             f"What it means: {alert.description}\n"
             f"Evidence: {alert.evidence}\n"
             f"Recommended response: {alert.recommendation}"
         )
+        related = self.similar_resolved_alerts(alert.name)
+        if not related:
+            return base
+        lines = [base, "", "Similar past incidents (resolved):"]
+        for r in related[:2]:
+            lines.append(
+                f"- #{r.id} {r.name} [{r.severity}]: {r.evidence[:160]} "
+                f"-> {r.recommendation[:160]}"
+            )
+        return "\n".join(lines)
 
     def _respond(self, intent: str, message: str) -> str:
         alert = self._find_alert(message)

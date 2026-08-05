@@ -10,18 +10,20 @@ A complete, research-oriented SOC framework that runs entirely on a single Windo
 
 | Layer | Capabilities |
 |---|---|
-| **Collection** | Windows security event log (4624, 4625, 4720, 4726, 4732, 4740, 4672...), running/new processes with parent-child relationships, active TCP connections + listening ports, PowerShell operational log, plus a realistic attack simulator |
+| **Collection** | Windows security event log (4624, 4625, 4720, 4726, 4732, 4740, 4672...), running/new processes with parent-child relationships, active TCP connections + listening ports, PowerShell operational log, **Sysmon (process tree E1 / network E3 / file events E11-E23)**, plus a realistic attack simulator |
 | **Processing** | Event normalization (Event ID / Category / User / Risk / Timestamp / Host) with **numeric risk scoring (0-100)** per event |
-| **Rule-Based Detection** | 7 rules — Brute Force (T1110), Suspicious PowerShell (T1059.001), Privilege Escalation (T1068), Persistence (T1547), Network Reconnaissance (T1046), **Lateral Movement (T1021)**, **Data Staging (T1074)** |
-| **ML Detection** | Per-behavior anomaly analysis (**login / process / network**) with Isolation Forest + Random Forest / XGBoost supervised classifier |
+| **Rule-Based Detection** | 12 rules — Brute Force (T1110), Suspicious PowerShell (T1059.001), Privilege Escalation (T1068), Persistence (T1547), Network Reconnaissance (T1046), Lateral Movement (T1021), Data Staging (T1074), Malware File, Email Phishing, DNS/HTTP Exfiltration, USB Device, **Multi-stage Kill-Chain Correlation (T1071)** |
+| **Alert Aggregation** | Rule-level deduplication (one open alert per signature) with **repeat-trigger severity escalation** (`trigger_count`, escalating LOW→MEDIUM→HIGH→CRITICAL) |
+| **ML Detection** | Per-behavior anomaly analysis (**login / process / network**) with Isolation Forest + Random Forest / XGBoost supervised classifier, **persisted model metadata and a "staleness" signal** with automatic scheduler retraining |
 | **Hybrid Risk Scoring** | Alert risk = **60% rule score + 40% ML anomaly score** → 0-100 score + LOW/MEDIUM/HIGH/CRITICAL level |
 | **MITRE ATT&CK** | Every alert enriched with technique ID, name, tactic, confidence and recommendation |
 | **Dashboard** | Security score, current risk level, system status, event/alert timeline, threat categories, severity distribution, attack statistics, user behavior, detection method breakdown, top targets, live alerts |
 | **Investigation** | Attack-chain reconstruction (kill chain steps), incident timeline, related events ±30 min, network context, AI explanations |
-| **AI Assistant** | Local rule/TF-IDF engine — explains alerts, summarizes incidents, recommends remediation, keeps chat history |
+| **AI Assistant** | Local rule/TF-IDF engine — explains alerts, summarizes incidents, recommends remediation, keeps chat history, and **grounds answers in similar resolved incidents (RAG)** |
+| **Real-Time Alerting** | Optional **webhook + SMTP notifications** on high/critical alerts (opt-in via config) |
 | **Reporting** | Executive & technical reports exported as **PDF, HTML, JSON, CSV** |
-| **Evaluation Framework** | Runs all attack scenarios + baseline in an isolated DB; computes **accuracy, precision, recall, F1-score, false-positive rate, detection time** |
-| **API** | Full FastAPI REST API with OpenAPI docs at `/docs` |
+| **Evaluation Framework** | Runs all attack scenarios + baseline in an isolated DB; computes **accuracy, precision, recall, F1-score, false-positive rate, detection time**; **hold-out evaluation** measures detection on attack scenarios the ML model never trained on with a **real-host-telemetry negative baseline** |
+| **API** | Full FastAPI REST API with OpenAPI docs at `/docs` and **API-key RBAC** (analyst/admin) |
 
 ---
 
@@ -155,6 +157,10 @@ curl.exe -X POST http://127.0.0.1:8000/api/system/ml/analyze
 # accuracy, precision, recall, F1-score, false-positive rate, detection time
 curl.exe -X POST http://127.0.0.1:8000/api/evaluation/run
 curl.exe http://127.0.0.1:8000/api/evaluation/latest
+
+# External-validity run: hold-out scenarios the ML model never trained on,
+# with real host telemetry as the negative baseline (true negatives):
+curl.exe -X POST "http://127.0.0.1:8000/api/evaluation/holdout?use_real_baseline=true"
 ```
 
 The same workflow is available in the dashboard under **Evaluation**.
@@ -168,7 +174,7 @@ The same workflow is available in the dashboard under **Evaluation**.
 python -m pytest tests -v
 ```
 
-Result: **48 tests passed** (collectors, detection rules, pipeline, API, hybrid risk scoring, evaluation framework).
+Result: **97 tests passed** (collectors, detection rules, pipeline, API + auth/RBAC, hybrid risk scoring, evaluation framework, hold-out evaluation, alert aggregation/escalation, ML lifecycle, assistant RAG).
 
 ---
 
@@ -183,9 +189,11 @@ All tunable parameters live in `backend/config.py`:
 | `PORT_SCAN_DISTINCT_PORTS` | 20 | Distinct probed ports → alert |
 | `DETECTION_WINDOW_MINUTES` | 10 | Detection correlation window |
 | `ML_CONTAMINATION` | 0.05 | Isolation Forest contamination |
+| `ML_RETRAIN_AFTER_HOURS` | 24 | Model age after which the scheduler auto-retrains |
+| `ALERT_ESCALATE_AFTER` | 5 | Repeat triggers before severity escalates one level |
 | `SECURITY_SCORE_PENALTY` | critical 14 / high 8 / medium 4 / low 1 | Score deduction per open alert |
 
-Environment overrides: `SENTINEL_INTERVAL`, `SENTINEL_DATABASE_URL`, `SENTINEL_AI_API_URL`, `SENTINEL_AI_API_KEY`, `SENTINEL_AI_MODEL`.
+Environment overrides: `SENTINEL_INTERVAL`, `SENTINEL_DATABASE_URL`, `SENTINEL_AI_API_URL`, `SENTINEL_AI_API_KEY`, `SENTINEL_AI_MODEL`, `SENTINEL_AUTH_ENABLED`, `SENTINEL_API_KEYS`, `SENTINEL_WEBHOOK_URL`, `SENTINEL_SMTP_HOST`, `SENTINEL_SMTP_USERNAME`, `SENTINEL_SMTP_PASSWORD`, `SENTINEL_SMTP_TO`.
 
 ### Authentication & RBAC
 
@@ -240,6 +248,8 @@ See `documentation/` for:
 - `architecture.md` — system architecture, data flow, and ASCII diagram
 - `test_results.md` — test suite results and coverage summary
 - `security_evaluation_report.md` — detection metrics (accuracy/precision/recall/F1/FPR/detection time)
+- `red_team_validation.md` — realistic live-attack validation incl. documented false negatives
+- `performance_benchmarks.md` — throughput/latency/memory on the target laptop
 
 ---
 

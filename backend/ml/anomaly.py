@@ -15,13 +15,22 @@ Trained on data present in the local database; no data leaves the machine.
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
 from sqlalchemy import func, select
 
-from backend.config import ML_CONTAMINATION, ML_RANDOM_STATE, ML_TRAIN_MIN_SAMPLES
+from backend.config import (
+    ML_CONTAMINATION,
+    ML_META_FILE,
+    ML_RANDOM_STATE,
+    ML_RETRAIN_AFTER_HOURS,
+    ML_RETRAIN_MIN_NEW_EVENTS,
+    ML_TRAIN_MIN_SAMPLES,
+)
 from backend.database.connection import SessionLocal
 from backend.database.models import NetworkConnection, NormalizedEvent, ProcessRecord
 
@@ -231,8 +240,81 @@ class MLAnomalyDetector:
         self.supervised_name = "none"
         self.trained_at: str | None = None
         self.n_samples = 0
+        self.events_at_train = 0
         self.encoders: dict[str, LabelEncoder] = {}
+        self._load_meta()
 
+    # ------------------------------------------------------------------
+    # Metadata persistence (model lifecycle / staleness)
+    # ------------------------------------------------------------------
+    def _meta_path(self):
+        return ML_META_FILE
+
+    def _load_meta(self) -> None:
+        """Restore the last training snapshot so staleness survives restarts."""
+        try:
+            path = self._meta_path()
+            if not path or not os.path.exists(path):
+                return
+            with open(path, encoding="utf-8") as fh:
+                meta = json.load(fh)
+            self.trained_at = meta.get("trained_at")
+            self.n_samples = int(meta.get("n_samples", 0))
+            self.events_at_train = int(meta.get("events_at_train", 0))
+            self.supervised_name = meta.get("supervised", "none")
+        except (OSError, ValueError, TypeError):
+            logger.warning("Could not read ML metadata at %s", ML_META_FILE)
+
+    def _save_meta(self) -> None:
+        try:
+            path = self._meta_path()
+            if not path:
+                return
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(
+                    {
+                        "trained_at": self.trained_at,
+                        "n_samples": self.n_samples,
+                        "events_at_train": self.events_at_train,
+                        "supervised": self.supervised_name,
+                    },
+                    fh,
+                    indent=2,
+                )
+        except OSError:
+            logger.warning("Could not persist ML metadata to %s", ML_META_FILE)
+
+    def _events_since_train(self, session) -> int:
+        if not self.trained_at:
+            return 0
+        try:
+            since = datetime.fromisoformat(self.trained_at)
+        except ValueError:
+            return 0
+        return int(
+            session.scalar(
+                select(func.count(NormalizedEvent.id)).where(NormalizedEvent.timestamp > since)
+            ) or 0
+        )
+
+    def is_stale(self, session=None) -> tuple[bool, str]:
+        """True when the model should be retrained (age or data-volume drift)."""
+        if not self.trained_at:
+            return True, "never-trained"
+        try:
+            age = datetime.now(timezone.utc) - datetime.fromisoformat(self.trained_at)
+        except ValueError:
+            return True, "unparseable-trained-at"
+        if age > timedelta(hours=ML_RETRAIN_AFTER_HOURS):
+            return True, f"trained {age.days}d {age.seconds // 3600}h ago (> {ML_RETRAIN_AFTER_HOURS}h)"
+        if session is not None:
+            new_events = self._events_since_train(session)
+            if new_events >= ML_RETRAIN_MIN_NEW_EVENTS:
+                return True, f"{new_events} new events since training (>= {ML_RETRAIN_MIN_NEW_EVENTS})"
+        return False, "fresh"
+
+    # ------------------------------------------------------------------
     @property
     def is_ready(self) -> bool:
         return HAS_SKLEARN and bool(self.models)
@@ -295,6 +377,10 @@ class MLAnomalyDetector:
                 self.supervised_name = "none"
 
             self.trained_at = datetime.now(timezone.utc).isoformat()
+            self.events_at_train = int(
+                session.scalar(select(func.count(NormalizedEvent.id))) or 0
+            )
+            self._save_meta()
             logger.info(
                 "ML models trained on %d samples; streams=%s supervised=%s",
                 self.n_samples, trained_streams, self.supervised_name,
@@ -504,15 +590,19 @@ class MLAnomalyDetector:
         proba = self.supervised.predict_proba(arr)[0]
         return float(proba[1] if len(proba) > 1 else 0.0)
 
-    def status(self) -> dict:
+    def status(self, session=None) -> dict:
+        stale, reason = self.is_stale(session)
         return {
             "has_sklearn": HAS_SKLEARN,
             "has_xgboost": HAS_XGBOOST,
             "ready": self.is_ready,
             "trained_at": self.trained_at,
             "samples": self.n_samples,
+            "events_at_train": self.events_at_train,
             "streams": list(self.models.keys()),
             "supervised": self.supervised_name,
+            "stale": stale,
+            "staleness_reason": reason,
         }
 
 

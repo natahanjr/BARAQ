@@ -63,6 +63,11 @@ def _scheduler_loop(interval_seconds: int = 15):
                     dashboard.snapshot(db)
                 if counter % 10 == 0 and get_detector().is_ready:
                     get_detector().analyze_events(db, hours=1)
+                if counter % 40 == 0:
+                    stale, reason = get_detector().is_stale(db)
+                    if stale and reason != "never-trained":
+                        logger.info("ML model stale (%s); retraining", reason)
+                        get_detector().train(db, hours=24)
             finally:
                 db.close()
         except Exception as exc:  # noqa: BLE001
