@@ -86,6 +86,7 @@ function KpiRow({ label, value, color }) {
 export default function System() {
   const [status, setStatus] = useState(null);
   const [ml, setMl] = useState(null);
+  const [endpoints, setEndpoints] = useState([]);
   const [busy, setBusy] = useState("");
   const [result, setResult] = useState(null);
   const [message, setMessage] = useState("");
@@ -94,6 +95,7 @@ export default function System() {
   const refresh = () => {
     api.systemStatus().then(setStatus).catch(() => {});
     api.mlStatus().then(setMl).catch(() => {});
+    api.endpoints().then((r) => setEndpoints(r.items || [])).catch(() => {});
   };
   useEffect(() => {
     refresh();
@@ -237,6 +239,66 @@ export default function System() {
           </div>
         </Card>
       </div>
+
+      {/* Connected endpoints */}
+      <Card>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h3 className="text-base font-semibold text-white">Connected Endpoints</h3>
+          <span className="text-[11px] text-slate-500">
+            {endpoints.length === 0 ? "No agents reporting yet" : `${endpoints.length} agent${endpoints.length === 1 ? "" : "s"}`}
+          </span>
+        </div>
+        {endpoints.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-slate-700/60 bg-slate-900/40 px-4 py-6 text-center text-xs text-slate-500">
+            Remote agents ingest via <span className="font-mono text-cyan-500/80">POST /api/ingest</span> with an
+            X-Agent-Key. See <span className="font-mono text-slate-400">scripts/agent.py</span>.
+          </p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {endpoints.map((ep) => {
+              const online = Date.now() - new Date(ep.last_seen).getTime() < 2 * 60 * 1000;
+              return (
+                <div key={ep.agent_id} className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-mono text-sm font-semibold text-slate-100">{ep.hostname}</span>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        online ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+                      }`}
+                    >
+                      {online ? "ONLINE" : "OFFLINE"}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate font-mono text-[10px] text-slate-500">{ep.agent_id}</p>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded bg-slate-800/50 py-1.5">
+                      <p className="text-xs font-bold text-cyan-400">{ep.records}</p>
+                      <p className="text-[9px] uppercase tracking-wider text-slate-500">records</p>
+                    </div>
+                    <div className="rounded bg-slate-800/50 py-1.5">
+                      <p className="text-xs font-bold text-slate-200">{ep.events}</p>
+                      <p className="text-[9px] uppercase tracking-wider text-slate-500">events</p>
+                    </div>
+                    <div className="rounded bg-slate-800/50 py-1.5">
+                      <p className="text-xs font-bold text-amber-400">{ep.alerts}</p>
+                      <p className="text-[9px] uppercase tracking-wider text-slate-500">alerts</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-[10px] text-slate-500">
+                    last seen{" "}
+                    {new Date(ep.last_seen).toLocaleString([], {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
 
       <ResultBox result={result} />
     </div>

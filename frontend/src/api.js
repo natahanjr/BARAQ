@@ -63,6 +63,7 @@ export const api = {
   eventStatistics: () => request("/api/events/statistics"),
 
   investigate: (alertId) => request(`/api/investigation/alert/${alertId}`),
+  endpoints: () => request("/api/endpoints"),
 
   assistantChat: (message) => request("/api/assistant/chat", { method: "POST", body: JSON.stringify({ message }) }),
   assistantHistory: () => request("/api/assistant/history"),

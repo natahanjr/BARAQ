@@ -87,6 +87,7 @@ class Alert(Base):
     recommendation: Mapped[str] = mapped_column(Text, default="")
     evidence: Mapped[str] = mapped_column(Text, default="")
     rule: Mapped[str] = mapped_column(String(64), index=True, default="")
+    host: Mapped[str] = mapped_column(String(128), index=True, default="")
     event_count: Mapped[int] = mapped_column(Integer, default=0)
     trigger_count: Mapped[int] = mapped_column(Integer, default=1)
     detection_method: Mapped[str] = mapped_column(String(16), index=True, default="rule")
@@ -123,6 +124,7 @@ class Alert(Base):
             "recommendation": self.recommendation,
             "evidence": self.evidence,
             "rule": self.rule,
+            "host": self.host,
             "event_count": self.event_count,
             "trigger_count": self.trigger_count,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -153,6 +155,32 @@ class AlertEventLink(Base):
     )
     alert: Mapped[Alert] = relationship(back_populates="events")
     event: Mapped[NormalizedEvent] = relationship()
+
+
+class Endpoint(Base):
+    """A monitored host feeding telemetry via the ingest agent."""
+
+    __tablename__ = "endpoints"
+
+    agent_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    host: Mapped[str] = mapped_column(String(128), index=True, default="")
+    last_seen: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+    records_total: Mapped[int] = mapped_column(Integer, default=0)
+    events_total: Mapped[int] = mapped_column(Integer, default=0)
+    alerts_total: Mapped[int] = mapped_column(Integer, default=0)
+    output_format_version: Mapped[str] = mapped_column(String(16), default="1.0")
+
+    def to_dict(self) -> dict:
+        return {
+            "agent_id": self.agent_id,
+            "host": self.host,
+            "last_seen": self.last_seen.isoformat() if self.last_seen else None,
+            "records_total": self.records_total,
+            "events_total": self.events_total,
+            "alerts_total": self.alerts_total,
+        }
 
 
 class ProcessRecord(Base):

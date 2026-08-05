@@ -7,6 +7,7 @@ import SeverityBadge from "../components/SeverityBadge.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import RiskBadge from "../components/RiskBadge.jsx";
 import { Loading, EmptyState, ErrorBanner } from "../components/Feedback.jsx";
+import TimelineGraph from "../components/TimelineGraph.jsx";
 import { InvestigationIcon, ActivityIcon, AlertIcon } from "../components/icons.jsx";
 
 function StepDot({ index, active }) {
@@ -239,6 +240,28 @@ export default function Investigation() {
 
           {/* Main investigation area */}
           <div className="space-y-6 lg:col-span-2">
+            {/* Event timeline visualization */}
+            <Card>
+              <div className="mb-5 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ActivityIcon className="h-5 w-5 text-cyan-400" />
+                  <h3 className="text-base font-semibold text-white">Incident Timeline</h3>
+                </div>
+                <span className="text-[11px] text-slate-500">
+                  {new Date().toLocaleDateString()} · {data.evidence_events?.length || 0} evidence +{" "}
+                  {data.related_events?.length || 0} related events
+                </span>
+              </div>
+              <TimelineGraph
+                events={[
+                  ...(data.evidence_events || []),
+                  ...(data.related_events || []),
+                ]}
+                attackChain={data.attack_chain}
+                windowMinutes={30}
+              />
+            </Card>
+
             {/* Attack chain */}
             <Card>
               <div className="mb-5 flex items-center gap-2">
@@ -338,6 +361,34 @@ export default function Investigation() {
                         </span>
                         <span>{ctx.state}</span>
                       </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {/* Similar past incidents (RAG) */}
+            {data.similar_incidents && data.similar_incidents.length > 0 && (
+              <Card>
+                <h3 className="mb-4 text-base font-semibold text-white">
+                  Similar Past Incidents (resolved)
+                </h3>
+                <div className="space-y-3">
+                  {data.similar_incidents.map((sim, idx) => (
+                    <div key={idx} className="rounded-lg border border-violet-500/25 bg-violet-500/5 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-100">
+                          #{sim.id} {sim.name}
+                        </p>
+                        <span className="rounded bg-black/30 px-2 py-0.5 text-[10px] font-mono text-slate-400">
+                          {sim.mitre_id} · {sim.severity}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-xs text-slate-400">{sim.evidence}</p>
+                      <p className="mt-1.5 text-xs text-cyan-300/80">
+                        <span className="font-semibold text-cyan-400">Resolved via:</span>{" "}
+                        {sim.recommendation}
+                      </p>
                     </div>
                   ))}
                 </div>

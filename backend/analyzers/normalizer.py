@@ -138,7 +138,7 @@ class Normalizer:
             "severity": meta["severity"],
             "source": record.get("source", "unknown"),
             "user": str(user)[:128],
-            "host": record.get("raw", {}).get("computer") or self.hostname,
+            "host": record.get("host") or record.get("raw", {}).get("computer") or self.hostname,
             "message": str(message)[:8192],
             "timestamp": timestamp,
             "raw_json": {

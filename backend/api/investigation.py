@@ -81,6 +81,26 @@ def investigate(alert_id: int, db: Session = Depends(get_db)):
     related = _related_events(db, alert)
     chain = _attack_chain(db, alert)
 
+    # RAG: similar past (resolved) incidents to ground the analyst's triage.
+    try:
+        from backend.ai.assistant import SecurityAssistant
+
+        similar = SecurityAssistant(db).similar_resolved_alerts(alert.name, limit=3)
+        similar_incidents = [
+            {
+                "id": s.id,
+                "name": s.name,
+                "severity": s.severity,
+                "mitre_id": s.mitre_id,
+                "evidence": (s.evidence or "")[:300],
+                "recommendation": (s.recommendation or "")[:300],
+                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+            }
+            for s in similar
+        ]
+    except Exception:  # noqa: BLE001
+        similar_incidents = []
+
     # Network context: connections around the alert window
     if alert.mitre_id == "T1046":
         conns = db.scalars(
@@ -96,6 +116,7 @@ def investigate(alert_id: int, db: Session = Depends(get_db)):
         "related_events": related,
         "attack_chain": chain,
         "network_context": network,
+        "similar_incidents": similar_incidents,
         "summary": (
             f"Attack chain for {alert.name} ({alert.mitre_id} / {alert.mitre_tactic}): "
             f"{len(evidence_events)} evidence events, {len(related)} related events "

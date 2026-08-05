@@ -165,6 +165,29 @@ curl.exe -X POST "http://127.0.0.1:8000/api/evaluation/holdout?use_real_baseline
 
 The same workflow is available in the dashboard under **Evaluation**.
 
+### Connect remote endpoint agents (multi-endpoint fleet)
+
+Run `scripts/agent.py` on any monitored host to stream telemetry into the SOC:
+
+```powershell
+# On the remote host (agent ships real host telemetry to the SOC server)
+python scripts/agent.py --server http://<soc-host>:8000 --key sentinel-agent-dev --interval 30
+```
+
+The agent authenticates with `X-Agent-Key` (configure `AGENT_KEYS` in `backend/config.py`),
+and every record is attributed to the reporting host. The fleet is visible in the
+dashboard under **System → Connected Endpoints** (online/offline, record/event/alert counters).
+
+```powershell
+# Fleet status API
+curl.exe http://127.0.0.1:8000/api/endpoints -H "X-API-Key: sentinel-dev-admin"
+```
+
+### Real-time alerting
+
+Alerts fan out via webhook, SMTP email, and Windows toast notifications
+(`TOAST_ENABLED` in `backend/config.py`; toasts use `scripts/toast.ps1`).
+
 ---
 
 ## Running Tests
@@ -174,7 +197,7 @@ The same workflow is available in the dashboard under **Evaluation**.
 python -m pytest tests -v
 ```
 
-Result: **97 tests passed** (collectors, detection rules, pipeline, API + auth/RBAC, hybrid risk scoring, evaluation framework, hold-out evaluation, alert aggregation/escalation, ML lifecycle, assistant RAG).
+Result: **103 tests passed** (collectors, detection rules, pipeline, API + auth/RBAC, hybrid risk scoring, evaluation framework, hold-out evaluation, alert aggregation/escalation, ML lifecycle, assistant RAG, multi-endpoint ingest/fleet).
 
 ---
 

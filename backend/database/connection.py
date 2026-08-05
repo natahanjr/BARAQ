@@ -21,6 +21,7 @@ _ADDITIVE_MIGRATIONS = {
         ("risk_score", "REAL"),
         ("risk_level", "VARCHAR(16) DEFAULT 'MEDIUM'"),
         ("trigger_count", "INTEGER DEFAULT 1"),
+        ("host", "VARCHAR(128) DEFAULT ''"),
     ],
     "network_connections": [
         ("bytes_sent", "INTEGER DEFAULT 0"),

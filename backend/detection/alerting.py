@@ -37,6 +37,13 @@ class AlertingService:
             user = self._evidence_user(result.evidence)
         return f"{result.rule}:{mitre_id}:{user}"
 
+    def _result_host(self, event_ids: list[int]) -> str:
+        for event_id in event_ids[:10]:
+            ev = self.session.get(NormalizedEvent, event_id)
+            if ev is not None and ev.host:
+                return ev.host[:128]
+        return ""
+
     @staticmethod
     def _evidence_user(evidence: str) -> str:
         """Best-effort user dimension from evidence text (rules without links)."""
@@ -161,6 +168,7 @@ class AlertingService:
                     recommendation=result.recommendation or get_recommendation(mitre_id),
                     evidence=result.evidence,
                     rule=result.rule,
+                    host=self._result_host(result.event_ids),
                     event_count=len(result.event_ids),
                 )
                 self.session.add(alert)

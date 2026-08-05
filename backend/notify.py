@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import smtplib
+import subprocess
 import threading
 import urllib.request
 from email.mime.text import MIMEText
@@ -22,6 +24,7 @@ from backend.config import (
     SMTP_PORT,
     SMTP_TO,
     SMTP_USERNAME,
+    TOAST_ENABLED,
     WEBHOOK_URL,
 )
 
@@ -81,18 +84,40 @@ def _send_email(alert: dict) -> None:
         server.send_message(msg)
 
 
+def _send_toast(alert: dict) -> None:
+    """Windows toast notification via a small PowerShell helper (best-effort)."""
+    if not TOAST_ENABLED or os.name != "nt":
+        return
+    title = f"SentinelSOC: {alert.get('severity', '').upper()} alert {alert.get('mitre_id', '')}"
+    message = f"{alert.get('name', '')} - {alert.get('evidence', '')[:240]}"
+    script = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "toast.ps1"
+    )
+    subprocess.run(
+        [
+            "powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass",
+            "-File", script, "-Title", title, "-Message", message,
+        ],
+        timeout=8,
+        capture_output=True,
+        check=False,
+    )
+
+
 def notify_alert(alert: dict) -> None:
-    """Fire webhook + email for a new alert (non-blocking)."""
+    """Fire webhook + email + toast for a new alert (non-blocking)."""
     if not _wanted(alert.get("severity", "")):
         return
-    if not WEBHOOK_URL and not (SMTP_HOST and SMTP_TO):
+    if not WEBHOOK_URL and not (SMTP_HOST and SMTP_TO) and not TOAST_ENABLED:
         return
 
     def _run():
-        for sender in (_send_webhook, _send_email):
+        for sender in (_send_webhook, _send_email, _send_toast):
             try:
                 sender(alert)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Notification channel failed: %s", exc)
+                if isinstance(exc, subprocess.TimeoutExpired):
+                    logger.warning("Windows toast timed out (suppressed)")
 
     threading.Thread(target=_run, daemon=True, name="sentinel-notify").start()

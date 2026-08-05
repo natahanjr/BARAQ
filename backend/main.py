@@ -16,6 +16,7 @@ from backend.api import (
     alerts,
     assistant,
     dashboard,
+    endpoints,
     evaluation,
     events,
     investigation,
@@ -154,6 +155,7 @@ for router in (
     assistant.router,
     evaluation.router,
     system.router,
+    endpoints.router,
 ):
     app.include_router(router)
 

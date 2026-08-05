@@ -173,6 +173,23 @@ SMTP_PASSWORD = os.environ.get("SENTINEL_SMTP_PASSWORD", "")
 SMTP_FROM = os.environ.get("SENTINEL_SMTP_FROM", "sentinel@localhost")
 SMTP_TO = os.environ.get("SENTINEL_SMTP_TO", "")
 NOTIFY_MIN_SEVERITY = os.environ.get("SENTINEL_NOTIFY_MIN_SEVERITY", "high")
+# Windows toast notifications (PowerShell helper; best-effort).
+TOAST_ENABLED = os.environ.get("SENTINEL_TOAST_ENABLED", "1").lower() not in (
+    "0", "false", "no", "off",
+)
+
+# --------------------------------------------------------------------------
+# Multi-endpoint ingest
+# --------------------------------------------------------------------------
+# JSON map {"agent_key": "agent-id"} for POST /api/ingest. A development
+# default is provided; override via SENTINEL_AGENT_KEYS.
+AGENT_KEYS: dict[str, str] = {
+    "sentinel-agent-dev": "agent-dev",
+    **{
+        str(k): str(v)
+        for k, v in json.loads(os.environ.get("SENTINEL_AGENT_KEYS", "{}") or "{}").items()
+    },
+}
 
 # --------------------------------------------------------------------------
 # AI assistant
