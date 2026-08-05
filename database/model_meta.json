@@ -1,6 +1,0 @@
-{
-  "trained_at": "2026-08-05T09:57:36.575239+00:00",
-  "n_samples": 48,
-  "events_at_train": 44,
-  "supervised": "random_forest"
-}

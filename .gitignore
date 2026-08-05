@@ -16,6 +16,7 @@ dist/
 *.db-wal
 *.sqlite*
 database/*.db
+database/model_meta.json
 
 # Generated artifacts
 reports/
@@ -33,3 +34,4 @@ logs/
 Thumbs.db
 .idea/
 .vscode/
+database/model_meta.json
