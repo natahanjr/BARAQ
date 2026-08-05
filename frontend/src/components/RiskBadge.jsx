@@ -5,13 +5,13 @@ const LEVEL_STYLES = {
   LOW: "bg-emerald-500/15 text-emerald-400 border-emerald-500/40",
 };
 
-export default function RiskBadge({ level = "LOW", score }) {
+export default function RiskBadge({ level = "LOW", score, className = "" }) {
   const l = String(level).toUpperCase();
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-xs font-semibold tracking-wide ${
         LEVEL_STYLES[l] || LEVEL_STYLES.LOW
-      }`}
+      } ${className}`}
     >
       {l}
       {score !== undefined && score !== null && (

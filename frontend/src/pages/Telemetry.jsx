@@ -1,145 +1,196 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Loading, EmptyState } from "../components/Feedback.jsx";
+import Card from "../components/Card.jsx";
+import PageHeader from "../components/PageHeader.jsx";
+import { Loading, EmptyState, ErrorBanner } from "../components/Feedback.jsx";
 
-function ProcessTable({ rows }) {
+function ProcessRow({ process }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-500">
-            <th className="px-3 py-2.5">PID</th>
-            <th className="px-3 py-2.5">Parent</th>
-            <th className="px-3 py-2.5">Process</th>
-            <th className="px-3 py-2.5">User</th>
-            <th className="px-3 py-2.5">New</th>
-            <th className="px-3 py-2.5">Observed</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((p) => (
-            <tr key={p.id} className="border-b border-slate-800/60 hover:bg-slate-800/30">
-              <td className="px-3 py-2 font-mono text-xs text-cyan-400">{p.pid}</td>
-              <td className="px-3 py-2 font-mono text-xs text-slate-500">{p.ppid}</td>
-              <td className="px-3 py-2">
-                <p className="text-xs font-medium text-slate-300">{p.name}</p>
-                <p className="max-w-md truncate font-mono text-[10px] text-slate-600" title={p.path}>
-                  {p.path || "—"}
-                </p>
-              </td>
-              <td className="px-3 py-2 text-xs text-slate-400">{p.user || "—"}</td>
-              <td className="px-3 py-2">
-                {p.is_new ? (
-                  <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">NEW</span>
-                ) : (
-                  <span className="text-xs text-slate-700">—</span>
-                )}
-              </td>
-              <td className="px-3 py-2 font-mono text-[11px] text-slate-500">
-                {p.observed_at ? new Date(p.observed_at).toLocaleString() : "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-colors hover:border-slate-600/60">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded bg-cyan-500/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-cyan-400">
+              PID {process.pid}
+            </span>
+            {process.is_new && (
+              <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+                NEW
+              </span>
+            )}
+          </div>
+          <p className="mt-2 text-sm font-semibold text-white">{process.name}</p>
+          <p className="mt-0.5 line-clamp-2 font-mono text-xs text-slate-400">
+            {process.path || "—"}
+          </p>
+        </div>
+        <span className="shrink-0 text-[11px] text-slate-500">
+          {process.observed_at
+            ? new Date(process.observed_at).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })
+            : "—"}
+        </span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-slate-700/50 pt-3 text-[11px] text-slate-400">
+        <span>
+          User: <strong className="text-slate-200">{process.user || "—"}</strong>
+        </span>
+        <span>
+          Parent PID: <strong className="font-mono text-slate-200">{process.ppid}</strong>
+        </span>
+        {process.parent_name && (
+          <span>
+            Parent: <strong className="text-slate-200">{process.parent_name}</strong>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
 
-function NetworkTable({ rows }) {
+function NetworkRow({ connection }) {
+  const stateColor = {
+    ESTABLISHED: "bg-emerald-500/15 text-emerald-400",
+    LISTEN: "bg-blue-500/15 text-blue-400",
+    SYN_SENT: "bg-amber-500/15 text-amber-400",
+    TIME_WAIT: "bg-slate-500/15 text-slate-400",
+  };
+
+  const color = stateColor[connection.state] || "bg-slate-500/15 text-slate-400";
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-500">
-            <th className="px-3 py-2.5">Process</th>
-            <th className="px-3 py-2.5">Local</th>
-            <th className="px-3 py-2.5">Remote</th>
-            <th className="px-3 py-2.5">State</th>
-            <th className="px-3 py-2.5">Listening</th>
-            <th className="px-3 py-2.5">Observed</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((c) => (
-            <tr key={c.id} className="border-b border-slate-800/60 hover:bg-slate-800/30">
-              <td className="px-3 py-2 text-xs text-slate-300">{c.process || "—"}</td>
-              <td className="px-3 py-2 font-mono text-xs text-slate-500">{c.local_ip}:{c.local_port}</td>
-              <td className="px-3 py-2 font-mono text-xs text-slate-500">
-                {c.is_listening ? "—" : `${c.remote_ip}:${c.remote_port}`}
-              </td>
-              <td className="px-3 py-2 text-xs text-slate-400">{c.state}</td>
-              <td className="px-3 py-2">
-                {c.is_listening ? (
-                  <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-400">LISTEN</span>
-                ) : (
-                  <span className="text-xs text-slate-700">—</span>
-                )}
-              </td>
-              <td className="px-3 py-2 font-mono text-[11px] text-slate-500">
-                {c.observed_at ? new Date(c.observed_at).toLocaleString() : "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-colors hover:border-slate-600/60">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm font-semibold text-cyan-400">
+              {connection.process || "Unknown"}
+            </span>
+            {connection.is_listening && (
+              <span className="rounded bg-blue-500/15 px-2 py-0.5 text-[10px] font-semibold text-blue-400">
+                LISTENING
+              </span>
+            )}
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="rounded-lg bg-black/20 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Local
+              </p>
+              <p className="mt-0.5 truncate font-mono text-xs text-slate-200">
+                {connection.local_ip}:{connection.local_port}
+              </p>
+            </div>
+            <div className="rounded-lg bg-black/20 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Remote
+              </p>
+              <p className="mt-0.5 truncate font-mono text-xs text-slate-200">
+                {connection.remote_ip || "—"}:{connection.remote_port ?? "—"}
+              </p>
+            </div>
+          </div>
+        </div>
+        <span className={`shrink-0 rounded px-2 py-1 font-mono text-[10px] font-semibold ${color}`}>
+          {connection.state}
+        </span>
+      </div>
     </div>
   );
 }
 
 export default function Telemetry() {
   const [tab, setTab] = useState("processes");
-  const [processes, setProcesses] = useState(null);
-  const [network, setNetwork] = useState(null);
+  const [processes, setProcesses] = useState([]);
+  const [network, setNetwork] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
     setError("");
-    if (tab === "processes") {
-      api.processes().then(setProcesses).catch((e) => setError(e.message));
-    } else {
-      api.network().then(setNetwork).catch((e) => setError(e.message));
-    }
-  }, [tab]);
+    Promise.all([api.processes(), api.network()])
+      .then(([p, n]) => {
+        setProcesses(p.items || []);
+        setNetwork(n.items || []);
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const tabClass = (active) =>
+    `rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+      active
+        ? "border border-cyan-500/30 bg-cyan-500/15 text-cyan-300"
+        : "border border-transparent text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+    }`;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => setTab("processes")}
-          className={`rounded-md px-4 py-1.5 text-sm font-medium ${
-            tab === "processes" ? "bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/30" : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          Processes ({processes?.total ?? "…"})
-        </button>
-        <button
-          onClick={() => setTab("network")}
-          className={`rounded-md px-4 py-1.5 text-sm font-medium ${
-            tab === "network" ? "bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/30" : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          Network connections ({network?.total ?? "…"})
-        </button>
-      </div>
+    <div className="space-y-6 pb-12">
+      <PageHeader
+        title="Processes & Network"
+        subtitle="Real-time system telemetry and active connections"
+      />
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
-      {!error && tab === "processes" && !processes && <Loading label="Loading processes" />}
-      {!error && tab === "network" && !network && <Loading label="Loading connections" />}
+      <Card>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setTab("processes")} className={tabClass(tab === "processes")}>
+            Running Processes ({processes.length})
+          </button>
+          <button type="button" onClick={() => setTab("network")} className={tabClass(tab === "network")}>
+            Network Connections ({network.length})
+          </button>
+          <button
+            type="button"
+            onClick={load}
+            className="ml-auto rounded-lg border border-slate-700/60 bg-slate-800/60 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700/60"
+          >
+            Refresh
+          </button>
+        </div>
+      </Card>
 
-      {tab === "processes" && processes && (
-        processes.items.length === 0 ? <EmptyState message="No process records" /> : (
-          <div className="rounded-lg border border-slate-800 bg-slate-900/60">
-            <ProcessTable rows={processes.items} />
-          </div>
-        )
+      {error && <ErrorBanner message={error} onRetry={load} />}
+
+      {loading && <Loading label="Loading telemetry" />}
+
+      {!loading && tab === "processes" && (
+        <Card>
+          {processes.length > 0 ? (
+            <div className="space-y-2">
+              {processes.map((process) => (
+                <ProcessRow key={process.id} process={process} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No processes" subtitle="No process data available yet" icon="⚙" />
+          )}
+        </Card>
       )}
-      {tab === "network" && network && (
-        network.items.length === 0 ? <EmptyState message="No network records" /> : (
-          <div className="rounded-lg border border-slate-800 bg-slate-900/60">
-            <NetworkTable rows={network.items} />
-          </div>
-        )
+
+      {!loading && tab === "network" && (
+        <Card>
+          {network.length > 0 ? (
+            <div className="space-y-2">
+              {network.map((conn) => (
+                <NetworkRow key={conn.id} connection={conn} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No connections"
+              subtitle="No network data available yet"
+              icon="🔌"
+            />
+          )}
+        </Card>
       )}
     </div>
   );

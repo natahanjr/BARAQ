@@ -8,6 +8,28 @@ import os
 from pathlib import Path
 
 # --------------------------------------------------------------------------
+# .env loader (no third-party dependency)
+# --------------------------------------------------------------------------
+def _load_dotenv(path: Path) -> None:
+    """Load KEY=VALUE lines from a .env file into os.environ (non-overriding)."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+# --------------------------------------------------------------------------
 # Paths
 # --------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -41,6 +63,13 @@ POWERSHELL_CHANNELS = [
     "Windows PowerShell",
 ]
 MAX_RAW_EVENT_SIZE = 64 * 1024
+
+# New collector channels / sources (live only).
+USB_EVENT_IDS = {6416, 6420}
+SYSMON_CHANNELS = ["Microsoft-Windows-Sysmon/Operational"]
+SIGNATURE_LIST = Path(__file__).resolve().parent / "detection" / "signatures.json"
+MAIL_INGEST_DIR = os.environ.get("SENTINEL_MAIL_DIR", "")
+MAIL_INGEST_EXTENSIONS = (".eml", ".msg", ".json")
 
 # --------------------------------------------------------------------------
 # Detection tuning

@@ -4,9 +4,13 @@ from __future__ import annotations
 import logging
 import threading
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException
 
 from backend.api import (
     alerts,
@@ -18,7 +22,7 @@ from backend.api import (
     reports,
     system,
 )
-from backend.config import CORS_ORIGINS
+from backend.config import CORS_ORIGINS, REPORT_DIR
 from backend.database.connection import SessionLocal, init_db
 
 logging.basicConfig(
@@ -116,6 +120,8 @@ for router in (
 ):
     app.include_router(router)
 
+app.mount("/reports", StaticFiles(directory=REPORT_DIR), name="reports")
+
 
 @app.get("/")
 def root():
@@ -130,3 +136,29 @@ def root():
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Serve the built React SPA (single-command deployment). Registered last so the
+# API routes above always take precedence; unknown paths fall back to
+# index.html to support client-side routing.
+# ---------------------------------------------------------------------------
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+
+class _SPAMount(StaticFiles):
+    """Serve the built SPA, falling back to index.html for client routes."""
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except HTTPException as exc:
+            if exc.status_code == 404:
+                index = FRONTEND_DIST / "index.html"
+                if index.is_file():
+                    return FileResponse(index)
+            raise
+
+
+if FRONTEND_DIST.is_dir():
+    app.mount("/", _SPAMount(directory=FRONTEND_DIST, html=True), name="frontend")

@@ -2,11 +2,9 @@
 from __future__ import annotations
 
 import logging
-import threading
 import time
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.analyzers import dashboard
@@ -17,13 +15,20 @@ from backend.ml.anomaly import get_detector
 logger = logging.getLogger("sentinel.api.system")
 router = APIRouter(prefix="/api/system", tags=["system"])
 
-_pipeline_lock = threading.Lock()
-
 
 def run_pipeline(db: Session, records: list[dict]) -> dict:
     """Full pipeline: normalize -> persist -> detect -> alert."""
     from backend.analyzers.normalizer import Normalizer
-    from backend.database.models import NetworkConnection, NormalizedEvent, ProcessRecord
+    from backend.database.models import (
+        DnsQuery,
+        EmailMessage,
+        FileScan,
+        HttpRequest,
+        NetworkConnection,
+        NormalizedEvent,
+        ProcessRecord,
+        UsbDevice,
+    )
     from backend.detection.alerting import AlertingService
     from backend.detection.rules_engine import RulesEngine, enrich_result
 
@@ -31,6 +36,11 @@ def run_pipeline(db: Session, records: list[dict]) -> dict:
     saved_events = 0
     saved_processes = 0
     saved_connections = 0
+    saved_dns = 0
+    saved_http = 0
+    saved_emails = 0
+    saved_usb = 0
+    saved_files = 0
 
     for record in records:
         source = record.get("source")
@@ -50,9 +60,55 @@ def run_pipeline(db: Session, records: list[dict]) -> dict:
                 local_ip=record.get("local_ip", ""), local_port=record.get("local_port", 0),
                 remote_ip=record.get("remote_ip", ""), remote_port=record.get("remote_port", 0),
                 state=record.get("state", ""), is_listening=record.get("is_listening", False),
+                bytes_sent=record.get("bytes_sent", 0), bytes_recv=record.get("bytes_recv", 0),
+                duration_seconds=record.get("duration_seconds", 0.0),
                 observed_at=Normalizer._safe_ts(record.get("timestamp")),
             ))
             saved_connections += 1
+        elif source == "dns":
+            db.add(DnsQuery(
+                process=record.get("process", ""), pid=record.get("pid", 0),
+                query=record.get("query", ""), response=record.get("response", ""),
+                response_size=record.get("response_size", 0),
+                observed_at=Normalizer._safe_ts(record.get("timestamp")),
+            ))
+            saved_dns += 1
+        elif source == "http":
+            db.add(HttpRequest(
+                process=record.get("process", ""), pid=record.get("pid", 0),
+                method=record.get("method", "GET"), url=record.get("url", ""),
+                host=record.get("host", ""), status_code=record.get("status_code", 0),
+                request_body_size=record.get("request_body_size", 0),
+                response_body_size=record.get("response_body_size", 0),
+                observed_at=Normalizer._safe_ts(record.get("timestamp")),
+            ))
+            saved_http += 1
+        elif source == "email":
+            db.add(EmailMessage(
+                sender=record.get("sender", ""), recipient=record.get("recipient", ""),
+                subject=record.get("subject", ""), body=record.get("body", ""),
+                attachment_types=record.get("attachment_types", ""),
+                ip_address=record.get("ip_address", ""),
+                received_at=Normalizer._safe_ts(record.get("timestamp")),
+            ))
+            saved_emails += 1
+        elif source == "usb":
+            db.add(UsbDevice(
+                device_name=record.get("device_name", ""), device_id=record.get("device_id", ""),
+                vendor=record.get("vendor", ""), serial=record.get("serial", ""),
+                inserted_at=Normalizer._safe_ts(record.get("timestamp")),
+            ))
+            saved_usb += 1
+        elif source == "malware":
+            db.add(FileScan(
+                file_path=record.get("file_path", ""), file_name=record.get("file_name", ""),
+                sha256=record.get("sha256", ""), md5=record.get("md5", ""),
+                size=record.get("size", 0), signed=record.get("signed", False),
+                is_malicious=record.get("is_malicious", False),
+                signature_name=record.get("signature_name", ""),
+                scanned_at=Normalizer._safe_ts(record.get("timestamp")),
+            ))
+            saved_files += 1
         else:
             normalized = normalizer.normalize(record)
             db.add(NormalizedEvent(**normalized))
@@ -70,6 +126,11 @@ def run_pipeline(db: Session, records: list[dict]) -> dict:
         "saved_events": saved_events,
         "saved_processes": saved_processes,
         "saved_connections": saved_connections,
+        "saved_dns": saved_dns,
+        "saved_http": saved_http,
+        "saved_emails": saved_emails,
+        "saved_usb": saved_usb,
+        "saved_files": saved_files,
         "findings": [enrich_result(f) for f in findings],
         "alerts_created": len(created),
     }
@@ -83,21 +144,6 @@ def collect_once(db: Session = Depends(get_db)):
         return {"message": "No new live records; install pywin32 for full event log access.", "pipeline": None}
     result = run_pipeline(db, records)
     return {"message": "Collection completed", "pipeline": result}
-
-
-class SimulateRequest(BaseModel):
-    scenario: str | None = None
-
-
-@router.post("/simulate")
-def simulate(request: SimulateRequest, db: Session = Depends(get_db)):
-    from backend.collectors.simulator import AttackSimulator
-
-    simulator = AttackSimulator()
-    records = simulator.scenario(request.scenario) if request.scenario else simulator.collect()
-    with _pipeline_lock:
-        result = run_pipeline(db, records)
-    return {"message": "Simulation completed", "pipeline": result}
 
 
 @router.post("/ml/train")

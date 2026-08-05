@@ -15,6 +15,13 @@ from backend.detection.rules.network_recon import NetworkReconRule
 from backend.detection.rules.persistence import PersistenceRule
 from backend.detection.rules.powershell import SuspiciousPowerShellRule
 from backend.detection.rules.privilege_escalation import PrivilegeEscalationRule
+from backend.detection.rules.lateral_movement import LateralMovementRule
+from backend.detection.rules.data_staging import DataStagingRule
+from backend.detection.rules.malware_file import MalwareFileRule
+from backend.detection.rules.email_phishing import EmailPhishingRule
+from backend.detection.rules.dns_http import DnsHttpExfilRule
+from backend.detection.rules.usb import UsbDeviceRule
+from backend.detection.rules.correlation import KillChainCorrelationRule
 from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
 
 logger = logging.getLogger("sentinel.detection")
@@ -28,6 +35,13 @@ def build_rules(session: Session) -> list[BaseRule]:
         PrivilegeEscalationRule(session),
         PersistenceRule(session),
         NetworkReconRule(session),
+        LateralMovementRule(session),
+        DataStagingRule(session),
+        MalwareFileRule(session),
+        EmailPhishingRule(session),
+        DnsHttpExfilRule(session),
+        UsbDeviceRule(session),
+        KillChainCorrelationRule(session),
     ]
 
 

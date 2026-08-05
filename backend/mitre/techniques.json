@@ -74,6 +74,60 @@
       "data_sources": "Process creation telemetry; script block logs",
       "detection": "Monitor suspicious parent-child process chains involving scripting interpreters.",
       "recommendation": "Restrict scripting interpreters, validate the invocation, and investigate the parent process."
+    },
+    {
+      "id": "T1021",
+      "name": "Remote Services",
+      "tactic": "Lateral Movement",
+      "description": "Adversaries may use valid accounts to interact with remote services such as SMB/Windows Admin Shares to move laterally within an environment. SentinelSOC detects SMB (port 445) connections to multiple internal hosts, cross-host failed logons and cross-host privilege events.",
+      "data_sources": "Windows Security Event Log 4624, 4625, 4672; endpoint connection telemetry (Sysmon Event 3; psutil table)",
+      "detection": "Monitor SMB connections (445) to multiple hosts from a single host, repeated failed logons across hosts, and privileged logons across distinct hosts within a short window.",
+      "recommendation": "Isolate the source host, review account usage, rotate credentials, and block admin share access (IPC$/C$) at the perimeter."
+    },
+    {
+      "id": "T1074",
+      "name": "Data Staged",
+      "tactic": "Collection",
+      "description": "Adversaries may stage collected data in a central location or in temporary directories prior to exfiltration. SentinelSOC flags archive-tool execution against data locations and rapid file aggregation in temp directories.",
+      "data_sources": "Process creation telemetry (4688); PowerShell script block logs (4104); file system telemetry",
+      "detection": "Monitor for compression/archiving tools (7z, rar, zip) targeting documents/downloads/desktop, and bursts of file activity in temp directories.",
+      "recommendation": "Review the affected user and process, preserve file-system evidence, block suspicious outbound transfers, and investigate data access history."
+    },
+    {
+      "id": "T1105",
+      "name": "Ingress Tool Transfer",
+      "tactic": "Command and Control",
+      "description": "Adversaries may transfer tools or other files from an external system into a compromised environment. SentinelSOC scores downloaded files against a local signature list of known-malicious hashes and paths.",
+      "data_sources": "File creation events; process image loads; downloaded file hashes",
+      "detection": "Compare file hashes and download paths against known-bad signature lists; flag recognizable malware names and unsigned dropped binaries in temp/public folders.",
+      "recommendation": "Quarantine the file, block the source, scan the endpoint, and review the initiating process and parent."
+    },
+    {
+      "id": "T1566",
+      "name": "Phishing",
+      "tactic": "Initial Access",
+      "description": "Adversaries may send phishing messages to gain access to victim systems. SentinelSOC inspects collected email/metadata for phishing indicators such as suspicious senders, urgent language, and malicious attachment types.",
+      "data_sources": "Email gateway/telemetry metadata",
+      "detection": "Heuristic scoring of headers/subjects/attachments against phishing indicators (impersonation, urgency, executable/RAR/zips attachments).",
+      "recommendation": "Block the sender domain, quarantine the message, and alert users who received the email."
+    },
+    {
+      "id": "T1071",
+      "name": "Application Layer Protocol",
+      "tactic": "Command and Control",
+      "description": "Adversaries may communicate using application-layer protocols (DNS, HTTP/S) to avoid detection. SentinelSOC monitors DNS queries for suspicious domains and HTTP payloads for secret-sized data transfers.",
+      "data_sources": "DNS query logs (Sysmon Event 22); HTTP/S request metadata; endpoint connection telemetry",
+      "detection": "Flag high-volume/large DNS responses, uncommon top-level domains and subdomains, and HTTP bodies with high-entropy or voluminous content.",
+      "recommendation": "Inspect the resolving process and target, block the domain/IP, and investigate the associated process chain."
+    },
+    {
+      "id": "T1091",
+      "name": "Replication Through Removable Media",
+      "tactic": "Lateral Movement",
+      "description": "Adversaries may move into systems by copying malware to removable media and executing it with autorun when the media is inserted into a victim system. SentinelSOC monitors new removable device insertion (Events 6416, 6420).",
+      "data_sources": "Windows Security Event Log 6416, 6420 (new external device)",
+      "detection": "Alert on insertion of new removable/USB storage devices, especially paired with executables or autorun activity.",
+      "recommendation": "Restrict USB write access / Autorun, review the device insertion context, and scan new media before mounting."
     }
   ]
 }

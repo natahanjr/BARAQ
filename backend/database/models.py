@@ -198,6 +198,9 @@ class NetworkConnection(Base):
     remote_port: Mapped[int] = mapped_column(Integer, default=0)
     state: Mapped[str] = mapped_column(String(32), default="")
     is_listening: Mapped[bool] = mapped_column(Boolean, default=False)
+    bytes_sent: Mapped[int] = mapped_column(Integer, default=0)
+    bytes_recv: Mapped[int] = mapped_column(Integer, default=0)
+    duration_seconds: Mapped[float] = mapped_column(Float, default=0.0)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
     def to_dict(self) -> dict:
@@ -211,7 +214,164 @@ class NetworkConnection(Base):
             "remote_port": self.remote_port,
             "state": self.state,
             "is_listening": self.is_listening,
+            "bytes_sent": self.bytes_sent,
+            "bytes_recv": self.bytes_recv,
+            "duration_seconds": self.duration_seconds,
             "observed_at": self.observed_at.isoformat() if self.observed_at else None,
+        }
+
+
+class DnsQuery(Base):
+    """A DNS query observed by the DNS monitor (Sysmon Event 22 / snoop).
+
+    No live packet capture by default; the collector reads the Sysmon DNS
+    channel (Event 22) and/or a configured query snapshot file so the
+    detection rules can reason over real resolver activity.
+    """
+
+    __tablename__ = "dns_queries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    process: Mapped[str] = mapped_column(String(256), default="")
+    pid: Mapped[int] = mapped_column(Integer, default=0)
+    query: Mapped[str] = mapped_column(String(512), index=True)
+    response: Mapped[str] = mapped_column(String(512), default="")
+    response_size: Mapped[int] = mapped_column(Integer, default=0)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "process": self.process,
+            "pid": self.pid,
+            "query": self.query,
+            "response": self.response,
+            "response_size": self.response_size,
+            "observed_at": self.observed_at.isoformat() if self.observed_at else None,
+        }
+
+
+class HttpRequest(Base):
+    """Metadata for an HTTP/S request observed by the HTTP monitor.
+
+    Mirrors what a local HTTP monitor (MITM proxy, Windows filter driver or
+    Sysmon-assisted logging) can expose without deep packet inspection.
+    """
+
+    __tablename__ = "http_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    process: Mapped[str] = mapped_column(String(256), default="")
+    pid: Mapped[int] = mapped_column(Integer, default=0)
+    method: Mapped[str] = mapped_column(String(16), default="GET")
+    url: Mapped[str] = mapped_column(String(1024), index=True)
+    host: Mapped[str] = mapped_column(String(256), default="")
+    status_code: Mapped[int] = mapped_column(Integer, default=0)
+    request_body_size: Mapped[int] = mapped_column(Integer, default=0)
+    response_body_size: Mapped[int] = mapped_column(Integer, default=0)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "process": self.process,
+            "pid": self.pid,
+            "method": self.method,
+            "url": self.url,
+            "host": self.host,
+            "status_code": self.status_code,
+            "request_body_size": self.request_body_size,
+            "response_body_size": self.response_body_size,
+            "observed_at": self.observed_at.isoformat() if self.observed_at else None,
+        }
+
+
+class EmailMessage(Base):
+    """An email message (metadata) ingested for phishing analysis.
+
+    The email collector ingests real message metadata from a configured source
+    (e.g. an EMF/.msg export directory or a local mail spool). No live inbox
+    scraping is performed; detection runs over whichever messages are present.
+    """
+
+    __tablename__ = "emails"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sender: Mapped[str] = mapped_column(String(256), default="")
+    recipient: Mapped[str] = mapped_column(String(256), default="")
+    subject: Mapped[str] = mapped_column(String(512), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    attachment_types: Mapped[str] = mapped_column(String(512), default="")
+    ip_address: Mapped[str] = mapped_column(String(64), default="")
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "sender": self.sender,
+            "recipient": self.recipient,
+            "subject": self.subject,
+            "attachment_types": self.attachment_types,
+            "ip_address": self.ip_address,
+            "received_at": self.received_at.isoformat() if self.received_at else None,
+        }
+
+
+class UsbDevice(Base):
+    """A removable/USB device insertion observed by the USB monitor.
+
+    Mirrors Windows Security/Kernel-PnP events 6416 and 6420 (new external
+    device recognised) captured via the event-log collector.
+    """
+
+    __tablename__ = "usb_devices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_name: Mapped[str] = mapped_column(String(256), default="")
+    device_id: Mapped[str] = mapped_column(String(256), default="")
+    vendor: Mapped[str] = mapped_column(String(128), default="")
+    serial: Mapped[str] = mapped_column(String(128), default="")
+    inserted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "device_name": self.device_name,
+            "device_id": self.device_id,
+            "vendor": self.vendor,
+            "serial": self.serial,
+            "inserted_at": self.inserted_at.isoformat() if self.inserted_at else None,
+        }
+
+
+class FileScan(Base):
+    """A file scanned by the malware/file-hash analyzer."""
+
+    __tablename__ = "file_scans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_path: Mapped[str] = mapped_column(String(1024), index=True)
+    file_name: Mapped[str] = mapped_column(String(256), default="")
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    md5: Mapped[str] = mapped_column(String(32), default="")
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    signed: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_malicious: Mapped[bool] = mapped_column(Boolean, default=False)
+    signature_name: Mapped[str] = mapped_column(String(128), default="")
+    scanned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "file_path": self.file_path,
+            "file_name": self.file_name,
+            "sha256": self.sha256,
+            "md5": self.md5,
+            "size": self.size,
+            "signed": self.signed,
+            "is_malicious": self.is_malicious,
+            "signature_name": self.signature_name,
+            "scanned_at": self.scanned_at.isoformat() if self.scanned_at else None,
         }
 
 
@@ -290,6 +450,35 @@ class AssistantMessage(Base):
             "id": self.id,
             "role": self.role,
             "content": self.content,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class AlertAction(Base):
+    """A response action taken on an alert (automated containment/triage)."""
+
+    __tablename__ = "alert_actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    alert_id: Mapped[int] = mapped_column(
+        ForeignKey("alerts.id", ondelete="CASCADE"), index=True
+    )
+    action: Mapped[str] = mapped_column(String(32))  # block_ip | kill_process | quarantine | escalate | ack
+    target: Mapped[str] = mapped_column(String(256), default="")
+    status: Mapped[str] = mapped_column(String(16), default="queued")  # queued | success | failed
+    detail: Mapped[str] = mapped_column(Text, default="")
+    triggered_by: Mapped[str] = mapped_column(String(64), default="auto")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "alert_id": self.alert_id,
+            "action": self.action,
+            "target": self.target,
+            "status": self.status,
+            "detail": self.detail,
+            "triggered_by": self.triggered_by,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

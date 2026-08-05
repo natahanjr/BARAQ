@@ -10,13 +10,17 @@ from tests.conftest import run_simulation
 
 def test_full_suite_end_to_end(db):
     result = run_simulation(db)
-    assert result["alerts_created"] >= 4  # brute force, PS, priv-esc, persistence, recon
+    assert result["alerts_created"] >= 5  # brute force, PS, priv-esc, persistence, recon
     assert result["saved_events"] > 0
     assert result["saved_connections"] > 0
 
 
-def test_all_five_scenarios_detected(db):
-    """Each scenario must produce its corresponding alert."""
+def test_all_scenarios_detected(db):
+    """Each fixture scenario must produce its corresponding alert."""
+    from backend.api.system import run_pipeline
+    from backend.database.models import Alert
+    from tests.conftest import _scenario
+
     scenarios = {
         "brute_force": "Brute Force Attack",
         "powershell": "Suspicious PowerShell Activity",
@@ -24,20 +28,14 @@ def test_all_five_scenarios_detected(db):
         "persistence": "Persistence Mechanism Installed",
         "port_scan": "Network Service Discovery (Port Scan)",
     }
-    from backend.collectors.simulator import AttackSimulator
-    from backend.api.system import run_pipeline
-
-    for scenario, alert_name in scenarios.items():
-        run_pipeline(db, AttackSimulator().scenario(scenario))
-
-    from backend.database.models import Alert
+    for scenario, _ in scenarios.items():
+        run_pipeline(db, _scenario(scenario))
 
     alerts = db.query(Alert).all()
     names = {a.name for a in alerts}
     for alert_name in scenarios.values():
         assert alert_name in names, f"Missing alert: {alert_name}"
 
-    # MITRE mappings present on every alert
     assert all(a.mitre_id for a in alerts)
     assert all(a.mitre_tactic for a in alerts)
     assert all(a.recommendation for a in alerts)
@@ -47,6 +45,8 @@ def test_mitre_helpers():
     assert get_tactic("T1110") == "Credential Access"
     assert "Brute Force" in get_technique_name("T1110")
     assert get_recommendation("T1059.001") != ""
+    assert get_tactic("T1021") == "Lateral Movement"
+    assert get_tactic("T1074") == "Collection"
 
 
 def test_alert_evidence_links(db):
@@ -87,7 +87,7 @@ def test_dashboard_analytics(db):
 
     run_simulation(db)
     summary = dashboard.dashboard_summary(db)
-    assert summary["active_alerts"] >= 4
+    assert summary["active_alerts"] >= 5
     assert 0 <= summary["security_score"] <= 100
     assert summary["system_status"] in ("CRITICAL", "ATTENTION", "HEALTHY")
     assert dashboard.threat_categories(db)

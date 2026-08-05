@@ -15,14 +15,14 @@ def client():
 
 
 def seed(client) -> None:
-    """Populate the test database with a full simulated attack suite."""
+    """Populate the test database with the fixture-based attack suite."""
     from backend.api.system import run_pipeline
-    from backend.collectors.simulator import AttackSimulator
     from backend.database.connection import SessionLocal
+    from tests.fixtures import full_suite
 
     db = SessionLocal()
     try:
-        result = run_pipeline(db, AttackSimulator().collect())
+        result = run_pipeline(db, full_suite())
     finally:
         db.close()
     return result

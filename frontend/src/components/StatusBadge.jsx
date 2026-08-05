@@ -5,13 +5,13 @@ const STATUS_STYLES = {
   dismissed: "bg-slate-500/15 text-slate-400 border-slate-500/40",
 };
 
-export default function StatusBadge({ status = "open" }) {
+export default function StatusBadge({ status = "open", className = "" }) {
   const s = String(status).toLowerCase();
   return (
     <span
       className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${
         STATUS_STYLES[s] || STATUS_STYLES.open
-      }`}
+      } ${className}`}
     >
       {s}
     </span>

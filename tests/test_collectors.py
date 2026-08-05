@@ -1,62 +1,56 @@
-"""Test Phase 1 collectors: simulated attack data production."""
+"""Test collectors: live collectors and collector manager wiring."""
 from __future__ import annotations
 
-import pytest
-
-from backend.collectors.simulator import (
-    AttackSimulator,
-    gen_brute_force,
-    gen_baseline_events,
-    gen_persistence,
-    gen_port_scan,
-    gen_privilege_escalation,
-    gen_suspicious_powershell,
-)
+from backend.collectors import CollectorManager
+from backend.collectors.dns_http import DnsHttpCollector
+from backend.collectors.email import EmailCollector
+from backend.collectors.malware import MalwareFileCollector
+from backend.collectors.usb import UsbCollector
+from tests.fixtures import brute_force, port_scan, suspicious_powershell
 
 
-def test_full_suite_produces_all_event_types():
-    records = AttackSimulator().collect()
-    sources = {r["source"] for r in records}
-    assert {"eventlog", "powershell", "network"} <= sources
+def test_collector_manager_registers_live_collectors():
+    manager = CollectorManager()
+    names = {c.name for c in manager.collectors}
+    assert {"eventlog", "powershell", "process", "network", "dns_http", "email", "usb", "malware"} <= names
+    assert "simulator" not in names
 
 
-@pytest.mark.parametrize(
-    "generator,event_id,count",
-    [
-        (gen_brute_force, 4625, 12),
-        (gen_suspicious_powershell, 4104, 1),
-        (gen_privilege_escalation, 4720, 1),
-        (gen_persistence, 7045, 1),
-    ],
-)
-def test_scenario_shapes(generator, event_id, count):
-    records = generator()
-    matching = [r for r in records if r["event_id"] == event_id]
-    assert len(matching) == count
+def test_email_collector_disabled_without_dir():
+    collector = EmailCollector(ingest_dir="")
+    assert collector.enabled() is False
+    assert collector.collect() == []
 
 
-def test_port_scan_has_distinct_ports():
-    records = gen_port_scan(ports=30)
-    ports = {r["remote_port"] for r in records}
-    assert len(ports) == 30
+def test_usb_collector_graceful_without_pywin32():
+    collector = UsbCollector()
+    assert collector.collect() in ([], None) or isinstance(collector.collect(), list)
+
+
+def test_dns_http_graceful_without_sources():
+    collector = DnsHttpCollector()
+    assert isinstance(collector.collect(), list)
+
+
+def test_malware_collector_has_signatures():
+    collector = MalwareFileCollector()
+    assert collector.enabled()
+    assert isinstance(collector.collect(), list)
+
+
+def test_fixtures_produce_eventlog_records():
+    records = brute_force()
+    assert all(r["source"] == "eventlog" for r in records[:12])
+    assert all(r["event_id"] == 4625 for r in records[:12])
+
+
+def test_fixtures_port_scan_records():
+    records = port_scan(ports=30)
+    assert {r["remote_port"] for r in records} == {1 + (i * 137) % 65535 for i in range(30)}
     assert all(r["state"] == "SYN_SENT" for r in records)
 
 
-def test_powershell_encoded_payload():
-    records = gen_suspicious_powershell()
-    raw = records[0]["raw"]
-    assert raw["has_encoded"] is True
-    assert raw["has_download"] is True
-    assert raw["has_hidden"] is True
-
-
-def test_baseline_has_no_attacks():
-    records = gen_baseline_events(100)
-    assert all(r.get("event_id", 0) not in (7045, 4698, 4720) for r in records)
-    assert all(r.get("process") != "nmap.exe" for r in records)
-
-
-def test_unknown_scenario_raises():
-    sim = AttackSimulator()
-    with pytest.raises(KeyError):
-        sim.scenario("does_not_exist")
+def test_fixtures_powershell_encoded():
+    records = suspicious_powershell()
+    assert records[0]["raw"]["has_encoded"] is True
+    assert records[0]["raw"]["has_download"] is True

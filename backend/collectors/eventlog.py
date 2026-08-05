@@ -41,10 +41,14 @@ class WindowsEventLogCollector(BaseCollector):
         7045, 7040, 7036,
     }
 
-    def __init__(self, channels: list[str] | None = None):
+    def __init__(self, channels: list[str] | None = None, extra_event_ids: set[int] | None = None):
         super().__init__()
         self.channels = channels or [*SECURITY_LOG_CHANNELS, *POWERSHELL_CHANNELS]
+        self._extra_event_ids = set(extra_event_ids or set())
         self._last_read: dict[str, int] = {}  # channel -> record number
+
+    def _relevant(self, event_id: int) -> bool:
+        return event_id in self.INTERESTING_EVENT_IDS or event_id in self._extra_event_ids
 
     def enabled(self) -> bool:
         return HAS_PYWIN32
@@ -67,7 +71,7 @@ class WindowsEventLogCollector(BaseCollector):
 
     def _parse_record(self, event) -> dict | None:
         event_id = event.EventID & 0xFFFFFFFF
-        if event_id not in self.INTERESTING_EVENT_IDS:
+        if not self._relevant(event_id):
             return None
 
         ts = event.TimeGenerated

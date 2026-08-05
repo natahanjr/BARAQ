@@ -4,10 +4,14 @@ from __future__ import annotations
 import logging
 
 from backend.collectors.base import BaseCollector
+from backend.collectors.dns_http import DnsHttpCollector
+from backend.collectors.email import EmailCollector
 from backend.collectors.eventlog import WindowsEventLogCollector
+from backend.collectors.malware import MalwareFileCollector
 from backend.collectors.network import NetworkCollector
 from backend.collectors.powershell import PowerShellCollector
 from backend.collectors.process import ProcessCollector
+from backend.collectors.usb import UsbCollector
 
 logger = logging.getLogger("sentinel.collectors")
 
@@ -21,6 +25,10 @@ class CollectorManager:
             PowerShellCollector(),
             ProcessCollector(),
             NetworkCollector(),
+            DnsHttpCollector(),
+            EmailCollector(),
+            UsbCollector(),
+            MalwareFileCollector(),
         ]
 
     def collect(self) -> list[dict]:

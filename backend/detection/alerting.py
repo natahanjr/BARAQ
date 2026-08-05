@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from backend.database.models import Alert, AlertEventLink, NormalizedEvent
 from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
+from backend.ml.anomaly import event_feature_vector, get_detector
 from backend.risk.scoring import hybrid_risk, risk_descriptor, risk_level
 
 logger = logging.getLogger("sentinel.detection.alerting")
@@ -31,7 +32,22 @@ class AlertingService:
             user = first_event.user if first_event else "?"
         except (IndexError, AttributeError):
             user = "?"
+        if user == "?":
+            user = self._evidence_user(result.evidence)
         return f"{result.rule}:{mitre_id}:{user}"
+
+    @staticmethod
+    def _evidence_user(evidence: str) -> str:
+        """Best-effort user dimension from evidence text (rules without links)."""
+        import re
+
+        m = re.search(r"User '([^']+)'", evidence or "")
+        if m:
+            return m.group(1)
+        m = re.search(r"account '([^']+)'", evidence or "")
+        if m:
+            return m.group(1)
+        return "?"
 
     def _evidence_events(self, event_ids: list[int]) -> list[NormalizedEvent]:
         events = []
@@ -42,15 +58,34 @@ class AlertingService:
         return events
 
     def _compute_risk(self, result) -> tuple[float, str, str]:
-        """Hybrid risk: 0.6 * rule score + 0.4 * ML anomaly score of evidence."""
+        """Hybrid risk: 0.6 * rule score + 0.4 * ML anomaly score of evidence.
+
+        ML scores are taken from the stored ``ml_score`` when present (set by
+        ``analyze_events``); otherwise they are computed live with the trained
+        detector so alerts are genuinely hybrid as soon as a model exists.
+        """
         events = self._evidence_events(result.event_ids)
+        anomaly_scores: list = []
+        ml_present = False
+        detector = get_detector()
+        for ev in events:
+            if ev.ml_score is not None:
+                anomaly_scores.append(ev)
+                ml_present = True
+                continue
+            if detector.is_ready:
+                features = event_feature_vector(ev)
+                if features is not None:
+                    score = detector.score_event(features)
+                    if score > 0:
+                        anomaly_scores.append({"ml_score": score})
+                        ml_present = True
         final, level = hybrid_risk(
             severity=result.severity,
             confidence=result.confidence,
             event_count=len(result.event_ids),
-            anomaly_scores=events,
+            anomaly_scores=anomaly_scores,
         )
-        ml_present = any(getattr(ev, "ml_score", None) is not None for ev in events)
         method = "hybrid" if ml_present else "rule"
         return final, level, method
 
@@ -136,12 +171,31 @@ class AlertingService:
 
     @staticmethod
     def _signature_matches(alert: Alert, result, key: str) -> bool:
-        """Loose signature check: same rule + same user dimension."""
+        """Loose signature check: same rule + same user dimension.
+
+        Rules without linked evidence (empty ``event_ids``) previously produced
+        a new alert every cycle because the full evidence string changed. We
+        match on rule + user so such findings refresh a single open alert.
+        """
         try:
             user_part = key.split(":", 2)[2] if ":" in key else ""
         except IndexError:
             user_part = ""
-        return alert.rule == result.rule and (not user_part or alert.evidence == result.evidence)
+        if alert.rule != result.rule:
+            return False
+        if user_part and user_part != "?":
+            return _alert_user(alert.evidence) == user_part
+        return True  # rule-only anchor (no user signal): refresh a single open alert
+
+
+def _alert_user(evidence: str) -> str:
+    import re
+
+    m = re.search(r"User '([^']+)'", evidence or "")
+    if m:
+        return m.group(1)
+    m = re.search(r"account '([^']+)'", evidence or "")
+    return m.group(1) if m else "?"
 
 
 def deduplicate_stale(session: Session, hours: int = 24) -> int:

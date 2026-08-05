@@ -40,13 +40,19 @@ class SecurityAssistant:
         self.session = session
         self._vectorizer = None
         self._intent_matrix = None
+        self._index_built = False
 
     # ------------------------------------------------------------------
     # Knowledge retrieval
     # ------------------------------------------------------------------
-    def _build_intent_index(self):
-        if not HAS_SKLEARN:
+    def _ensure_index(self):
+        """Build the TF-IDF intent index once per assistant instance."""
+        if self._index_built or not HAS_SKLEARN:
             return
+        self._build_intent_index()
+        self._index_built = True
+
+    def _build_intent_index(self):
         docs = [i["examples"] for i in INTENTS]
         corpus = [" ".join(i["examples"]) for i in INTENTS]
         self._vectorizer = TfidfVectorizer(
@@ -207,7 +213,8 @@ class SecurityAssistant:
             return (
                 "The detection rules map to these MITRE ATT&CK techniques: "
                 "T1110 (Brute Force), T1059.001 (PowerShell), T1068 (Privilege Escalation), "
-                "T1547 (Persistence), T1046 (Network Service Discovery)."
+                "T1547 (Persistence), T1046 (Network Service Discovery), "
+                "T1021 (Lateral Movement), T1074 (Data Staging)."
             )
 
         if intent == "analyst_note":
@@ -241,7 +248,7 @@ class SecurityAssistant:
     # Chat
     # ------------------------------------------------------------------
     def chat(self, message: str, role: str = "user", persist: bool = True) -> str:
-        self._build_intent_index()
+        self._ensure_index()
         intent = self._classify_intent(message)
         logger.info("Assistant intent=%s for: %s", intent, message[:80])
 
@@ -267,6 +274,21 @@ class SecurityAssistant:
     # ------------------------------------------------------------------
     # Optional remote completion (OpenAI-compatible)
     # ------------------------------------------------------------------
+    def _context_block(self) -> str:
+        """Compact live SOC context so the remote model can ground its reply."""
+        alerts = self._latest_alerts(5)
+        if not alerts:
+            return f"Security score: {self._compute_score():.1f}/100. No open alerts."
+        lines = [
+            f"Security score: {self._compute_score():.1f}/100.",
+            f"Open alerts: {len(alerts)}.",
+        ]
+        for a in alerts:
+            lines.append(
+                f"- Alert #{a.id}: {a.name} ({a.severity}) MITRE {a.mitre_id} - {a.mitre_tactic}"
+            )
+        return "\n".join(lines)
+
     def _remote_completion(self, message: str) -> str:
         try:
             payload = json.dumps(
@@ -277,8 +299,9 @@ class SecurityAssistant:
                             "role": "system",
                             "content": (
                                 "You are the SentinelSOC security analyst assistant. "
-                                "Answer concisely using the context provided. "
-                                "Ground all statements in MITRE ATT&CK where applicable."
+                                "Answer concisely using the provided SOC context. "
+                                "Ground all statements in MITRE ATT&CK where applicable.\n\n"
+                                f"LIVE SOC CONTEXT:\n{self._context_block()}"
                             ),
                         },
                         {"role": "user", "content": message},

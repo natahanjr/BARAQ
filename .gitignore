@@ -11,10 +11,11 @@ dist/
 *.local
 
 # Database & runtime data (real host telemetry)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite*
 database/*.db
-database/*.db-shm
-database/*.db-wal
-database/*.sqlite*
 
 # Generated artifacts
 reports/

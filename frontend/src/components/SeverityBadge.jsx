@@ -6,13 +6,13 @@ const SEVERITY_STYLES = {
   info: "bg-slate-500/15 text-slate-400 border-slate-500/40",
 };
 
-export default function SeverityBadge({ severity = "info" }) {
+export default function SeverityBadge({ severity = "info", className = "" }) {
   const s = String(severity).toLowerCase();
   return (
     <span
       className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${
         SEVERITY_STYLES[s] || SEVERITY_STYLES.info
-      }`}
+      } ${className}`}
     >
       {s}
     </span>

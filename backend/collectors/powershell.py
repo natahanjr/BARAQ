@@ -2,8 +2,7 @@
 
 Primarily built on Windows Event Log script block/module logging
 (Event 4104 / 4103) which is read through the same pywin32 mechanism.
-On machines without pywin32 this collector is a no-op; the simulator
-feeds equivalent records for testing.
+On machines without pywin32 this collector is a no-op.
 """
 from __future__ import annotations
 

@@ -1,30 +1,84 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import Card from "../components/Card.jsx";
+import PageHeader from "../components/PageHeader.jsx";
 import StatCard from "../components/StatCard.jsx";
-import { Loading } from "../components/Feedback.jsx";
+import { Loading, ErrorBanner } from "../components/Feedback.jsx";
+import { RefreshIcon } from "../components/icons.jsx";
+
+const ACTION_STYLES = {
+  primary: "bg-gradient-to-r from-cyan-600 to-cyan-500 text-white hover:from-cyan-500 hover:to-cyan-400",
+  secondary: "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700",
+  ml: "bg-gradient-to-r from-violet-600 to-violet-500 text-white hover:from-violet-500 hover:to-violet-400",
+};
+
+function ActionButton({ busy, kind, onClick, children, variant = "primary" }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!!busy}
+      className={`w-full rounded-lg px-4 py-2.5 text-sm font-semibold transition-all disabled:opacity-50 ${
+        ACTION_STYLES[variant]
+      }`}
+    >
+      {busy === kind ? "Processing..." : children}
+    </button>
+  );
+}
 
 function ResultBox({ result }) {
   if (!result) return null;
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
-      <h3 className="mb-2 text-sm font-semibold text-slate-300">Pipeline result</h3>
-      <div className="grid grid-cols-2 gap-2 text-xs text-slate-400 md:grid-cols-4">
-        <p>Collected: <span className="font-mono text-slate-200">{result.collected}</span></p>
-        <p>Events: <span className="font-mono text-slate-200">{result.saved_events}</span></p>
-        <p>Processes: <span className="font-mono text-slate-200">{result.saved_processes}</span></p>
-        <p>Connections: <span className="font-mono text-slate-200">{result.saved_connections}</span></p>
-        <p>Findings: <span className="font-mono text-slate-200">{result.findings?.length ?? 0}</span></p>
-        <p className="col-span-2">Alerts created: <span className="font-mono text-amber-300">{result.alerts_created}</span></p>
+    <Card tone="emerald">
+      <h3 className="mb-4 text-base font-semibold text-white">Pipeline Result</h3>
+      <div className="grid grid-cols-2 gap-3 text-sm text-slate-400 md:grid-cols-4">
+        <div className="rounded-lg bg-slate-800/40 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Collected</p>
+          <p className="mt-1 font-mono text-xl font-bold text-cyan-400">{result.collected}</p>
+        </div>
+        <div className="rounded-lg bg-slate-800/40 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Events</p>
+          <p className="mt-1 font-mono text-xl font-bold text-slate-200">{result.saved_events}</p>
+        </div>
+        <div className="rounded-lg bg-slate-800/40 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Processes</p>
+          <p className="mt-1 font-mono text-xl font-bold text-slate-200">{result.saved_processes}</p>
+        </div>
+        <div className="rounded-lg bg-slate-800/40 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Connections</p>
+          <p className="mt-1 font-mono text-xl font-bold text-slate-200">{result.saved_connections}</p>
+        </div>
+        <div className="rounded-lg bg-slate-800/40 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Findings</p>
+          <p className="mt-1 font-mono text-xl font-bold text-amber-400">{result.findings?.length ?? 0}</p>
+        </div>
+        <div className="col-span-2 rounded-lg bg-slate-800/40 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Alerts Created</p>
+          <p className="mt-1 font-mono text-xl font-bold text-red-400">{result.alerts_created}</p>
+        </div>
       </div>
       {result.findings?.length > 0 && (
-        <div className="mt-3 max-h-48 space-y-1 overflow-y-auto">
+        <div className="mt-4 max-h-48 space-y-1 overflow-y-auto">
           {result.findings.map((f, i) => (
-            <p key={i} className="rounded bg-slate-900 px-2 py-1 font-mono text-[11px] text-slate-400">
+            <p
+              key={i}
+              className="rounded-lg border border-slate-800/50 bg-slate-900/60 px-3 py-2 font-mono text-[11px] text-slate-400"
+            >
               {f.rule} → {f.mitre_id} ({f.mitre_tactic}) · {f.severity} · score {f.score}
             </p>
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+function KpiRow({ label, value, color }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-slate-800/50 bg-slate-900/50 px-3 py-2">
+      <span className="text-xs text-slate-400">{label}</span>
+      <span className={`text-xs font-semibold ${color}`}>{value ?? "—"}</span>
     </div>
   );
 }
@@ -67,83 +121,121 @@ export default function System() {
   if (!status) return <Loading label="Loading system status" />;
 
   const summary = status.summary || {};
+  const trained = Boolean(ml?.ready);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
+      <PageHeader
+        title="System Control"
+        subtitle="Manage collection, ML training, and system operations"
+        actions={
+          <button
+            type="button"
+            onClick={refresh}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3.5 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700/60"
+          >
+            <RefreshIcon className="h-4 w-4" />
+            Refresh
+          </button>
+        }
+      />
+
+      {/* Status cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Application" value={status.application} sub={`v${status.version}`} accent="text-cyan-400" />
         <StatCard label="Database" value={status.database} sub="local SQLite" accent="text-slate-100" />
-        <StatCard label="Collection" value={status.collecting ? "ACTIVE" : "IDLE"} sub="15s scheduler" accent={status.collecting ? "text-emerald-400" : "text-red-400"} />
-        <StatCard label="Uptime" value={`${Math.floor((status.uptime_seconds || 0) / 60)} min`} sub={`${status.uptime_seconds ?? 0}s`} accent="text-slate-100" />
+        <StatCard
+          label="Collection"
+          value={status.collecting ? "ACTIVE" : "IDLE"}
+          sub="15s scheduler"
+          accent={status.collecting ? "text-emerald-400" : "text-red-400"}
+        />
+        <StatCard
+          label="Uptime"
+          value={`${Math.floor((status.uptime_seconds || 0) / 60)} min`}
+          sub={`${status.uptime_seconds ?? 0}s elapsed`}
+          accent="text-slate-100"
+        />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-5">
-          <h2 className="text-sm font-semibold text-slate-300">Live collection</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Collect real host telemetry from the live system for the detection pipeline.
+      {message && (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300">
+          ✓ {message}
+        </div>
+      )}
+      {error && <ErrorBanner message={error} onRetry={refresh} />}
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Live collection */}
+        <Card>
+          <h3 className="text-base font-semibold text-white">Live Collection</h3>
+          <p className="mt-1 text-xs leading-relaxed text-slate-400">
+            Collect real host telemetry from the live system and push it through the detection
+            pipeline.
           </p>
-          <div className="mt-4 grid gap-2">
-            <button
-              onClick={() => run("collect")}
-              disabled={!!busy}
-              className="rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-600 disabled:opacity-40"
-            >
-              {busy === "collect" ? "Collecting..." : "◉ Collect live host data"}
-            </button>
+          <div className="mt-5">
+            <ActionButton busy={busy} kind="collect" onClick={() => run("collect")} variant="primary">
+              Collect Live Host Data
+            </ActionButton>
           </div>
-          {message && <p className="mt-3 text-xs text-emerald-300">{message}</p>}
-          {error && <p className="mt-3 text-xs text-red-300">{error}</p>}
-        </div>
+        </Card>
 
-        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-5">
-          <h2 className="text-sm font-semibold text-slate-300">Machine learning (Isolation Forest)</h2>
-          {ml && (
-            <div className="mt-3 space-y-2 text-xs text-slate-400">
-              <p>Trained: <span className={ml.trained ? "text-emerald-300" : "text-amber-300"}>{ml.ready ? "yes" : "no"}</span></p>
-              <p>Samples: <span className="font-mono text-slate-200">{ml.samples ?? "—"}</span></p>
-              <p>Behavior streams: <span className="font-mono text-slate-200">{(ml.streams ?? []).join(", ") || "—"}</span></p>
-              <p>Supervised model: <span className="font-mono text-slate-200">{ml.supervised ?? "—"}</span></p>
-              <p>XGBoost available: <span className={ml.has_xgboost ? "text-emerald-300" : "text-slate-500"}>{ml.has_xgboost ? "yes" : "no (sklearn fallback)"}</span></p>
+        {/* ML training */}
+        <Card tone="violet">
+          <h3 className="text-base font-semibold text-white">Machine Learning</h3>
+          <p className="mt-1 text-xs leading-relaxed text-slate-400">
+            Isolation Forest + supervised anomaly detection
+          </p>
+
+          <div className="mt-4 space-y-2 text-xs">
+            <div className="flex items-center justify-between rounded-lg bg-slate-800/40 px-3 py-2">
+              <span className="flex items-center gap-2 text-slate-400">
+                <span className={`h-1.5 w-1.5 rounded-full ${trained ? "bg-emerald-400" : "bg-amber-400"}`} />
+                Trained
+              </span>
+              <span className={`font-semibold ${trained ? "text-emerald-400" : "text-amber-400"}`}>
+                {trained ? "yes" : "no"}
+              </span>
             </div>
-          )}
-          <div className="mt-4 grid gap-2">
-            <button
-              onClick={() => run("mlTrain")}
-              disabled={!!busy}
-              className="rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-40"
-            >
-              {busy === "mlTrain" ? "Training..." : "◈ Train model"}
-            </button>
-            <button
-              onClick={() => run("mlAnalyze")}
-              disabled={!!busy}
-              className="rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-600 disabled:opacity-40"
-            >
-              {busy === "mlAnalyze" ? "Analyzing..." : "◈ Analyze recent events"}
-            </button>
+            <div className="flex items-center justify-between rounded-lg bg-slate-800/40 px-3 py-2">
+              <span className="text-slate-400">Samples</span>
+              <span className="font-mono text-slate-200">{ml?.samples ?? "—"}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-slate-800/40 px-3 py-2">
+              <span className="text-slate-400">Streams</span>
+              <span className="truncate font-mono text-slate-200">
+                {(ml?.streams ?? []).join(", ") || "—"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-slate-800/40 px-3 py-2">
+              <span className="text-slate-400">Supervised</span>
+              <span className="font-mono text-slate-200">{ml?.supervised ?? "—"}</span>
+            </div>
           </div>
-        </div>
 
-        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-5">
-          <h2 className="text-sm font-semibold text-slate-300">Current KPIs</h2>
-          <div className="mt-3 space-y-1.5 text-xs">
-            {[
-              ["Security score", summary.security_score, "text-cyan-300"],
-              ["Total events", summary.total_events, "text-slate-200"],
-              ["Active alerts", summary.active_alerts, "text-amber-300"],
-              ["Critical threats", summary.critical_threats, "text-red-300"],
-              ["Anomalies (ML)", summary.anomalies_detected, "text-violet-300"],
-              ["Events last hour", summary.events_last_hour, "text-slate-200"],
-              ["System status", summary.system_status, "text-emerald-300"],
-            ].map(([k, v, c]) => (
-              <div key={k} className="flex justify-between rounded bg-slate-950/50 px-3 py-1.5">
-                <span className="text-slate-500">{k}</span>
-                <span className={`font-mono font-semibold ${c}`}>{v}</span>
-              </div>
-            ))}
+          <div className="mt-5 grid gap-2">
+            <ActionButton busy={busy} kind="mlTrain" onClick={() => run("mlTrain")} variant="ml">
+              Train Model
+            </ActionButton>
+            <ActionButton busy={busy} kind="mlAnalyze" onClick={() => run("mlAnalyze")} variant="secondary">
+              Analyze Recent Events
+            </ActionButton>
           </div>
-        </div>
+        </Card>
+
+        {/* KPIs */}
+        <Card>
+          <h3 className="mb-4 text-base font-semibold text-white">Current KPIs</h3>
+          <div className="space-y-2">
+            <KpiRow label="Security score" value={summary.security_score?.toFixed(1)} color="text-cyan-300" />
+            <KpiRow label="Total events" value={summary.total_events?.toLocaleString()} color="text-slate-200" />
+            <KpiRow label="Active alerts" value={summary.active_alerts} color="text-amber-300" />
+            <KpiRow label="Critical threats" value={summary.critical_threats} color="text-red-300" />
+            <KpiRow label="Anomalies (ML)" value={summary.anomalies_detected} color="text-violet-300" />
+            <KpiRow label="Events last hour" value={summary.events_last_hour} color="text-slate-200" />
+            <KpiRow label="System status" value={summary.system_status} color="text-emerald-300" />
+          </div>
+        </Card>
       </div>
 
       <ResultBox result={result} />

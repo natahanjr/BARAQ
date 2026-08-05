@@ -84,3 +84,28 @@ def risk_descriptor(level: str) -> str:
         "MEDIUM": "Monitor and verify",
         "LOW": "Informational / low priority",
     }.get(str(level).upper(), "Unknown")
+
+
+def compute_rule_score(severity: str, confidence: float, event_count: int = 1) -> float:
+    """Evaluation-framework alias for :func:`rule_score`."""
+    return rule_score(severity, confidence, event_count)
+
+
+def compute_hybrid_score(
+    rule_score: float,
+    ml_scores: list,
+    ml_weight: float = ML_DETECTION_WEIGHT,
+    rule_weight: float = ML_RULE_WEIGHT,
+) -> float:
+    """Evaluation-framework entry point: fuse a numeric rule score with ML scores.
+
+    ``rule_score`` is a 0-100 rule-based risk value; ``ml_scores`` is a list of
+    per-event anomaly scores (0-1). The weighted blend is renormalized by the
+    total weight so a pure rule run (``ml_weight=0``) returns the rule score.
+    """
+    rule_part = float(rule_score) * rule_weight
+    ml_part = ml_anomaly_score(ml_scores) * ml_weight
+    total_weight = rule_weight + ml_weight
+    if total_weight <= 0:
+        return round(min(100.0, float(rule_score)), 2)
+    return round(min(100.0, (rule_part + ml_part) / total_weight), 2)

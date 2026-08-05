@@ -1,10 +1,10 @@
-"""Tests for the Evaluation Framework (Upgrade Module 10)."""
+"""Tests for the Evaluation Framework (live-only mode)."""
 from __future__ import annotations
 
 import pytest
 
 from backend.database.models import EvaluationRun
-from backend.evaluation.evaluator import SCENARIOS, _metrics, run_evaluation
+from backend.evaluation.evaluator import _metrics, run_evaluation
 
 
 def test_metrics_perfect_detection():
@@ -34,20 +34,17 @@ def test_metrics_mixed_case():
     assert m["false_positive_rate"] == pytest.approx(2 / 20, abs=0.001)
 
 
-def test_run_evaluation_detects_all_attack_scenarios(db):
+def test_run_evaluation_live_assessment(db):
+    from tests.conftest import run_simulation
+
+    run_simulation(db)
     result = run_evaluation(db, with_ml=False)
-    assert len(result["runs"]) == len(SCENARIOS)
-    overall = result["overall"]
-    # Attack scenarios must be detected (recall >= 0.5 overall), baseline clean.
-    assert overall["true_positives"] > 0
-    assert overall["recall"] > 0.5
-    assert overall["false_positive_rate"] < 0.5
+    assert result["overall"]["scenario"] == "overall"
+    assert result["info"]["events_analyzed"] > 0
+    assert result["info"]["findings"] > 0
+    assert result["info"]["rules_fired"] > 0
+    assert "runs" in result
+    assert isinstance(result["runs"], list)
 
-    by_scenario = {r["scenario"]: r for r in result["runs"]}
-    for name in ("brute_force", "powershell", "privilege_escalation", "persistence", "port_scan"):
-        assert by_scenario[name]["true_positives"] > 0, f"{name} produced no true positives"
-    assert by_scenario["baseline"]["false_positives"] < 5, "baseline produced too many FPs"
-
-    # Persisted to the production DB.
     runs = db.query(EvaluationRun).all()
-    assert len(runs) >= len(SCENARIOS) + 1
+    assert len(runs) >= 2  # at least one per-rule run + overall

@@ -11,7 +11,10 @@ from pathlib import Path
 
 _TEST_DB = Path(tempfile.gettempdir()) / "sentinel_test.db"
 if _TEST_DB.exists():
-    _TEST_DB.unlink()
+    try:
+        _TEST_DB.unlink()
+    except PermissionError:  # another process may still hold a stale handle
+        pass
 os.environ["SENTINEL_DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"
 os.environ["SENTINEL_INTERVAL"] = "60"
 
@@ -51,10 +54,26 @@ def db():
 
 
 def run_simulation(db, scenario: str | None = None) -> dict:
-    """Execute the simulation pipeline inside a test database."""
+    """Execute a fixture-driven pipeline run inside a test database."""
     from backend.api.system import run_pipeline
-    from backend.collectors.simulator import AttackSimulator
+    from tests.fixtures import full_suite
 
-    simulator = AttackSimulator()
-    records = simulator.collect() if scenario is None else simulator.scenario(scenario)
-    return run_pipeline(db, records)
+    return run_pipeline(db, full_suite() if scenario is None else _scenario(scenario))
+
+
+def _scenario(name: str) -> list[dict]:
+    from tests import fixtures
+
+    mapping = {
+        "brute_force": fixtures.brute_force,
+        "powershell": fixtures.suspicious_powershell,
+        "privilege_escalation": fixtures.privilege_escalation,
+        "persistence": fixtures.persistence,
+        "port_scan": fixtures.port_scan,
+        "lateral_movement": fixtures.lateral_movement,
+        "data_staging": fixtures.data_staging,
+        "baseline": fixtures.benign_baseline,
+    }
+    if name not in mapping:
+        raise KeyError(f"Unknown fixture scenario: {name}")
+    return mapping[name]()

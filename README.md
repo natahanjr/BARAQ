@@ -12,7 +12,7 @@ A complete, research-oriented SOC framework that runs entirely on a single Windo
 |---|---|
 | **Collection** | Windows security event log (4624, 4625, 4720, 4726, 4732, 4740, 4672...), running/new processes with parent-child relationships, active TCP connections + listening ports, PowerShell operational log, plus a realistic attack simulator |
 | **Processing** | Event normalization (Event ID / Category / User / Risk / Timestamp / Host) with **numeric risk scoring (0-100)** per event |
-| **Rule-Based Detection** | 5 rules — Brute Force (T1110), Suspicious PowerShell (T1059.001), Privilege Escalation (T1068), Persistence (T1547), Network Reconnaissance (T1046) |
+| **Rule-Based Detection** | 7 rules — Brute Force (T1110), Suspicious PowerShell (T1059.001), Privilege Escalation (T1068), Persistence (T1547), Network Reconnaissance (T1046), **Lateral Movement (T1021)**, **Data Staging (T1074)** |
 | **ML Detection** | Per-behavior anomaly analysis (**login / process / network**) with Isolation Forest + Random Forest / XGBoost supervised classifier |
 | **Hybrid Risk Scoring** | Alert risk = **60% rule score + 40% ML anomaly score** → 0-100 score + LOW/MEDIUM/HIGH/CRITICAL level |
 | **MITRE ATT&CK** | Every alert enriched with technique ID, name, tactic, confidence and recommendation |

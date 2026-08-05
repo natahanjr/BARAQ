@@ -55,6 +55,8 @@ EVENT_META: dict[int, dict[str, str]] = {
     4104: {"category": "PowerShell", "risk": "Medium", "severity": "medium"},
     400: {"category": "PowerShell", "risk": "Low", "severity": "info"},
     403: {"category": "PowerShell", "risk": "Medium", "severity": "medium"},
+    6416: {"category": "Device", "risk": "Medium", "severity": "medium"},
+    6420: {"category": "Device", "risk": "Medium", "severity": "medium"},
 }
 
 MESSAGE_PATTERNS = {

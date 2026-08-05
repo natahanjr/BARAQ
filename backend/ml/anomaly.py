@@ -58,21 +58,82 @@ def _behavior_of(event_id: int) -> str:
     return "login"
 
 
-def _fact(event, key: str, default=0.0) -> float:
+def _fact(event, key: str, default: float = 0.0) -> float:
+    """Read a numeric fact from any event shape.
+
+    Supports ORM ``NormalizedEvent`` objects, normalized dicts (``raw_json``
+    with ``facts``), and raw collector records (``raw.<key>``).
+    """
     try:
-        value = (event.raw_json or {}).get("facts", {}).get(key)
+        raw = event.raw_json
     except AttributeError:
-        value = (event.get("raw") or {}).get("facts", {}).get(key) if isinstance(event, dict) else None
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+        raw = event.get("raw_json") if isinstance(event, dict) else None
+    if isinstance(raw, dict):
+        facts = raw.get("facts") or {}
+        if key in facts:
+            try:
+                return float(facts[key])
+            except (TypeError, ValueError):
+                return default
+    if isinstance(event, dict):
+        value = (event.get("raw") or {}).get(key)
+        if value is not None:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return default
+    return default
 
 
 def _bool_fact(event, key: str) -> int:
     return 1 if _fact(event, key) else 0
+
+
+def _ip_feature(event, key: str) -> float:
+    """Coerce an IP/status-code value into a stable numeric feature.
+
+    Raw collectors store ``source_ip``/``sub_status`` as strings (e.g.
+    ``"192.168.99.77"``, ``"0xC000006A"``), which the old code silently
+    collapsed to ``0.0`` via a failed ``float()``. This returns a
+    deterministic numeric sketch so the feature vector is no longer a
+    near-constant. Nonexistent values map to ``0.0``.
+    """
+    raw = None
+    try:
+        raw = event.raw_json
+    except AttributeError:
+        raw = event.get("raw_json") if isinstance(event, dict) else None
+    value = None
+    if isinstance(raw, dict):
+        value = (raw.get("facts") or {}).get(key)
+    elif isinstance(event, dict):
+        value = (event.get("raw") or {}).get(key)
+
+    if value is None:
+        return 0.0
+    # Already numeric -> use directly.
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+
+    def _digits(s: str) -> float:
+        return sum(int(c) for c in s if c.isdigit())
+
+    # IPv4 dotted form -> combine octets into a bounded numeric sketch.
+    if "." in text and all(ch.isdigit() for ch in text.replace(".", "")):
+        try:
+            parts = [int(p) for p in text.split(".") if p.isdigit()]
+            if len(parts) == 4:
+                return float((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3])
+        except (TypeError, ValueError, OverflowError):
+            pass
+    # Hex status codes -> numeric sum of digits (deterministic).
+    if text.startswith("0x"):
+        return float(_digits(text))
+    if text.isdigit():
+        return float(text)
+    # Keep something signal-y rather than a silent zero.
+    return float(_digits(text) or 0)
 
 
 def event_feature_vector(event) -> list[float] | None:
@@ -83,8 +144,8 @@ def event_feature_vector(event) -> list[float] | None:
         return [
             int(event_id),
             _fact(event, "logon_type"),
-            _bool_fact(event, "sub_status"),
-            _fact(event, "source_ip", 0) / 1000.0,
+            _ip_feature(event, "sub_status") / 100.0,
+            _ip_feature(event, "source_ip") / 4_294_967_296.0,
             _bool_fact(event, "is_locked"),
         ]
     if behavior == "process":
@@ -101,64 +162,63 @@ def event_feature_vector(event) -> list[float] | None:
 # ---------------------------------------------------------------------------
 # Feature extraction (per behavior stream)
 # ---------------------------------------------------------------------------
-def _load_login_features(session, since: datetime) -> tuple[np.ndarray, list[dict]]:
-    rows = session.execute(
-        select(
-            NormalizedEvent.user,
-            func.sum(_case_event(4625)).label("failures"),
-            func.sum(_case_event(4624)).label("successes"),
-            func.count(func.distinct(NormalizedEvent.raw_json)).label("distinct_sources"),
-        )
-        .where(
-            NormalizedEvent.event_id.in_([4624, 4625]),
+def _load_behavior_features(session, since: datetime, event_ids: set[int]) -> np.ndarray:
+    """Per-event feature matrix for a behavior stream.
+
+    Uses :func:`event_feature_vector` so training and scoring share the same
+    feature space (see docs/ml_strategy_and_validation.md).
+    """
+    rows = session.scalars(
+        select(NormalizedEvent).where(
+            NormalizedEvent.event_id.in_(event_ids),
             NormalizedEvent.timestamp >= since,
         )
-        .group_by(NormalizedEvent.user)
     ).all()
-    if not rows:
-        return np.empty((0, 3)), []
-    X = np.array(
-        [[r.failures or 0, r.successes or 0, r.distinct_sources or 0] for r in rows],
-        dtype=float,
-    )
-    meta = [{"user": r.user, "failures": r.failures or 0, "successes": r.successes or 0} for r in rows]
-    return X, meta
-
-
-def _case_event(event_id: int):
-    from sqlalchemy import case
-    return case((NormalizedEvent.event_id == event_id, 1), else_=0)
-
-
-def _load_process_features(session, since: datetime) -> tuple[np.ndarray, list[dict]]:
-    rows = session.execute(
-        select(NormalizedEvent.raw_json, func.count(NormalizedEvent.id))
-        .where(NormalizedEvent.event_id == 4688, NormalizedEvent.timestamp >= since)
-        .group_by(NormalizedEvent.raw_json)
-    ).all()
-    if not rows:
-        return np.empty((0, 2)), []
-    encoder = LabelEncoder()
-    names = [r[0].get("facts", {}).get("new_process", "unknown") if r[0] else "unknown" for r in rows]
-    counts = np.array([[int(r[1])] for r in rows], dtype=float)
-    encoded = encoder.fit_transform(names).reshape(-1, 1)
-    X = np.hstack([encoded, counts])
-    return X, [{"process": n} for n in names]
+    X = []
+    for ev in rows:
+        features = event_feature_vector(ev)
+        if features:
+            X.append(features)
+    return np.array(X, dtype=float) if X else np.empty((0, 5))
 
 
 def _load_network_features(session, since: datetime) -> tuple[np.ndarray, list[dict]]:
+    """Per-remote-IP flow features: count, distinct ports, bytes, duration.
+
+    Returns (X, rows) where ``rows`` carries the remote_ip label for each
+    feature row so the IP encoder can be retained for scoring unseen hosts.
+    """
     rows = session.execute(
-        select(NetworkConnection.remote_ip, func.count(NetworkConnection.id))
+        select(
+            NetworkConnection.remote_ip,
+            func.count(NetworkConnection.id),
+            func.count(func.distinct(NetworkConnection.remote_port)),
+            func.sum(NetworkConnection.bytes_sent),
+            func.sum(NetworkConnection.bytes_recv),
+            func.avg(NetworkConnection.duration_seconds),
+        )
         .where(NetworkConnection.observed_at >= since)
         .group_by(NetworkConnection.remote_ip)
     ).all()
     if not rows:
-        return np.empty((0, 2)), []
+        return np.empty((0, 6)), []
     encoder = LabelEncoder()
     ips = [r[0] or "unknown" for r in rows]
-    counts = np.array([[int(r[1])] for r in rows], dtype=float)
     encoded = encoder.fit_transform(ips).reshape(-1, 1)
-    X = np.hstack([encoded, counts])
+    flows = np.array(
+        [
+            [
+                int(r[1]),
+                int(r[2]),
+                float(r[3] or 0),
+                float(r[4] or 0),
+                float(r[5] or 0),
+            ]
+            for r in rows
+        ],
+        dtype=float,
+    )
+    X = np.hstack([encoded, flows])
     return X, [{"remote_ip": ip} for ip in ips]
 
 
@@ -187,15 +247,16 @@ class MLAnomalyDetector:
         try:
             since = datetime.now(timezone.utc) - timedelta(hours=hours)
             datasets = {
-                "login": _load_login_features(session, since),
-                "process": _load_process_features(session, since),
-                "network": _load_network_features(session, since),
+                "login": _load_behavior_features(session, since, LOGIN_EVENTS),
+                "process": _load_behavior_features(session, since, PROCESS_EVENTS),
+                "network": _load_network_features(session, since)[0],
             }
+            _, network_rows = _load_network_features(session, since)
 
             self.models = {}
             self.encoders = {}
             trained_streams = []
-            for behavior, (X, _meta) in datasets.items():
+            for behavior, X in datasets.items():
                 if len(X) < 3:
                     continue
                 model = IsolationForest(
@@ -207,10 +268,17 @@ class MLAnomalyDetector:
                 self.models[behavior] = model
                 trained_streams.append(behavior)
 
+            # Retain the ip -> code encoder so unseen connections can be scored
+            # in the same feature space as the trained network model.
+            if "network" in self.models and network_rows:
+                encoder = LabelEncoder()
+                encoder.fit([r["remote_ip"] for r in network_rows])
+                self.encoders["network"] = encoder
+
             if not self.models:
                 return {"status": "insufficient-data", "trained": False}
 
-            self.n_samples = int(sum(len(d[0]) for d in datasets.values()))
+            self.n_samples = int(sum(len(d) for d in datasets.values()))
             if self.n_samples < ML_TRAIN_MIN_SAMPLES:
                 logger.info(
                     "Only %d samples; training anyway (min %d)", self.n_samples, ML_TRAIN_MIN_SAMPLES
@@ -259,21 +327,45 @@ class MLAnomalyDetector:
 
     @staticmethod
     def _labeled_samples(session) -> tuple[list[list[float]], list[list[float]]]:
-        """Heuristic labels: simulated attack events vs benign baseline."""
+        """Heuristic labels: simulated attack events vs benign baseline.
+
+        Builds labels from the *real* feature vectors (via
+        :func:`event_feature_vector`) so the supervised classifier is trained
+        on the same 5-dim space used for scoring. Previously this returned
+        hardcoded 3-dim vectors, which silently zeroed the classifier because
+        its ``n_features_in_`` never matched the scorer.
+        """
         attack_samples: list[list[float]] = []
         baseline_samples: list[list[float]] = []
         rows = session.execute(select(NormalizedEvent.raw_json, NormalizedEvent.event_id)).all()
         for raw, event_id in rows:
             facts = (raw or {}).get("facts", {})
-            if event_id == 4625 and str(facts.get("source_ip", "")).startswith("192.168.99"):
-                attack_samples.append([1.0, 10.0, 1.0])
-            elif event_id in (4720, 4732, 7045, 4698, 4104):
-                attack_samples.append([0.0, 5.0, 1.0])
-            elif event_id == 4624:
-                baseline_samples.append([1.0, 1.0, 1.0])
+            src = str(facts.get("source_ip", "") or "")
+            eid = int(event_id)
+            if eid == 4625 and (src.startswith("192.168.99") or src.startswith("10.")):
+                is_attack = True
+            elif eid in (4624, 4634, 4647, 4771):  # benign logon family
+                is_attack = False
+            elif eid in (4720, 4732, 7045, 4698, 4104, 4103, 4688):  # risky mutation
+                is_attack = True
+            else:
+                is_attack = bool(facts.get("is_anomalous") or facts.get("attack"))
+            features = event_feature_vector({"event_id": eid, "raw_json": raw})
+            if not features:
+                continue
+            (attack_samples if is_attack else baseline_samples).append(features)
         return attack_samples, baseline_samples
 
     # ------------------------------------------------------------------
+    def _combined_score(self, model, features: list[float]) -> float:
+        """Blend the IsolationForest anomaly signal with the supervised
+        classifier's attack probability into a single [0,1] score."""
+        base = self._score_with(model, features)
+        if self.supervised is None:
+            return base
+        p = self.supervised_proba(features)
+        return float(max(0.0, min(1.0, 0.6 * base + 0.4 * p)))
+
     def score_event(self, features: list[float]) -> float:
         """Anomaly score in [0,1]; higher = more anomalous.
 
@@ -283,21 +375,54 @@ class MLAnomalyDetector:
         if not self.is_ready:
             return 0.0
         model = self.models.get("login") or next(iter(self.models.values()))
-        return self._score_with(model, features)
+        return self._combined_score(model, features)
 
     def score_event_for_behavior(self, behavior: str, features: list[float]) -> float:
         model = self.models.get(behavior)
         if model is None:
             return 0.0
-        return self._score_with(model, features)
+        return self._combined_score(model, features)
+
+    def score_network_connection(
+        self,
+        remote_ip: str,
+        count: int = 1,
+        distinct_ports: int = 1,
+        bytes_sent: int = 0,
+        bytes_recv: int = 0,
+        duration: float = 0.0,
+    ) -> float:
+        """Anomaly score for an aggregated remote-IP flow bucket.
+
+        Feature vector: [ip_code, count, distinct_ports, bytes_sent,
+        bytes_recv, duration_seconds].
+        """
+        model = self.models.get("network")
+        encoder = self.encoders.get("network")
+        if model is None or encoder is None:
+            return 0.0
+        if remote_ip in encoder.classes_:
+            code = float(encoder.transform([remote_ip])[0])
+        else:
+            code = -1.0  # unseen host -> treat as novel
+        return self._combined_score(
+            model,
+            [code, float(count), float(distinct_ports), float(bytes_sent), float(bytes_recv), float(duration)],
+        )
 
     @staticmethod
     def _score_with(model, features: list[float]) -> float:
+        """Anomaly score in [0,1]; higher = more anomalous.
+
+        Uses the IsolationForest ``decision_function``: normal points score
+        above 0 and anomalies below 0, so ``0.5 - decision`` maps the decision
+        boundary onto 0.5 (matches sklearn's ``predict`` semantics).
+        """
         arr = np.array([features], dtype=float)
         if arr.shape[1] != model.n_features_in_:
             return 0.0
-        raw = float(model.score_samples(arr)[0])
-        return float(1.0 / (1.0 + np.exp(-raw)))  # sigmoid -> [0,1]
+        decision = float(model.decision_function(arr)[0])
+        return float(max(0.0, min(1.0, 0.5 - decision)))
 
     # ------------------------------------------------------------------
     def analyze_events(self, session=None, hours: int = 1) -> dict:
@@ -323,7 +448,7 @@ class MLAnomalyDetector:
                 if features is None:
                     continue
                 try:
-                    score = self._score_with(model, features)
+                    score = self._combined_score(model, features)
                 except Exception:  # noqa: BLE001
                     continue
                 ev.ml_score = round(score, 4)
@@ -331,6 +456,37 @@ class MLAnomalyDetector:
                 if score > 0.5:
                     ev.is_anomaly = True
                     flagged += 1
+
+            # Score network connection buckets in the same pass.
+            if "network" in self.models:
+                net_rows = session.execute(
+                    select(
+                        NetworkConnection.remote_ip,
+                        func.count(NetworkConnection.id),
+                        func.count(func.distinct(NetworkConnection.remote_port)),
+                        func.sum(NetworkConnection.bytes_sent),
+                        func.sum(NetworkConnection.bytes_recv),
+                        func.avg(NetworkConnection.duration_seconds),
+                    )
+                    .where(NetworkConnection.observed_at >= since)
+                    .group_by(NetworkConnection.remote_ip)
+                ).all()
+                for remote_ip, count, distinct_ports, bytes_sent, bytes_recv, duration in net_rows:
+                    try:
+                        score = self.score_network_connection(
+                            remote_ip or "unknown",
+                            int(count),
+                            int(distinct_ports),
+                            int(bytes_sent or 0),
+                            int(bytes_recv or 0),
+                            float(duration or 0.0),
+                        )
+                    except Exception:  # noqa: BLE001
+                        continue
+                    scored += 1
+                    if score > 0.5:
+                        flagged += 1
+
             session.commit()
             return {"status": "ok", "scored": scored, "flagged": flagged}
         finally:
