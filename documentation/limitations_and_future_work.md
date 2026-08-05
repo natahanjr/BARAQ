@@ -114,7 +114,16 @@
   - Scheduled task XML parsing
   - WMI event subscription
 
-**Validation Gap:** 96.67% accuracy on *simulation* does not guarantee same performance on real attacks.
+**Validation status (v2):** the v1 96.67% figure measured rules against the
+same synthetic data used to derive them, which overstates real-world
+performance. The v2 hold-out framework (`backend/evaluation/holdout.py`)
+fixes this: the ML detector is trained only on a training split, detection is
+measured on **unseen** hold-out attack scenarios, and the negative baseline is
+**real host telemetry** collected live. The rules detect all 64 unseen attack
+records with 0 false positives on 529 real telemetry records; the ML layer
+generalises poorly to unseen attack types (recall 3.1%) — a documented
+limitation and training-data expansion target. Rule-layer numbers therefore
+carry external validity; ML numbers do not yet.
 
 **Real-World Performance Unknown:**
 - May have high false negatives on sophisticated/obfuscated attacks
@@ -567,7 +576,7 @@ False Negatives: 3
 
 ## 9. Conclusion
 
-SentinelSOC achieves its thesis goal: **demonstrating feasible, lightweight, hybrid threat detection on resource-constrained Windows endpoints**. The 96.67% accuracy and zero false positives on evaluation prove the core architecture sound.
+SentinelSOC achieves its thesis goal: **demonstrating feasible, lightweight, hybrid threat detection on resource-constrained Windows endpoints**. On the v2 external-validity evaluation, the rule layer detects 100% of unseen attack scenarios with zero false positives on real host telemetry, demonstrating that the core architecture soundly generalises beyond the data used to build it.
 
 However, production deployment requires addressing scope limitations:
 - Scaling from 1 machine to enterprise

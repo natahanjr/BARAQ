@@ -4,6 +4,7 @@ All tunable parameters of the platform live here so the application can be
 adjusted without touching business logic. Optimised for a low-resource
 single Windows 11 laptop (i5 / 12 GB RAM).
 """
+import json
 import os
 from pathlib import Path
 
@@ -56,6 +57,9 @@ EVENT_RETENTION_DAYS = 30
 # Collection
 # --------------------------------------------------------------------------
 COLLECT_INTERVAL_SECONDS = int(os.environ.get("SENTINEL_INTERVAL", "15"))
+SCHEDULER_ENABLED = os.environ.get("SENTINEL_SCHEDULER_ENABLED", "1").lower() not in (
+    "0", "false", "no", "off",
+)
 EVENT_LOG_POLL_BATCH = 500
 SECURITY_LOG_CHANNELS = ["Security", "System"]
 POWERSHELL_CHANNELS = [
@@ -110,6 +114,27 @@ RISK_LEVEL_CRITICAL = 85
 HOST = "127.0.0.1"
 PORT = 8000
 CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+# --------------------------------------------------------------------------
+# Authentication / RBAC
+# --------------------------------------------------------------------------
+# When enabled, every /api/* request must present a valid API key via the
+# `X-API-Key` header. Roles: "analyst" (read + standard ops) / "admin".
+# Keys are configured as a JSON map {"key": "role"}; a development default
+# is provided so the dashboard works out of the box.
+AUTH_ENABLED = os.environ.get("SENTINEL_AUTH_ENABLED", "1").lower() not in (
+    "0", "false", "no", "off",
+)
+
+_DEFAULT_API_KEYS = {
+    "sentinel-dev-admin": "admin",
+    "sentinel-dev-analyst": "analyst",
+}
+try:
+    _env_keys = json.loads(os.environ.get("SENTINEL_API_KEYS", "{}") or "{}")
+except (ValueError, TypeError):
+    _env_keys = {}
+API_KEYS: dict[str, str] = {**_DEFAULT_API_KEYS, **{str(k): str(v) for k, v in _env_keys.items()}}
 
 # --------------------------------------------------------------------------
 # Reports

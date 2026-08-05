@@ -3,47 +3,69 @@ from __future__ import annotations
 
 import logging
 import re
+from enum import Enum
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
 from backend.database.models import Alert, AlertAction, AnalystNote
+from backend.security import require_admin, require_auth
 
 logger = logging.getLogger("sentinel.api.alerts")
 
-router = APIRouter(prefix="/api/alerts", tags=["alerts"])
+router = APIRouter(
+    prefix="/api/alerts",
+    tags=["alerts"],
+    dependencies=[Depends(require_auth)],
+)
+
+
+class AlertStatus(str, Enum):
+    open = "open"
+    in_progress = "in_progress"
+    contained = "contained"
+    closed = "closed"
 
 
 class StatusUpdate(BaseModel):
-    status: str
+    status: AlertStatus
 
 
 class NoteCreate(BaseModel):
-    note: str
+    note: str = Field(min_length=1, max_length=2000)
+
+
+class ActionType(str, Enum):
+    block_ip = "block_ip"
+    kill_process = "kill_process"
+    quarantine = "quarantine"
+    escalate = "escalate"
+    acknowledge = "acknowledge"
 
 
 class ActionRequest(BaseModel):
-    action: str
-    target: str = ""
-    triggered_by: str = "manual"
+    action: ActionType
+    target: str = Field(default="", max_length=256)
+    triggered_by: Literal["manual", "auto", "api"] = "manual"
 
 
 @router.get("")
 def list_alerts(
-    status: str | None = None,
-    severity: str | None = None,
-    page: int = 1,
-    page_size: int = 25,
+    status: AlertStatus | None = None,
+    severity: Literal["critical", "high", "medium", "low", "info"] | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     stmt = select(Alert)
     if status:
-        stmt = stmt.where(Alert.status == status)
+        stmt = stmt.where(Alert.status == status.value)
     if severity:
-        stmt = stmt.where(Alert.severity == severity)
+        stmt = stmt.where(Alert.severity == severity.value)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(
         stmt.order_by(Alert.created_at.desc())
@@ -66,7 +88,7 @@ def update_status(alert_id: int, body: StatusUpdate, db: Session = Depends(get_d
     alert = db.get(Alert, alert_id)
     if not alert:
         raise HTTPException(404, "Alert not found")
-    alert.status = body.status
+    alert.status = body.status.value
     db.commit()
     return alert.to_dict()
 
@@ -85,8 +107,6 @@ def add_note(alert_id: int, body: NoteCreate, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # Alert response actions
 # ---------------------------------------------------------------------------
-
-ALLOWED_ACTIONS = {"block_ip", "kill_process", "quarantine", "escalate", "acknowledge"}
 
 
 def _extract_target(alert: Alert, action: str) -> str:
@@ -127,14 +147,12 @@ def _execute_action(action: str, target: str) -> tuple[str, str]:
     return "failed", "Target could not be resolved from evidence."
 
 
-@router.post("/{alert_id}/actions")
+@router.post("/{alert_id}/actions", dependencies=[Depends(require_admin)])
 def take_action(alert_id: int, body: ActionRequest, db: Session = Depends(get_db)):
     alert = db.get(Alert, alert_id)
     if not alert:
         raise HTTPException(404, "Alert not found")
-    action = body.action.lower()
-    if action not in ALLOWED_ACTIONS:
-        raise HTTPException(422, f"Action must be one of: {sorted(ALLOWED_ACTIONS)}")
+    action = body.action.value
 
     target = body.target or _extract_target(alert, action)
     status, detail = _execute_action(action, target)

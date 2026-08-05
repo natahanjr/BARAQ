@@ -187,6 +187,26 @@ All tunable parameters live in `backend/config.py`:
 
 Environment overrides: `SENTINEL_INTERVAL`, `SENTINEL_DATABASE_URL`, `SENTINEL_AI_API_URL`, `SENTINEL_AI_API_KEY`, `SENTINEL_AI_MODEL`.
 
+### Authentication & RBAC
+
+Every `/api/*` endpoint (except health and Swagger docs) requires a valid API
+key in the `X-API-Key` header. Keys map to roles — `analyst` (read + standard
+operations) or `admin` (alert containment, telemetry collection, ML
+retraining, evaluation):
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `SENTINEL_AUTH_ENABLED` | `1` | Set `0` to disable auth (dev only) |
+| `SENTINEL_API_KEYS` | JSON map | e.g. `{"my-key":"admin"}` — merged over the dev defaults |
+
+Dev default keys: `sentinel-dev-admin` (admin) and `sentinel-dev-analyst`
+(analyst). The dashboard sends the admin key by default; override with the
+`VITE_API_KEY` env var:
+`powershell $env:VITE_API_KEY="your-key"; npm run dev`
+
+Inputs are validated: alert `status`/`action` and report `report_type`/`format`
+are enums, pagination/limits/hours are bounded (422 on out-of-range values).
+
 ---
 
 ## Security Score

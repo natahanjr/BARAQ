@@ -243,17 +243,24 @@ The `backend/evaluation/evaluator.py` module runs controlled detection validatio
 | **False Positive Rate** | FP / (FP + TN) | Nuisance factor |
 | **Detection Time** | first_attack_event → first_alert (ms) | Response latency |
 
-### 5.3 Evaluation Results (Last Run - 2026-08-03)
+### 5.3 Evaluation Results (v2 hold-out — external validity)
 
-| Scenario | MITRE | TP | FP | TN | FN | Accuracy | Precision | Recall | F1 | FPR |
-|----------|-------|----|----|----|----|----------|-----------|--------|----|----|
-| Brute Force | T1110 | 12 | 0 | 0 | 2 | 85.7% | 100% | 85.7% | 0.923 | 0% |
-| Suspicious PowerShell | T1059.001 | 1 | 0 | 0 | 0 | 100% | 100% | 100% | 1.0 | 0% |
-| Privilege Escalation | T1068 | 2 | 0 | 0 | 1 | 66.7% | 100% | 66.7% | 0.800 | 0% |
-| Persistence | T1547 | 2 | 0 | 0 | 0 | 100% | 100% | 100% | 1.0 | 0% |
-| Network Recon | T1046 | 30 | 0 | 0 | 0 | 100% | 100% | 100% | 1.0 | 0% |
-| Baseline (normal) | — | 0 | 0 | 40 | 0 | 100% | 100% | 100% | 1.0 | 0% |
-| **OVERALL** | | **47** | **0** | **40** | **3** | **96.67%** | **100%** | **94.0%** | **0.969** | **0%** |
+The v1 per-scenario table below measured rules against the same synthetic
+data used to derive them and is superseded. The v2 hold-out framework
+(`backend/evaluation/holdout.py`) trains the ML detector on a training split
+and measures detection on **unseen** attack scenarios against a **real
+host-telemetry** baseline (529 live records):
+
+| Layer | Samples (attacks) | Baseline (real) | TP | FP | TN | FN | Accuracy | Precision | Recall | F1 | FPR |
+|-------|-------------------|-----------------|----|----|----|----|----------|-----------|--------|----|----|
+| Rule | 64 | 529 | 64 | 0 | 529 | 0 | 100% | 100% | 100% | 1.0 | 0% |
+| ML | 64 | 529 | 2 | 0 | 529 | 62 | 89.5% | 100% | 3.1% | 0.06 | 0% |
+| Hybrid | 64 | 529 | 64 | 0 | 529 | 0 | 100% | 100% | 100% | 1.0 | 0% |
+
+Rules detect all 64 unseen attack records and raise zero alerts on real host
+telemetry. The ML layer generalises poorly to unseen attack types (low
+recall) because the training split only covers login/process behaviours —
+an honest, externally valid result that motivates broader training data.
 
 ---
 

@@ -6,9 +6,9 @@ import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 
@@ -22,7 +22,7 @@ from backend.api import (
     reports,
     system,
 )
-from backend.config import CORS_ORIGINS, REPORT_DIR
+from backend.config import API_KEYS, AUTH_ENABLED, CORS_ORIGINS, REPORT_DIR
 from backend.database.connection import SessionLocal, init_db
 
 logging.basicConfig(
@@ -73,9 +73,14 @@ def _scheduler_loop(interval_seconds: int = 15):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
+    import os
+
     init_db()
     global _scheduler_thread
-    if not _scheduler_thread or not _scheduler_thread.is_alive():
+    no_scheduler = os.environ.get("SENTINEL_NO_SCHEDULER", "0").lower() in (
+        "1", "true", "yes", "on",
+    )
+    if not no_scheduler and (not _scheduler_thread or not _scheduler_thread.is_alive()):
         _scheduler_stop.clear()
         from backend.config import COLLECT_INTERVAL_SECONDS
         _scheduler_thread = threading.Thread(
@@ -107,6 +112,33 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------------------------------
+# API key authentication (RBAC). Every /api/* request must carry a valid
+# X-API-Key; the resolved role is stored on request.state for the endpoint
+# role dependencies (require_auth / require_admin in backend/security.py).
+# Health, docs and static mounts are excluded.
+# ---------------------------------------------------------------------------
+_PUBLIC_PREFIXES = ("/api/health", "/docs", "/openapi.json", "/redoc")
+
+
+@app.middleware("http")
+async def api_key_auth(request: Request, call_next):
+    path = request.url.path
+    if AUTH_ENABLED and path.startswith("/api/") and not path.startswith(_PUBLIC_PREFIXES):
+        key = request.headers.get("X-API-Key", "").strip()
+        role = API_KEYS.get(key)
+        if not role:
+            return JSONResponse(
+                {"detail": "Missing or invalid API key (X-API-Key header)"},
+                status_code=401,
+            )
+        request.state.api_role = role
+    elif AUTH_ENABLED:
+        request.state.api_role = "admin"
+    else:
+        request.state.api_role = "admin"
+    return await call_next(request)
 
 for router in (
     dashboard.router,

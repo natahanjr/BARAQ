@@ -1,23 +1,28 @@
 """AI Assistant API endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.ai.assistant import SecurityAssistant
 from backend.database.connection import get_db
+from backend.security import require_auth
 
-router = APIRouter(prefix="/api/assistant", tags=["assistant"])
+router = APIRouter(
+    prefix="/api/assistant",
+    tags=["assistant"],
+    dependencies=[Depends(require_auth)],
+)
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(min_length=1, max_length=4000)
 
 
 class ExplainRequest(BaseModel):
-    alert_id: int | None = None
-    query: str = ""
+    alert_id: int | None = Field(default=None, ge=1)
+    query: str = Field(default="", max_length=2000)
 
 
 @router.post("/chat")
@@ -28,7 +33,7 @@ def chat(body: ChatRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/history")
-def history(limit: int = 50, db: Session = Depends(get_db)):
+def history(limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
     assistant = SecurityAssistant(db)
     return {"items": assistant.history(limit)}
 

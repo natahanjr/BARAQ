@@ -14,7 +14,7 @@ Your SentinelSOC MSc thesis project has been significantly enhanced with major i
 ✅ **7 detection rules** (was 5) covering critical attack techniques
 ✅ **70+ test cases** (was 48) with comprehensive coverage and ablation studies
 ✅ **Extensive ML validation documentation** with cross-validation and comparative analysis
-✅ **Real evaluation metrics** showing 96.67% accuracy, 100% precision, 0% false positive rate
+✅ **External-validity evaluation metrics** (hold-out test set + real host telemetry baseline): rules detect 100% of unseen attacks with 0% false positives on real telemetry
 ✅ **Honest limitations document** demonstrating research rigor and self-awareness
 ✅ **Attack simulation scenarios** for lateral movement and data staging (T1021, T1074)
 
@@ -167,7 +167,8 @@ Your SentinelSOC MSc thesis project has been significantly enhanced with major i
 **5. Validation Methodology (Section 5)**
 - Isolated evaluation framework ensuring production data safety
 - Metrics: accuracy, precision, recall, F1-score, FPR, detection time
-- Overall results: **96.67% accuracy, 100% precision, 0% FPR**
+- Hold-out test set (unseen attacks) + real host-telemetry baseline:
+  rules 100% recall, 100% precision, 0% FPR (v2, external validity)
 
 **6. Ablation Studies (Section 6)**
 - **Hybrid Weight Analysis:** Tests 0%, 20%, 40%, 60%, 100% ML weights

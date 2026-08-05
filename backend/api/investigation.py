@@ -7,8 +7,13 @@ from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
 from backend.database.models import Alert, AlertEventLink, NetworkConnection, NormalizedEvent
+from backend.security import require_auth
 
-router = APIRouter(prefix="/api/investigation", tags=["investigation"])
+router = APIRouter(
+    prefix="/api/investigation",
+    tags=["investigation"],
+    dependencies=[Depends(require_auth)],
+)
 
 
 def _related_events(db: Session, alert: Alert, window_minutes: int = 30) -> list[dict]:

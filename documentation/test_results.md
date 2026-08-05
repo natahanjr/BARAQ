@@ -54,16 +54,25 @@ No false positives observed for baseline (normal activity) scenarios in the test
 
 ---
 
-## 4. Evaluation Framework Results (isolated run, 2026-08-03)
+## 4. Evaluation Framework Results (hold-out, external validity)
 
-| Metric | Value |
-|---|---|
-| Accuracy | **96.67%** |
-| Precision | **100%** |
-| Recall | **94.0%** |
-| F1-score | **0.969** |
-| False positive rate | **0.00%** |
-| Mean detection time | ~36.7 s (first event → alert) |
+The v2 hold-out evaluation (`backend/evaluation/holdout.py`) trains the ML
+detector on a training split and measures detection on **unseen** attack
+scenarios against a **real host-telemetry** baseline (529 live records).
+
+| Metric | Rule layer | ML layer | Hybrid |
+|---|---|---|---|
+| Accuracy | **100%** | 89.5% | **100%** |
+| Precision | **100%** | 100% | **100%** |
+| Recall | **100%** | 3.1% | **100%** |
+| F1-score | **1.0** | 0.06 | **1.0** |
+| False positive rate | **0.00%** | 0.00% | **0.00%** |
+| Detection time | ~70 ms | — | — |
+
+> The v1 96.67% figure measured rules against the same synthetic data used to
+> derive them and is superseded. The v2 numbers have external validity: rules
+> detect all 64 unseen attack records and raise zero alerts on 529 real host
+> telemetry records.
 
 Full methodology and per-scenario tables: `documentation/security_evaluation_report.md`.
 

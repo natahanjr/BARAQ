@@ -4,16 +4,21 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from backend.analyzers import dashboard
 from backend.collectors import CollectorManager
 from backend.database.connection import get_db, init_db
 from backend.ml.anomaly import get_detector
+from backend.security import require_admin, require_auth
 
 logger = logging.getLogger("sentinel.api.system")
-router = APIRouter(prefix="/api/system", tags=["system"])
+router = APIRouter(
+    prefix="/api/system",
+    tags=["system"],
+    dependencies=[Depends(require_auth)],
+)
 
 
 def run_pipeline(db: Session, records: list[dict]) -> dict:
@@ -136,7 +141,7 @@ def run_pipeline(db: Session, records: list[dict]) -> dict:
     }
 
 
-@router.post("/collect")
+@router.post("/collect", dependencies=[Depends(require_admin)])
 def collect_once(db: Session = Depends(get_db)):
     manager = CollectorManager()
     records = manager.collect()
@@ -146,14 +151,14 @@ def collect_once(db: Session = Depends(get_db)):
     return {"message": "Collection completed", "pipeline": result}
 
 
-@router.post("/ml/train")
+@router.post("/ml/train", dependencies=[Depends(require_admin)])
 def ml_train(db: Session = Depends(get_db)):
     result = get_detector().train(db)
     return result
 
 
-@router.post("/ml/analyze")
-def ml_analyze(hours: int = 1, db: Session = Depends(get_db)):
+@router.post("/ml/analyze", dependencies=[Depends(require_admin)])
+def ml_analyze(hours: int = Query(1, ge=1, le=168), db: Session = Depends(get_db)):
     result = get_detector().analyze_events(db, hours)
     return result
 

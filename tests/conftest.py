@@ -17,6 +17,11 @@ if _TEST_DB.exists():
         pass
 os.environ["SENTINEL_DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"
 os.environ["SENTINEL_INTERVAL"] = "60"
+# Deterministic test runs: never spawn the background scheduler thread and use
+# the fully-local assistant engine (no dependence on a live AI endpoint).
+os.environ["SENTINEL_NO_SCHEDULER"] = "1"
+os.environ["SENTINEL_AI_API_URL"] = ""
+os.environ["SENTINEL_SCHEDULER_ENABLED"] = "0"  # no background collector in tests
 
 import pytest  # noqa: E402
 

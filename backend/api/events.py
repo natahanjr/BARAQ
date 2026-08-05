@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
 from backend.database.models import NetworkConnection, NormalizedEvent, ProcessRecord
+from backend.security import require_auth
 
-router = APIRouter(prefix="/api", tags=["events"])
+router = APIRouter(prefix="/api", tags=["events"], dependencies=[Depends(require_auth)])
 
 
 @router.get("/events")
@@ -17,8 +18,8 @@ def list_events(
     user: str | None = None,
     category: str | None = None,
     anomaly: bool | None = None,
-    page: int = 1,
-    page_size: int = 50,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
 ):
     stmt = select(NormalizedEvent)
@@ -48,7 +49,7 @@ def get_event(event_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/processes")
-def list_processes(limit: int = 200, db: Session = Depends(get_db)):
+def list_processes(limit: int = Query(200, ge=1, le=1000), db: Session = Depends(get_db)):
     rows = db.scalars(
         select(ProcessRecord).order_by(ProcessRecord.observed_at.desc()).limit(limit)
     ).all()
@@ -56,7 +57,11 @@ def list_processes(limit: int = 200, db: Session = Depends(get_db)):
 
 
 @router.get("/network")
-def list_network(limit: int = 200, remote_ip: str | None = None, db: Session = Depends(get_db)):
+def list_network(
+    limit: int = Query(200, ge=1, le=1000),
+    remote_ip: str | None = None,
+    db: Session = Depends(get_db),
+):
     stmt = select(NetworkConnection)
     if remote_ip:
         stmt = stmt.where(NetworkConnection.remote_ip == remote_ip)
