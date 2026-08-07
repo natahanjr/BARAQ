@@ -8,6 +8,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Alerts = lazy(() => import("./pages/Alerts.jsx"));
 const AlertDetail = lazy(() => import("./pages/AlertDetail.jsx"));
 const Investigation = lazy(() => import("./pages/Investigation.jsx"));
+const EntityGraph = lazy(() => import("./pages/EntityGraph.jsx"));
 const Events = lazy(() => import("./pages/Events.jsx"));
 const Telemetry = lazy(() => import("./pages/Telemetry.jsx"));
 const Assistant = lazy(() => import("./pages/Assistant.jsx"));
@@ -21,6 +22,7 @@ import {
   DashboardIcon,
   AlertsIcon,
   InvestigationIcon,
+  NetworkIcon,
   EventsIcon,
   TelemetryIcon,
   AssistantIcon,
@@ -40,6 +42,7 @@ const NAV = [
   { to: "/", label: "Dashboard", icon: DashboardIcon, end: true },
   { to: "/alerts", label: "Alerts", icon: AlertsIcon },
   { to: "/investigation", label: "Investigation", icon: InvestigationIcon },
+  { to: "/entities", label: "Entity Graph", icon: NetworkIcon },
   { to: "/events", label: "Events", icon: EventsIcon },
   { to: "/telemetry", label: "Processes & Network", icon: TelemetryIcon },
   { to: "/assistant", label: "AI Assistant", icon: AssistantIcon },
@@ -493,6 +496,7 @@ export default function App() {
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/alerts/:id" element={<AlertDetail />} />
               <Route path="/investigation" element={<Investigation />} />
+              <Route path="/entities" element={<EntityGraph />} />
               <Route path="/events" element={<Events />} />
               <Route path="/telemetry" element={<Telemetry />} />
               <Route path="/assistant" element={<Assistant />} />

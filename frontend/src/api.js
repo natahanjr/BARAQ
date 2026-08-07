@@ -133,6 +133,25 @@ export const api = {
   systemStatus: () => request("/api/system/status"),
   collect: () => request("/api/system/collect", { method: "POST" }),
 
+  entities: (params = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") qs.set(k, v);
+    });
+    return request(`/api/entities?${qs.toString()}`);
+  },
+  entityStatus: () => request("/api/entities/status"),
+  entityGraph: (kind, name, depth = 1) =>
+    request(
+      `/api/entities/graph?center_kind=${encodeURIComponent(kind)}&center_name=${encodeURIComponent(name)}&depth=${depth}`,
+    ),
+  entityOverview: (depth = 1) => request(`/api/entities/graph?depth=${depth}`),
+  entityProfile: (kind, name, depth = 1) =>
+    request(
+      `/api/entities/${encodeURIComponent(kind)}/${encodeURIComponent(name)}?depth=${depth}`,
+    ),
+  syncEntities: () => request("/api/entities/sync", { method: "POST" }),
+
   incidents: (params = {}) => {
     const qs = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => {

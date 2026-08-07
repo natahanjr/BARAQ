@@ -25,6 +25,7 @@ database/campaigns/
 reports/
 logs/
 build/
+*.log
 dist/
 
 # Dev / tooling

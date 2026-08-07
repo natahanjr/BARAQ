@@ -12,18 +12,23 @@ A lightweight, production-oriented SOC framework for Windows endpoints — no cl
 |---|---|
 | **Collection** | Windows security event log (4624, 4625, 4720, 4726, 4732, 4740, 4672...), running/new processes with parent-child relationships, active TCP connections + listening ports, PowerShell operational log, **Sysmon (process tree E1 / network E3 / process access E10 / file events E11 / registry E13 / file delete E23)**, plus a realistic attack simulator |
 | **Processing** | Event normalization (Event ID / Category / User / Risk / Timestamp / Host) with **numeric risk scoring (0-100)** per event |
-| **Rule-Based Detection** | 23 rules — Brute Force (T1110), Suspicious PowerShell (T1059.001), Privilege Escalation (T1068), Persistence (T1547), Network Reconnaissance (T1046), Lateral Movement (T1021), Data Staging (T1074), Malware File, Email Phishing, DNS/HTTP Exfiltration, USB Device, Kill-Chain Correlation (T1071), **LSASS Memory Access (T1003.001), Registry Run Keys (T1547.001), Scheduled Task Abuse (T1053.005), WMI Event Subscriptions (T1546.003), Account Tampering (T1098), Binary Masquerading (T1036), Artifact Hiding (T1564), System Binary Proxy/LOLBins (T1218), Bulk Exfiltration (T1041), Event Log Clearing (T1070.001)** |
+| **Rule-Based Detection** | 29 rules — Brute Force (T1110), Suspicious PowerShell (T1059.001), Privilege Escalation (T1068), Persistence (T1547), Network Reconnaissance (T1046), Lateral Movement (T1021), Data Staging (T1074), Malware File, Email Phishing, DNS/HTTP Exfiltration, USB Device, Kill-Chain Correlation (T1071), **Vulnerability Exploitation (T1190), Credential Access (T1003), Registry Run Keys (T1547.001), Scheduled Task Abuse (T1053.005), WMI Event Subscriptions (T1546.003), Account Tampering (T1098), Binary Masquerading (T1564), Artifact Hiding (T1564), LOLBins (T1218), Bulk Exfiltration (T1041), Log Clearing (T1070.001), C2 Beaconing (T1071), Ransomware Impact (T1486), Recovery Inhibition (T1490), Credential Store Theft (T1003), BITS Jobs (T1197), Shortcut Modification (T1547.009)** — each mapped to MITRE ATT&CK with confidence + remediation |
 | **Alert Aggregation** | Rule-level deduplication (one open alert per signature) with **repeat-trigger severity escalation** (`trigger_count`, escalating LOW→MEDIUM→HIGH→CRITICAL) |
 | **ML Detection** | Per-behavior anomaly analysis (**login / process / network**) with Isolation Forest + Random Forest / XGBoost supervised classifier, **persisted model metadata and a "staleness" signal** with automatic scheduler retraining |
 | **Hybrid Risk Scoring** | Alert risk = **60% rule score + 40% ML anomaly score** → 0-100 score + LOW/MEDIUM/HIGH/CRITICAL level |
 | **MITRE ATT&CK** | Every alert enriched with technique ID, name, tactic, confidence and recommendation |
 | **Dashboard** | Security score, current risk level, system status, event/alert timeline, threat categories, severity distribution, attack statistics, user behavior, detection method breakdown, top targets, live alerts |
-| **Investigation** | Attack-chain reconstruction (kill chain steps), incident timeline, related events ±30 min, network context, AI explanations |
+| **Investigation** | Attack-chain reconstruction (kill chain steps), incident timeline, related events ±30 min, network context, AI explanations, **entity graph investigation (hosts / users / IPs / processes linked in a graph, Postgres or Neo4j backend)** |
+| **Incidents & Case Management** | Group alerts into incidents, link evidence, add analyst comments, drive alerts through a **workflow state machine** (open → investigating → contained → resolved) with analyst verdicts persisted back into ML retraining |
+| **Vulnerability Scanning** | Local software inventory → CVE matching engine → `vuln` findings correlated with MITRE **T1190**, exposed in the dashboard and reports |
+| **Threat Intelligence** | IOC enrichment (IP / domain / hash) with **AbuseIPDB, AlienVault OTX, VirusTotal** — DB-cached, on-demand or auto-enriched from alert evidence, with analyst verdict overrides |
 | **AI Assistant** | Local rule/TF-IDF engine — explains alerts, summarizes incidents, recommends remediation, keeps chat history, and **grounds answers in similar resolved incidents (RAG)** |
-| **Real-Time Alerting** | Optional **webhook + SMTP notifications** on high/critical alerts (opt-in via config) |
+| **Real-Time Alerting** | Optional **webhook + SMTP notifications** on high/critical alerts plus **Windows toast alerts**; live dashboard updates via **WebSocket push** |
+| **Streaming Pipeline** | Forward normalized events/alerts to external buses — **Apache Kafka, Redis Streams, Elasticsearch** (granular control of archived/alerted record models) |
 | **Reporting** | Executive & technical reports exported as **PDF, HTML, JSON, CSV** |
-| **Evaluation Framework** | Runs all attack scenarios + baseline in an isolated DB; computes **accuracy, precision, recall, F1-score, false-positive rate, detection time**; **hold-out evaluation** measures detection on attack scenarios the ML model never trained on with a **real-host-telemetry negative baseline** |
-| **API** | Full FastAPI REST API with OpenAPI docs at `/docs` and **API-key RBAC** (analyst/admin) |
+| **Evaluation Framework** | Runs all attack scenarios + baseline in an isolated DB; computes **accuracy, precision, recall, F1-score, false-positive rate, detection time**; **hold-out evaluation** measures detection on attack scenarios the ML model never trained on with a **real-host-telemetry negative baseline**; **parameter-tuning script** grid-searches rule thresholds |
+| **Security & Hardening** | Multi-user login with roles, **TOTP 2FA (MFA)**, **LDAP/AD + OIDC SSO**, DPAPI secret vault, login rate-limiting, CSRF protection, request-size guards, **tamper-evident SHA-256 audit chain**, **AES-256-GCM encryption-at-rest** (frozen builds), syslog audit stream |
+| **API** | Full FastAPI REST API with OpenAPI docs at `/docs`, **API-key RBAC** (analyst/admin), and remote **agent command channel** (block_ip / kill_process / quarantine / escalate) |
 
 ---
 
@@ -32,23 +37,29 @@ A lightweight, production-oriented SOC framework for Windows endpoints — no cl
 ```
 SentinelSOC/
 ├── backend/
-│   ├── ai/            # AI security assistant (local engine)
+│   ├── ai/            # AI security assistant (local engine + RAG)
 │   ├── analyzers/     # Normalizer (numeric risk) + dashboard analytics
-│   ├── api/           # FastAPI routers (alerts, events, dashboard, evaluation, ...)
-│   ├── collectors/    # Windows event log, process, network, PowerShell, simulator
-│   ├── database/      # SQLAlchemy models + SQLite connection (+ additive migrations)
-│   ├── detection/     # Rules engine, alerting (hybrid risk), 23 detection rules
-│   ├── evaluation/    # Detection evaluation framework (metrics)
+│   ├── api/           # FastAPI routers (alerts, auth, incidents, intel, graph, realtime, ...)
+│   ├── collectors/    # Windows event log, process, network, PowerShell, Sysmon, vuln scanner, simulator
+│   ├── database/      # SQLAlchemy models + SQLite/PostgreSQL connection (+ additive migrations)
+│   ├── detection/     # Rules engine, alert workflow, 29 detection rules
+│   ├── evaluation/    # Detection evaluation framework (metrics, hold-out)
+│   ├── graph/         # Entity graph (Postgres / Neo4j backend)
 │   ├── mitre/         # MITRE ATT&CK techniques data + helpers
-│   ├── ml/            # Isolation Forest / Random Forest / XGBoost anomaly detection
+│   ├── ml/            # Isolation Forest / Random Forest / XGBoost + SHAP/LIME explanations
 │   ├── reports/       # Report generator + exporters (PDF/HTML/JSON/CSV)
-│   └── risk/          # Hybrid risk scoring engine (rule 60% + ML 40%)
-├── frontend/          # React 18 + Tailwind CSS 4 + Recharts dashboard
-├── database/          # Local SQLite database (sentinel.db)
+│   ├── risk/          # Hybrid risk scoring engine (rule 60% + ML 40%)
+│   ├── streaming/      # Kafka / Redis Streams / ES forwarding
+│   ├── threatintel/   # IOC enrichment (AbuseIPDB / OTX / VirusTotal)
+│   └── vulnscan/      # CVE database + local inventory matching
+├── frontend/          # React 18 + Tailwind CSS 4 + Recharts dashboard (login/MFA/SSO, alerts, incidents, users & audit, realtime)
+├── database/          # Local database (SQLite by default, PostgreSQL for fleets)
 ├── logs/              # Runtime logs
 ├── reports/           # Generated security reports
-├── tests/             # pytest test suite (217 tests)
-├── documentation/     # User manual, DB schema, architecture, test results, evaluation report
+├── scripts/           # Agent, agent.ps1, exe builder, cert generation, Postgres migration, launchers
+├── tests/             # pytest test suite (247 tests)
+├── tools/             # Realtime validation / SOC integration tooling
+├── documentation/     # User manual, architecture, test results, evaluation report, combined guide
 ├── requirements.txt
 └── README.md
 ```
@@ -264,7 +275,7 @@ Alerts fan out via webhook, SMTP email, and Windows toast notifications
 python -m pytest tests -v
 ```
 
-Result: **217 tests passed** (collectors, detection rules incl. the Tier 1 commercial-grade rule set, pipeline, API + auth/RBAC, hybrid risk scoring, evaluation framework, hold-out evaluation, alert aggregation/escalation, ML lifecycle + v2 generalization, assistant RAG, multi-endpoint ingest/fleet, data retention, encryption at rest, tamper-evident audit chain, SSO/OIDC, MFA, CSRF + request-size guards).
+Result: **247 tests passed** (collectors incl. Sysmon/vuln scan, 29 detection rules + hold-out evaluation, pipeline, API + auth/RBAC, hybrid risk scoring, evaluation framework, alert aggregation/escalation/workflow verdicts, ML lifecycle + v2 generalization + async training, assistant RAG, multi-endpoint ingest/fleet + agent commands, data retention, encryption at rest, tamper-evident audit chain, LDAP + OIDC SSO, TOTP MFA, CSRF + request-size guards, parameter tuning).
 
 ---
 
@@ -376,6 +387,7 @@ See `documentation/` for:
 - `security_evaluation_report.md` — detection metrics (accuracy/precision/recall/F1/FPR/detection time)
 - `red_team_validation.md` — realistic live-attack validation incl. documented false negatives
 - `performance_benchmarks.md` — throughput/latency/memory on the target laptop
+- `SentinelSOC_Combined_Guide.md` — single consolidated operator/maintenance walkthrough
 
 Security: see `SECURITY.md` for the coordinated-disclosure policy and
 `SECURITY_AUDIT.md` for the hardening controls inventory and pen-test

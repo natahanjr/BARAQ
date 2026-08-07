@@ -231,6 +231,19 @@ export function MoonIcon(props) {
   );
 }
 
+export function NetworkIcon(props) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="5" r="2.5" />
+      <circle cx="5" cy="18" r="2.5" />
+      <circle cx="19" cy="18" r="2.5" />
+      <path d="M10.7 6.4 6.4 15.6" />
+      <path d="M13.3 6.4 17.6 15.6" />
+      <path d="M7.5 18h9" />
+    </Icon>
+  );
+}
+
 export function IncidentsIcon(props) {
   return (
     <Icon {...props}>
