@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import {
-  AreaChart,
-  Area,
   XAxis,
   YAxis,
   Tooltip,
@@ -19,6 +17,7 @@ import { api } from "../api.js";
 import Card from "../components/Card.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import ChartTooltip from "../components/ChartTooltip.jsx";
+import HeartbeatChart from "../components/HeartbeatChart.jsx";
 import { Loading, EmptyState, ErrorBanner } from "../components/Feedback.jsx";
 import {
   BoltIcon,
@@ -35,38 +34,70 @@ const RISK_COLORS = {
   LOW: "#3b82f6",
 };
 
-const SEVERITY_ICONS = {
-  critical: "🔴",
-  high: "🟠",
-  medium: "🟡",
-  low: "🔵",
-  info: "⚪",
+const SEVERITY_BAR = {
+  critical: "#ef4444",
+  high: "#fb923c",
+  medium: "#f59e0b",
+  low: "#3b82f6",
+  info: "#94a3b8",
+};
+
+const KPI_ACCENT = {
+  cyan: {
+    bar: "#22d3ee",
+    text: "text-cyan-300",
+    glow: "shadow-[0_8px_32px_-10px_rgba(34,211,238,0.3)]",
+    grad: "from-cyan-500/15 via-slate-900/50 to-slate-900/60 border-cyan-500/25",
+  },
+  green: {
+    bar: "#34d399",
+    text: "text-emerald-300",
+    glow: "shadow-[0_8px_32px_-10px_rgba(52,211,153,0.25)]",
+    grad: "from-emerald-500/15 via-slate-900/50 to-slate-900/60 border-emerald-500/25",
+  },
+  orange: {
+    bar: "#fb923c",
+    text: "text-orange-300",
+    glow: "shadow-[0_8px_32px_-10px_rgba(251,146,60,0.25)]",
+    grad: "from-orange-500/15 via-slate-900/50 to-slate-900/60 border-orange-500/25",
+  },
+  red: {
+    bar: "#f87171",
+    text: "text-red-300",
+    glow: "shadow-[0_8px_32px_-10px_rgba(248,113,113,0.25)]",
+    grad: "from-red-500/15 via-slate-900/50 to-slate-900/60 border-red-500/25",
+  },
 };
 
 function MetricBox({ label, value, icon: Icon, trend, color = "cyan", sub }) {
-  const colorMap = {
-    cyan: "from-cyan-500/10 to-cyan-500/5 border-cyan-500/20 text-cyan-400",
-    green: "from-emerald-500/10 to-emerald-500/5 border-emerald-500/20 text-emerald-400",
-    orange: "from-orange-500/10 to-orange-500/5 border-orange-500/20 text-orange-400",
-    red: "from-red-500/10 to-red-500/5 border-red-500/20 text-red-400",
-  };
-
+  const accent = KPI_ACCENT[color] || KPI_ACCENT.cyan;
   return (
-    <div className={`bg-gradient-to-br ${colorMap[color]} border rounded-xl p-5`}>
-      <div className="flex items-start justify-between gap-2">
+    <div
+      className={`relative overflow-hidden rounded-xl border bg-gradient-to-br backdrop-blur-sm ${accent.grad} ${accent.glow}`}
+    >
+      <span
+        className="absolute inset-x-0 top-0 h-[2px]"
+        style={{
+          background: `linear-gradient(90deg, transparent, ${accent.bar}, transparent)`,
+        }}
+      />
+      <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full opacity-25 blur-2xl"
+        style={{ backgroundColor: accent.bar }}
+      />
+      <div className="flex items-start justify-between gap-2 p-5">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-slate-500">
             {label}
           </p>
-          <p className="mt-2 text-3xl font-bold text-white">{value}</p>
-          {sub && <p className="mt-0.5 text-xs text-slate-400">{sub}</p>}
+          <p className={`mt-2 text-3xl font-semibold tracking-tight ${accent.text}`}>{value}</p>
+          {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
           {trend && (
-            <p className="mt-2 truncate rounded-md bg-black/20 px-2 py-0.5 text-[11px] text-slate-300">
+            <p className="mt-2.5 inline-flex truncate rounded-md bg-black/20 px-2 py-0.5 text-[11px] text-slate-300">
               {trend}
             </p>
           )}
         </div>
-        <Icon className="h-7 w-7 shrink-0 opacity-60" />
+        <Icon className="h-6 w-6 shrink-0 opacity-60" />
       </div>
     </div>
   );
@@ -88,35 +119,24 @@ function ChartCard({ title, subtitle, children, action }) {
 }
 
 function AlertCard({ alert }) {
-  const severityColor = {
-    critical: "bg-red-500/10 border-red-500/30",
-    high: "bg-orange-500/10 border-orange-500/30",
-    medium: "bg-amber-500/10 border-amber-500/30",
-    low: "bg-blue-500/10 border-blue-500/30",
-    info: "bg-slate-500/10 border-slate-500/30",
-  };
-
   const severity = (alert.severity || "info").toLowerCase();
-  const colors = severityColor[severity] || severityColor.info;
-  const accent = SEVERITY_ICONS[severity] || SEVERITY_ICONS.info;
+  const bar = SEVERITY_BAR[severity] || SEVERITY_BAR.info;
 
   return (
-    <div
-      className={`${colors} flex items-start gap-3 rounded-xl border p-4 transition-all hover:border-opacity-70`}
-    >
-      <span className="mt-0.5 text-lg">{accent}</span>
-      <div className="min-w-0 flex-1">
+    <div className="relative overflow-hidden rounded-xl border border-slate-800/60 bg-slate-900/50 p-4 transition-colors hover:border-slate-700/70">
+      <span className="absolute inset-y-0 left-0 w-[3px]" style={{ backgroundColor: bar }} />
+      <div className="min-w-0 flex-1 pl-3">
         <div className="flex items-start justify-between gap-3">
-          <h4 className="truncate text-sm font-semibold text-white">{alert.name}</h4>
-          <span className="shrink-0 rounded bg-black/30 px-2 py-0.5 font-mono text-[10px] text-slate-300">
+          <h4 className="truncate text-sm font-medium text-slate-100">{alert.name}</h4>
+          <span className="shrink-0 rounded border border-white/5 bg-black/30 px-2 py-0.5 font-mono text-[10px] text-slate-400">
             {alert.mitre_id}
           </span>
         </div>
-        <p className="mt-1 line-clamp-2 text-xs text-slate-300">{alert.evidence}</p>
-        <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400">
+        <p className="mt-1 line-clamp-2 text-xs text-slate-400">{alert.evidence}</p>
+        <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-500">
           <span>
             Risk:{" "}
-            <strong className="font-mono text-slate-200">
+            <strong className="font-mono text-slate-300">
               {alert.risk_score?.toFixed(0) ?? "—"}
             </strong>
           </span>
@@ -139,11 +159,11 @@ function UserBehaviorRow({ user }) {
   const failPct = total > 0 ? Math.round(((user.failures || 0) / total) * 100) : 0;
 
   return (
-    <div className="rounded-lg border border-slate-700/40 bg-slate-800/30 p-3">
+    <div className="rounded-lg border border-slate-800/60 bg-slate-900/50 p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-white">{user.user || "Unknown"}</p>
-          <p className="mt-0.5 text-xs text-slate-400">
+          <p className="truncate text-sm font-medium text-slate-100">{user.user || "Unknown"}</p>
+          <p className="mt-0.5 text-xs text-slate-500">
             <span className="text-emerald-400">{user.successes ?? 0}</span> successful ·{" "}
             <span className="text-red-400">{user.failures ?? 0}</span> failed
           </p>
@@ -155,7 +175,7 @@ function UserBehaviorRow({ user }) {
           <p className="text-[10px] uppercase tracking-wider text-slate-500">Avg risk</p>
         </div>
       </div>
-      <div className="mt-2.5 flex h-1.5 overflow-hidden rounded-full bg-slate-700/40">
+      <div className="mt-2.5 flex h-1 overflow-hidden rounded-full bg-slate-800/70">
         <div
           className="h-full bg-emerald-500/80"
           style={{ width: `${100 - failPct}%` }}
@@ -255,7 +275,7 @@ export default function Dashboard() {
           <button
             type="button"
             onClick={load}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3.5 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700/60"
+            className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.08]"
           >
             <RefreshIcon className="h-4 w-4" />
             Refresh
@@ -309,45 +329,10 @@ export default function Dashboard() {
         <div className="lg:col-span-2">
           <ChartCard
             title="Event Timeline"
-            subtitle="Security events and alerts over the last 24 hours"
+            subtitle="Heartbeat monitor — event volume and alerts over the last 24 hours"
           >
             <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={timelineData}>
-                  <defs>
-                    <linearGradient id="colorEvents" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorAlerts" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="label" stroke="#64748b" fontSize={12} tickLine={false} />
-                  <YAxis stroke="#64748b" fontSize={12} tickLine={false} width={40} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Area
-                    type="monotone"
-                    dataKey="count"
-                    stroke="#06b6d4"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#colorEvents)"
-                    name="Events"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="alerts"
-                    stroke="#ef4444"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#colorAlerts)"
-                    name="Alerts"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              <HeartbeatChart data={timelineData} />
             </div>
           </ChartCard>
         </div>
@@ -396,7 +381,7 @@ export default function Dashboard() {
             {categories.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={categories.slice(0, 8)} margin={{ left: -12 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                   <XAxis
                     dataKey="tactic"
                     stroke="#64748b"
@@ -467,7 +452,7 @@ export default function Dashboard() {
             {attacks.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={attacks.slice(0, 6)} layout="vertical" margin={{ left: 12 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                   <XAxis type="number" stroke="#64748b" fontSize={12} tickLine={false} allowDecimals={false} />
                   <YAxis
                     dataKey="attack"
@@ -552,24 +537,24 @@ export default function Dashboard() {
             {topAttackers.map((attacker, idx) => (
               <div
                 key={idx}
-                className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4"
+                className="rounded-xl border border-slate-800/60 bg-slate-900/50 p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-white">
+                    <p className="truncate text-sm font-medium text-slate-100">
                       {attacker.user || "Unknown"}
                     </p>
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p className="mt-1 text-xs text-slate-500">
                       Targeted{" "}
-                      <strong className="font-mono text-slate-200">{attacker.count}</strong>{" "}
+                      <strong className="font-mono text-slate-300">{attacker.count}</strong>{" "}
                       times
                     </p>
                   </div>
-                  <span className="rounded bg-red-500/15 px-2 py-1 font-mono text-[10px] font-semibold text-red-400">
+                  <span className="rounded border border-white/5 bg-red-500/10 px-2 py-1 font-mono text-[10px] font-medium text-red-400">
                     T1110
                   </span>
                 </div>
-                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-700/40">
+                <div className="mt-3 h-1 overflow-hidden rounded-full bg-slate-800/70">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-red-500/70 to-orange-400/70"
                     style={{ width: `${Math.min(100, attacker.count * 10)}%` }}

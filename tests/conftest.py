@@ -22,14 +22,30 @@ if _TEST_ML_META.exists():
     except PermissionError:
         pass
 
-os.environ["SENTINEL_DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"
+# Opt-in override: run the suite against PostgreSQL (e.g. the migrated fleet
+# cluster) by setting SENTINEL_TEST_DATABASE_URL. Defaults to an isolated
+# SQLite file in %TEMP% so the real database/sentinel.db is never touched.
+os.environ["SENTINEL_DATABASE_URL"] = os.environ.get(
+    "SENTINEL_TEST_DATABASE_URL",
+    f"sqlite:///{_TEST_DB.as_posix()}",
+)
+print(f"[conftest] test DB URL -> {os.environ['SENTINEL_DATABASE_URL']}")
 os.environ["SENTINEL_INTERVAL"] = "60"
 os.environ["SENTINEL_ML_META_FILE"] = _TEST_ML_META.as_posix()
+# Never let first-run secret generation write to / modify the real project .env.
+os.environ["SENTINEL_SKIP_SECRET_GEN"] = "1"
+# Override the project .env credentials so tests always run with the dev keys
+# (the config loader is non-overriding, so these take precedence over .env).
+os.environ["SENTINEL_API_KEYS"] = '{"sentinel-dev-admin": "admin", "sentinel-dev-analyst": "analyst"}'
+os.environ["SENTINEL_ADMIN_PASSWORD"] = "sentinel-test-admin"
+os.environ["SENTINEL_TOKEN_SECRET"] = "sentinel-test-token-secret"
 # Deterministic test runs: never spawn the background scheduler thread and use
 # the fully-local assistant engine (no dependence on a live AI endpoint).
 os.environ["SENTINEL_NO_SCHEDULER"] = "1"
 os.environ["SENTINEL_AI_API_URL"] = ""
 os.environ["SENTINEL_SCHEDULER_ENABLED"] = "0"  # no background collector in tests
+# Never spam Windows toasts / webhooks / email from synthetic test alerts.
+os.environ["SENTINEL_TOAST_ENABLED"] = "0"
 
 import pytest  # noqa: E402
 

@@ -6,7 +6,9 @@ shapes:
 
   * Event 1  (Process Create)      -> "process" source (pid/ppid tree)
   * Event 3  (Network Connect)     -> "network" source
+  * Event 10 (Process Access)      -> "eventlog" Event 10 (LSASS / credential access)
   * Event 11 (File Create)         -> "eventlog" Event 11 (file staging/binary drop)
+  * Event 13 (Registry Event)      -> "eventlog" Event 13 (Run-key persistence)
   * Event 23 (File Delete)         -> "eventlog" Event 23 (delete churn / cleanup)
 
 So when Sysmon (or pywin32) is not installed the collector degrades
@@ -44,6 +46,11 @@ _FIELD = {
     "target_filename": re.compile(r"TargetFilename:\s+(\S+)", re.IGNORECASE),
     "hashes": re.compile(r"Hashes:\s+(\S+)", re.IGNORECASE),
     "fqdn": re.compile(r"QueryName:\s+(\S+)", re.IGNORECASE),
+    "target_image": re.compile(r"TargetImage:\s+(\S+)", re.IGNORECASE),
+    "granted_access": re.compile(r"GrantedAccess:\s+(\S+)", re.IGNORECASE),
+    "target_object": re.compile(r"TargetObject:\s+(\S+)", re.IGNORECASE),
+    "event_type": re.compile(r"EventType:\s+(\S+)", re.IGNORECASE),
+    "details": re.compile(r"Details:\s+(.+)", re.IGNORECASE),
 }
 
 
@@ -58,7 +65,7 @@ class SysmonCollector(BaseCollector):
     name = "sysmon"
 
     #: Sysmon event IDs this collector cares about.
-    EVENT_IDS = {1, 3, 11, 23}
+    EVENT_IDS = {1, 3, 10, 11, 13, 23}
 
     def __init__(self, channels: list[str] | None = None):
         super().__init__()
@@ -128,6 +135,56 @@ class SysmonCollector(BaseCollector):
                 "bytes_recv": 0,
                 "duration_seconds": 0.0,
                 "timestamp": timestamp,
+            }]
+
+        if event_id == 10:  # Process Access -> credential-access signal (Event 10)
+            target_image = _match(message, "target_image")
+            if not target_image:
+                return []
+            image = _match(message, "image")
+            return [{
+                "source": "eventlog",
+                "channel": "Sysmon",
+                "event_id": 10,
+                "timestamp": timestamp,
+                "user": _match(message, "user") or "-",
+                "message": f"Process accessed: {target_image} by {image} (GrantedAccess: {_match(message, 'granted_access')})",
+                "raw": {
+                    "computer": event.ComputerName,
+                    "record_number": event.RecordNumber,
+                    "sysmon_event_id": 10,
+                    "image": image,
+                    "target_image": target_image,
+                    "granted_access": _match(message, "granted_access") or "0x0",
+                },
+            }]
+
+        if event_id == 13:  # Registry Value Set -> persistence signal (Event 13)
+            target_object = _match(message, "target_object")
+            if not target_object:
+                return []
+            image = _match(message, "image")
+            event_type = _match(message, "event_type") or "SetValue"
+            details = _match(message, "details")
+            return [{
+                "source": "eventlog",
+                "channel": "Sysmon",
+                "event_id": 13,
+                "timestamp": timestamp,
+                "user": _match(message, "user") or "-",
+                "message": (
+                    f"Registry value {event_type}: {target_object} = "
+                    f"{details or '<deleted>'} by {image}"
+                ),
+                "raw": {
+                    "computer": event.ComputerName,
+                    "record_number": event.RecordNumber,
+                    "sysmon_event_id": 13,
+                    "image": image,
+                    "target_object": target_object,
+                    "event_type": event_type,
+                    "details": details or "",
+                },
             }]
 
         # File events (11 create / 23 delete) -> normalized events so the

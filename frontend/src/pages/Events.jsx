@@ -87,6 +87,7 @@ function EventRow({ event }) {
 export default function Events() {
   const [data, setData] = useState(null);
   const [page, setPage] = useState(1);
+  const [categories, setCategories] = useState([]);
   const [eventId, setEventId] = useState("");
   const [user, setUser] = useState("");
   const [category, setCategory] = useState("");
@@ -112,6 +113,13 @@ export default function Events() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, eventId, user, category, anomaly]);
+
+  useEffect(() => {
+    api
+      .eventStatistics()
+      .then((stats) => setCategories(stats.by_category || []))
+      .catch(() => setCategories([]));
+  }, []);
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
   const hasFilters = eventId || user || category || anomaly;
@@ -161,15 +169,22 @@ export default function Events() {
             placeholder="Username"
             className={selectClass}
           />
-          <input
+          <select
             value={category}
             onChange={(e) => {
               setCategory(e.target.value);
               setPage(1);
             }}
-            placeholder="Category"
             className={selectClass}
-          />
+            aria-label="Filter by category"
+          >
+            <option value="">All Categories</option>
+            {categories.map((c) => (
+              <option key={c.category} value={c.category}>
+                {c.category} ({c.count})
+              </option>
+            ))}
+          </select>
           <select
             value={anomaly}
             onChange={(e) => {

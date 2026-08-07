@@ -31,7 +31,7 @@ def seed(client) -> None:
 def test_root(client):
     resp = client.get("/")
     assert resp.status_code == 200
-    assert resp.json()["application"] == "SentinelSOC"
+    assert "text/html" in resp.headers["content-type"]
 
 
 def test_health(client):
@@ -63,7 +63,13 @@ def test_alert_detail_and_status(client):
     assert resp.status_code == 200
     assert resp.json()["mitre_id"]
     update = client.patch(f"/api/alerts/{alert_id}/status", json={"status": "in_progress"})
-    assert update.json()["status"] == "in_progress"
+    assert update.json()["status"] == "investigating"
+    resolved = client.patch(f"/api/alerts/{alert_id}/status", json={"status": "resolved"})
+    assert resolved.json()["status"] == "resolved"
+    closed = client.patch(f"/api/alerts/{alert_id}/status", json={"status": "closed"})
+    assert closed.json()["status"] == "closed"
+    bad = client.patch(f"/api/alerts/{alert_id}/status", json={"status": "investigating"})
+    assert bad.status_code == 409  # closed -> investigating is an illegal transition
 
 
 def test_investigation(client):
@@ -97,3 +103,17 @@ def test_events_endpoint(client):
     resp = client.get("/api/events", params={"page_size": 5})
     assert resp.status_code == 200
     assert resp.json()["total"] > 0
+
+
+def test_events_category_and_user_substring_filters(client):
+    seed(client)
+    items = client.get("/api/events", params={"page_size": 5}).json()["items"]
+    assert items
+    category = items[0]["category"]
+    user = items[0].get("user") or ""
+    by_category = client.get("/api/events", params={"category": category[:5]}).json()
+    assert by_category["total"] > 0
+    assert all(category.lower() in i["category"].lower() for i in by_category["items"])
+    if user:
+        by_user = client.get("/api/events", params={"user": user[:4]}).json()
+        assert by_user["total"] > 0

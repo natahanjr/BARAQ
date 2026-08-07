@@ -28,6 +28,10 @@ try:
 except ImportError:  # pragma: no cover - non-Windows fallback
     HAS_PYWIN32 = False
 
+#: Event IDs whose string values (command line, script block) are commonly
+#: truncated by the legacy message formatter and must be fetched structurally.
+STRUCTURED_FIELDS_EVENT_IDS = {4688, 4104, 4103, 4698, 7045}
+
 
 class WindowsEventLogCollector(BaseCollector):
     """Collects raw Windows Event Log records from configured channels."""
@@ -68,6 +72,51 @@ class WindowsEventLogCollector(BaseCollector):
                 return win32evtlogutil.FormatMessage(event, channel)
             except Exception:
                 return ""
+
+    # ------------------------------------------------------------------
+    def _structured_fields(self, channel: str, record_number: int) -> dict:
+        """Full structured fields for events whose string values the legacy
+        message formatter truncates (4688 command line, 4104 script block).
+
+        Queries the event by record number through the structured event API
+        (``EvtQuery``/``EvtRender``) so ``<Data Name=...>`` values arrive
+        complete - exactly what SafeFormatMessage cuts short.
+        """
+        if not HAS_PYWIN32:
+            return {}
+        try:
+            query = f"*[System[EventRecordID={int(record_number)}]]"
+            handle = win32evtlog.EvtQuery(channel, win32evtlog.EvtQueryChannelPath, query)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("structured query failed for %s/%s: %s", channel, record_number, exc)
+            return {}
+        try:
+            events = win32evtlog.EvtNext(handle, 1)
+            if not events:
+                return {}
+            xml = win32evtlog.EvtRender(events[0], win32evtlog.EvtRenderEventXml)
+            return self._parse_data_xml(xml)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("structured render failed for %s/%s: %s", channel, record_number, exc)
+            return {}
+        finally:
+            try:
+                win32evtlog.EvtClose(handle)
+            except Exception:  # noqa: BLE001
+                pass
+
+    @staticmethod
+    def _parse_data_xml(xml: str) -> dict:
+        """Extract ``<Data Name="X">value</Data>`` pairs from event XML."""
+        if not xml:
+            return {}
+        fields: dict[str, str] = {}
+        for m in re.finditer(r"<Data\s+Name=[\"']([^\"']+)[\"']>(.*?)</Data>", xml, re.DOTALL):
+            name, value = m.group(1), m.group(2)
+            value = value.strip()
+            if value and name not in fields:
+                fields[name] = value
+        return fields
 
     def _parse_record(self, event) -> dict | None:
         event_id = event.EventID & 0xFFFFFFFF
@@ -113,17 +162,29 @@ class WindowsEventLogCollector(BaseCollector):
         handle, flags = self._open_channel(channel)
         out: list[dict] = []
         try:
-            # Resume from last position if known, else read most recent batch.
+            # First poll: read the newest batch. Later polls: resume FORWARD
+            # from the last record number so no event is ever skipped when the
+            # channel volume between polls exceeds the batch cap.
             seek = getattr(win32evtlog, "SeekEventLog", None)
             if seek is not None and channel in self._last_read:
-                seek(handle, self._last_read[channel], 0, win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEEK_READ)
+                seek(
+                    handle, self._last_read[channel] + 1, 0,
+                    win32evtlog.EVENTLOG_FORWARDS_READ | win32evtlog.EVENTLOG_SEEK_READ,
+                )
+                read_flags = win32evtlog.EVENTLOG_FORWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+            else:
+                read_flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
 
-            events = win32evtlog.ReadEventLog(handle, flags, 0)
+            events = win32evtlog.ReadEventLog(handle, read_flags, 0)
             for event in events:
                 rec = self._parse_record(event)
                 if rec:
                     rec["channel"] = channel
                     rec["message"] = self._safe_message(handle, event, channel)[:8192]
+                    if rec["event_id"] in STRUCTURED_FIELDS_EVENT_IDS:
+                        structured = self._structured_fields(channel, event.RecordNumber)
+                        if structured:
+                            rec["raw"].update(structured)
                     out.append(rec)
                 self._last_read[channel] = event.RecordNumber
                 if len(out) >= EVENT_LOG_POLL_BATCH:

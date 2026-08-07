@@ -4,15 +4,16 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.audit import client_ip, log_action
 from backend.database.connection import get_db
 from backend.database.models import ReportRecord
 from backend.reports.generator import generate_report
-from backend.security import require_auth
+from backend.security import actor_name, require_auth
 
 router = APIRouter(
     prefix="/api/reports",
@@ -39,11 +40,14 @@ class ReportRequest(BaseModel):
 
 
 @router.post("/generate")
-def generate(body: ReportRequest, db: Session = Depends(get_db)):
+def generate(body: ReportRequest, request: Request, db: Session = Depends(get_db)):
     try:
-        return generate_report(db, body.report_type.value, body.format.value)
+        result = generate_report(db, body.report_type.value, body.format.value)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    log_action(db, actor_name(request), "report.generate", "report", result.get("file_path", ""),
+               f"{body.report_type.value} / {body.format.value}", client_ip(request))
+    return result
 
 
 @router.get("/list")

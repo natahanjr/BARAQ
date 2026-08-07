@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link } from "react-router";
 import { api } from "../api.js";
 import Card from "../components/Card.jsx";
 import SeverityBadge from "../components/SeverityBadge.jsx";
@@ -9,18 +9,47 @@ import { Loading, EmptyState, ErrorBanner } from "../components/Feedback.jsx";
 
 const MITRE_LINK = (id) => `https://attack.mitre.org/techniques/${id}/`;
 
+const FEATURE_LABELS = {
+  event_id: "Event ID",
+  logon_type: "Logon type",
+  sub_status: "Status code",
+  source_host: "Source host",
+  is_locked: "Locked out",
+  hour: "Hour (0–24)",
+  is_night: "Night hours",
+  is_weekend: "Weekend",
+  unusual_logon_type: "Unusual logon type",
+  has_encoded: "Encoded cmdline",
+  has_download: "Download signal",
+  has_hidden: "Hidden flag",
+  group_sid: "Group SID",
+  script_len: "Script length",
+  cmdline_len: "Cmdline length",
+  has_remote: "Remote SID",
+  ip_code: "IP code",
+  connection_count: "Connections",
+  distinct_ports: "Distinct ports",
+  bytes_sent_mb: "Bytes sent (MB)",
+  bytes_recv_mb: "Bytes recv (MB)",
+  duration_h: "Duration (h)",
+  send_rate: "Send rate",
+  is_novel: "Novel host",
+};
+
+const formatFeature = (name) => FEATURE_LABELS[name] || name.replaceAll("_", " ");
+
 const STATUSES = [
   { value: "open", label: "Open" },
-  { value: "investigating", label: "Investigating" },
-  { value: "resolved", label: "Resolved" },
-  { value: "dismissed", label: "Dismissed" },
+  { value: "in_progress", label: "Investigating" },
+  { value: "contained", label: "Contained" },
+  { value: "closed", label: "Closed" },
 ];
 
 const STATUS_ACTIVE = {
   open: "border-rose-500/50 bg-rose-500/20 text-rose-300",
-  investigating: "border-amber-500/50 bg-amber-500/20 text-amber-300",
-  resolved: "border-emerald-500/50 bg-emerald-500/20 text-emerald-300",
-  dismissed: "border-slate-500/50 bg-slate-600/30 text-slate-300",
+  in_progress: "border-amber-500/50 bg-amber-500/20 text-amber-300",
+  contained: "border-violet-500/50 bg-violet-500/20 text-violet-300",
+  closed: "border-emerald-500/50 bg-emerald-500/20 text-emerald-300",
 };
 
 function InfoRow({ label, value }) {
@@ -42,11 +71,53 @@ export default function AlertDetail() {
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState({});
+  const [warned, setWarning] = useState({});
+  const [intel, setIntel] = useState(null);
+  const [intelLoading, setIntelLoading] = useState(false);
+  const [marking, setMarking] = useState(null);
+  const [explain, setExplain] = useState(null);
+  const [explainLoading, setExplainLoading] = useState(false);
+  const [explainError, setExplainError] = useState("");
 
   const load = () => api.alert(id).then(setAlert).catch((e) => setError(e.message));
   useEffect(() => {
     load();
   }, [id]);
+
+  const loadIntel = (refresh = false) => {
+    if (!alert) return;
+    setIntelLoading(true);
+    api
+      .intelAlert(alert.id, refresh)
+      .then(setIntel)
+      .catch(() => {
+        /* non-fatal, panel hides */
+        setIntel(null);
+      })
+      .finally(() => setIntelLoading(false));
+  };
+  useEffect(() => {
+    if (!alert) return;
+    loadIntel();
+  }, [alert?.id]);
+
+  const loadExplain = () => {
+    if (!alert || explainLoading) return;
+    setExplainLoading(true);
+    setExplainError("");
+    api
+      .mlExplainAlert(alert.id)
+      .then((r) => setExplain(r.explanations || []))
+      .catch((e) => setExplainError(e.message))
+      .finally(() => setExplainLoading(false));
+  };
+  useEffect(() => {
+    if (!alert) return;
+    setExplain(null);
+    setExplainError("");
+    loadExplain();
+  }, [alert?.id]);
 
   if (error)
     return <ErrorBanner message={error} onRetry={load} />;
@@ -81,6 +152,75 @@ export default function AlertDetail() {
       setSaving(false);
     }
   };
+
+  const fixAlert = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await api.fixAlert(alert.id);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runSoar = async (action) => {
+    if (warned[action]) return;
+    if (!window.confirm(`Run SOAR action "${action}" against this alert (host: ${alert.host || "?"})?`)) return;
+    setWarning((prev) => ({ ...prev, [action]: true }));
+    setRunning((prev) => ({ ...prev, [action]: true }));
+    setError("");
+    try {
+      await api.takeAction(alert.id, action);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setRunning((prev) => ({ ...prev, [action]: false }));
+    }
+  };
+
+  // ---- Threat intelligence enrichment ----
+  const markMalicious = async (indicator) => {
+    if (marking) return;
+    if (!window.confirm(`Mark "${indicator}" as malicious? This overrides its reputation for all future lookups.`)) return;
+    setMarking(indicator);
+    setError("");
+    try {
+      await api.intelMarkMalicious(indicator);
+      await loadIntel(true);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setMarking(null);
+    }
+  };
+
+  const intelTone = {
+    malicious: "border-rose-500/40 bg-rose-500/10 text-rose-300",
+    suspicious: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+    benign: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+    unknown: "border-slate-600 bg-slate-800/60 text-slate-300",
+  };
+
+  const intelDot = {
+    malicious: "bg-rose-500",
+    suspicious: "bg-amber-500",
+    benign: "bg-emerald-500",
+    unknown: "bg-slate-500",
+  };
+
+  // ---- ML explainability ----
+  const soarButtons = [
+    { key: "isolate", label: "Isolate Host", tone: "border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20" },
+    { key: "block_ip", label: "Block Source IP", tone: "border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" },
+    { key: "disable_account", label: "Disable Account", tone: "border-orange-500/40 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20" },
+    { key: "kill_process", label: "Kill Process", tone: "border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700" },
+    { key: "quarantine", label: "Quarantine File", tone: "border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700" },
+  ];
 
   return (
     <div className="space-y-6 pb-12">
@@ -166,6 +306,91 @@ export default function AlertDetail() {
               <EmptyState title="No evidence events" subtitle="No linked events recorded for this alert" />
             )}
           </Card>
+
+          <Card>
+            <div className="mb-3 flex items-center justify-between">
+              <SectionHeading>ML Explanation</SectionHeading>
+              <div className="flex items-center gap-2">
+                {explainError && (
+                  <span className="text-[11px] text-amber-400">{explainError}</span>
+                )}
+                <button
+                  type="button"
+                  onClick={loadExplain}
+                  disabled={explainLoading}
+                  className="rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-[11px] font-semibold text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-50"
+                >
+                  {explainLoading ? "Computing..." : "↻ Recompute"}
+                </button>
+              </div>
+            </div>
+            <p className="mb-3 text-xs leading-relaxed text-slate-400">
+              SHAP / LIME feature attribution for each linked evidence event — shows which
+              signals pulled the anomaly score up or down.
+            </p>
+            {explain ? (
+              explain.length > 0 ? (
+                <div className="space-y-3">
+                  {explain.map((ex, i) => (
+                    <div key={i} className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-3">
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <span className="rounded bg-violet-500/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-violet-400">
+                          Event {ex.event?._event_id}
+                        </span>
+                        <span className="rounded bg-slate-700/50 px-2 py-0.5 text-[10px] text-slate-300">
+                          {ex.method}
+                        </span>
+                        <span className="rounded bg-slate-700/50 px-2 py-0.5 text-[10px] text-slate-300">
+                          {ex.behavior}
+                        </span>
+                        <span
+                          className={`ml-auto rounded px-2 py-0.5 text-[10px] font-bold ${
+                            ex.flagged
+                              ? "bg-rose-500/15 text-rose-400"
+                              : "bg-emerald-500/15 text-emerald-400"
+                          }`}
+                        >
+                          score {ex.score?.toFixed(3)}
+                        </span>
+                      </div>
+                      {(ex.features || [])
+                        .filter((f) => Math.abs(f.contribution) > 0.001)
+                        .slice(0, 5)
+                        .map((f) => (
+                          <div key={f.name} className="flex items-center gap-2 py-0.5">
+                            <span className="w-36 shrink-0 truncate font-mono text-[11px] text-slate-400">
+                              {formatFeature(f.name)}
+                            </span>
+                            <span className="flex h-1.5 flex-1 overflow-hidden rounded bg-slate-700/60">
+                              <span
+                                className={`h-full ${
+                                  f.contribution > 0 ? "bg-rose-500" : "bg-cyan-500"
+                                }`}
+                                style={{
+                                  width: `${Math.min(100, Math.abs(f.contribution) * 220)}%`,
+                                }}
+                              />
+                            </span>
+                            <span
+                              className={`w-20 shrink-0 text-right font-mono text-[11px] ${
+                                f.contribution > 0 ? "text-rose-400" : "text-cyan-400"
+                              }`}
+                            >
+                              {f.contribution > 0 ? "+" : ""}
+                              {f.contribution?.toFixed(3)}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                    ))}
+                </div>
+              ) : (
+                <EmptyState title="No explanations" subtitle="No linked events to explain for this alert" />
+              )
+            ) : (
+              <Loading label="Computing explanations" />
+            )}
+          </Card>
         </div>
 
         {/* Sidebar */}
@@ -198,7 +423,108 @@ export default function AlertDetail() {
           </Card>
 
           <Card>
+            <SectionHeading>SOAR Actions</SectionHeading>
+            <div className="grid grid-cols-1 gap-2">
+              {soarButtons.map((b) => (
+                <button
+                  key={b.key}
+                  type="button"
+                  onClick={() => runSoar(b.key)}
+                  disabled={running[b.key] || alert.status === "closed"}
+                  className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-all disabled:opacity-40 ${b.tone} ${
+                    running[b.key] ? "animate-pulse" : ""
+                  }`}
+                >
+                  {running[b.key] ? "Running..." : b.label}
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          <Card>
+            <div className="mb-3 flex items-center justify-between">
+              <SectionHeading>Threat Intelligence</SectionHeading>
+              <button
+                type="button"
+                onClick={() => loadIntel(true)}
+                disabled={intelLoading}
+                className="rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-[11px] font-semibold text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-50"
+              >
+                {intelLoading ? "Checking..." : "↻ Refresh"}
+              </button>
+            </div>
+            {intel ? (
+              intel.items.length > 0 ? (
+                <ul className="space-y-2">
+                  {intel.items.map((it) => (
+                    <li
+                      key={it.indicator}
+                      className={`rounded-lg border p-3 ${intelTone[it.category] || intelTone.unknown}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="break-all font-mono text-xs font-semibold text-slate-200">
+                          {it.indicator}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <span className="flex items-center gap-1 rounded bg-black/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                            <span className={`h-1.5 w-1.5 rounded-full ${intelDot[it.category] || intelDot.unknown}`} />
+                            {it.category}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                        {it.label}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-[10px] font-medium text-slate-400">
+                          {it.kind}
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          conf {(it.confidence * 100).toFixed(0)}%
+                        </span>
+                        {it.sources && it.sources.length > 0 && (
+                          <span className="text-[10px] text-slate-500">
+                            {it.sources.join(" · ")}
+                          </span>
+                        )}
+                        {it.category !== "malicious" && (
+                          <button
+                            type="button"
+                            onClick={() => markMalicious(it.indicator)}
+                            disabled={marking === it.indicator}
+                            className={`ml-auto rounded border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                              it.category === "suspicious"
+                                ? "border-rose-500/50 text-rose-400 hover:bg-rose-500/20"
+                                : "border-slate-600 text-slate-400 hover:bg-slate-700"
+                            } disabled:opacity-50`}
+                          >
+                            {marking === it.indicator ? "Marking..." : "⚠ Mark malicious"}
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState title="No indicators" subtitle="No IPs, domains or hashes found in this alert's evidence" />
+              )
+            ) : (
+              <EmptyState title="Not enriched" subtitle="No threat-intel enrichment available" />
+            )}
+          </Card>
+
+          <Card>
             <SectionHeading>Status Management</SectionHeading>
+            <button
+              type="button"
+              onClick={fixAlert}
+              disabled={saving || alert.status === "closed"}
+              className="mb-4 w-full rounded-lg bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-2.5 text-sm font-bold text-white transition-all hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-40"
+            >
+              {alert.status === "closed"
+                ? "✓ Alert Fixed — Security Score Restored"
+                : "✓ Fix Alert (Restore Score to 100)"}
+            </button>
             <div className="grid grid-cols-2 gap-2">
               {STATUSES.map((s) => (
                 <button

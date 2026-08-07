@@ -17,14 +17,35 @@ dist/
 *.sqlite*
 database/*.db
 database/model_meta.json
+database/model.bundle.joblib
+database/realtime_policy_state.json
+database/campaigns/
 
 # Generated artifacts
 reports/
 logs/
+build/
+dist/
+
+# Dev / tooling
+.edge-profile/
+.vite/
+.opencode/
+dev/
+
+# Certificates (ephemeral, machine-specific)
+certs/sentinel.crt
+certs/sentinel.key
+certs/sentinel.pfx
+certs/sentinel.thumbprint
+certs/_c.pub
+certs/_k.pub
 
 # Environment & secrets
 .env
 .env.*
+secrets.dat
+secrets.tmp
 
 # Archives
 *.zip

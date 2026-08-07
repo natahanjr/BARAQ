@@ -38,6 +38,50 @@ def test_malware_collector_has_signatures():
     assert isinstance(collector.collect(), list)
 
 
+def test_malware_collector_ignores_empty_files(monkeypatch, tmp_path):
+    """Regression: the SHA-256 of a 0-byte file (e3b0c442...) must never be
+    treated as malware - an empty download stub (e.g. Claude-*.msix) is not a
+    threat and must not produce a malicious file record."""
+    import backend.collectors.malware as malware_mod
+
+    empty = tmp_path / "Claude-2436373788.msix"
+    empty.write_bytes(b"")
+
+    monkeypatch.setattr(malware_mod, "SCAN_TARGETS", ((str(tmp_path), 50),))
+    collector = MalwareFileCollector()
+    records = collector.collect()
+
+    names = [r["file_name"] for r in records]
+    assert "Claude-2436373788.msix" in names, "test file not scanned"
+    for r in records:
+        assert r["is_malicious"] is False
+        assert r["signature_name"] == ""
+        assert r["sha256"] == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+
+def test_malware_collector_still_flags_real_bad_hash(monkeypatch, tmp_path):
+    """A genuinely known-bad signature still fires after the empty-file fix."""
+    import hashlib
+    import json
+
+    import backend.collectors.malware as malware_mod
+
+    bad = tmp_path / "payload.bin"
+    bad.write_bytes(b"evil-01")
+    digest = hashlib.sha256(bad.read_bytes()).hexdigest()
+
+    sig = tmp_path / "signatures.json"
+    sig.write_text(
+        json.dumps({"hashes": {digest: "known-bad-sample"}, "paths": [], "malware_names": []}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(malware_mod, "SCAN_TARGETS", ((str(tmp_path), 50),))
+    collector = MalwareFileCollector(signature_list=sig)
+    records = collector.collect()
+    assert any(r["is_malicious"] for r in records)
+    assert any(r["signature_name"] == "known-bad-sample" for r in records)
+
+
 def test_fixtures_produce_eventlog_records():
     records = brute_force()
     assert all(r["source"] == "eventlog" for r in records[:12])

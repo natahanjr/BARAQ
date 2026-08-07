@@ -39,7 +39,15 @@ def test_repeat_under_threshold_keeps_severity(db):
 
 
 def test_ml_staleness_lifecycle(db):
+    import os
+
+    from backend.config import ML_META_FILE
     from backend.ml.anomaly import MLAnomalyDetector
+
+    # Deterministic start: another test may have trained a model earlier in
+    # this session and persisted a fresh meta file.
+    if os.path.exists(ML_META_FILE):
+        os.unlink(ML_META_FILE)
 
     detector = MLAnomalyDetector()
     stale, reason = detector.is_stale()

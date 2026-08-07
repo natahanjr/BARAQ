@@ -30,10 +30,19 @@ def run(with_ml: bool = True, db: Session = Depends(get_db)):
 def run_holdout(
     with_ml: bool = True,
     use_real_baseline: bool = True,
+    randomize: bool = False,
+    seed: int = 20260806,
     db: Session = Depends(get_db),
 ):
-    """Run the external-validity evaluation (hold-out test set + real baseline)."""
-    return run_holdout_evaluation(db, with_ml=with_ml, use_real_baseline=use_real_baseline)
+    """Run the external-validity evaluation (hold-out test set + real baseline).
+
+    ``randomize=True`` applies seeded domain randomization (timing/address
+    jitter) to the hold-out attacks to de-risk deterministic fixtures.
+    """
+    return run_holdout_evaluation(
+        db, with_ml=with_ml, use_real_baseline=use_real_baseline,
+        randomize=randomize, seed=seed,
+    )
 
 
 @router.get("/results")

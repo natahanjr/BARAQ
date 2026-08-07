@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Routes, Route, NavLink, useLocation, Navigate } from "react-router-dom";
-import { api } from "./api.js";
+import { Routes, Route, NavLink, Link, useLocation, Navigate } from "react-router";
+import { api, authStore } from "./api.js";
+import { useRealtime } from "./realtime.js";
+import Login from "./pages/Login.jsx";
 
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Alerts = lazy(() => import("./pages/Alerts.jsx"));
@@ -11,7 +13,9 @@ const Telemetry = lazy(() => import("./pages/Telemetry.jsx"));
 const Assistant = lazy(() => import("./pages/Assistant.jsx"));
 const Reports = lazy(() => import("./pages/Reports.jsx"));
 const Evaluation = lazy(() => import("./pages/Evaluation.jsx"));
+const Incidents = lazy(() => import("./pages/Incidents.jsx"));
 const System = lazy(() => import("./pages/System.jsx"));
+const Users = lazy(() => import("./pages/Users.jsx"));
 
 import {
   DashboardIcon,
@@ -23,8 +27,13 @@ import {
   ReportsIcon,
   EvaluationIcon,
   SystemIcon,
+  UsersIcon,
+  IncidentsIcon,
+  LogoutIcon,
   MenuIcon,
   ShieldIcon,
+  SunIcon,
+  MoonIcon,
 } from "./components/icons.jsx";
 
 const NAV = [
@@ -35,8 +44,10 @@ const NAV = [
   { to: "/telemetry", label: "Processes & Network", icon: TelemetryIcon },
   { to: "/assistant", label: "AI Assistant", icon: AssistantIcon },
   { to: "/reports", label: "Reports", icon: ReportsIcon },
+  { to: "/incidents", label: "Incidents", icon: IncidentsIcon },
   { to: "/evaluation", label: "Evaluation", icon: EvaluationIcon },
   { to: "/system", label: "System", icon: SystemIcon },
+  { to: "/users", label: "Users & Audit", icon: UsersIcon },
 ];
 
 function useBackendStatus() {
@@ -57,19 +68,117 @@ function useBackendStatus() {
           if (!cancelled) setOnline(false);
         });
     check();
-    const timer = setInterval(check, 15000);
+    const timer = setInterval(check, 30000);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
   }, []);
 
-  return { status, online };
+  const realtimeConnected = useRealtime((msg) => {
+    if (msg.type === "status" && msg.payload?.summary) {
+      setStatus((prev) => ({ ...(prev || {}), summary: msg.payload.summary }));
+      setOnline(true);
+    } else if (msg.type === "alert") {
+      setOnline(true);
+      window.dispatchEvent(new CustomEvent("sentinel:realtime-alert", { detail: msg.payload }));
+    }
+  });
+
+  return { status, online, realtimeConnected };
+}
+
+function useTheme() {
+  const [theme, setTheme] = useState(() =>
+    typeof document !== "undefined" && document.documentElement.classList.contains("light")
+      ? "light"
+      : "dark"
+  );
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("light", theme === "light");
+    try {
+      localStorage.setItem("sentinel-theme", theme);
+    } catch {
+      /* private mode etc. */
+    }
+  }, [theme]);
+
+  return [theme, setTheme];
+}
+
+function SetupBanner({ setup, user, setNavOpen }) {
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem("sentinel-setup-dismissed") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  if (!setup || dismissed || user?.role !== "admin") return null;
+
+  const items = [];
+  if (!setup.credentials_configured) {
+    items.push({
+      key: "credentials",
+      text: "Default admin password and API keys are still in use",
+      link: "/users",
+      label: "Change credentials",
+    });
+  }
+  if (!setup.ml_trained) {
+    items.push({
+      key: "ml",
+      text: "The ML detection model has not been trained yet",
+      link: "/system",
+      label: "Train model",
+    });
+  }
+  if (!items.length) return null;
+
+  return (
+    <div className="border-b border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-500/15 px-4 py-3 sm:px-6 lg:px-8">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-amber-200">
+          <span className="font-semibold uppercase tracking-wider text-amber-400">
+            Setup checklist
+          </span>
+          {items.map((item, idx) => (
+            <Link
+              key={item.key}
+              to={item.link}
+              onClick={() => setNavOpen(false)}
+              className={`inline-flex items-center gap-1.5 ${idx > 0 ? "sm:border-l sm:border-amber-500/25 sm:pl-4" : ""}`}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+              {item.text} · {item.label} →
+            </Link>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            try {
+              localStorage.setItem("sentinel-setup-dismissed", "1");
+            } catch {
+              /* ignore */
+            }
+            setDismissed(true);
+          }}
+          className="rounded-md px-2 py-1 text-xs text-amber-300 transition-colors hover:bg-amber-500/20"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function SentinelLogo() {
   return (
-    <svg className="h-10 w-10" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+    <svg className="h-10 w-10" viewBox="0 0 64 64">
       <defs>
         <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#06b6d4" />
@@ -106,7 +215,7 @@ function SentinelLogo() {
   );
 }
 
-function Sidebar({ open, onClose, online, activeAlerts }) {
+function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected }) {
   const location = useLocation();
 
   return (
@@ -118,23 +227,23 @@ function Sidebar({ open, onClose, online, activeAlerts }) {
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-800/60 bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 shadow-2xl transition-transform duration-200 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-800/60 bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900/80 transition-transform duration-200 lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Brand */}
-        <div className="flex items-center gap-3 border-b border-slate-800/40 px-5 py-5">
+        <div className="flex items-center gap-3 px-5 pb-5 pt-6">
           <SentinelLogo />
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold tracking-wide text-white">SentinelSOC</p>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-400">
-              Live Threat Detection
+            <p className="truncate text-sm font-semibold tracking-wide text-white">SentinelSOC</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
+              Threat Detection
             </p>
           </div>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
           {NAV.map((item) => {
             const isActive =
               item.end
@@ -147,21 +256,21 @@ function Sidebar({ open, onClose, online, activeAlerts }) {
                 to={item.to}
                 end={item.end}
                 onClick={onClose}
-                className={`group flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-all duration-150 ${
+                className={`group relative flex items-center gap-3 rounded-lg px-3.5 py-2 text-sm font-medium transition-all duration-150 ${
                   isActive
-                    ? "border border-cyan-500/30 bg-gradient-to-r from-cyan-500/20 to-cyan-500/10 text-cyan-300 shadow-lg shadow-cyan-500/10"
-                    : "border border-transparent text-slate-400 hover:bg-slate-800/40 hover:text-slate-200"
+                    ? "border border-cyan-500/25 bg-gradient-to-r from-cyan-500/20 to-cyan-500/5 text-cyan-200 shadow-[0_0_18px_-6px_rgba(34,211,238,0.45)]"
+                    : "border border-transparent text-slate-500 hover:bg-white/[0.03] hover:text-slate-300"
                 }`}
               >
-                <Icon className={`h-5 w-5 shrink-0 ${isActive ? "text-cyan-400" : "text-slate-500 group-hover:text-slate-300"}`} />
+                <Icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? "text-cyan-400" : "text-slate-600 group-hover:text-slate-400"}`} />
                 <span className="truncate">{item.label}</span>
                 {item.to === "/alerts" && activeAlerts > 0 && (
-                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500/20 px-1.5 text-[10px] font-bold text-red-400">
+                  <span className="ml-auto rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400">
                     {activeAlerts}
                   </span>
                 )}
-                {isActive && item.to !== "/alerts" && (
-                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-lg shadow-cyan-400/50" />
+                {isActive && (
+                  <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-cyan-400" />
                 )}
               </NavLink>
             );
@@ -169,25 +278,32 @@ function Sidebar({ open, onClose, online, activeAlerts }) {
         </nav>
 
         {/* Footer status */}
-        <div className="border-t border-slate-800/40 px-5 py-4">
-          <div className="flex items-center gap-2">
+        <div className="border-t border-white/5 px-5 py-4">
+          <div className="flex items-center gap-2.5">
             <span
-              className={`h-2 w-2 rounded-full ${
-                online ? "animate-pulse bg-emerald-500" : "bg-red-500"
+              className={`h-1.5 w-1.5 rounded-full ${
+                online ? "bg-emerald-400" : "bg-red-400"
               }`}
             />
-            <span className={`text-xs font-medium ${online ? "text-emerald-400" : "text-red-400"}`}>
+            <span className="text-xs font-medium text-slate-500">
               {online ? "System Online" : "Backend Offline"}
             </span>
+            <span
+              className={`ml-auto rounded-full px-1.5 py-0.5 text-[9px] ${
+                online ? "bg-cyan-500/15 text-cyan-400" : "bg-slate-700 text-slate-500"
+              }`}
+              title={realtimeConnected ? "Live push connected" : "Live push unavailable (polling)"}
+            >
+              {realtimeConnected ? "LIVE" : "15s poll"}
+            </span>
           </div>
-          <p className="mt-2 font-mono text-[11px] text-slate-500">v1.0.0 · Real-time · Win32</p>
         </div>
       </aside>
     </>
   );
 }
 
-function Topbar({ onMenuClick, online, summary }) {
+function Topbar({ onMenuClick, online, summary, theme, onToggleTheme, user, onLogout }) {
   const location = useLocation();
   const page = NAV.find(
     (n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to))
@@ -198,72 +314,95 @@ function Topbar({ onMenuClick, online, summary }) {
     score >= 70 ? "text-emerald-400" : score >= 40 ? "text-amber-400" : "text-red-400";
 
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-800/50 bg-gradient-to-r from-slate-950/95 via-slate-950/90 to-slate-950/95 px-4 py-4 shadow-lg backdrop-blur-md sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-20 border-b border-slate-800/50 bg-gradient-to-r from-slate-950/90 via-slate-950/80 to-slate-900/85 px-4 py-3.5 shadow-lg shadow-black/20 backdrop-blur-xl sm:px-6 lg:px-8">
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
             onClick={onMenuClick}
             aria-label="Open navigation"
-            className="rounded-lg border border-slate-700/60 bg-slate-800/60 p-2 text-slate-300 transition-colors hover:bg-slate-700 lg:hidden"
+            className="rounded-lg border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-colors hover:bg-white/[0.08] lg:hidden"
           >
             <MenuIcon className="h-5 w-5" />
           </button>
           <div className="min-w-0">
-            <h1 className="truncate text-xl font-bold tracking-tight text-white sm:text-2xl">
+            <h1 className="truncate text-lg font-semibold tracking-tight text-white sm:text-xl">
               {page}
             </h1>
-            <p className="mt-0.5 hidden text-xs text-slate-400 sm:block">
+            <p className="mt-0.5 hidden text-xs text-slate-500 sm:block">
               Real-time endpoint security monitoring
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {summary && (
-            <div className="hidden items-center gap-5 rounded-lg border border-slate-800/60 bg-slate-900/50 px-4 py-2 md:flex">
+            <div className="hidden items-center gap-4 rounded-lg border border-white/5 bg-white/[0.03] px-4 py-1.5 md:flex">
               <div className="text-center">
-                <p className={`text-xl font-bold leading-none ${scoreClass}`}>
+                <p className={`text-base font-semibold leading-none ${scoreClass}`}>
                   {Math.round(score)}
                 </p>
-                <p className="mt-1 text-[10px] uppercase tracking-wider text-slate-500">
-                  Security Score
+                <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                  Score
                 </p>
               </div>
-              <div className="h-7 w-px bg-slate-700/50" />
+              <div className="h-5 w-px bg-white/10" />
               <div className="text-center">
                 <p className="text-base font-semibold leading-none text-slate-200">
                   {(summary.total_events ?? 0).toLocaleString()}
                 </p>
-                <p className="mt-1 text-[10px] uppercase tracking-wider text-slate-500">Events</p>
+                <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                  Events
+                </p>
               </div>
-              <div className="h-7 w-px bg-slate-700/50" />
+              <div className="h-5 w-px bg-white/10" />
               <div className="text-center">
                 <p className="text-base font-semibold leading-none text-cyan-400">
                   {summary.active_alerts ?? 0}
                 </p>
-                <p className="mt-1 text-[10px] uppercase tracking-wider text-slate-500">Alerts</p>
+                <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                  Alerts
+                </p>
               </div>
             </div>
           )}
 
-          <div
-            className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
-              online
-                ? "border-emerald-500/30 bg-emerald-500/10"
-                : "border-red-500/30 bg-red-500/10"
-            }`}
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            aria-label={theme === "light" ? "Switch to dark theme" : "Switch to light theme"}
+            title={theme === "light" ? "Dark mode" : "Light mode"}
+            className="rounded-lg border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-colors hover:bg-white/[0.08]"
           >
-            <span
-              className={`inline-block h-2 w-2 rounded-full ${
-                online ? "animate-pulse bg-emerald-500" : "bg-red-500"
-              }`}
-            />
-            <span className={`text-xs font-medium ${online ? "text-emerald-400" : "text-red-400"}`}>
-              <span className="hidden sm:inline">{online ? "Backend Online" : "Backend Offline"}</span>
-              <span className="sm:hidden">{online ? "Online" : "Offline"}</span>
-            </span>
-          </div>
+            {theme === "light" ? (
+              <MoonIcon className="h-5 w-5" />
+            ) : (
+              <SunIcon className="h-5 w-5" />
+            )}
+          </button>
+
+          {user && (
+            <div className="flex items-center gap-2">
+              <div className="hidden items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 sm:flex">
+                <span className={`h-1.5 w-1.5 rounded-full ${user.role === "admin" ? "bg-violet-400" : "bg-cyan-400"}`} />
+                <span className="max-w-[110px] truncate text-xs font-medium text-slate-200">
+                  {user.username}
+                </span>
+                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                  {user.role}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={onLogout}
+                aria-label="Log out"
+                title="Log out"
+                className="rounded-lg border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-colors hover:border-red-500/40 hover:text-red-400"
+              >
+                <LogoutIcon className="h-5 w-5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>
@@ -272,23 +411,73 @@ function Topbar({ onMenuClick, online, summary }) {
 
 export default function App() {
   const [navOpen, setNavOpen] = useState(false);
-  const { status, online } = useBackendStatus();
+  const { status, online, realtimeConnected } = useBackendStatus();
+  const [theme, setTheme] = useTheme();
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    // Session may be restored from the httpOnly cookie on reload; an
+    // anonymous/expired session simply falls back to the login screen.
+    api
+      .me()
+      .then((res) => setUser(res.user))
+      .catch(() => {})
+      .finally(() => setAuthReady(true));
+  }, []);
+
+  useEffect(() => {
+    const onLogout = () => setUser(null);
+    window.addEventListener("sentinel:logout", onLogout);
+    return () => window.removeEventListener("sentinel:logout", onLogout);
+  }, []);
+
+  const logout = async () => {
+    try {
+      await api.logout();
+    } catch {
+      /* token already invalid */
+    }
+    authStore.set(null);
+    setUser(null);
+  };
+
+  if (!authReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950">
+        <div className="flex items-center gap-3 text-sm text-slate-400">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-600 border-t-cyan-400" />
+          Checking session…
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login onAuthenticated={setUser} />;
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-200">
-      <Sidebar
-        open={navOpen}
-        onClose={() => setNavOpen(false)}
-        online={online}
-        activeAlerts={status?.summary?.active_alerts ?? 0}
-      />
-      <div className="flex min-h-screen flex-col lg:pl-64">
-        <Topbar
-          onMenuClick={() => setNavOpen(true)}
+    <div className="min-h-screen bg-[var(--app-bg)] text-slate-200">
+        <Sidebar
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
           online={online}
-          summary={status?.summary}
+          realtimeConnected={realtimeConnected}
+          activeAlerts={status?.summary?.active_alerts ?? 0}
         />
-        <main className="fade-in flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="flex min-h-screen flex-col lg:pl-64">
+          <Topbar
+            onMenuClick={() => setNavOpen(true)}
+            online={online}
+            summary={status?.summary}
+            theme={theme}
+            onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
+            user={user}
+            onLogout={logout}
+          />
+          <SetupBanner setup={status?.setup} user={user} setNavOpen={setNavOpen} />
+        <main className="fade-in mx-auto w-full max-w-[1400px] flex-1 px-4 py-7 sm:px-6 lg:px-8">
           <Suspense
             fallback={
               <div className="flex min-h-[40vh] items-center justify-center">
@@ -308,13 +497,15 @@ export default function App() {
               <Route path="/telemetry" element={<Telemetry />} />
               <Route path="/assistant" element={<Assistant />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/incidents" element={<Incidents />} />
               <Route path="/evaluation" element={<Evaluation />} />
               <Route path="/system" element={<System />} />
+              <Route path="/users" element={<Users />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
         </main>
-        <footer className="border-t border-slate-800/40 px-6 py-4 text-center text-xs text-slate-600">
+        <footer className="border-t border-white/5 px-6 py-5 text-center text-xs text-slate-600">
           <span className="inline-flex items-center gap-1.5">
             <ShieldIcon className="h-3.5 w-3.5" />
             SentinelSOC · Real-Time Endpoint Security Operations

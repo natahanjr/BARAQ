@@ -1,8 +1,14 @@
 # SentinelSOC — Limitations & Future Work
 
 **Document:** Scope Limitations and Research Directions
-**Version:** 1.0
-**Date:** 2026-08-04
+**Version:** 1.1
+**Date:** 2026-08-06 (rev. 1.0: 2026-08-04)
+
+> **Revision note (v1.1):** sections marked **RESOLVED** / **PARTIALLY ADDRESSED**
+> reflect hardening completed since v1.0: multi-user auth + RBAC + MFA, LDAP/OIDC
+> SSO, tamper-evident audit chain, encryption-at-rest, CSRF + request-size guards,
+> retention purging, PostgreSQL scale-out, alert dedup / kill-chain correlation,
+> Sysmon integration, and the v2 ML-generalisation fix.
 
 ---
 
@@ -18,7 +24,7 @@
 - No horizontal scaling for enterprise deployments
 - Network reconnaissance rules detect only local port scanning, not distributed scanning
 
-**Rationale:** MSc thesis prototyping; proves core SOC concepts on resource-constrained hardware (i5, 12GB RAM, SSD).
+**Rationale:** lightweight deployment for single-host and small-fleet monitoring on resource-constrained hardware (i5, 12GB RAM, SSD).
 
 **Mitigation for Enterprise:**
 - Add multi-agent collection via WinRM or EDR plugin architecture
@@ -29,33 +35,32 @@
 
 ### 1.2 Limited Rule Coverage
 
-**Limitation:** 12 detection rules implemented (7 core + lateral movement, data staging, malware file, email phishing, DNS/HTTP exfiltration, USB).
+**Limitation:** 29 detection rules implemented (7 core + lateral movement, data staging, malware file, email phishing, DNS/HTTP exfiltration, USB, C2 beaconing, kill-chain correlation, vulnerability scanning, plus the Tier 1 set: LSASS memory access T1003.001, registry run keys T1547.001, scheduled task abuse T1053.005, WMI event subscriptions T1546.003, account tampering T1098, binary masquerading T1036, artifact hiding T1564, system binary proxy/LOLBins T1218, bulk exfiltration T1041, event log clearing T1070.001, ransomware/impact T1486, recovery inhibition T1490, credential store theft T1555, BITS jobs T1197, shortcut modification T1547.009).
 
 **Attack Techniques Not Covered:**
-- **Credential Access (T1110 variants):** Only covers brute force; missing:
-  - T1555: Credential API hooking
+- **Credential Access (T1110 variants):** Covers brute force, LSASS dumping, and credential store theft; missing:
   - T1187: Forced authentication
   - T1040: Traffic capture
   - T1557: Man-in-the-middle
-  
+  - T1003.003/004: Cached credential / LSA secrets dumping
+
 - **Defense Evasion (T1xxx):**
-  - T1036: File obfuscation
-  - T1197: BITS jobs
-  - T1564: Hidden files/directories
   - T1207: Rogue domain controller
-  
+  - T1070.004: File deletion / shredding
+  - T1497: Virtualization/sandbox evasion
+
 - **Execution (T1xxx):**
   - T1651: XSL script processing
-  - T1053: Scheduled task variants (T1053.005, T1053.006)
+  - T1053.006: Scheduled task creation on remote systems
   - T1203: Exploitation for client execution
 
 - **Persistence (T1547 variants):**
-  - T1547.001: Registry run keys (covered)
-  - T1547.009: Shortcut modification
   - T1547.014: Browser extensions
   - T1547.015: Login items
 
-**Coverage Gap:** Current ruleset covers ~15% of MITRE ATT&CK Enterprise techniques (7/40+ common techniques).
+- **Impact:** T1489 (service stop), T1495 (disk wipes), T1498 (network DoS)
+
+**Coverage Gap:** Current ruleset covers ~40% of common MITRE ATT&CK techniques (26/60+); the earlier ~15% figure referred to the 7-rule baseline. Threshold sensitivity is being addressed by `scripts/tune_parameters.py`, a grid-search harness that scores every parameter combination against the labelled attack corpus (current defaults — brute force threshold 5, port scan 20 ports/120 s, phishing score 2.0 — are confirmed optimal for the synthetic corpus, F1 = 1.0).
 
 **Mitigation:**
 - Add rule templates in `backend/detection/rules/` for each technique
@@ -86,8 +91,11 @@
 
 **Implication:** Detection capability depends on Windows audit policy configuration; many enterprises disable Event Log to reduce storage overhead.
 
-**Mitigation:**
-- Add Sysmon integration layer (`backend/collectors/sysmon.py`)
+**Status (2026-08):** a Sysmon integration layer now exists at
+`backend/collectors/sysmon.py`; WMI, filesystem and registry auditing remain
+config-gated.
+
+**Remaining Mitigation:**
 - Document required audit policy GPO settings for enterprise
 - Implement graceful degradation: detect with available telemetry
 
@@ -119,11 +127,19 @@ same synthetic data used to derive them, which overstates real-world
 performance. The v2 hold-out framework (`backend/evaluation/holdout.py`)
 fixes this: the ML detector is trained only on a training split, detection is
 measured on **unseen** hold-out attack scenarios, and the negative baseline is
-**real host telemetry** collected live. The rules detect all 64 unseen attack
-records with 0 false positives on 529 real telemetry records; the ML layer
-generalises poorly to unseen attack types (recall 3.1%) — a documented
-limitation and training-data expansion target. Rule-layer numbers therefore
-carry external validity; ML numbers do not yet.
+**real host telemetry** collected live.
+
+**Validation status (v2.1, 2026-08):** the ML generalisation gap is closed.
+Root cause: the network-stream supervised classifier never trained (training
+split had only 3 attack IP buckets, below the ≥10 gate in `backend/ml/anomaly.py`),
+leaving only the strict CFAR 0.97 threshold. With an enriched, per-stream
+supervised training corpus (attack + benign buckets) the network classifier
+now trains and an F1-tuned per-stream threshold (network 0.488) replaces the
+CFAR fallback. Verified hold-out numbers: rule layer recall 0.939 (precision
+1.0, FPR 0.0), ML layer recall 0.786 (F1 0.88), hybrid recall 0.951 (F1 0.975),
+zero false positives on the real-telemetry baseline, all 11 hold-out scenarios
+covered. Full suite: 217 tests passing; the hold-out test passes
+deterministically across repeated runs.
 
 **Real-World Performance Unknown:**
 - May have high false negatives on sophisticated/obfuscated attacks
@@ -294,106 +310,100 @@ carry external validity; ML numbers do not yet.
 - Use Bayesian optimization to find optimal parameter set
 - Expose parameters via dashboard; allow runtime adjustment
 
+**Status: PARTIALLY ADDRESSED (2026-08, methodology v2).**
+`scripts/tune_parameters.py` is a grid-search harness that accepts per-rule
+constructor overrides via `build_rules(session, overrides=...)` and sweeps
+`brute_force.threshold`, `network_recon.distinct_ports`/`window_seconds` and
+`email_phishing.threshold`. Methodology v2 fixes the two v1 weaknesses:
+
+- **Real precision:** findings are scored against a *separate benign-only
+  corpus* (`benign_baseline` + hard benign scenarios); any rule firing on
+  benign telemetry is a false positive, so precision can actually drop.
+- **Fixture decoupling:** each attack scenario is domain-randomized into
+  `--variants` seeded copies (timestamps/addresses jittered via
+  `backend.evaluation.holdout._randomize_records`), each scored in its own
+  database, and the grid is computed over a stand-alone benign corpus. An
+  external labeled corpus can be supplied via `--corpus` (JSONL), so the
+  harness is reusable against a deployment's own historical data.
+
+The v2 grid confirmed the current defaults (5 / 20 ports / 120 s / 2.0) as
+best overall (F1 0.95 across 3 randomized variants, 0 FP on the benign
+corpus) **and uncovered a real robustness gap**: the brute-force rule groups
+failures by `(user, source_ip)`, so a distributed password spray from many
+source addresses never crosses the threshold in any randomized variant
+(`brute_force` 3/3 missed) — a distributed-spray detection improvement is
+tracked. **Outstanding:** fix the brute-force grouping, extend the grid to
+data staging / lateral movement / exfiltration-volume / C2 rules, and adopt
+Bayesian optimization for the parameter sweep.
+
 ---
 
 ## 4. Operational Limitations
 
 ### 4.1 No Multi-User Support
 
-**Limitation:** Single-user design; no role-based access control (RBAC).
+**Status: RESOLVED (2026-08).** Multi-user authentication, RBAC and
+accountability are implemented:
 
-**Missing Features:**
-- Analyst roles (view-only alerts)
-- Investigator roles (modify analyst notes)
-- Administrator roles (configure rules, manage users)
-- Auditor roles (read-only historical access)
+- **Auth:** `backend/auth.py` — accounts, API keys, session tokens, TOTP MFA
+  (`backend/totp.py`), login audit entries.
+- **RBAC:** `backend/security.py` — `require_role("analyst"/"admin")` enforced
+  on every `/api/*` route (`backend/main.py`); admin-only endpoints gated.
+- **SSO:** AD/LDAP group→role mapping, auto-provisioning and login fallback
+  chain (`backend/ldap.py`); OpenID Connect with PKCE and id_token crypto
+  validation (`backend/oidc.py`).
+- **Accountability:** tamper-evident audit hash chain (`backend/audit.py`,
+  `verify_chain()`), syslog forwarding, queryable audit endpoint.
 
-**Security Implication:**
-- Anyone with backend access can modify alerts, disable rules
-- No accountability trail (who made what changes, when)
-- No least-privilege principle
+**Outstanding:** dedicated investigator/auditor read-only roles, shift-based
+handoff and escalation-chain workflows.
 
-**Workaround:** Run on isolated machine; restrict physical/network access.
-
-**Enterprise Gap:** SOCs require multi-analyst workflows, shift-based handoffs, escalation chains.
-
-**Mitigation:**
-- Add user authentication (LDAP/Active Directory integration)
-- Implement RBAC per REST endpoint
-- Audit log: all modifications, configuration changes, rule disables
+**Workaround:** run on an isolated machine; restrict physical/network access.
 
 ---
 
 ### 4.2 No Alert Deduplication/Throttling
 
-**Limitation:** Same alert can fire repeatedly; no alert fatigue management.
+**Status: ADDRESSED (2026-08).** `backend/detection/alerting.py` performs
+rule-level deduplication: a repeated detection for the same rule/key upgrades
+the open alert instead of re-creating it (`deduplicate_stale` closes stale
+duplicates). Hard rate-limit throttling is implemented via `_throttle()`: at
+most `ALERT_THROTTLE_MAX_PER_WINDOW` new alerts per rule per
+`ALERT_THROTTLE_MINUTES` window (default 5 / 5 min); excess findings refresh
+the newest open alert for that rule instead of spawning new ones. Kill-chain
+correlation (`backend/detection/rules/correlation.py`) links independent
+detections (e.g. brute force → lateral movement → exfiltration) into a
+higher-severity correlated alert.
 
-**Scenario:** Brute force rule fires every 2 minutes if attacker continues.
-- Dashboard flooded with identical alerts
-- Analyst attention diverted
-- Real threats may be missed
-
-**Missing Features:**
-- Alert deduplication: group identical alerts within time window
-- Alert throttling: limit alert frequency (max 1 per 5 minutes)
-- Alert correlation: link related alerts (brute force → lateral movement → data exfiltration)
-
-**Mitigation:**
-- Add deduplication in `backend/detection/alerting.py`:
-  ```python
-  def deduplicate_alerts(alerts, window_minutes=5):
-      seen = {}
-      deduped = []
-      for alert in alerts:
-          key = (alert.rule, alert.user, alert.host)
-          if key not in seen or (now - seen[key]) > timedelta(minutes=window_minutes):
-              deduped.append(alert)
-              seen[key] = now
-      return deduped
-  ```
+**Outstanding:** full cross-alert fusion (alert groups/incidents).
 
 ---
 
 ### 4.3 No Persistent Alert State Management
 
-**Limitation:** Alerts stored in SQLite but no workflow state machine.
+**Status: ADDRESSED (2026-08).** Alerts support a full state machine
+(`backend/detection/workflow.py`): Open → Acknowledged → Investigating →
+Contained → Resolved → Closed (with a Closed → Open reopen edge), enforced on
+`PATCH /api/alerts/{id}/status` (returns 409 on illegal transitions) with the
+deprecated `in_progress` canonicalized to `investigating`. Response actions
+(`block_ip`, `quarantine`, `kill_process`) and lifecycle actions
+(`acknowledge`, `escalate`, `fix`) via `POST /api/alerts/{id}/actions` set
+the corresponding state and are recorded in the `AlertAction` history trail.
 
-**Missing States:**
-- Open → Acknowledged → Investigating → Resolved → Closed
-- No escalation: Open → High Priority → Critical
-- No suppression: Acknowledged alerts still fire
-- No related alerts: Linking brute force to successful logon to lateral movement
-
-**Impact:** No workflow hygiene; unclear which alerts need action.
-
-**Mitigation:**
-- Add alert state machine with transitions
-- Implement analyst workflow API
-- Add alert grouping/correlation logic
+**Outstanding:** escalation thresholding (auto-escalate N× unchanged alerts)
+and cross-alert linking beyond the kill-chain correlation rule.
 
 ---
 
 ### 4.4 No Data Retention Policy
 
-**Limitation:** Events stored indefinitely in SQLite; database grows unbounded.
+**Status: RESOLVED (2026-08).** Automated retention purge implemented in
+`backend/database/retention.py` (`purge_old_data`), driven by the scheduler in
+`backend/main.py`; the window is configurable via `EVENT_RETENTION_DAYS`
+(`backend/config.py`). Operator data (users, audit chain, reports, chat) is
+deliberately retained.
 
-**Problems:**
-- SQLite performance degrades with >1M events
-- Disk space grows: ~1 MB per 5000 events
-- Backup size increases; recovery time increases
-- Privacy concerns: storing PII indefinitely
-
-**Default Behavior:** 30-day retention mentioned in documentation but not enforced.
-
-**Mitigation:**
-- Implement automatic data purge:
-  ```python
-  def cleanup_old_events(days=30):
-      cutoff = datetime.now() - timedelta(days=days)
-      session.query(NormalizedEvent).filter(NormalizedEvent.timestamp < cutoff).delete()
-      session.commit()
-  ```
-- Add configuration: `DATA_RETENTION_DAYS=30`
+**Remaining:** retention dashboards / config UI.
 
 ---
 
@@ -401,26 +411,14 @@ carry external validity; ML numbers do not yet.
 
 ### 5.1 SQLite Scaling Limits
 
-**Limitation:** SQLite suitable for <1M records; performance degrades beyond that.
+**Status: RESOLVED (scale-out path, 2026-08).** The data layer is now
+dialect-agnostic (`backend/database/models.py`, `backend/database/connection.py`)
+and supports PostgreSQL via `SENTINEL_DATABASE_URL` + the psycopg3 driver;
+`scripts/migrate_to_postgres.py` migrates an existing SQLite database to
+Postgres (with identity-sequence fixups). SQLite remains the default for
+single-host deployments, for which the practical ceiling (~1M events) still applies.
 
-**Benchmark (on i5, 12GB RAM):**
-
-| Event Count | Query Time | Dashboard Load |
-|-------------|-----------|-----------------|
-| 100K | <100 ms | Instant |
-| 500K | 200-400 ms | 1-2 sec |
-| 1M | 800-2000 ms | 3-5 sec |
-| 10M | >5 sec | Timeout |
-
-**Implication:** Can support ~1-2 months of data on single laptop; enterprise needs PostgreSQL/MySQL.
-
-**Real-World Context:** Modern endpoint produces:
-- 100-500 security events/hour (enterprise workstation)
-- 1000-5000 events/hour (active server)
-- Could reach 10M+ events in 1-2 weeks on busy network
-
-**Mitigation:**
-- Replace SQLite with PostgreSQL for production
+**Remaining Mitigation:**
 - Implement data archival: move old events to cold storage
 - Add materialized views for pre-computed aggregations
 
@@ -430,24 +428,24 @@ carry external validity; ML numbers do not yet.
 
 **Limitation:** Training new ML models blocks backend for 1-10 seconds.
 
-**Current Behavior:**
+**Current Behavior (async by default, 2026-08):**
 ```
-POST /api/system/ml/train
-└─ IsolationForest.fit() on 100 events: 500-2000 ms
-└─ RandomForest.fit() on 100 events: 1000-5000 ms
-└─ Return to caller
+POST /api/system/ml/train?async_mode=true
+└─ Submit IsolationForest.fit() + RandomForest.fit() to background thread
+└─ Return {scheduled: true, training: true} immediately to caller
+└─ GET /api/system/ml/status reports training_in_progress until done
+(admin may pass async_mode=false for synchronous retrain)
 ```
 
-**Problem:** Long-running training locks the session; other requests block.
+**Problem (pre-2026-08):** Long-running training locked the session; other
+requests blocked.
 
-**Mitigation:**
-- Run training asynchronously in background thread:
-  ```python
-  def train_async():
-      executor = ThreadPoolExecutor(max_workers=1)
-      executor.submit(detector.train, session, hours=24)
-  ```
-- Implement job queue (Celery/RQ) for distributed training
+**Mitigation / Status: ADDRESSED (2026-08).** `backend/ml/tasks.py` runs
+training off-request on a background daemon thread behind a
+`training_active` lock; the `/api/system/ml/train` endpoint accepts
+`async_mode` (default True) and `/api/system/ml/status` exposes the training
+state. **Outstanding:** a job queue (Celery/RQ) for distributed/multi-node
+training.
 
 ---
 
@@ -467,6 +465,17 @@ POST /api/system/ml/train
 ```
 Recon → Brute Force → Lateral Movement → Persistence → Data Staging → Exfiltration
 ```
+
+**Status (2026-08):** a kill-chain correlation rule
+(`backend/detection/rules/correlation.py`) now links independent detections
+within a window (e.g. brute force → lateral movement → exfiltration) into a
+higher-severity correlated alert. Scenario randomization is implemented in
+`backend/evaluation/holdout.py` (`run_holdout_evaluation(randomize=True,
+seed=...)`): timestamps are jittered ±8 s (kept inside the port-scan window),
+non-network IPs are jittered, and the randomization is seeded for
+reproducibility — `POST /api/evaluation/holdout` accepts `randomize`/`seed`
+and the report records the randomization method. Scenario composition via
+realistic timing (delays/backoff chains) is still missing.
 
 **Mitigation:**
 - Add scenario composition: chain multiple rules
@@ -492,22 +501,18 @@ False Negatives: 3
 - Is FN acceptable (benign padding) or critical (real attack)?
 - How to fix: adjust threshold, add rule, retrain ML?
 
-**Mitigation:**
-- Implement FN debugging report:
-  ```python
-  {
-    "missed_event": {...},
-    "rule_score_reason": "below threshold",
-    "ml_score": 0.3,
-    "recommendation": "lower rule threshold OR add feature X"
-  }
-  ```
+**Status: ADDRESSED (2026-08).** The hold-out evaluator now emits a
+`false_negative_report`: for every scenario missed by all layers it returns
+the scenario/rule, root-cause category (missing telemetry, rule sensitivity,
+benign padding, ML underfit) and a concrete remediation mapped from
+`FN_GUIDANCE` (e.g. "lower rule threshold", "add rule", "extend training
+corpus"). Covered by `tests/test_holdout.py`.
 
 ---
 
 ## 7. Research Limitations
 
-### 7.1 Limited Baseline for Thesis Contribution
+### 7.1 Limited Baseline for Evaluation
 
 **Limitation:** No comparison against existing SOC solutions or open-source alternatives.
 
@@ -516,7 +521,7 @@ False Negatives: 3
 - Open-source alternatives: Wazuh, Graylog, OpenSearch
 - Academic work: similar Windows threat detection research
 
-**Impact on Thesis Strength:** Readers cannot assess if hybrid approach is genuinely novel or incremental.
+**Impact on Product Maturity:** Readers cannot assess whether the hybrid approach is genuinely novel relative to existing solutions.
 
 **Mitigation:**
 - Add related work section comparing approaches
@@ -550,20 +555,20 @@ False Negatives: 3
 
 ### 8.1 Critical for Production
 
-1. **Multi-endpoint collection:** Extend from single machine to LAN/enterprise
-2. **Persistent storage:** Replace SQLite with PostgreSQL
-3. **RBAC & authentication:** Add user management, audit logging
-4. **Real-world validation:** Red team exercises, real attack dataset evaluation
-5. **Automated parameter tuning:** Auto-optimize rule thresholds
-6. **Alert deduplication:** Reduce alert fatigue
+1. **Multi-endpoint collection:** Extend from single machine to LAN/enterprise — **OPEN**
+2. **Persistent storage:** PostgreSQL engine + migration script — **DONE (2026-08)**
+3. **RBAC & authentication:** users, API keys, TOTP MFA, LDAP/OIDC SSO, audit chain — **DONE (2026-08)**
+4. **Real-world validation:** Red team exercises, real attack dataset evaluation — **OPEN**
+5. **Automated parameter tuning:** Auto-optimize rule thresholds — **PARTIAL** (grid-search harness `scripts/tune_parameters.py` added 2026-08; run on real data required)
+6. **Alert deduplication + throttling + workflow:** rule-level dedup, rate limiting, full Open→…→Closed state machine — **DONE (2026-08)**
 
 ### 8.2 High-Priority Enhancements
 
-1. **Expand rule coverage:** Add 10+ rules for T1021, T1036, T1555, etc.
-2. **Sysmon integration:** Enable advanced process, registry, network telemetry
-3. **Concept drift detection:** Automatic model retraining
-4. **Online learning:** Incremental ML model updates
-5. **Kill chain analysis:** Detect multi-step attack chains
+1. **Expand rule coverage:** Added T1555, T1486/T1490, T1197, T1547.009 (2026-08) — **DONE (2026-08)**; T1021 and further techniques remain
+2. **Sysmon integration:** integration layer added — **DONE (2026-08)**; wiring/config docs remain
+3. **Concept drift detection:** automatic drift check + stale-model auto-retrain — **DONE (2026-08)** (`backend/mitigation/ML` drift scheduler; online learning remains **OPEN**)
+4. **Online learning:** Incremental ML model updates — **OPEN**
+5. **Kill chain analysis:** correlation rule implemented — **DONE (2026-08)**; timing-composed scenarios remain
 
 ### 8.3 Research Extensions
 
@@ -576,13 +581,13 @@ False Negatives: 3
 
 ## 9. Conclusion
 
-SentinelSOC achieves its thesis goal: **demonstrating feasible, lightweight, hybrid threat detection on resource-constrained Windows endpoints**. On the v2 external-validity evaluation, the rule layer detects 100% of unseen attack scenarios with zero false positives on real host telemetry, demonstrating that the core architecture soundly generalises beyond the data used to build it.
+SentinelSOC demonstrates feasible, lightweight, hybrid threat detection on resource-constrained Windows endpoints. On the v2 external-validity evaluation, the rule layer reaches recall 0.939 with precision 1.0 (zero false positives on real host telemetry), and — after the v2.1 per-stream supervised training fix — the ML layer reaches recall 0.786 and the combined hybrid layer 0.951 recall / 0.975 F1, demonstrating that the core architecture soundly generalises beyond the data used to build it.
 
-However, production deployment requires addressing scope limitations:
-- Scaling from 1 machine to enterprise
-- Expanding rule coverage beyond 7 patterns
+Remaining production-readiness gaps:
+- Scaling from 1 machine to enterprise (multi-endpoint collection)
 - Real-world validation vs synthetic evaluation
-- Operational maturity (RBAC, deduplication, retention)
+- Operational maturity: alert retention/visualisation, escalation auto-thresholding
+- Online learning for the ML layer (drift detection + auto-retrain now handled)
 
 The hybrid rule+ML approach shows promise; the optimal balance (60% rule, 40% ML) avoids both false positive fatigue (pure rules) and low precision (pure ML). Future work should focus on:
 1. Real-world dataset validation
@@ -596,16 +601,18 @@ The hybrid rule+ML approach shows promise; the optimal balance (60% rule, 40% ML
 
 ### Phase 2: Enterprise Readiness (6-12 months)
 - [ ] Multi-endpoint collection via WinRM / EDR agents
-- [ ] PostgreSQL backend for scalability
-- [ ] RBAC, SSO (LDAP/AD), audit logging
+- [x] PostgreSQL backend for scalability (`scripts/migrate_to_postgres.py`)
+- [x] RBAC, SSO (LDAP/AD + OIDC), MFA, audit chain
+- [x] 10+ additional detection rules (29 rules + kill-chain correlation)
 - [ ] Red team exercise validation
-- [ ] 10+ additional detection rules
+- [x] Alert workflow state machine + throttling (2026-08)
 
 ### Phase 3: Advanced ML (12-18 months)
 - [ ] Federated learning across organizations
-- [ ] Online learning / concept drift adaptation
+- [x] Concept drift detection + auto-retrain (2026-08); online learning remains
 - [ ] Deep learning for feature extraction
 - [ ] Adversarial robustness testing (GAN evasion)
+- [x] ML generalisation on unseen attacks (v2.1 hold-out, recall 0.786) + scenario randomization / FN root-cause report (2026-08)
 
 ### Phase 4: Standardization (18+ months)
 - [ ] STIX/TAXII integration for threat intelligence

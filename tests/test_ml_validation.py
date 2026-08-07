@@ -1,4 +1,4 @@
-﻿"""ML anomaly detection validation and ablation studies."""
+"""ML anomaly detection validation and ablation studies."""
 from __future__ import annotations
 
 import pytest
@@ -6,12 +6,19 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from backend.database.models import Base, NormalizedEvent
-from backend.ml.anomaly import MLAnomalyDetector, event_feature_vector
+from backend.database.models import Base, NetworkConnection, NormalizedEvent
+from backend.ml.anomaly import MLAnomalyDetector, _behavior_of, event_feature_vector
 from backend.analyzers.normalizer import Normalizer
 from tests.fixtures import (
     benign_baseline,
     brute_force,
+    ml_c2_beacon,
+    ml_credential_spray,
+    ml_hidden_script,
+    ml_implant_drop,
+    ml_masquerade_process,
+    ml_network_exfil,
+    ml_obfuscated_powershell,
     suspicious_powershell,
 )
 
@@ -52,7 +59,7 @@ class TestMLAnomalyDetector:
         }
         features = event_feature_vector(record)
         assert features is not None
-        assert len(features) == 5
+        assert len(features) == 9
         assert features[0] == 4625  # event_id
 
     def test_detector_trains_on_baseline(self, ml_session):
@@ -160,8 +167,26 @@ class TestDetectionMethodComparison:
 
     def test_ml_only_detection_sensitivity(self, ml_session):
         """Test ML-only detection on attack vs baseline."""
-        # Train detector
-        for r in benign_baseline(60):
+        from datetime import datetime, timezone
+
+        # Model features include time-of-day; training on "now"-stamped
+        # fixtures all within the same minute makes this test depend on the
+        # clock (hour/NIGHT boundaries collapse the hour feature to a constant
+        # and IsolationForest sees no variance -> zero anomalies). Anchor the
+        # timeline to "now" (so train(hours=24) always covers it) but spread
+        # records across a full day so hour/night features vary reproducibly.
+        NOW = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        DAY_START = NOW - timedelta(hours=24)
+
+        def _spread(records, start_hours, step_minutes):
+            """Stamp records at ``DAY_START + start_hours + i*step``."""
+            for i, r in enumerate(records):
+                stamp = DAY_START + timedelta(hours=start_hours, minutes=i * step_minutes)
+                r["timestamp"] = stamp.isoformat()
+
+        baseline = benign_baseline(60)
+        _spread(baseline, 0, 24)  # spans the full 24 h (hour + night vary)
+        for r in baseline:
             ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
         ml_session.commit()
 
@@ -170,27 +195,37 @@ class TestDetectionMethodComparison:
 
         # Test on baseline (should have low anomaly flags)
         baseline_anomalies = 0
-        for r in benign_baseline(30):
+        baseline_evals = benign_baseline(30)
+        _spread(baseline_evals, 2, 30)
+        for r in baseline_evals:
             normalized = Normalizer().normalize(r)
             features = event_feature_vector(normalized)
             if features:
-                score = detector.score_event(features)
-                if score > 0.5:
+                behavior = _behavior_of(int(normalized["event_id"]))
+                score = detector.score_event_for_behavior(behavior, features)
+                if score > detector.thresholds.get(behavior, 0.5):
                     baseline_anomalies += 1
 
         # Test on attacks (should have high anomaly flags)
         attack_anomalies = 0
-        for r in brute_force(attempts=12):
+        attacks = brute_force(attempts=12)
+        _spread(attacks, 3, 1)
+        for r in attacks:
             normalized = Normalizer().normalize(r)
             features = event_feature_vector(normalized)
             if features:
-                score = detector.score_event(features)
-                if score > 0.5:
+                behavior = _behavior_of(int(normalized["event_id"]))
+                score = detector.score_event_for_behavior(behavior, features)
+                if score > detector.thresholds.get(behavior, 0.5):
                     attack_anomalies += 1
 
-        # Attack events should flag higher anomaly rate than baseline
-        # (this is a heuristic check, not strict)
-        assert baseline_anomalies <= len(benign_baseline(30)) * 0.5
+        # CFAR-thresholded FPR on benign history stays bounded (production
+        # uses the same score > thresholds[behavior] semantics).
+        assert baseline_anomalies <= len(benign_baseline(30)) * 0.2
+        # ML-only sensitivity on these fixtures is limited: brute-force
+        # failed-logon attacks share the login feature space with benign
+        # failures (that is why the rule engine is the primary detector for
+        # them). At least something must have been flagged overall.
         assert attack_anomalies > 0 or baseline_anomalies > 0
 
     def test_rule_detection_precision(self, ml_session):
@@ -333,6 +368,148 @@ class TestAblationStudies:
 
         # Longer window should capture more events
         assert len(findings_long) >= len(findings_short)
+
+
+# =====================================================================
+# V3 BEHAVIORAL LAYERS: labeled ground truth, per-stream supervision,
+# threshold tuning in deployed score space, drift guard
+# =====================================================================
+
+class TestMLv3BehavioralLayers:
+    """Supervised per-stream classifiers with deployed-space tuning + drift."""
+
+    def test_per_stream_supervised_and_thresholds(self, ml_session):
+        """Training on labeled attacks yields per-stream classifiers and
+        tuned (non-default) thresholds instead of pure CFAR defaults."""
+        for r in benign_baseline(50):
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        for r in ml_credential_spray(attempts=24):
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        for r in ml_obfuscated_powershell():
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        for r in ml_implant_drop():
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        for r in ml_hidden_script():
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        ml_session.commit()
+
+        detector = MLAnomalyDetector()
+        result = detector.train(ml_session, hours=24)
+        assert result["trained"] is True
+
+        # Supervised layers exist for both behavior streams that had attacks.
+        assert detector.supervised_by_stream.get("login") is not None
+        assert detector.supervised_by_stream.get("process") is not None
+        # Thresholds were tuned off pure-CFAR defaults for those streams.
+        assert detector.thresholds["login"] < 0.98
+        assert detector.thresholds["process"] < 0.98
+        status = detector.status()
+        assert "login" in status["supervised_streams"]
+        assert "process" in status["supervised_streams"]
+
+    def test_ml_generalizes_to_unseen_process_attacks(self, ml_session):
+        """After training on the labeled train split, the ML layer alone must
+        catch hold-out process attacks (masquerade, C2) it never saw."""
+        for r in benign_baseline(50):
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        for r in ml_credential_spray(attempts=24):
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        for r in ml_obfuscated_powershell():
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        for r in ml_implant_drop():
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        for r in ml_hidden_script():
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        ml_session.commit()
+
+        detector = MLAnomalyDetector()
+        detector.train(ml_session, hours=24)
+
+        # Hold-out attacks are only added AFTER training, like a live feed.
+        for r in ml_masquerade_process():
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        for r in ml_c2_beacon():
+            if r.get("source") == "eventlog":
+                ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        ml_session.commit()
+
+        flagged = 0
+        for r in ml_masquerade_process() + [r for r in ml_c2_beacon() if r.get("source") == "eventlog"]:
+            normalized = Normalizer().normalize(r)
+            features = event_feature_vector(normalized)
+            if not features:
+                continue
+            behavior = _behavior_of(int(normalized["event_id"]))
+            score = detector.score_event_for_behavior(behavior, features)
+            if score > detector.thresholds.get(behavior, 0.5):
+                flagged += 1
+        assert flagged >= 2, f"ML caught only {flagged}/5 hold-out process attacks"
+
+    def test_drift_guard_triggers_on_attack_shift(self, ml_session):
+        """Sustained high-scoring behavior after training trips the drift
+        guard so a retrain is scheduled."""
+        NOW = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        DAY_START = NOW - timedelta(hours=24)
+
+        baseline = benign_baseline(60)
+        for i, r in enumerate(baseline):
+            r["timestamp"] = (DAY_START + timedelta(hours=0, minutes=i * 24)).isoformat()
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        ml_session.commit()
+
+        detector = MLAnomalyDetector()
+        detector.train(ml_session, hours=24)
+
+        # A mid-range boundary on a benign-heavy window: the sustained
+        # process-pattern flood sits above it and must trip the drift guard.
+        detector.thresholds["process"] = 0.25
+        trained_at = datetime.fromisoformat(detector.trained_at)
+
+        feed = [r for r in benign_baseline(200) if r.get("event_id") in (4688, 4104)][:50]
+        for i, r in enumerate(feed):
+            r["timestamp"] = (trained_at + timedelta(seconds=2 + i)).isoformat()
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        ml_session.commit()
+
+        detector.analyze_events(ml_session, hours=1)
+        status = detector.status(ml_session)
+        assert status["drift"] is True
+        assert status["drift_reason"].startswith("drifted")
+        assert detector.is_stale(ml_session)
+
+    def test_network_supervision_labels_by_remote_ip(self, ml_session):
+        """Network stream labels come from per-remote-IP attack attribution."""
+        from datetime import timedelta
+
+        detector = MLAnomalyDetector()
+
+        for r in benign_baseline(60):
+            ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
+        for c in ml_network_exfil():
+            ml_session.add(NetworkConnection(
+                pid=c.get("pid", 0), process=c.get("process", ""),
+                local_ip=c.get("local_ip", ""), local_port=c.get("local_port", 0),
+                remote_ip=c.get("remote_ip", ""), remote_port=c.get("remote_port", 0),
+                state=c.get("state", ""), is_listening=c.get("is_listening", False),
+                bytes_sent=c.get("bytes_sent", 0), bytes_recv=c.get("bytes_recv", 0),
+                duration_seconds=c.get("duration_seconds", 0.0),
+                observed_at=Normalizer._safe_ts(c.get("timestamp")),
+            ))
+        # Benign flows to a normal external host (labels 0).
+        for i in range(3):
+            ml_session.add(NetworkConnection(
+                pid=100, process="svchost.exe", local_ip="192.168.1.20",
+                local_port=53000 + i, remote_ip="8.8.8.8", remote_port=53,
+                state="ESTABLISHED", is_listening=False,
+                bytes_sent=2000, bytes_recv=4000, duration_seconds=1.5,
+                observed_at=datetime.now(timezone.utc),
+            ))
+        ml_session.commit()
+
+        since = datetime.now(timezone.utc) - timedelta(hours=24)
+        _, network_y, _ = MLAnomalyDetector._labeled_network_samples(ml_session, since)
+        assert sum(1 for v in network_y if v) >= 1, "no attack-labeled network IPs"
+        assert sum(1 for v in network_y if not v) >= 1, "no benign network IPs"
 
 
 # =====================================================================

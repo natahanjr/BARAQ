@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models for the SentinelSOC local database (SQLite)."""
+"""SQLAlchemy ORM models for the SentinelSOC local database (SQLite/PostgreSQL)."""
 from __future__ import annotations
 
 import json
@@ -10,20 +10,177 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON, TypeDecorator
+
+
+class JSONColumnType(TypeDecorator):
+    """JSON column that compiles to ``jsonb`` on PostgreSQL and ``json``
+    elsewhere.
+
+    Plain ``json`` has no equality operator in PostgreSQL, so GROUP BY /
+    distinct on JSON columns requires ``jsonb``. SQLite keeps the generic
+    ``JSON`` type. Being a ``TypeDecorator`` the choice follows the engine
+    dialect at compile time, not the process-level DATABASE_URL, so mixed
+    SQLite/Postgres engines (tests, migrations) always render correctly.
+    """
+
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import JSONB
+
+            return dialect.type_descriptor(JSONB())
+        return dialect.type_descriptor(JSON())
+
+
+class EncryptedColumn(TypeDecorator):
+    """AES-256-GCM field-level encryption applied transparently on write/read.
+
+    Encrypts on ``bind`` (any non-empty string) and decrypts on ``result``.
+    Legacy plaintext values are returned unchanged, so pre-hardening rows and
+    development databases keep working. Queries that filter/group on these
+    columns are NOT supported (encryption prevents index lookups) — the
+    caller must filter in Python on loaded rows (which all rules already do).
+    """
+
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, (dict, list)):
+            value = json.dumps(value, default=str)
+        from backend.crypto import encrypt_text
+
+        return encrypt_text(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        from backend.crypto import decrypt_text
+
+        return decrypt_text(value)
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def canonical_timestamp(ts: datetime | None) -> str:
+    """Normalise a timestamp to a deterministic UTC string (no microseconds).
+
+    SQLite drops tzinfo and may truncate microseconds on round-trip, so the
+    same instant must hash identically at write time and read time.
+    """
+    if ts is None:
+        return ""
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts.astimezone(timezone.utc).replace(microsecond=0).isoformat()
+
+
 class Base(DeclarativeBase):
     pass
+
+
+class User(Base):
+    """An operator/analyst account. Passwords are stored as salted PBKDF2
+    hashes; role is either ``admin`` or ``analyst``.
+
+    Two-factor authentication (TOTP, see ``backend/totp.py``): ``totp_secret``
+    holds the base32 shared secret (encrypted at rest) and ``totp_enabled``
+    gates the second step on login. Operators provision 2FA via
+    ``/api/auth/mfa/*``.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(512))
+    role: Mapped[str] = mapped_column(String(16), default="analyst")  # admin | analyst
+    full_name: Mapped[str] = mapped_column(String(128), default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    totp_secret: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # User
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "username": self.username,
+            "role": self.role,
+            "full_name": self.full_name,
+            "is_active": self.is_active,
+            "totp_enabled": self.totp_enabled,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_login_at": self.last_login_at.isoformat() if self.last_login_at else None,
+        }
+
+
+class AuditLog(Base):
+    """Immutable trail of who did what, when. Wired into login, alert actions,
+    command dispatch, report generation and user management.
+
+    Tamper-evidence: every entry carries ``prev_hash`` (SHA-256 of the
+    canonical form of the previous entry) and ``hash`` (SHA-256 of this
+    entry's canonical form chained to ``prev_hash``). Altering any historical
+    row breaks the chain and is detectable (see ``backend/audit.verify_chain``).
+    """
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor: Mapped[str] = mapped_column(String(64), index=True)  # username / api key / system
+    action: Mapped[str] = mapped_column(String(64), index=True)  # login, alert.status, command.queue, ...
+    entity_type: Mapped[str] = mapped_column(String(32), default="")
+    entity_id: Mapped[str] = mapped_column(String(64), default="")
+    detail: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # AuditLog
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    #: SHA-256 of the previous audit entry's canonical form ("0"*64 for genesis).
+    prev_hash: Mapped[str] = mapped_column(String(64), default="0" * 64)
+    #: SHA-256 chain hash of this entry.
+    hash: Mapped[str] = mapped_column(String(64), default="0" * 64)
+
+    def canonical(self) -> str:
+        """Deterministic string hashed to build the chain."""
+        ts = canonical_timestamp(self.created_at)
+        return "|".join(
+            [
+                self.prev_hash or "",
+                self.actor or "",
+                self.action or "",
+                self.entity_type or "",
+                self.entity_id or "",
+                self.detail or "",
+                self.ip or "",
+                ts,
+            ]
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "actor": self.actor,
+            "action": self.action,
+            "entity_type": self.entity_type,
+            "entity_id": self.entity_id,
+            "detail": self.detail,
+            "ip": self.ip,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "hash": self.hash,
+            "prev_hash": self.prev_hash,
+        }
 
 
 class NormalizedEvent(Base):
@@ -43,9 +200,9 @@ class NormalizedEvent(Base):
     host: Mapped[str] = mapped_column(String(128), default="-")
     risk: Mapped[str] = mapped_column(String(16), index=True, default="Low")
     severity: Mapped[str] = mapped_column(String(16), index=True, default="info")
-    message: Mapped[str] = mapped_column(Text, default="")
+    message: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # NormalizedEvent
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
-    raw_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    raw_json: Mapped[dict | None] = mapped_column(JSONColumnType, nullable=True)
     is_anomaly: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     ml_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     risk_score: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
@@ -85,7 +242,7 @@ class Alert(Base):
     mitre_name: Mapped[str] = mapped_column(String(128), default="")
     mitre_tactic: Mapped[str] = mapped_column(String(64), default="")
     recommendation: Mapped[str] = mapped_column(Text, default="")
-    evidence: Mapped[str] = mapped_column(Text, default="")
+    evidence: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # Alert
     rule: Mapped[str] = mapped_column(String(64), index=True, default="")
     host: Mapped[str] = mapped_column(String(128), index=True, default="")
     event_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -193,7 +350,7 @@ class ProcessRecord(Base):
     ppid: Mapped[int] = mapped_column(Integer, default=0)
     name: Mapped[str] = mapped_column(String(256), index=True)
     path: Mapped[str] = mapped_column(Text, default="")
-    command_line: Mapped[str] = mapped_column(Text, default="")
+    command_line: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # ProcessRecord
     parent_name: Mapped[str] = mapped_column(String(256), default="")
     user: Mapped[str] = mapped_column(String(128), default="")
     is_new: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -330,7 +487,7 @@ class EmailMessage(Base):
     sender: Mapped[str] = mapped_column(String(256), default="")
     recipient: Mapped[str] = mapped_column(String(256), default="")
     subject: Mapped[str] = mapped_column(String(512), default="")
-    body: Mapped[str] = mapped_column(Text, default="")
+    body: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # EmailMessage
     attachment_types: Mapped[str] = mapped_column(String(512), default="")
     ip_address: Mapped[str] = mapped_column(String(64), default="")
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
@@ -405,6 +562,41 @@ class FileScan(Base):
         }
 
 
+class VulnFinding(Base):
+    """A matched known-vulnerable product (CVE hit) on a monitored host.
+
+    Produced by the vulnerability scanner (``source: vuln`` records) and
+    aggregated into alerts by the vulnerability detection rule.
+    """
+
+    __tablename__ = "vuln_findings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    host: Mapped[str] = mapped_column(String(128), index=True, default="")
+    product: Mapped[str] = mapped_column(String(256), index=True)
+    version: Mapped[str] = mapped_column(String(64), default="")
+    cve_id: Mapped[str] = mapped_column(String(32), index=True)
+    cvss: Mapped[float] = mapped_column(Float, default=0.0)
+    severity: Mapped[str] = mapped_column(String(16), default="medium")
+    description: Mapped[str] = mapped_column(Text, default="")
+    remediation: Mapped[str] = mapped_column(Text, default="")
+    found_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "host": self.host,
+            "product": self.product,
+            "version": self.version,
+            "cve_id": self.cve_id,
+            "cvss": self.cvss,
+            "severity": self.severity,
+            "description": self.description,
+            "remediation": self.remediation,
+            "found_at": self.found_at.isoformat() if self.found_at else None,
+        }
+
+
 class DashboardSnapshot(Base):
     """Periodic roll-up of the platform KPIs used for trend charts."""
 
@@ -472,7 +664,7 @@ class AssistantMessage(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     role: Mapped[str] = mapped_column(String(16))  # user | assistant
-    content: Mapped[str] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(EncryptedColumn())  # AssistantMessage
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     def to_dict(self) -> dict:
@@ -510,6 +702,39 @@ class AlertAction(Base):
             "detail": self.detail,
             "triggered_by": self.triggered_by,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class AgentCommand(Base):
+    """A remote command queued for an agent by the SOC controller.
+
+    The server stores the command (block_ip / kill_process / quarantine /
+    escalate) and the agent picks it up on its next poll cycle via
+    ``GET /api/commands/pending``, executes it locally and reports the
+    outcome back with ``POST /api/commands/{id}/result``.
+    """
+
+    __tablename__ = "agent_commands"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    agent_id: Mapped[str] = mapped_column(String(64), index=True)
+    action: Mapped[str] = mapped_column(String(32))  # block_ip | kill_process | quarantine | escalate
+    target: Mapped[str] = mapped_column(String(256), default="")
+    status: Mapped[str] = mapped_column(String(16), index=True, default="pending")  # pending | success | failed
+    detail: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "agent_id": self.agent_id,
+            "action": self.action,
+            "target": self.target,
+            "status": self.status,
+            "detail": self.detail,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "executed_at": self.executed_at.isoformat() if self.executed_at else None,
         }
 
 
@@ -556,5 +781,271 @@ class EvaluationRun(Base):
         }
 
 
+class Verdict(Base):
+    """Analyst ground-truth on a scored event (the feedback loop).
+
+    One verdict per event; posting again overwrites. Verdicts become the
+    authoritative labels for supervised retraining - an analyst-confirmed
+    attack is always labelled positive and a false-positive always negative,
+    overriding the heuristic labeler.
+    """
+
+    __tablename__ = "verdicts"
+    __table_args__ = (UniqueConstraint("event_id", name="uq_verdict_event"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(Integer, index=True)
+    verdict: Mapped[str] = mapped_column(String(32))  # true_positive | false_positive
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "event_id": self.event_id,
+            "verdict": self.verdict,
+            "note": self.note,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 def json_dumps(data) -> str:
     return json.dumps(data, default=str)
+
+
+class Incident(Base):
+    """A security incident: one or more related alerts tracked as a case.
+
+    Analysts group alerts into incidents, assign ownership, track response
+    status and build a timeline of investigation notes.
+    """
+
+    __tablename__ = "incidents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(256), index=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    severity: Mapped[str] = mapped_column(String(16), index=True, default="high")
+    status: Mapped[str] = mapped_column(String(16), index=True, default="open")
+    owner: Mapped[str] = mapped_column(String(128), default="")
+    mitre_id: Mapped[str] = mapped_column(String(16), default="T0000")
+    mitre_name: Mapped[str] = mapped_column(String(128), default="")
+    host: Mapped[str] = mapped_column(String(128), index=True, default="")
+    risk_score: Mapped[float] = mapped_column(Float, default=0.0)
+    risk_level: Mapped[str] = mapped_column(String(16), index=True, default="MEDIUM")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), index=True, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    alerts: Mapped[list["IncidentAlertLink"]] = relationship(
+        "IncidentAlertLink",
+        back_populates="incident",
+        cascade="all, delete-orphan",
+        order_by="IncidentAlertLink.alert_id",
+    )
+    comments: Mapped[list["IncidentComment"]] = relationship(
+        "IncidentComment",
+        back_populates="incident",
+        cascade="all, delete-orphan",
+        order_by="IncidentComment.created_at",
+    )
+
+    def to_dict(self, include_links: bool = False) -> dict:
+        data = {
+            "id": self.id,
+            "ref": f"INC-{self.id:04d}",
+            "title": self.title,
+            "description": self.description,
+            "severity": self.severity,
+            "status": self.status,
+            "owner": self.owner,
+            "mitre_id": self.mitre_id,
+            "mitre_name": self.mitre_name,
+            "host": self.host,
+            "risk_score": self.risk_score,
+            "risk_level": self.risk_level,
+            "alert_count": len(self.alerts),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "opened_at": self.opened_at.isoformat() if self.opened_at else None,
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "closed_at": self.closed_at.isoformat() if self.closed_at else None,
+        }
+        if include_links:
+            data["alerts"] = [
+                {"alert_id": l.alert_id, "name": l.alert.name, "severity": l.alert.severity}
+                for l in self.alerts
+            ]
+            data["comments"] = [c.to_dict() for c in self.comments]
+        return data
+
+
+class IncidentAlertLink(Base):
+    """Link an incident to the alerts that make up the case."""
+
+    __tablename__ = "incident_alerts"
+    __table_args__ = (UniqueConstraint("incident_id", "alert_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    incident_id: Mapped[int] = mapped_column(
+        ForeignKey("incidents.id", ondelete="CASCADE"), index=True
+    )
+    alert_id: Mapped[int] = mapped_column(
+        ForeignKey("alerts.id", ondelete="CASCADE"), index=True
+    )
+    incident: Mapped[Incident] = relationship(back_populates="alerts")
+    alert: Mapped[Alert] = relationship()
+
+    def to_dict(self) -> dict:
+        return {
+            "incident_id": self.incident_id,
+            "alert_id": self.alert_id,
+            "alert_name": self.alert.name if self.alert else "",
+            "alert_severity": self.alert.severity if self.alert else "",
+        }
+
+
+class IncidentComment(Base):
+    """An analyst note/update appended to an incident timeline."""
+
+    __tablename__ = "incident_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    incident_id: Mapped[int] = mapped_column(
+        ForeignKey("incidents.id", ondelete="CASCADE"), index=True
+    )
+    author: Mapped[str] = mapped_column(String(128), default="analyst")
+    body: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(16), default="comment")  # comment | action | status
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    incident: Mapped[Incident] = relationship(back_populates="comments")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "incident_id": self.incident_id,
+            "author": self.author,
+            "body": self.body,
+            "kind": self.kind,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class ThreatIntelRecord(Base):
+    """Cached threat-intel verdict for a single indicator (IP / domain / hash)."""
+
+    __tablename__ = "threat_intel_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    indicator: Mapped[str] = mapped_column(String(256), unique=True, index=True)
+    kind: Mapped[str] = mapped_column(String(16), default="ip")  # ip | domain | hash
+    category: Mapped[str] = mapped_column(String(16), index=True, default="unknown")  # abusive | malicious | suspicious | benign | unknown
+    label: Mapped[str] = mapped_column(Text, default="")
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    sources: Mapped[list] = mapped_column(JSONColumnType, default=list)
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "indicator": self.indicator,
+            "kind": self.kind,
+            "category": self.category,
+            "label": self.label,
+            "confidence": self.confidence,
+            "sources": self.sources or [],
+            "checked_at": self.checked_at.isoformat() if self.checked_at else None,
+        }
+
+
+class EntityNode(Base):
+    """An entity in the intelligence graph (user / device / process / IP /
+    domain / file hash / technique / threat actor).
+
+    Persisted by the configured graph provider (Postgres by default, Neo4j
+    adapter optional). ``kind`` + ``name`` is the natural key; analytic
+    counters (event_count, alert_count, risk_score) are refreshed by the
+    extractor on each pipeline pass.
+    """
+
+    __tablename__ = "entity_nodes"
+    __table_args__ = (UniqueConstraint("kind", "name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(24), index=True)  # user | device | process | ip | domain | file | technique | threat_actor
+    name: Mapped[str] = mapped_column(String(512), index=True)
+    display_name: Mapped[str] = mapped_column(String(512), default="")
+    label: Mapped[str] = mapped_column(String(256), default="")
+    risk_level: Mapped[str] = mapped_column(String(16), index=True, default="LOW")
+    risk_score: Mapped[float] = mapped_column(Float, default=0.0, index=True)
+    alerts_count: Mapped[int] = mapped_column(Integer, default=0)
+    events_count: Mapped[int] = mapped_column(Integer, default=0)
+    properties: Mapped[dict] = mapped_column(JSONColumnType, default=dict)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    provider: Mapped[str] = mapped_column(String(16), default="postgres")
+
+    def to_dict(self, include_props: bool = True) -> dict:
+        data = {
+            "kind": self.kind,
+            "name": self.name,
+            "display_name": self.display_name or self.name,
+            "label": self.label,
+            "risk_level": self.risk_level,
+            "risk_score": round(self.risk_score, 2),
+            "alerts_count": self.alerts_count,
+            "events_count": self.events_count,
+            "first_seen": self.first_seen.isoformat() if self.first_seen else None,
+            "last_seen": self.last_seen.isoformat() if self.last_seen else None,
+            "id": self.id,
+        }
+        if include_props:
+            data["properties"] = self.properties or {}
+        return data
+
+
+class EntityEdge(Base):
+    """A directional relationship between two graph entities.
+
+    Edges carry a verb label (e.g. ``user -> logon_on -> host``) plus a
+    freshness/weight so the graph can rank "hot" connections. The Postgres
+    provider merges on ``(src_kind, src_name, rel, dst_kind, dst_name)``.
+    """
+
+    __tablename__ = "entity_edges"
+    __table_args__ = (UniqueConstraint("src_kind", "src_name", "rel", "dst_kind", "dst_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    src_kind: Mapped[str] = mapped_column(String(24), index=True)
+    src_name: Mapped[str] = mapped_column(String(512), index=True)
+    rel: Mapped[str] = mapped_column(String(32), index=True)
+    dst_kind: Mapped[str] = mapped_column(String(24), index=True)
+    dst_name: Mapped[str] = mapped_column(String(512), index=True)
+    weight: Mapped[int] = mapped_column(Integer, default=1)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    properties: Mapped[dict] = mapped_column(JSONColumnType, default=dict)
+    provider: Mapped[str] = mapped_column(String(16), default="postgres")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "source": {"kind": self.src_kind, "name": self.src_name},
+            "rel": self.rel,
+            "target": {"kind": self.dst_kind, "name": self.dst_name},
+            "weight": self.weight,
+            "first_seen": self.first_seen.isoformat() if self.first_seen else None,
+            "last_seen": self.last_seen.isoformat() if self.last_seen else None,
+            "properties": self.properties or {},
+        }

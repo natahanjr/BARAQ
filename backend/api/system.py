@@ -24,6 +24,7 @@ router = APIRouter(
 def run_pipeline(db: Session, records: list[dict]) -> dict:
     """Full pipeline: normalize -> persist -> detect -> alert."""
     from backend.analyzers.normalizer import Normalizer
+    from backend.analyzers.normalizer import Normalizer
     from backend.database.models import (
         DnsQuery,
         EmailMessage,
@@ -33,6 +34,7 @@ def run_pipeline(db: Session, records: list[dict]) -> dict:
         NormalizedEvent,
         ProcessRecord,
         UsbDevice,
+        VulnFinding,
     )
     from backend.detection.alerting import AlertingService
     from backend.detection.rules_engine import RulesEngine, enrich_result
@@ -46,6 +48,7 @@ def run_pipeline(db: Session, records: list[dict]) -> dict:
     saved_emails = 0
     saved_usb = 0
     saved_files = 0
+    saved_vulns = 0
 
     for record in records:
         source = record.get("source")
@@ -114,6 +117,19 @@ def run_pipeline(db: Session, records: list[dict]) -> dict:
                 scanned_at=Normalizer._safe_ts(record.get("timestamp")),
             ))
             saved_files += 1
+        elif source == "vuln":
+            db.add(VulnFinding(
+                host=record.get("host", ""),
+                product=record.get("product", ""),
+                version=record.get("version", ""),
+                cve_id=record.get("cve_id", ""),
+                cvss=float(record.get("cvss", 0.0) or 0.0),
+                severity=record.get("severity", "medium"),
+                description=record.get("description", ""),
+                remediation=record.get("remediation", ""),
+                found_at=Normalizer._safe_ts(record.get("timestamp")),
+            ))
+            saved_vulns += 1
         else:
             normalized = normalizer.normalize(record)
             db.add(NormalizedEvent(**normalized))
@@ -126,6 +142,37 @@ def run_pipeline(db: Session, records: list[dict]) -> dict:
     alerting = AlertingService(db)
     created = alerting.handle_findings(findings)
 
+    # Outbound streaming: forward the freshly-persisted records to configured
+    # Kafka / Redis / Elasticsearch sinks. Never blocks the pipeline - records
+    # are enqueued for the background flush worker.
+    streamed = 0
+    if records or created:
+        try:
+            from backend.streaming import record_alert, record_event
+
+            host = records[0].get("host", "") if records else ""
+            for i, record in enumerate(records):
+                payload = dict(record)
+                payload["sentinel.seq"] = i
+                if host:
+                    payload["host"] = host
+                record_event(payload)
+                streamed += 1
+            for alert in created:
+                record_alert(alert.to_dict(include_events=True))
+                streamed += 1
+        except Exception:  # noqa: BLE001 - streaming must never break collection
+            logger.debug("Stream forwarding skipped", exc_info=True)
+
+    # Entity graph: keep the intelligence graph fresh with cheap targeted
+    # upserts for this batch (full rebuild is available via /api/entities/sync).
+    try:
+        from backend.graph import get_graph_store, ingest_batch
+
+        ingest_batch(db, get_graph_store(), records, created)
+    except Exception:  # noqa: BLE001 - graph must never break collection
+        logger.debug("Graph ingest skipped", exc_info=True)
+
     return {
         "collected": len(records),
         "saved_events": saved_events,
@@ -136,8 +183,10 @@ def run_pipeline(db: Session, records: list[dict]) -> dict:
         "saved_emails": saved_emails,
         "saved_usb": saved_usb,
         "saved_files": saved_files,
+        "saved_vulns": saved_vulns,
         "findings": [enrich_result(f) for f in findings],
         "alerts_created": len(created),
+        "streamed": streamed,
     }
 
 
@@ -152,8 +201,26 @@ def collect_once(db: Session = Depends(get_db)):
 
 
 @router.post("/ml/train", dependencies=[Depends(require_admin)])
-def ml_train(db: Session = Depends(get_db)):
-    result = get_detector().train(db)
+def ml_train(
+    async_mode: bool = Query(True),
+    hours: int = Query(24, ge=1, le=168),
+    force: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    from backend.ml.tasks import train_in_background, training_active
+
+    if async_mode:
+        scheduled = train_in_background(hours=hours, force=force)
+        return {
+            "scheduled": scheduled,
+            "force": force,
+            "message": (
+                "Background training started." if scheduled
+                else "A training run is already in progress."
+            ),
+            "training": training_active(),
+        }
+    result = get_detector().train(db, hours=hours, validate=not force)
     return result
 
 
@@ -165,18 +232,72 @@ def ml_analyze(hours: int = Query(1, ge=1, le=168), db: Session = Depends(get_db
 
 @router.get("/ml/status")
 def ml_status():
-    return get_detector().status()
+    from backend.ml.tasks import training_active
+
+    return {**get_detector().status(), "training": training_active()}
+
+
+@router.get("/ml/explain/alert/{alert_id}")
+def ml_explain_alert(alert_id: int, db: Session = Depends(get_db)):
+    """Per-evidence-event ML explanations (SHAP/LIME) for an alert.
+
+    Computed under a hard wall-clock budget; slow explainers degrade to a
+    permutation fallback so the endpoint never blocks the analyst for long.
+    """
+    from sqlalchemy.orm import selectinload
+
+    from backend.database.models import Alert
+    from backend.ml.explain import explain_alert
+
+    alert = db.get(Alert, alert_id, options=[selectinload(Alert.events).selectinload("*")])
+    if not alert:
+        from fastapi import HTTPException
+
+        raise HTTPException(404, "Alert not found")
+    return {"alert_id": alert_id, "explanations": explain_alert(db, alert)}
+
+
+@router.get("/ml/explain/event/{event_id}")
+def ml_explain_event(event_id: int, db: Session = Depends(get_db)):
+    """Explain a single normalised event's anomaly score."""
+    from backend.database.models import NormalizedEvent
+    from backend.ml.explain import explain_event
+
+    event = db.get(NormalizedEvent, event_id)
+    if not event:
+        from fastapi import HTTPException
+
+        raise HTTPException(404, "Event not found")
+    return explain_event(event, session=db)
+
+
+@router.get("/stream/status")
+def stream_status():
+    """Streaming pipeline config + per-sink health."""
+    from backend.streaming import status
+
+    return status()
 
 
 @router.get("/status")
 def system_status(db: Session = Depends(get_db)):
+    from backend.config import EVENT_RETENTION_DAYS, SECRETS_CONFIGURED
+    from backend.database.connection import DATABASE_URL
+
+    detector = get_detector()
+    dialect = DATABASE_URL.split(":", 1)[0]
     return {
         "application": "SentinelSOC",
         "version": "1.0.0",
         "collecting": True,
-        "database": "sqlite",
+        "database": "sqlite" if dialect == "sqlite" else dialect,
         "summary": dashboard.dashboard_summary(db),
         "uptime_seconds": int(time.time() - _START_TIME),
+        "setup": {
+            "credentials_configured": SECRETS_CONFIGURED,
+            "ml_trained": bool(detector.trained_at),
+            "retention_days": EVENT_RETENTION_DAYS,
+        },
     }
 
 

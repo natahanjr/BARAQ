@@ -128,6 +128,150 @@
       "data_sources": "Windows Security Event Log 6416, 6420 (new external device)",
       "detection": "Alert on insertion of new removable/USB storage devices, especially paired with executables or autorun activity.",
       "recommendation": "Restrict USB write access / Autorun, review the device insertion context, and scan new media before mounting."
+    },
+    {
+      "id": "T1190",
+      "name": "Exploit Public-Facing Application",
+      "tactic": "Initial Access",
+      "description": "Adversaries may exploit a publicly accessible application or known-vulnerable software running on the endpoint to gain initial access. SentinelSOC flags installed products matching known CVEs via the vulnerability scanner.",
+      "data_sources": "Installed-software inventory (registry uninstall keys); CVE database match",
+      "detection": "Match installed product names/versions against the curated CVE database; alert on CVSS-critical findings and re-check after patch cycles.",
+      "recommendation": "Patch or update the affected software immediately, verify whether the vulnerability has been exploited, and apply compensating controls (segmentation, WAF) until the patch is deployed."
+    },
+    {
+      "id": "T1003.001",
+      "name": "LSASS Memory",
+      "tactic": "Credential Access",
+      "description": "Adversaries may access the Local Security Authority Subsystem Service (LSASS) memory to steal credentials (e.g. with Mimikatz sekurlsa). SentinelSOC flags Sysmon Event 10 (Process Access) targeting lsass.exe from unexpected processes.",
+      "data_sources": "Sysmon Event 10 (Process Access); Process creation telemetry",
+      "detection": "Monitor access to lsass.exe: any handle opened with VM_READ/process-query access by a process outside the known-good set (svchost, winlogon, wininit, services, AV agents) is suspicious.",
+      "recommendation": "Kill the offending process, extract and rotate the compromised credentials, enable Credential Guard, and review logons made with the stolen hashes/tickets."
+    },
+    {
+      "id": "T1547.001",
+      "name": "Registry Run Keys / Startup Folder",
+      "tactic": "Persistence",
+      "description": "Adversaries may achieve persistence by adding a program to the HKCU/HKLM Run or RunOnce registry keys so it executes at logon. SentinelSOC flags Sysmon Event 13 (Registry Value Set) writing to Run/RunOnce keys.",
+      "data_sources": "Sysmon Event 13 (Registry Value Set); Security Event Log 4688",
+      "detection": "Monitor SetValue/CreateKey operations on Run, RunOnce, RunServices and StartupApproved keys; verify the binary being registered and its location.",
+      "recommendation": "Remove the registry value, delete the dropped binary, scan for additional persistence, and review the process that wrote the key."
+    },
+    {
+      "id": "T1053.005",
+      "name": "Scheduled Task",
+      "tactic": "Persistence",
+      "description": "Adversaries may abuse the Windows Task Scheduler to execute code at system startup or on user logon. SentinelSOC detects schtasks /create invocations whose task name or action path indicates abuse.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688); Security Event Log 4698, 4702",
+      "detection": "Flag schtasks.exe /create with action binaries in temp/public/appdata paths, system-masquerading task names, or onlogon/onstart/onboot triggers.",
+      "recommendation": "Delete the task, remove the dropped binary, disable remote task creation, and audit scheduled tasks across the fleet."
+    },
+    {
+      "id": "T1546.003",
+      "name": "Windows Management Instrumentation Event Subscription",
+      "tactic": "Persistence",
+      "description": "Adversaries may establish persistence by creating WMI event subscriptions (EventFilter + EventConsumer + FilterToConsumerBinding) that execute a payload when a defined event occurs. SentinelSOC detects WMI subscription tooling in command lines.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688); WMI activity (Event 5861)",
+      "detection": "Flag wmic/PowerShell invocations that create __EventFilter, CommandLineEventConsumer/ActiveScriptEventConsumer or _FilterToConsumerBinding objects under the root\\subscription namespace.",
+      "recommendation": "Enumerate and remove the malicious subscription (Get-WmiObject -Namespace root\\subscription), remove the payload, and restrict WMI access with WMI namespaces ACLs."
+    },
+    {
+      "id": "T1098",
+      "name": "Account Manipulation",
+      "tactic": "Persistence",
+      "description": "Adversaries may manipulate accounts to maintain or elevate access: resetting admin passwords, deleting accounts, or enabling disabled privileged accounts. SentinelSOC flags password-reset, deletion and enable/disable activity against admin-named accounts.",
+      "data_sources": "Windows Security Event Log 4724, 4726, 4725, 4722, 4738",
+      "detection": "Monitor password reset attempts (4724), account deletion (4726) and enable/disable (4725/4722) where the target account is privileged or admin-named.",
+      "recommendation": "Verify the change with the account owner, reset credentials if tampered, restore the account, and audit admin account change requests."
+    },
+    {
+      "id": "T1036",
+      "name": "Masquerading",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries may disguise malware as legitimate files, such as naming a payload svchost.exe and running it from a user-writable directory. SentinelSOC flags known system binaries executing from outside C:\\Windows.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688)",
+      "detection": "Watch for processes named after system binaries (svchost, lsass, csrss, winlogon, services) whose image path is not under C:\\Windows\\System32 or SysWOW64.",
+      "recommendation": "Terminate the masquerading process, delete the binary, scan the originating folder, and review the parent process chain."
+    },
+    {
+      "id": "T1564",
+      "name": "Hide Artifacts",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries may hide files or artifacts, e.g. by using NTFS alternate data streams (file:stream) or setting the hidden attribute. SentinelSOC flags ADS usage and attrib +h hiding in command lines.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688)",
+      "detection": "Flag command lines referencing colon-stream paths (filename:stream), attrib +h/+s calls, and redirection into hidden streams.",
+      "recommendation": "Extract and inspect the stream contents, scan for additional streams, and clean the dropped payload."
+    },
+    {
+      "id": "T1218",
+      "name": "System Binary Proxy Execution",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries may abuse trusted system binaries (rundll32, mshta, regsvr32, certutil, bitsadmin, installutil) to proxy the execution of malicious code and bypass allow-lists. SentinelSOC detects their abuse patterns in command lines.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688)",
+      "detection": "Flag LOLBin usage: rundll32 with javascript:/mshtml, mshta with remote .hta, regsvr32 /s /i:http, certutil -urlcache/-decode, bitsadmin /transfer, installutil/regasm/regsvc, cmstp, pcalua and hh.exe with remote content.",
+      "recommendation": "Investigate the invoked content, block the remote host, restrict execution of these binaries (Software Restriction / WDAC), and review the parent chain."
+    },
+    {
+      "id": "T1041",
+      "name": "Exfiltration Over C2 Channel",
+      "tactic": "Exfiltration",
+      "description": "Adversaries may exfiltrate stolen data over the existing command-and-control channel, often as bulk HTTP/S transfers. SentinelSOC flags per-process HTTP transfer volumes that are anomalous for the endpoint.",
+      "data_sources": "HTTP/S request metadata; endpoint connection telemetry",
+      "detection": "Monitor per-process HTTP upload/download byte totals and request counts; alert on multi-megabyte volumes or very high request rates within a short window.",
+      "recommendation": "Block the destination, inspect the process's memory and parent chain, identify what data left the host, and notify the incident response process."
+    },
+    {
+      "id": "T1070.001",
+      "name": "Clear Windows Event Logs",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries may clear or delete Windows event logs to hide their activity. SentinelSOC flags Security log clearing (Event 1102), System log clearing (Event 104) and deletion of .evtx log files (Sysmon Event 23).",
+      "data_sources": "Windows Security Event Log 1102, 104; Sysmon Event 23 (File Delete)",
+      "detection": "Alert on event log clear events (1102/104) and on file-delete events targeting .evtx files.",
+      "recommendation": "Restore logs from the SIEM/central collection, treat the host as compromised, and review the account that cleared the logs."
+    },
+    {
+      "id": "T1486",
+      "name": "Data Encrypted for Impact",
+      "tactic": "Impact",
+      "description": "Adversaries may encrypt data on target systems to interrupt availability of system and network resources, then demand ransom. SentinelSOC flags bulk file-rename/encryption command lines and ransom-note drops.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688); file system monitoring",
+      "detection": "Flag commands that bulk-rename or re-encrypt files with ransomware-style extensions (.locked/.crypt/.encrypted), delete originals, or write ransom notes (readme/decrypt/how_to files).",
+      "recommendation": "Isolate the host and volume immediately, retain forensic copies, restore from offline/immutable backups, and hunt for the initial access vector."
+    },
+    {
+      "id": "T1490",
+      "name": "Inhibit System Recovery",
+      "tactic": "Impact",
+      "description": "Adversaries may delete or disable system restoration and recovery features to prevent rollback following an attack. SentinelSOC flags shadow-copy deletion and boot-recovery tampering commands.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688)",
+      "detection": "Alert on vssadmin delete shadows, wmic shadowcopy delete, dism for image-cleanup, bcdedit recoveryenabled disabled and wevtutil cl invocations.",
+      "recommendation": "Treat as a precursor to destructive ransomware, isolate the host, and verify remaining backup/shadow-copy integrity."
+    },
+    {
+      "id": "T1555",
+      "name": "Credentials from Password Stores",
+      "tactic": "Credential Access",
+      "description": "Adversaries may search for and acquire credentials stored in Password Stores (Credential Manager, DPAPI-protected web stores, browser profiles) to authenticate and move laterally.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688)",
+      "detection": "Flag cmdkey /list, vaultcmd enumeration, Credential Manager access via rundll32 keymgr.dll, DPAPI master-key extraction (mimikatz dpapi), and browser credential-database reads (Login Data, cookies, logins.json).",
+      "recommendation": "Rotate the exposed credentials, enable Credential Guard and DPAPI user-protection, and investigate what account/lateral path was used."
+    },
+    {
+      "id": "T1197",
+      "name": "BITS Jobs",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries may abuse Windows BITS (Background Intelligent Transfer Service) to download, upload and execute malicious code while evading defensive tools, often with SetNotifyCmdLine for execution.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688); BITS event log",
+      "detection": "Flag bitsadmin /transfer, /create with notification command lines that point at executables, Start-BitsTransfer usage, and BITS downloads into user-writable or temp directories.",
+      "recommendation": "Delete the BITS job, kill the executed payload, block the download source, and review BITS job enumeration on the host."
+    },
+    {
+      "id": "T1547.009",
+      "name": "Shortcut Modification",
+      "tactic": "Persistence",
+      "description": "Adversaries may create or modify shortcut (.lnk) files in the user or global startup folders to execute payloads at logon.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688); file system monitoring",
+      "detection": "Alert on command lines that create or modify .lnk files under the Startup folders or that inject remote/executable targets into shortcuts (WScript.Shell CreateShortcut, .TargetPath).",
+      "recommendation": "Remove the shortcut, delete the target payload, scan the startup folder, and harden it against write by non-privileged users."
     }
   ]
 }

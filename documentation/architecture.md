@@ -106,6 +106,24 @@ Risk mapping: event ID → risk level; severity derived per category (Authentica
 | `privilege_escalation.py` | New admin accounts, sensitive privilege assignment (4720/4732/4672) | T1068 |
 | `persistence.py` | Run-key registry changes, scheduled tasks, new services (4698/7045) | T1547 |
 | `network_recon.py` | One source probing ≥20 distinct ports in 120 s | T1046 |
+| `lateral_movement.py` | SMB connections + cross-host logons | T1021 |
+| `data_staging.py` | Archive tools against data folders (7z/rar/zip) | T1074 |
+| `malware_file.py` | Known-bad hash/path/signature hits | T1105 |
+| `email_phishing.py` | Heuristic sender/attachment/body scoring | T1566 |
+| `dns_http.py` | DNS tunnel/TLD + oversized HTTP bodies | T1071 |
+| `usb.py` | New removable-device insertion | T1091 |
+| `correlation.py` | ≥2 kill-chain steps from one host in window | T1082 |
+| `vulnerability.py` | Installed software matching known CVEs | T1190 |
+| `credential_access.py` | Sysmon E10 targeting lsass.exe from unexpected process | T1003.001 |
+| `registry_runkey.py` | Sysmon E13 writes to Run/RunOnce autostart keys | T1547.001 |
+| `scheduled_task.py` | schtasks /create with masquerading name / writable action path | T1053.005 |
+| `wmi_event_subscription.py` | wmic/PowerShell subscription object creation | T1546.003 |
+| `account_tampering.py` | Password reset/deletion/enable of admin accounts | T1098 |
+| `masquerading.py` | System-named binary running outside C:\Windows | T1036 |
+| `hidden_artifacts.py` | ADS (:stream) + attrib +h hiding | T1564 |
+| `lolbin_execution.py` | rundll32/mshta/regsvr32/certutil/bitsadmin abuse | T1218 |
+| `exfiltration_volume.py` | Per-process HTTP volume > 5 MB / 250 req | T1041 |
+| `log_clearing.py` | Event 1102/104 clears + .evtx deletion | T1070.001 |
 
 - **Alerting Service** (`alerting.py`) deduplicates findings into `Alert` records, linking evidence events (many-to-many), attaching MITRE metadata + recommendations, and computing the **hybrid risk score** for every alert.
 - **ML** (`ml/anomaly.py`): three-layer lightweight anomaly detection:

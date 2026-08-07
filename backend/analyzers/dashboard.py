@@ -81,33 +81,45 @@ def dashboard_summary(session: Session) -> dict:
     }
 
 
+def _hour_bucket(column, session: Session):
+    """Portable SQL expression truncating a UTC datetime column to the hour."""
+    dialect = session.get_bind().dialect.name
+    if dialect == "postgresql":
+        return func.date_trunc("hour", column)
+    if dialect in ("mysql", "mariadb"):
+        return func.date_format(column, "%Y-%m-%dT%H:00:00")
+    return func.strftime("%Y-%m-%dT%H:00:00", func.datetime(column, "localtime"))
+
+
+def _format_bucket(value) -> str:
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%dT%H:00:00")
+    return str(value)
+
+
 def event_timeline(session: Session, hours: int = 24) -> list[dict]:
     """Event counts bucketed per hour for the timeline chart."""
     since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    bucket = _hour_bucket(NormalizedEvent.timestamp, session)
     rows = session.execute(
-        select(
-            func.strftime("%Y-%m-%dT%H:00:00", func.datetime(NormalizedEvent.timestamp, "localtime")).label("bucket"),
-            func.count(NormalizedEvent.id),
-        )
+        select(bucket.label("bucket"), func.count(NormalizedEvent.id))
         .where(NormalizedEvent.timestamp >= since)
         .group_by("bucket")
         .order_by("bucket")
     ).all()
-    return [{"bucket": r[0], "count": int(r[1])} for r in rows]
+    return [{"bucket": _format_bucket(r[0]), "count": int(r[1])} for r in rows]
 
 
 def alert_timeline(session: Session, hours: int = 24) -> list[dict]:
     since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    bucket = _hour_bucket(Alert.created_at, session)
     rows = session.execute(
-        select(
-            func.strftime("%Y-%m-%dT%H:00:00", func.datetime(Alert.created_at, "localtime")).label("bucket"),
-            func.count(Alert.id),
-        )
+        select(bucket.label("bucket"), func.count(Alert.id))
         .where(Alert.created_at >= since)
         .group_by("bucket")
         .order_by("bucket")
     ).all()
-    return [{"bucket": r[0], "count": int(r[1])} for r in rows]
+    return [{"bucket": _format_bucket(r[0]), "count": int(r[1])} for r in rows]
 
 
 def threat_categories(session: Session) -> list[dict]:

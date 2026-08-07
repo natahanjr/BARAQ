@@ -7,18 +7,36 @@ from backend.analyzers.normalizer import Normalizer
 from backend.database.models import NetworkConnection, NormalizedEvent
 from tests.fixtures import (
     add_normalized,
+    admin_tampering,
     benign_baseline,
+    benign_process,
     brute_force,
     data_staging,
+    hidden_artifact,
     http_exfil,
+    http_volume,
+    log_clear,
     logon_failure,
     lateral_movement,
+    lolbin_usage,
+    masquerading_process,
     persistence,
     phishing_email,
     port_scan,
     privilege_escalation,
+    schtasks_create,
     suspicious_powershell,
+    sysmon_benign_registry,
+    sysmon_lsass_benign,
+    sysmon_lsass_dump,
+    sysmon_runkey,
     usb_device,
+    wmi_subscription,
+    bits_download,
+    credential_store_theft,
+    ransomware_impact,
+    recovery_inhibit,
+    shortcut_persistence,
 )
 
 
@@ -228,3 +246,214 @@ def test_kill_chain_correlation(db):
     findings = KillChainCorrelationRule(db, threshold=2).evaluate(10)
     assert len(findings) == 1
     assert findings[0].severity == "critical"
+
+
+def test_credential_access_lsass_dump(db):
+    from backend.detection.rules.credential_access import CredentialAccessRule
+
+    add_normalized(db, sysmon_lsass_dump() + sysmon_lsass_benign())
+    findings = CredentialAccessRule(db).evaluate(10)
+    assert len(findings) == 1
+    assert findings[0].mitre_id == "T1003.001"
+    assert findings[0].severity == "critical"
+    assert "lsass.exe" in findings[0].evidence
+
+
+def test_registry_runkey_persistence(db):
+    from backend.detection.rules.registry_runkey import RegistryRunKeyRule
+
+    add_normalized(db, sysmon_runkey() + sysmon_benign_registry())
+    findings = RegistryRunKeyRule(db).evaluate(10)
+    assert len(findings) == 1
+    assert findings[0].mitre_id == "T1547.001"
+    assert "\\Run\\" in findings[0].evidence
+
+
+def test_scheduled_task_abuse(db):
+    from backend.detection.rules.scheduled_task import ScheduledTaskAbuseRule
+
+    add_normalized(db, benign_process() + schtasks_create())
+    findings = ScheduledTaskAbuseRule(db).evaluate(10)
+    assert len(findings) == 1
+    assert findings[0].mitre_id == "T1053.005"
+    assert "SystemUpdater" in findings[0].evidence
+
+
+def test_wmi_event_subscription(db):
+    from backend.detection.rules.wmi_event_subscription import WmiEventSubscriptionRule
+
+    add_normalized(db, wmi_subscription())
+    findings = WmiEventSubscriptionRule(db).evaluate(10)
+    assert len(findings) >= 2
+    assert all(f.mitre_id == "T1546.003" for f in findings)
+    assert all(f.severity == "critical" for f in findings)
+
+
+def test_account_tampering(db):
+    from backend.detection.rules.account_tampering import AccountTamperingRule
+
+    add_normalized(db, admin_tampering())
+    findings = AccountTamperingRule(db).evaluate(10)
+    assert len(findings) == 2
+    assert all(f.mitre_id == "T1098" for f in findings)
+
+
+def test_masquerading_system_binary(db):
+    from backend.detection.rules.masquerading import MasqueradingRule
+
+    add_normalized(db, benign_process() + masquerading_process())
+    findings = MasqueradingRule(db).evaluate(10)
+    assert len(findings) == 1
+    assert findings[0].mitre_id == "T1036"
+    assert "svchost.exe" in findings[0].evidence
+
+
+def test_hidden_artifacts(db):
+    from backend.detection.rules.hidden_artifacts import HiddenArtifactsRule
+
+    add_normalized(db, hidden_artifact())
+    findings = HiddenArtifactsRule(db).evaluate(10)
+    assert len(findings) == 2
+    assert all(f.mitre_id == "T1564" for f in findings)
+
+
+def test_hidden_artifacts_uvicorn_module_syntax_not_flagged(db):
+    from backend.detection.rules.hidden_artifacts import HiddenArtifactsRule
+
+    def _proc(name, cmdline, pid):
+        return {
+            "source": "process", "pid": pid, "ppid": 900, "name": name,
+            "path": f"C:\\Windows\\System32\\{name}",
+            "cmdline": cmdline, "raw": {"cmdline": cmdline},
+            "parent_name": "explorer.exe", "user": "HAARAPHEL\\Haaraphel",
+            "is_new": True, "timestamp": "2026-08-07T21:00:00Z",
+        }
+
+    add_normalized(
+        db,
+        [
+            _proc(
+                "python.exe",
+                "F:\\My Project\\SentinelSOC\\venv\\Scripts\\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000",
+                25956,
+            ),
+            _proc("gunicorn.exe", "gunicorn myapp.wsgi:application -w 2", 25957),
+        ],
+    )
+    assert HiddenArtifactsRule(db).evaluate(10) == []
+
+
+def test_lolbin_execution(db):
+    from backend.detection.rules.lolbin_execution import LolBinExecutionRule
+
+    add_normalized(db, benign_process() + lolbin_usage())
+    findings = LolBinExecutionRule(db).evaluate(10)
+    assert len(findings) == 2
+    assert all(f.mitre_id == "T1218" for f in findings)
+    assert any("rundll32" in f.evidence for f in findings)
+    assert any("certutil" in f.evidence for f in findings)
+
+
+def test_exfiltration_volume(db):
+    from backend.detection.rules.exfiltration_volume import ExfiltrationVolumeRule
+
+    add_normalized(db, http_volume())
+    findings = ExfiltrationVolumeRule(db).evaluate(10)
+    assert len(findings) == 1
+    assert findings[0].mitre_id == "T1041"
+    assert "powershell.exe" in findings[0].evidence
+
+
+def test_log_clearing(db):
+    from backend.detection.rules.log_clearing import LogClearingRule
+
+    add_normalized(db, log_clear())
+    findings = LogClearingRule(db).evaluate(10)
+    assert len(findings) == 2
+    assert all(f.mitre_id == "T1070.001" for f in findings)
+
+
+def test_ransomware_impact(db):
+    from backend.detection.rules.impact import RansomwareImpactRule
+
+    add_normalized(db, ransomware_impact())
+    findings = RansomwareImpactRule(db).evaluate(10)
+    assert len(findings) == 2
+    assert all(f.mitre_id == "T1486" for f in findings)
+    assert all(f.severity == "critical" for f in findings)
+    assert any("ransomware-style file extensions" in f.evidence for f in findings)
+    assert any("ransom-note" in f.evidence for f in findings)
+
+
+def test_inhibit_recovery(db):
+    from backend.detection.rules.impact import InhibitRecoveryRule
+
+    add_normalized(db, recovery_inhibit())
+    findings = InhibitRecoveryRule(db).evaluate(10)
+    assert len(findings) == 2
+    assert all(f.mitre_id == "T1490" for f in findings)
+    assert all(f.severity == "critical" for f in findings)
+    assert any("vssadmin" in f.evidence for f in findings)
+
+
+def test_credential_store_theft(db):
+    from backend.detection.rules.credential_store import CredentialStoreTheftRule
+
+    add_normalized(db, credential_store_theft())
+    findings = CredentialStoreTheftRule(db).evaluate(10)
+    assert len(findings) == 2
+    assert all(f.mitre_id == "T1555" for f in findings)
+    assert any("cmdkey" in f.evidence for f in findings)
+    assert any("Login Data" in f.evidence for f in findings)
+
+
+def test_bits_job(db):
+    from backend.detection.rules.bits_jobs import BitsJobRule
+
+    add_normalized(db, bits_download())
+    findings = BitsJobRule(db).evaluate(10)
+    assert len(findings) == 1
+    assert findings[0].mitre_id == "T1197"
+    assert "user-writable/temp" in findings[0].evidence
+
+
+def test_shortcut_modification(db):
+    from backend.detection.rules.shortcut_modification import ShortcutModificationRule
+
+    add_normalized(db, shortcut_persistence())
+    findings = ShortcutModificationRule(db).evaluate(10)
+    assert len(findings) == 1
+    assert findings[0].mitre_id == "T1547.009"
+    assert "Startup" in findings[0].evidence
+
+
+def test_new_rules_no_false_positives_on_benign(db):
+    from backend.detection.rules.bits_jobs import BitsJobRule
+    from backend.detection.rules.credential_access import CredentialAccessRule
+    from backend.detection.rules.credential_store import CredentialStoreTheftRule
+    from backend.detection.rules.exfiltration_volume import ExfiltrationVolumeRule
+    from backend.detection.rules.hidden_artifacts import HiddenArtifactsRule
+    from backend.detection.rules.impact import InhibitRecoveryRule, RansomwareImpactRule
+    from backend.detection.rules.log_clearing import LogClearingRule
+    from backend.detection.rules.lolbin_execution import LolBinExecutionRule
+    from backend.detection.rules.masquerading import MasqueradingRule
+    from backend.detection.rules.registry_runkey import RegistryRunKeyRule
+    from backend.detection.rules.scheduled_task import ScheduledTaskAbuseRule
+    from backend.detection.rules.shortcut_modification import ShortcutModificationRule
+    from backend.detection.rules.wmi_event_subscription import WmiEventSubscriptionRule
+
+    add_normalized(db, benign_baseline(60) + benign_process())
+    assert CredentialAccessRule(db).evaluate(10) == []
+    assert RegistryRunKeyRule(db).evaluate(10) == []
+    assert ScheduledTaskAbuseRule(db).evaluate(10) == []
+    assert WmiEventSubscriptionRule(db).evaluate(10) == []
+    assert MasqueradingRule(db).evaluate(10) == []
+    assert HiddenArtifactsRule(db).evaluate(10) == []
+    assert LolBinExecutionRule(db).evaluate(10) == []
+    assert ExfiltrationVolumeRule(db).evaluate(10) == []
+    assert LogClearingRule(db).evaluate(10) == []
+    assert RansomwareImpactRule(db).evaluate(10) == []
+    assert InhibitRecoveryRule(db).evaluate(10) == []
+    assert CredentialStoreTheftRule(db).evaluate(10) == []
+    assert BitsJobRule(db).evaluate(10) == []
+    assert ShortcutModificationRule(db).evaluate(10) == []

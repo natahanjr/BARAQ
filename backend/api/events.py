@@ -28,7 +28,7 @@ def list_events(
     if user:
         stmt = stmt.where(NormalizedEvent.user.ilike(f"%{user}%"))
     if category:
-        stmt = stmt.where(NormalizedEvent.category == category)
+        stmt = stmt.where(NormalizedEvent.category.ilike(f"%{category}%"))
     if anomaly is not None:
         stmt = stmt.where(NormalizedEvent.is_anomaly == anomaly)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
@@ -38,6 +38,24 @@ def list_events(
         .limit(page_size)
     ).all()
     return {"total": total, "page": page, "page_size": page_size, "items": [e.to_dict() for e in rows]}
+
+
+@router.get("/events/statistics")
+def event_statistics(db: Session = Depends(get_db)):
+    by_event = db.execute(
+        select(NormalizedEvent.event_id, func.count(NormalizedEvent.id))
+        .group_by(NormalizedEvent.event_id)
+        .order_by(func.count(NormalizedEvent.id).desc())
+        .limit(20)
+    ).all()
+    by_category = db.execute(
+        select(NormalizedEvent.category, func.count(NormalizedEvent.id))
+        .group_by(NormalizedEvent.category)
+    ).all()
+    return {
+        "by_event_id": [{"event_id": int(r[0]), "count": int(r[1])} for r in by_event],
+        "by_category": [{"category": r[0], "count": int(r[1])} for r in by_category],
+    }
 
 
 @router.get("/events/{event_id}")
@@ -67,21 +85,3 @@ def list_network(
         stmt = stmt.where(NetworkConnection.remote_ip == remote_ip)
     rows = db.scalars(stmt.order_by(NetworkConnection.observed_at.desc()).limit(limit)).all()
     return {"total": len(rows), "items": [c.to_dict() for c in rows]}
-
-
-@router.get("/events/statistics")
-def event_statistics(db: Session = Depends(get_db)):
-    by_event = db.execute(
-        select(NormalizedEvent.event_id, func.count(NormalizedEvent.id))
-        .group_by(NormalizedEvent.event_id)
-        .order_by(func.count(NormalizedEvent.id).desc())
-        .limit(20)
-    ).all()
-    by_category = db.execute(
-        select(NormalizedEvent.category, func.count(NormalizedEvent.id))
-        .group_by(NormalizedEvent.category)
-    ).all()
-    return {
-        "by_event_id": [{"event_id": int(r[0]), "count": int(r[1])} for r in by_event],
-        "by_category": [{"category": r[0], "count": int(r[1])} for r in by_category],
-    }

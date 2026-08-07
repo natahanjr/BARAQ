@@ -2,7 +2,7 @@
 
 **SentinelSOC: An Intelligent Lightweight Security Operations Center Framework for Real-Time Windows Endpoint Threat Detection and Incident Analysis**
 
-A complete, research-oriented SOC framework that runs entirely on a single Windows 11 laptop — no cloud, no heavy infrastructure. It collects real Windows telemetry, normalizes events, detects attacks with a **hybrid rule-based + machine-learning engine**, maps findings to MITRE ATT&CK, computes **hybrid risk scores**, displays everything in a professional SOC dashboard, generates executive/technical reports, and includes an **evaluation framework** that measures detection accuracy.
+A lightweight, production-oriented SOC framework for Windows endpoints — no cloud, no heavy infrastructure. It collects real Windows telemetry, normalizes events, detects attacks with a **hybrid rule-based + machine-learning engine**, maps findings to MITRE ATT&CK, computes **hybrid risk scores**, displays everything in a professional SOC dashboard, generates executive/technical reports, and includes an **evaluation framework** that measures detection accuracy.
 
 ---
 
@@ -10,9 +10,9 @@ A complete, research-oriented SOC framework that runs entirely on a single Windo
 
 | Layer | Capabilities |
 |---|---|
-| **Collection** | Windows security event log (4624, 4625, 4720, 4726, 4732, 4740, 4672...), running/new processes with parent-child relationships, active TCP connections + listening ports, PowerShell operational log, **Sysmon (process tree E1 / network E3 / file events E11-E23)**, plus a realistic attack simulator |
+| **Collection** | Windows security event log (4624, 4625, 4720, 4726, 4732, 4740, 4672...), running/new processes with parent-child relationships, active TCP connections + listening ports, PowerShell operational log, **Sysmon (process tree E1 / network E3 / process access E10 / file events E11 / registry E13 / file delete E23)**, plus a realistic attack simulator |
 | **Processing** | Event normalization (Event ID / Category / User / Risk / Timestamp / Host) with **numeric risk scoring (0-100)** per event |
-| **Rule-Based Detection** | 12 rules — Brute Force (T1110), Suspicious PowerShell (T1059.001), Privilege Escalation (T1068), Persistence (T1547), Network Reconnaissance (T1046), Lateral Movement (T1021), Data Staging (T1074), Malware File, Email Phishing, DNS/HTTP Exfiltration, USB Device, **Multi-stage Kill-Chain Correlation (T1071)** |
+| **Rule-Based Detection** | 23 rules — Brute Force (T1110), Suspicious PowerShell (T1059.001), Privilege Escalation (T1068), Persistence (T1547), Network Reconnaissance (T1046), Lateral Movement (T1021), Data Staging (T1074), Malware File, Email Phishing, DNS/HTTP Exfiltration, USB Device, Kill-Chain Correlation (T1071), **LSASS Memory Access (T1003.001), Registry Run Keys (T1547.001), Scheduled Task Abuse (T1053.005), WMI Event Subscriptions (T1546.003), Account Tampering (T1098), Binary Masquerading (T1036), Artifact Hiding (T1564), System Binary Proxy/LOLBins (T1218), Bulk Exfiltration (T1041), Event Log Clearing (T1070.001)** |
 | **Alert Aggregation** | Rule-level deduplication (one open alert per signature) with **repeat-trigger severity escalation** (`trigger_count`, escalating LOW→MEDIUM→HIGH→CRITICAL) |
 | **ML Detection** | Per-behavior anomaly analysis (**login / process / network**) with Isolation Forest + Random Forest / XGBoost supervised classifier, **persisted model metadata and a "staleness" signal** with automatic scheduler retraining |
 | **Hybrid Risk Scoring** | Alert risk = **60% rule score + 40% ML anomaly score** → 0-100 score + LOW/MEDIUM/HIGH/CRITICAL level |
@@ -37,7 +37,7 @@ SentinelSOC/
 │   ├── api/           # FastAPI routers (alerts, events, dashboard, evaluation, ...)
 │   ├── collectors/    # Windows event log, process, network, PowerShell, simulator
 │   ├── database/      # SQLAlchemy models + SQLite connection (+ additive migrations)
-│   ├── detection/     # Rules engine, alerting (hybrid risk), 5 detection rules
+│   ├── detection/     # Rules engine, alerting (hybrid risk), 23 detection rules
 │   ├── evaluation/    # Detection evaluation framework (metrics)
 │   ├── mitre/         # MITRE ATT&CK techniques data + helpers
 │   ├── ml/            # Isolation Forest / Random Forest / XGBoost anomaly detection
@@ -47,7 +47,7 @@ SentinelSOC/
 ├── database/          # Local SQLite database (sentinel.db)
 ├── logs/              # Runtime logs
 ├── reports/           # Generated security reports
-├── tests/             # pytest test suite (48 tests)
+├── tests/             # pytest test suite (217 tests)
 ├── documentation/     # User manual, DB schema, architecture, test results, evaluation report
 ├── requirements.txt
 └── README.md
@@ -61,26 +61,34 @@ SentinelSOC/
 - **Python 3.11+** (tested with 3.14)
 - **Node.js 18+** (tested with 24) — only required for the dashboard
 - Optional: `pywin32` for full Windows Event Log access (installed automatically on Windows)
-
 ---
 
 ## Installation
 
-### 1. Backend
+### 1. One-click launcher (recommended)
+
+Double-click **`start.bat`** (project root). On first run it:
+
+1. Creates the Python virtual environment and installs dependencies
+2. Builds the React dashboard (if Node.js is present)
+3. Generates **random admin credentials** (password + API keys) into the
+   DPAPI-protected vault (`secrets.dat`) and prints them once — save them, they
+   won't be shown again
+4. Starts the backend and opens the browser at **http://127.0.0.1:8000**
+
+The backend serves the built dashboard itself, so no extra configuration is
+needed. To restart later, just run `start.bat` again.
+
+### 2. Manual setup (optional)
 
 ```powershell
 # from the project root
 python -m venv venv
 venv\Scripts\Activate.ps1
-
 pip install -r requirements.txt
-```
-
-### 2. Frontend
-
-```powershell
 cd frontend
 npm install
+npm run build   # dashboard is then served by the backend
 ```
 
 ---
@@ -107,15 +115,74 @@ cd frontend
 npm run dev
 ```
 
-Open **http://localhost:5173** — the dashboard auto-connects to the backend via the Vite proxy (no extra configuration).
+Open **http://localhost:5173** — the dashboard auto-connects to the backend via the Vite proxy (no extra configuration). With `npm run build` (done automatically by `start.bat`), the dashboard is served directly by the backend at `http://127.0.0.1:8000` — no dev server needed.
 
-### Production-style build (optional)
+---
+
+## First-Run Security & Automatic Upkeep
+
+On first start the platform **generates random credentials** and stores them in
+the DPAPI-protected vault (`secrets.dat`):
+
+- Admin dashboard password (`SENTINEL_ADMIN_PASSWORD`)
+- Admin + analyst API keys (`SENTINEL_API_KEYS` — fully **replaces** the public dev defaults once set)
+- Session-token signing secret (`SENTINEL_TOKEN_SECRET`)
+
+These are printed to the console exactly once. The dashboard shows a **setup checklist banner** until the credentials are configured and the ML model is trained.
+
+| Automatic upkeep | Behaviour |
+|---|---|
+| **ML training** | Auto-trains on first start once 30+ events exist, then every ~1 h (model age) or after 200+ new events |
+| **Data retention** | Purges telemetry/alerts older than `EVENT_RETENTION_DAYS` (30) every hour — the database never grows unbounded |
+
+---
+
+## Distributing Without Source Code
+
+Two ways to hand the product to other people **without giving them the project files**:
+
+### Option 0 — HTTPS (production recommended)
 
 ```powershell
-cd frontend
-npm run build     # outputs static bundle to frontend/dist
-npm run preview   # serve the built bundle
+start.bat secure          # HTTPS on https://127.0.0.1:8443 (self-signed cert)
+start.bat secure lan      # HTTPS exposed to the network on port 8443
 ```
+
+`scripts\gen_cert.ps1` generates a self-signed certificate covering
+`localhost` + all LAN IPv4 addresses (regenerated/rotated on demand by
+deleting `certs\sentinel.thumbprint`). When TLS is enabled the session cookie
+is forced to `Secure`. To silence browser warnings, import `certs\sentinel.crt`
+into the *Trusted Root Certification Authorities* store of each client
+(`certmgr.msc`). The login endpoint is rate-limited (5 failures per IP per
+5 minutes) as brute-force protection.
+
+### Option A — Run it on your machine, share the URL
+Users open a browser link and log in with accounts you create — they never touch the files.
+
+```powershell
+start.bat lan        # or double-click start-lan.bat
+```
+
+This opens port 8000 in the firewall, prints your machine's LAN IP, and serves the
+dashboard at `http://<your-ip>:8000`. Create one account per person under
+**Users & Audit** (analyst role).
+
+### Option B — Build a standalone `.exe`
+Packages the whole platform (backend + dashboard + all dependencies) into a folder
+they can copy to any Windows 10/11 PC — **no Python or Node needed, no source exposed**.
+
+```powershell
+scripts\build_exe.bat
+# output: dist\SentinelSOC\SentinelSOC.exe (+ _internal\)
+```
+
+Recipients copy the `dist\SentinelSOC` folder and double-click:
+```
+SentinelSOC.exe        # local only
+SentinelSOC.exe --lan  # accessible from the network
+```
+The runtime folder (database, logs, reports, `.env`) is created next to the
+executable on first run.
 
 ---
 
@@ -197,7 +264,7 @@ Alerts fan out via webhook, SMTP email, and Windows toast notifications
 python -m pytest tests -v
 ```
 
-Result: **103 tests passed** (collectors, detection rules, pipeline, API + auth/RBAC, hybrid risk scoring, evaluation framework, hold-out evaluation, alert aggregation/escalation, ML lifecycle, assistant RAG, multi-endpoint ingest/fleet).
+Result: **217 tests passed** (collectors, detection rules incl. the Tier 1 commercial-grade rule set, pipeline, API + auth/RBAC, hybrid risk scoring, evaluation framework, hold-out evaluation, alert aggregation/escalation, ML lifecycle + v2 generalization, assistant RAG, multi-endpoint ingest/fleet, data retention, encryption at rest, tamper-evident audit chain, SSO/OIDC, MFA, CSRF + request-size guards).
 
 ---
 
@@ -212,11 +279,12 @@ All tunable parameters live in `backend/config.py`:
 | `PORT_SCAN_DISTINCT_PORTS` | 20 | Distinct probed ports → alert |
 | `DETECTION_WINDOW_MINUTES` | 10 | Detection correlation window |
 | `ML_CONTAMINATION` | 0.05 | Isolation Forest contamination |
-| `ML_RETRAIN_AFTER_HOURS` | 24 | Model age after which the scheduler auto-retrains |
+| `ML_RETRAIN_AFTER_MINUTES` | 1 | Model age (minutes) after which the scheduler auto-retrains (`SENTINEL_ML_RETRAIN_AFTER_MINUTES`) |
+| `EVENT_RETENTION_DAYS` | 30 | Telemetry/alerts older than this are auto-purged hourly |
 | `ALERT_ESCALATE_AFTER` | 5 | Repeat triggers before severity escalates one level |
 | `SECURITY_SCORE_PENALTY` | critical 14 / high 8 / medium 4 / low 1 | Score deduction per open alert |
 
-Environment overrides: `SENTINEL_INTERVAL`, `SENTINEL_DATABASE_URL`, `SENTINEL_AI_API_URL`, `SENTINEL_AI_API_KEY`, `SENTINEL_AI_MODEL`, `SENTINEL_AUTH_ENABLED`, `SENTINEL_API_KEYS`, `SENTINEL_WEBHOOK_URL`, `SENTINEL_SMTP_HOST`, `SENTINEL_SMTP_USERNAME`, `SENTINEL_SMTP_PASSWORD`, `SENTINEL_SMTP_TO`.
+Environment overrides: `SENTINEL_INTERVAL`, `SENTINEL_DATABASE_URL`, `SENTINEL_AI_API_URL`, `SENTINEL_AI_API_KEY`, `SENTINEL_AI_MODEL`, `SENTINEL_AUTH_ENABLED`, `SENTINEL_API_KEYS`, `SENTINEL_WEBHOOK_URL`, `SENTINEL_SMTP_HOST`, `SENTINEL_SMTP_USERNAME`, `SENTINEL_SMTP_PASSWORD`, `SENTINEL_SMTP_TO`, `SENTINEL_TLS`, `SENTINEL_TLS_CERT`, `SENTINEL_TLS_KEY`, `SENTINEL_ALLOW_DEV_KEYS`.
 
 ### Authentication & RBAC
 
@@ -228,15 +296,50 @@ retraining, evaluation):
 | Setting | Default | Purpose |
 |---|---|---|
 | `SENTINEL_AUTH_ENABLED` | `1` | Set `0` to disable auth (dev only) |
-| `SENTINEL_API_KEYS` | JSON map | e.g. `{"my-key":"admin"}` — merged over the dev defaults |
+| `SENTINEL_API_KEYS` | JSON map | e.g. `{"my-key":"admin"}` — fully replaces the dev defaults when set |
 
 Dev default keys: `sentinel-dev-admin` (admin) and `sentinel-dev-analyst`
 (analyst). The dashboard sends the admin key by default; override with the
 `VITE_API_KEY` env var:
 `powershell $env:VITE_API_KEY="your-key"; npm run dev`
 
+The public dev keys are rejected in production by setting `SENTINEL_ALLOW_DEV_KEYS=0`
+(or by configuring `SENTINEL_API_KEYS`, which fully replaces them). Sensitive
+secrets (`SENTINEL_ADMIN_PASSWORD`, `SENTINEL_API_KEYS`, `SENTINEL_TOKEN_SECRET`,
+`SENTINEL_AGENT_KEYS`, `SENTINEL_AI_API_KEY`) are stored in a DPAPI-encrypted
+`secrets.dat` vault on Windows, not in plaintext `.env`.
+
 Inputs are validated: alert `status`/`action` and report `report_type`/`format`
 are enums, pagination/limits/hours are bounded (422 on out-of-range values).
+
+### Single sign-on (LDAP/AD and OIDC)
+
+Local passwords are tried first; when they fail and an SSO provider is
+configured, authentication falls through to the directory. Directory users are
+auto-provisioned on first login (role from group membership, unusable local
+password hash). `SENTINEL_LDAP_ADMIN_GROUPS` controls admin role mapping for
+both providers.
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `SENTINEL_LDAP_ENABLED` | `0` | Enable LDAP/AD SSO |
+| `SENTINEL_LDAP_URL` | — | e.g. `ldap://dc.corp.local:389` (or `ldaps://`) |
+| `SENTINEL_LDAP_BIND_DN` | — | Optional service account (anonymous when empty) |
+| `SENTINEL_LDAP_BIND_PASSWORD` | — | Service account password (vault-stored) |
+| `SENTINEL_LDAP_BASE_DN` | — | Search base, e.g. `DC=corp,DC=local` |
+| `SENTINEL_LDAP_USER_FILTER` | `(sAMAccountName={username})` | Filter; `{username}` is substituted |
+| `SENTINEL_LDAP_ADMIN_GROUPS` | `Domain Admins,Sentinel Admins` | Groups that map to the admin role |
+| `SENTINEL_OIDC_ENABLED` | `0` | Enable OIDC SSO (e.g. Entra ID, Keycloak) |
+| `SENTINEL_OIDC_ISSUER` | — | Issuer discovery URL (`/.well-known/openid-configuration`) |
+| `SENTINEL_OIDC_CLIENT_ID` | — | OIDC client ID (vault-stored) |
+| `SENTINEL_OIDC_CLIENT_SECRET` | — | OIDC client secret (vault-stored) |
+| `SENTINEL_OIDC_SCOPES` | `openid profile email` | Scopes requested at the authorization endpoint |
+| `SENTINEL_OIDC_CLOCK_SKEW` | `30` | Max tolerated seconds between provider and host clocks |
+
+OIDC uses PKCE (S256) with a nonce and signed one-time flow cookie; id_token
+signatures (RS256/ES256) are verified against the provider JWKS. When OIDC is
+enabled the login page shows **Continue with SSO**; the callback URL is
+`{base_url}/api/auth/oidc/callback`.
 
 ---
 
@@ -274,12 +377,15 @@ See `documentation/` for:
 - `red_team_validation.md` — realistic live-attack validation incl. documented false negatives
 - `performance_benchmarks.md` — throughput/latency/memory on the target laptop
 
+Security: see `SECURITY.md` for the coordinated-disclosure policy and
+`SECURITY_AUDIT.md` for the hardening controls inventory and pen-test
+readiness checklist.
+
 ---
 
-## Thesis Support
+## Roadmap
 
-This repository is the working prototype for the MSc thesis:
-
-> *"SentinelSOC: An Intelligent Lightweight Security Operations Center Framework for Real-Time Windows Endpoint Threat Detection and Incident Analysis"*
-
-Suggested thesis sections it supports: threat collection methodology (Module 1), normalization design (Module 2), rule-based detection (Module 3), ML anomaly detection (Module 4), hybrid risk scoring (Module 5), MITRE ATT&CK alignment (Module 6), SOC dashboard UX (Module 7), AI-assisted analysis (Module 8), automated reporting (Module 9), and the evaluation framework with detection metrics (Module 10).
+Planned hardening for production deployment: TLS everywhere, secure secret
+management, multi-node/ha deployment, SOC2/ISO 27001-aligned audit trails,
+immutable evidence storage, and a managed-versioning/update channel. See the
+phased deployment plan for details.

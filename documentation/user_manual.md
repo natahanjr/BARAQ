@@ -2,7 +2,7 @@
 
 **Document:** Operator Guide
 **Version:** 2.0 (hybrid risk scoring + evaluation framework)
-**Audience:** SOC analyst / thesis examiner operating the prototype
+**Audience:** SOC analyst / system administrator operating the platform
 
 ---
 

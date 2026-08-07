@@ -1,7 +1,6 @@
 {
   "note": "Local malware/file-hash signature list used by the live MalwareFileRule (T1105). Add SHA-256 hashes of files observed on the endpoint. The 'paths' section matches process image paths / file names and speed up detection without hash lookups.",
   "hashes": {
-    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855": "empty-stub-test",
     "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f": "known-bad-sample"
   },
   "paths": [

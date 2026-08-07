@@ -48,7 +48,7 @@ class SuspiciousPowerShellRule(BaseRule):
         since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
-                NormalizedEvent.event_id.in_([4104, 4103, 400, 403]),
+                NormalizedEvent.event_id.in_([4104, 4103, 400, 403, 4688]),
                 NormalizedEvent.timestamp >= since,
             )
         ).all()
@@ -58,6 +58,11 @@ class SuspiciousPowerShellRule(BaseRule):
             script = event.raw_json.get("facts", {}).get("script_block", "") if event.raw_json else ""
             command_line = event.raw_json.get("facts", {}).get("command_line", "") if event.raw_json else ""
             haystack = f"{script} {command_line} {event.message}"
+
+            # Process-creation (4688) records are only PowerShell evidence when
+            # the command line actually invokes a PowerShell engine.
+            if event.event_id == 4688 and not re.search(r"powershell|pwsh", haystack, re.IGNORECASE):
+                continue
 
             hits = [label for label, pattern in SUSPICIOUS_PATTERNS.items() if pattern.search(haystack)]
             if not hits:

@@ -3,8 +3,12 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from datetime import datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from backend.database.models import NormalizedEvent, ProcessRecord
 
 
 class DetectionResult:
@@ -94,3 +98,27 @@ class BaseRule(ABC):
             mitre_id=overrides.get("mitre_id", self.mitre_id),
             recommendation=overrides.get("recommendation", self.recommendation),
         )
+
+    def cmdline_candidates(self, since: datetime) -> list[tuple[str, str, str]]:
+        """Yield (command_line, source_label, user) from process snapshots and
+        normalized 4688/4104 events so command-line rules share one source."""
+        out: list[tuple[str, str, str]] = []
+        for pr in self.session.scalars(
+            select(ProcessRecord).where(
+                ProcessRecord.observed_at >= since,
+                ProcessRecord.command_line.isnot(None),
+                ProcessRecord.command_line != "",
+            )
+        ).all():
+            out.append((pr.command_line, f"pid {pr.pid} ({pr.name})", pr.user))
+        for ev in self.session.scalars(
+            select(NormalizedEvent).where(
+                NormalizedEvent.event_id.in_([4688, 4104]),
+                NormalizedEvent.timestamp >= since,
+            )
+        ).all():
+            facts = (ev.raw_json or {}).get("facts", {}) if ev.raw_json else {}
+            cl = facts.get("command_line") or facts.get("cmdline") or ""
+            if cl:
+                out.append((cl, f"Event {ev.event_id} (user '{ev.user}')", ev.user))
+        return out

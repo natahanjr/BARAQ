@@ -120,6 +120,27 @@ export function ShieldIcon(props) {
   );
 }
 
+export function UsersIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </Icon>
+  );
+}
+
+export function LogoutIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="m16 17 5-5-5-5" />
+      <path d="M21 12H9" />
+    </Icon>
+  );
+}
+
 export function MenuIcon(props) {
   return (
     <Icon {...props}>
@@ -182,6 +203,45 @@ export function BoxesIcon(props) {
       <path d="M5 21V7" />
       <path d="M19 21V7" />
       <path d="M12 21V7" />
+    </Icon>
+  );
+}
+
+export function SunIcon(props) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2" />
+      <path d="M12 20v2" />
+      <path d="m4.9 4.9 1.4 1.4" />
+      <path d="m17.7 17.7 1.4 1.4" />
+      <path d="M2 12h2" />
+      <path d="M20 12h2" />
+      <path d="m4.9 19.1 1.4-1.4" />
+      <path d="m17.7 6.3 1.4-1.4" />
+    </Icon>
+  );
+}
+
+export function MoonIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+    </Icon>
+  );
+}
+
+export function IncidentsIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M9 3H5a2 2 0 0 0-2 2v4" />
+      <path d="M15 3h4a2 2 0 0 1 2 2v4" />
+      <path d="M9 21H5a2 2 0 0 1-2-2v-4" />
+      <path d="M15 21h4a2 2 0 0 0 2-2v-4" />
+      <path d="M6 8h.01" />
+      <path d="M6 16h.01" />
+      <path d="M10.5 12H18" />
+      <path d="m8.5 10.5 3 1.5-3 1.5V10.5Z" />
     </Icon>
   );
 }

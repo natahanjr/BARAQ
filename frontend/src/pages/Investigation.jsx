@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { api } from "../api.js";
 import Card from "../components/Card.jsx";
 import PageHeader from "../components/PageHeader.jsx";

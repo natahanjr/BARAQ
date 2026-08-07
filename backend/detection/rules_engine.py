@@ -22,26 +22,69 @@ from backend.detection.rules.email_phishing import EmailPhishingRule
 from backend.detection.rules.dns_http import DnsHttpExfilRule
 from backend.detection.rules.usb import UsbDeviceRule
 from backend.detection.rules.correlation import KillChainCorrelationRule
+from backend.detection.rules.vulnerability import VulnerabilityRule
+from backend.detection.rules.credential_access import CredentialAccessRule
+from backend.detection.rules.registry_runkey import RegistryRunKeyRule
+from backend.detection.rules.scheduled_task import ScheduledTaskAbuseRule
+from backend.detection.rules.wmi_event_subscription import WmiEventSubscriptionRule
+from backend.detection.rules.account_tampering import AccountTamperingRule
+from backend.detection.rules.masquerading import MasqueradingRule
+from backend.detection.rules.hidden_artifacts import HiddenArtifactsRule
+from backend.detection.rules.lolbin_execution import LolBinExecutionRule
+from backend.detection.rules.exfiltration_volume import ExfiltrationVolumeRule
+from backend.detection.rules.log_clearing import LogClearingRule
+from backend.detection.rules.c2_beacon import C2BeaconRule
+from backend.detection.rules.impact import InhibitRecoveryRule, RansomwareImpactRule
+from backend.detection.rules.credential_store import CredentialStoreTheftRule
+from backend.detection.rules.bits_jobs import BitsJobRule
+from backend.detection.rules.shortcut_modification import ShortcutModificationRule
 from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
 
 logger = logging.getLogger("sentinel.detection")
 
 
-def build_rules(session: Session) -> list[BaseRule]:
-    """Instantiate all detection rules (the platform's rule set)."""
+def build_rules(session: Session, overrides: dict | None = None) -> list[BaseRule]:
+    """Instantiate all detection rules (the platform's rule set).
+
+    ``overrides`` maps rule_id -> constructor kwargs (used by the parameter
+    tuning script to grid-search thresholds without touching the defaults).
+    """
+    overrides = overrides or {}
+
+    def build(cls, rule_id: str, *args, **kwargs):
+        kwargs.update(overrides.get(rule_id, {}))
+        return cls(*args, **kwargs)
+
     return [
-        BruteForceRule(session),
+        build(BruteForceRule, "brute_force", session),
         SuspiciousPowerShellRule(session),
         PrivilegeEscalationRule(session),
         PersistenceRule(session),
-        NetworkReconRule(session),
-        LateralMovementRule(session),
-        DataStagingRule(session),
+        build(NetworkReconRule, "network_recon", session),
+        build(LateralMovementRule, "lateral_movement", session),
+        build(DataStagingRule, "data_staging", session),
         MalwareFileRule(session),
-        EmailPhishingRule(session),
+        build(EmailPhishingRule, "email_phishing", session),
         DnsHttpExfilRule(session),
         UsbDeviceRule(session),
         KillChainCorrelationRule(session),
+        VulnerabilityRule(session),
+        CredentialAccessRule(session),
+        RegistryRunKeyRule(session),
+        ScheduledTaskAbuseRule(session),
+        WmiEventSubscriptionRule(session),
+        AccountTamperingRule(session),
+        MasqueradingRule(session),
+        HiddenArtifactsRule(session),
+        LolBinExecutionRule(session),
+        ExfiltrationVolumeRule(session),
+        LogClearingRule(session),
+        C2BeaconRule(session),
+        RansomwareImpactRule(session),
+        InhibitRecoveryRule(session),
+        CredentialStoreTheftRule(session),
+        BitsJobRule(session),
+        ShortcutModificationRule(session),
     ]
 
 
@@ -64,6 +107,7 @@ class RulesEngine:
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Rule %s failed: %s", rule.rule_id, exc)
+                self.session.rollback()
         return findings
 
 

@@ -12,14 +12,43 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.database.models import Alert, AlertEventLink, NormalizedEvent
+from backend.detection.workflow import ACTIVE_STATES
 from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
 from backend.ml.anomaly import event_feature_vector, get_detector
 from backend.risk.scoring import hybrid_risk, risk_descriptor, risk_level
-from backend.config import ALERT_ESCALATE_AFTER, SEVERITY_LADDER
+from backend.config import (
+    ALERT_ESCALATE_AFTER,
+    ALERT_THROTTLE_MAX_PER_WINDOW,
+    ALERT_THROTTLE_MINUTES,
+    SEVERITY_LADDER,
+    TEST_MODE,
+)
 
 logger = logging.getLogger("sentinel.detection.alerting")
 
 SEVERITY_SCORES = {"critical": 10, "high": 7, "medium": 4, "low": 1}
+
+#: Markers that identify commands run by the detection test harness / ad-hoc
+#: rule probes. When a finding's evidence references them, the alert is a
+#: byproduct of exercising the rules themselves, not real malicious activity,
+#: so it is never persisted. Kept tight and explicit to avoid hiding genuine
+#: attacks.
+_DEV_HARNESS_MARKERS = (
+    "from backend.detection.rules",
+    "import _ADS",
+    "hidden_artifacts import",
+    "cmdline_candidates",
+    "run_pipeline(",
+    "pytest",
+)
+
+
+def _is_dev_harness(evidence: str) -> bool:
+    """True when evidence looks like a byproduct of rule/test development."""
+    if TEST_MODE:
+        return True
+    text = evidence or ""
+    return any(marker in text for marker in _DEV_HARNESS_MARKERS)
 
 
 class AlertingService:
@@ -97,6 +126,25 @@ class AlertingService:
         method = "hybrid" if ml_present else "rule"
         return final, level, method
 
+    def _throttle(self, rule: str) -> Alert | None:
+        """Return an open alert to refresh when a rule exceeds its alert quota.
+
+        Once a rule has opened ALERT_THROTTLE_MAX_PER_WINDOW alerts within the
+        last ALERT_THROTTLE_MINUTES minutes, further findings stop creating
+        new alerts; they refresh the most recent open alert of that rule
+        instead (alert-fatigue management).
+        """
+        since = datetime.now(timezone.utc) - timedelta(minutes=ALERT_THROTTLE_MINUTES)
+        recent = self.session.scalars(
+            select(Alert).where(
+                Alert.rule == rule,
+                Alert.created_at >= since,
+            )
+        ).all()
+        if len(recent) < ALERT_THROTTLE_MAX_PER_WINDOW:
+            return None
+        return max(recent, key=lambda a: a.created_at)
+
     def handle_findings(self, findings: list) -> list[Alert]:
         created: list[Alert] = []
         linked: set[tuple[int, int]] = set()  # (alert_id, event_id) already queued
@@ -122,9 +170,16 @@ class AlertingService:
             mitre_id = getattr(result, "mitre_id", "T0000")
             key = self.dedup_key(result, mitre_id)
 
+            if _is_dev_harness(result.evidence):
+                logger.info(
+                    "Test-harness finding suppressed (%s, %s): %s",
+                    result.rule, mitre_id, (result.evidence or "")[:200],
+                )
+                continue
+
             existing = self.session.scalars(
                 select(Alert).where(
-                    Alert.status == "open",
+                    Alert.status.in_(ACTIVE_STATES),
                     Alert.name == result.name,
                 )
             ).all()
@@ -151,6 +206,18 @@ class AlertingService:
                     alert.id, alert.trigger_count,
                     " -> severity %s" % escalated if escalated else "",
                 )
+            elif (throttle_target := self._throttle(result.rule)):
+                # Rule is above its per-window quota: refresh the newest open
+                # alert instead of opening another one (anti-fatigue).
+                alert = throttle_target
+                alert.evidence = result.evidence
+                alert.event_count = max(alert.event_count or 0, len(result.event_ids))
+                alert.trigger_count = (alert.trigger_count or 1) + 1
+                alert.updated_at = datetime.now(timezone.utc)
+                logger.info(
+                    "Throttled duplicate for rule %s -> refreshed alert #%s",
+                    result.rule, alert.id,
+                )
             else:
                 alert = Alert(
                     name=result.name,
@@ -174,6 +241,12 @@ class AlertingService:
                 self.session.add(alert)
                 self.session.flush()
                 created.append(alert)
+                from backend.realtime import publish_alert
+
+                try:
+                    publish_alert(alert.to_dict())
+                except Exception:  # noqa: BLE001
+                    pass
                 logger.info(
                     "Created alert #%s: %s (%s) risk=%s [%s] %s",
                     alert.id, alert.name, mitre_id, risk_score, risk_level_value,

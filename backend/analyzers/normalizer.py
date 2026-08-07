@@ -59,8 +59,13 @@ EVENT_META: dict[int, dict[str, str]] = {
     6420: {"category": "Device", "risk": "Medium", "severity": "medium"},
     1: {"category": "Process", "risk": "Low", "severity": "info"},
     3: {"category": "Network", "risk": "Low", "severity": "info"},
+    10: {"category": "Process", "risk": "High", "severity": "high"},
     11: {"category": "File", "risk": "Medium", "severity": "medium"},
+    13: {"category": "Registry", "risk": "Medium", "severity": "medium"},
     23: {"category": "File", "risk": "Low", "severity": "info"},
+    104: {"category": "Log Clearing", "risk": "High", "severity": "high"},
+    1102: {"category": "Log Clearing", "risk": "High", "severity": "high"},
+    4738: {"category": "Account Management", "risk": "High", "severity": "high"},
 }
 
 MESSAGE_PATTERNS = {
@@ -74,6 +79,14 @@ MESSAGE_PATTERNS = {
     "service_file": re.compile(r"Service File Name:\s+(\S+)", re.IGNORECASE),
     "task_name": re.compile(r"Task Name:\s+(\S+)", re.IGNORECASE),
     "group_name": re.compile(r"Group:\s+([\w\s-]+?)\.\s+Subject", re.IGNORECASE),
+    "target_image": re.compile(r"TargetImage:\s+(\S+)", re.IGNORECASE),
+    "granted_access": re.compile(r"GrantedAccess:\s+(\S+)", re.IGNORECASE),
+    "target_object": re.compile(r"TargetObject:\s+(\S+)", re.IGNORECASE),
+    "event_type": re.compile(r"EventType:\s+(\S+)", re.IGNORECASE),
+    "details": re.compile(r"Details:\s+(.+)", re.IGNORECASE),
+    "target_account_name": re.compile(r"Target Account Name:\s+(\S+)", re.IGNORECASE),
+    "deleted_account": re.compile(r"Deleted Account Name:\s+(\S+)", re.IGNORECASE),
+    "file_path": re.compile(r"File (?:created|deleted):\s+(\S+)", re.IGNORECASE),
 }
 
 
@@ -111,11 +124,94 @@ class Normalizer:
         return facts
 
     # ------------------------------------------------------------------
+    _ENC_SIGNAL = re.compile(r"(?:enc|encodedcommand|frombase64string|base64)", re.IGNORECASE)
+    _DOWNLOAD_SIGNAL = re.compile(
+        r"(?:downloadstring|invoke-webrequest|start-bits|webclient|wget|curl|downloadfile)", re.IGNORECASE
+    )
+    _HIDDEN_SIGNAL = re.compile(r"(?:-w(?:indowstyle)?\s+hidden|/hidden|windowstyle\s+hidden)", re.IGNORECASE)
+    _REMOTE_SIGNAL = re.compile(
+        r"(?:tcpclient|net\.sockets|\.connect\s*\(|invoke-webrequest|downloadstring|etcp|127\.0\.0\.1)", re.IGNORECASE
+    )
+    #: System binary names commonly abused by name-masquerading malware.
+    _MASQUERADE_NAMES = {
+        "svchost.exe", "lsass.exe", "csrss.exe", "winlogon.exe", "services.exe", "smss.exe",
+        "wininit.exe", "spoolsv.exe", "dllhost.exe", "conhost.exe", "taskhost.exe",
+        "explorer.exe", "wmiprvse.exe", "searchindexer.exe",
+    }
+    _SYSTEM32_HINT = re.compile(r"\\windows\\(?:system(?:32|64)\\|syswow64)\\", re.IGNORECASE)
+
+    @classmethod
+    def _derive_attack_facts(cls, event_id: int, facts: dict) -> dict:
+        """Derive attack-indicator facts from the *real* process/script text.
+
+        The structured event fields (full command line for 4688, script block
+        for 4104) are used to populate the same facts the fixtures carry, so
+        production telemetry and training fixtures share the exact signal set.
+        """
+        eid = int(event_id)
+        if eid not in (4688, 4104, 4103, 4698, 7045, 4697):
+            return facts
+        cmd = str(
+            facts.get("command_line") or facts.get("CommandLine")
+            or facts.get("script_block") or facts.get("ScriptBlockText") or ""
+        )
+        script = str(
+            facts.get("script_block") or facts.get("ScriptBlockText") or ""
+        )
+        image = str(
+            facts.get("image_path") or facts.get("new_process")
+            or facts.get("NewProcessName") or ""
+        )
+        text = (cmd + " " + script).strip()
+
+        # Structured fields are complete; the message-parsed value may be
+        # truncated by SafeFormatMessage (e.g. "New Process Name:\tC") - the
+        # full structured value is authoritative and must win.
+        if facts.get("NewProcessName") and not facts.get("image_path"):
+            image = str(facts["NewProcessName"])
+            facts["new_process"] = image
+        if facts.get("CommandLine"):
+            cmd = str(facts["CommandLine"])
+            facts["cmdline_len"] = len(cmd)
+        if facts.get("ScriptBlockText"):
+            script = str(facts["ScriptBlockText"])
+            facts["script_len"] = len(script)
+
+        facts.setdefault("cmdline_len", len(cmd))
+        if eid in (4104, 4103, 4698):
+            facts.setdefault("script_len", len(script))
+        if text:
+            if not facts.get("has_encoded") and cls._ENC_SIGNAL.search(text):
+                facts["has_encoded"] = True
+            if not facts.get("has_download") and cls._DOWNLOAD_SIGNAL.search(text):
+                facts["has_download"] = True
+            if not facts.get("has_remote") and cls._REMOTE_SIGNAL.search(text):
+                facts["has_remote"] = True
+            if not facts.get("has_hidden") and (cls._HIDDEN_SIGNAL.search(cmd) or cls._is_masquerade(image)):
+                facts["has_hidden"] = True
+        return facts
+
+    @classmethod
+    def _is_masquerade(cls, image: str) -> bool:
+        """True when a known-system-name binary runs from a non-system path."""
+        if not image:
+            return False
+        name = image.split("\\")[-1].lower()
+        is_system_name = any(
+            name == candidate or (candidate.startswith("svchost") and name.startswith("svchost"))
+            for candidate in cls._MASQUERADE_NAMES
+        )
+        if not is_system_name:
+            return False
+        return not bool(cls._SYSTEM32_HINT.search(image))
+
+    # ------------------------------------------------------------------
     def normalize(self, record: dict) -> dict:
         """Normalize one raw record into a canonical event dict."""
         event_id = int(record.get("event_id") or 0)
         meta = EVENT_META.get(event_id, {"category": "Other", "risk": "Low", "severity": "info"})
         facts = self._extract_facts(record)
+        facts = self._derive_attack_facts(event_id, facts)
 
         # Resolve the user: prefer structured, fall back to message parse.
         user = record.get("user") or facts.get("account_name") or facts.get("new_account") or "-"
@@ -166,6 +262,10 @@ class Normalizer:
             bonus += 10  # download-execute PowerShell
         if event_id == 4698 and re.search(r"public|temp|downloads", str(facts.get("image_path", "")), re.IGNORECASE):
             bonus += 10
+        if event_id == 10 and re.search(r"lsass\.exe$", str(facts.get("target_image", "")), re.IGNORECASE):
+            bonus += 20  # LSASS memory access
+        if event_id == 13 and re.search(r"\\Run(?:Once)?(?:Services)?\\", str(facts.get("target_object", "")), re.IGNORECASE):
+            bonus += 15  # autostart Run-key write
         return bonus
 
     # ------------------------------------------------------------------

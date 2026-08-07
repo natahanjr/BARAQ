@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { api } from "../api.js";
 import Card from "../components/Card.jsx";
 import PageHeader from "../components/PageHeader.jsx";
@@ -15,10 +15,10 @@ const PAGE_SIZE = 25;
 const selectClass =
   "rounded-lg border border-slate-700 bg-slate-800/70 px-4 py-2 text-sm text-slate-200 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors";
 
-function AlertRow({ alert }) {
+function AlertRow({ alert, onFix }) {
   return (
-    <Link to={`/alerts/${alert.id}`} className="block">
-      <div className="group rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-all hover:border-cyan-500/30 hover:bg-slate-800/50">
+    <div className="group flex items-start gap-3 rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-all hover:border-cyan-500/30 hover:bg-slate-800/50">
+      <Link to={`/alerts/${alert.id}`} className="block min-w-0 flex-1">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -55,8 +55,18 @@ function AlertRow({ alert }) {
             </p>
           </div>
         </div>
-      </div>
-    </Link>
+      </Link>
+      {alert.status !== "closed" && (
+        <button
+          type="button"
+          title="Fix alert and restore security score"
+          onClick={() => onFix(alert.id)}
+          className="shrink-0 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-400 transition-colors hover:bg-emerald-500/25"
+        >
+          Fix
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -66,6 +76,8 @@ export default function Alerts() {
   const [status, setStatus] = useState("");
   const [severity, setSeverity] = useState("");
   const [error, setError] = useState("");
+  const [clearing, setClearing] = useState(false);
+  const [clearResult, setClearResult] = useState(null);
 
   const load = () => {
     setError("");
@@ -89,21 +101,78 @@ export default function Alerts() {
     setPage(1);
   };
 
+  const fixAlert = async (id) => {
+    setError("");
+    try {
+      await api.fixAlert(id);
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const clearAll = async () => {
+    if (!data || data.total === 0) return;
+    if (!window.confirm("Clear all open alerts? A forced security report will be generated first.")) return;
+    setClearing(true);
+    setError("");
+    setClearResult(null);
+    try {
+      const result = await api.clearAlerts();
+      setClearResult(result);
+      setStatus("");
+      setSeverity("");
+      setPage(1);
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setClearing(false);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-12">
       <PageHeader
         title="Security Alerts"
         subtitle="All detected threats and security events"
         actions={
-          data ? (
-            <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3.5 py-2 text-sm text-slate-300">
-              <AlertsIcon className="h-4 w-4 text-cyan-400" />
-              <strong className="text-white">{data.total.toLocaleString()}</strong>
-              alerts
-            </span>
-          ) : undefined
+          <div className="flex items-center gap-3">
+            {data ? (
+              <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3.5 py-2 text-sm text-slate-300">
+                <AlertsIcon className="h-4 w-4 text-cyan-400" />
+                <strong className="text-white">{data.total.toLocaleString()}</strong>
+                alerts
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={clearAll}
+              disabled={clearing || !data || data.total === 0}
+              title="Close all open alerts and force-generate an incident report"
+              className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-sm font-semibold text-rose-300 transition-colors hover:bg-rose-500/25 disabled:opacity-40"
+            >
+              {clearing ? "Clearing..." : "Clear Alerts"}
+            </button>
+          </div>
         }
       />
+
+      {clearResult && (
+        <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-emerald-300">
+          <p className="font-semibold">{clearResult.message}</p>
+          {clearResult.report && (
+            <a
+              href={`/reports/${clearResult.report.file_path.split(/[\\/]/).pop()}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 inline-block font-medium text-cyan-400 underline-offset-2 hover:underline"
+            >
+              View incident report ({clearResult.report.title}, {clearResult.report.format}) →
+            </a>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <Card>
@@ -119,9 +188,9 @@ export default function Alerts() {
           >
             <option value="">All Statuses</option>
             <option value="open">Open</option>
-            <option value="investigating">Investigating</option>
-            <option value="resolved">Resolved</option>
-            <option value="dismissed">Dismissed</option>
+            <option value="in_progress">Investigating</option>
+            <option value="contained">Contained</option>
+            <option value="closed">Closed</option>
           </select>
 
           <select
@@ -169,7 +238,7 @@ export default function Alerts() {
         <Card>
           <div className="space-y-2">
             {data.items.map((alert) => (
-              <AlertRow key={alert.id} alert={alert} />
+              <AlertRow key={alert.id} alert={alert} onFix={fixAlert} />
             ))}
           </div>
         </Card>

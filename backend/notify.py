@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import smtplib
+import ssl
 import subprocess
 import threading
 import urllib.request
@@ -22,6 +23,7 @@ from backend.config import (
     SMTP_HOST,
     SMTP_PASSWORD,
     SMTP_PORT,
+    SMTP_STARTTLS,
     SMTP_TO,
     SMTP_USERNAME,
     TOAST_ENABLED,
@@ -69,6 +71,11 @@ def _send_webhook(alert: dict) -> None:
 def _send_email(alert: dict) -> None:
     if not SMTP_HOST or not SMTP_TO:
         return
+    if not SMTP_STARTTLS:
+        logger.warning(
+            "SMTP STARTTLS is disabled: alert email will be sent in cleartext "
+            "(enable SENTINEL_SMTP_STARTTLS in production)"
+        )
     body = _payload(alert)
     text = "\n".join(f"{k}: {v}" for k, v in body.items())
     msg = MIMEText(text)
@@ -79,6 +86,10 @@ def _send_email(alert: dict) -> None:
     msg["From"] = SMTP_FROM or SMTP_HOST
     msg["To"] = SMTP_TO
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+        if SMTP_STARTTLS:
+            server.ehlo()
+            server.starttls(context=ssl.create_default_context())
+            server.ehlo()
         if SMTP_USERNAME:
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
         server.send_message(msg)

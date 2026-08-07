@@ -13,6 +13,7 @@ from backend.collectors.powershell import PowerShellCollector
 from backend.collectors.process import ProcessCollector
 from backend.collectors.sysmon import SysmonCollector
 from backend.collectors.usb import UsbCollector
+from backend.collectors.vulnscan import VulnScanCollector
 
 logger = logging.getLogger("sentinel.collectors")
 
@@ -31,6 +32,7 @@ class CollectorManager:
             EmailCollector(),
             UsbCollector(),
             MalwareFileCollector(),
+            VulnScanCollector(),
         ]
 
     def collect(self) -> list[dict]:

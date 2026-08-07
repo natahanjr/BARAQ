@@ -2,17 +2,147 @@
 
 :root {
   color-scheme: dark;
+  --app-bg: #0a0f1a;
+  --app-fg: #e2e8f0;
+  --chart-grid: #1e293b;
+  --chart-track: #1e293b;
+}
+
+/* ---------------------------------------------------------------------------
+ * Light theme
+ * Tailwind v4 utilities resolve to runtime CSS variables (e.g. --color-slate-*),
+ * so redefining the palette under html.light re-themes the whole application.
+ * Curated values: white cards on a cool gray-blue page, dark ink text,
+ * saturated accent buttons that keep white labels.
+ * ------------------------------------------------------------------------- */
+html.light {
+  color-scheme: light;
+  --app-bg: #eef2f7;
+  --app-fg: #0f172a;
+  --chart-grid: #e2e8f0;
+  --chart-track: #e2e8f0;
+  --color-white: #0f172a;
+
+  --color-slate-50: #0f172a;
+  --color-slate-100: #0f172a;
+  --color-slate-200: #0f172a;
+  --color-slate-300: #1e293b;
+  --color-slate-400: #374151;
+  --color-slate-500: #475569;
+  --color-slate-600: #475569;
+  --color-slate-700: #e2e8f0;
+  --color-slate-800: #f1f5f9;
+  --color-slate-900: #ffffff;
+  --color-slate-950: #eef2f7;
+
+  --color-cyan-50: #083344;
+  --color-cyan-100: #164e63;
+  --color-cyan-200: #155e75;
+  --color-cyan-300: #0e7490;
+  --color-cyan-400: #0e7490;
+  --color-cyan-500: #06b6d4;
+  --color-cyan-600: #0891b2;
+  --color-cyan-700: #0e7490;
+  --color-cyan-800: #155e75;
+  --color-cyan-900: #164e63;
+  --color-cyan-950: #083344;
+
+  --color-emerald-50: #022c22;
+  --color-emerald-100: #064e3b;
+  --color-emerald-200: #065f46;
+  --color-emerald-300: #047857;
+  --color-emerald-400: #047857;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #047857;
+  --color-emerald-700: #047857;
+  --color-emerald-800: #065f46;
+  --color-emerald-900: #064e3b;
+  --color-emerald-950: #022c22;
+
+  --color-rose-300: #e11d48;
+  --color-rose-400: #e11d48;
+  --color-rose-500: #f43f5e;
+  --color-red-300: #b91c1c;
+  --color-red-400: #dc2626;
+  --color-red-500: #ef4444;
+  --color-amber-300: #b45309;
+  --color-amber-400: #d97706;
+  --color-amber-500: #d97706;
+  --color-violet-300: #6d28d9;
+  --color-violet-400: #7c3aed;
+  --color-violet-500: #7c3aed;
+  --color-blue-500: #2563eb;
+}
+
+/* White text flips to ink on light surfaces; keep it white only on solid
+   accent buttons (opaque from-*-600 gradients) and solid accent badges. */
+html.light .text-white,
+html.light .text-slate-50,
+html.light .text-slate-100,
+html.light .text-slate-200,
+html.light .text-slate-300 {
+  color: #0f172a;
+}
+html.light .text-slate-400,
+html.light .text-slate-500,
+html.light .text-slate-600 {
+  color: #475569;
+}
+html.light [class*="from-cyan-600"] .text-white,
+html.light [class*="from-violet-600"] .text-white,
+html.light [class*="from-emerald-600"] .text-white,
+html.light [class*="from-amber-600"] .text-white,
+html.light [class*="from-rose-600"] .text-white,
+html.light [class*="from-red-600"] .text-white,
+html.light [class*="from-blue-600"] .text-white,
+html.light .bg-red-500 .text-white,
+html.light .bg-rose-500 .text-white,
+html.light .bg-amber-500 .text-white,
+html.light .bg-emerald-500 .text-white,
+html.light .bg-cyan-500 .text-white,
+html.light .bg-violet-500 .text-white {
+  color: #fff;
+}
+
+/* Small chips / code blocks: ink-tinted in light mode instead of black-tinted. */
+html.light [class*="bg-black/"] {
+  background-color: rgba(15, 23, 42, 0.06);
+}
+html.light .hb-screen [class*="bg-black/"] {
+  background-color: rgba(2, 6, 23, 0.45);
+}
+
+/* Cards: clean white surfaces with a soft shadow in light mode. */
+html.light .card-surface {
+  background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
+  border-color: rgba(148, 163, 184, 0.35);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 10px 30px rgba(15, 23, 42, 0.05);
+}
+
+/* Heartbeat "screens" stay dark in both themes, like real monitors. */
+.hb-screen {
+  background-color: #020617 !important;
+  border-color: rgba(34, 211, 238, 0.15) !important;
+}
+html.light .hb-screen .text-white,
+html.light .hb-screen .text-slate-100,
+html.light .hb-screen .text-slate-200,
+html.light .hb-screen .text-slate-300 {
+  color: #e2e8f0;
 }
 
 html {
   scrollbar-color: #1e293b transparent;
   scrollbar-width: thin;
 }
+html.light {
+  scrollbar-color: #cbd5e1 transparent;
+}
 
 body {
   font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
-  background-color: #0a0f1a;
-  color: #e2e8f0;
+  background-color: var(--app-bg);
+  color: var(--app-fg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -33,6 +163,9 @@ pre {
   background: rgba(34, 211, 238, 0.25);
   color: #fff;
 }
+html.light ::selection {
+  color: #0f172a;
+}
 
 /* Thin scrollbars to match a dark SIEM aesthetic */
 *::-webkit-scrollbar {
@@ -48,6 +181,12 @@ pre {
 }
 *::-webkit-scrollbar-thumb:hover {
   background: #334155;
+}
+html.light *::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+html.light *::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 /* Recharts polish */

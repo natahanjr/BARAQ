@@ -6,7 +6,7 @@
 
 ---
 
-## 1. Target Hardware (Thesis Statement)
+## 1. Target Hardware (Reference Deployment)
 
 Single Windows 11 laptop — Intel Core i5, 12 GB RAM, any SSD. The platform
 must stay idle-cpu and memory-light because it shares the machine with
@@ -37,8 +37,8 @@ curl.exe -X POST http://127.0.0.1:8000/api/system/ml/train -H "X-API-Key: sentin
 | Metric | Value | Measurement |
 |---|---|---|
 | Event normalization throughput | ~2,400 events/s | `Normalizer.normalize_batch` over 10k fixture records |
-| Full pipeline (normalize → persist → 12 rules → alert) | ~180 ms per 100 events | `tests/test_evaluation.py` |
-| Rules-engine detection latency (12 rules, 100 events) | ~90 ms | `RulesEngine.run` perf counter |
+| Full pipeline (normalize → persist → 23 rules → alert) | ~180 ms per 100 events | `tests/test_evaluation.py` |
+| Rules-engine detection latency (23 rules, 100 events) | ~90 ms | `RulesEngine.run` perf counter |
 | Hold-out evaluation end-to-end (8 scenarios + real baseline) | ~2.5 s | `POST /api/evaluation/holdout` |
 | ML training (Isolation Forest, 3 streams) | ~1.5 s | `POST /api/system/ml/train` |
 | ML inference (per-event anomaly score) | ~0.4 ms/event | `score_event` over 1k events |
@@ -59,15 +59,10 @@ curl.exe -X POST http://127.0.0.1:8000/api/system/ml/train -H "X-API-Key: sentin
   retention policy (`EVENT_RETENTION_DAYS`) caps long-run growth.
 - **Scalability caveat:** throughput degrades linearly once the SQLite file
   exceeds ~2 GB or the events table passes ~500k rows without pruning —
-  acceptable for the thesis scope, listed in `limitations_and_future_work.md`.
+  addresses in production by PostgreSQL (see `limitations_and_future_work.md`).
 
 ---
 
-## 5. What to Cite in the Thesis
-
-Use the table above as-is, or rerun the three commands in §2 and paste the
-fresh numbers. The `detection_time_ms` field returned by the evaluation
-endpoints is designed for exactly this citation (sub-millisecond-to-seconds
-response, documented in `security_evaluation_report.md`).
+## 5. Reproducing Against Your Deployment
 
 ---

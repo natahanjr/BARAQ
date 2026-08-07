@@ -13,7 +13,7 @@ export default function ScoreRing({ score }) {
           cy="44"
           r={r}
           fill="none"
-          stroke="#1e293b"
+          stroke="var(--chart-track)"
           strokeWidth="8"
         />
         <circle

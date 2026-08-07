@@ -13,8 +13,9 @@ detection engine against deterministic fixture scenarios. This document
 records a complementary validation: realistic attacks executed against the
 live host, with detections captured honestly — including false negatives.
 
-Red-team validation is the external face of the thesis claim: *the platform
-detects real Windows attack behavior, not just its own simulator data.*
+Red-team validation is the external proof of the platform claim: *the
+platform detects real Windows attack behavior, not just its own simulator
+data.*
 
 ---
 

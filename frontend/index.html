@@ -1,18 +1,53 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
     <title>SentinelSOC &mdash; Security Operations Center</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
-      rel="stylesheet"
-    />
+    <link rel="icon" href="data:," />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("sentinel-theme");
+          var light = saved
+            ? saved === "light"
+            : window.matchMedia("(prefers-color-scheme: light)").matches;
+          if (light) document.documentElement.classList.add("light");
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body>
+<body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Fail-safe: if the app bundle fails to load or crashes before mounting,
+      // show a readable message instead of a blank/black screen.
+      (function () {
+        function showError(message) {
+          var root = document.getElementById("root");
+          if (!root || root.children.length) return;
+          root.removeAttribute("style");
+          root.innerHTML =
+            '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f172a;font-family:system-ui,sans-serif;color:#e2e8f0;padding:24px;text-align:center">' +
+            '<div style="max-width:520px">' +
+            '<div style="font-size:22px;font-weight:700;color:#22d3ee;margin-bottom:8px">SentinelSOC failed to load</div>' +
+            '<div style="font-size:14px;color:#94a3b8;margin-bottom:16px">' + message + '</div>' +
+            '<button onclick="location.reload(true)" style="background:#0e7490;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer">Reload</button>' +
+            "</div></div>";
+        }
+        window.addEventListener("error", function (e) {
+          if (e.target && (e.target.tagName === "SCRIPT" || e.target.tagName === "LINK")) {
+            showError("The application code could not be loaded. This is usually caused by a stale browser cache after an update. Try a hard refresh (Ctrl+F5) or the Reload button below.");
+          }
+        });
+        setTimeout(function () {
+          if (!document.getElementById("root") || !document.getElementById("root").childElementCount) {
+            showError("Nothing rendered after the bundle loaded. Check the browser console and verify the backend is running.");
+          }
+        }, 15000);
+      })();
+    </script>
   </body>
 </html>
