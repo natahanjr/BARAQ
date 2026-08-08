@@ -60,11 +60,14 @@ def extract_indicators(text: str, limit: int = 12) -> list[str]:
     return seen
 
 
-def lookup_indicator(db: Session, indicator: str, refresh: bool = False) -> dict[str, Any]:
+def lookup_indicator(db: Session, indicator: str, refresh: bool = False,
+                     offline: bool = False) -> dict[str, Any]:
     """Return a full threat-intel verdict for one indicator.
 
     Order: DB cache -> embedded IOC baseline -> offline classifier -> online
     providers. ``refresh=True`` bypasses the cache and re-queries providers.
+    ``offline=True`` skips providers entirely (pipeline fast path; cached or
+    classifier verdicts only).
     """
     indicator = indicator.strip().lower()
     result: dict[str, Any] = {
@@ -114,7 +117,7 @@ def lookup_indicator(db: Session, indicator: str, refresh: bool = False) -> dict
             result["sources"].append("offline-baseline")
 
     # 4) Online providers (only for missing or non-benign indicators)
-    if result["category"] != "benign":
+    if not offline and result["category"] != "benign":
         for provider in (_abuseipdb, _otx, _vt):
             verdict = provider([indicator]) if provider in (_otx, _vt) else provider(indicator)
             if not verdict:

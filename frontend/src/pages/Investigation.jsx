@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { api } from "../api.js";
 import Card from "../components/Card.jsx";
 import PageHeader from "../components/PageHeader.jsx";
@@ -8,7 +8,22 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import RiskBadge from "../components/RiskBadge.jsx";
 import { Loading, EmptyState, ErrorBanner } from "../components/Feedback.jsx";
 import TimelineGraph from "../components/TimelineGraph.jsx";
-import { InvestigationIcon, ActivityIcon, AlertIcon } from "../components/icons.jsx";
+import {
+  InvestigationIcon,
+  ActivityIcon,
+  AlertIcon,
+  NetworkIcon,
+} from "../components/icons.jsx";
+
+const KINDS_COLOR = {
+  user: "#38bdf8",
+  device: "#818cf8",
+  process: "#f472b6",
+  ip: "#fb923c",
+  domain: "#34d399",
+  file: "#e879f9",
+  technique: "#a3e635",
+};
 
 function StepDot({ index, active }) {
   return (
@@ -75,6 +90,134 @@ function EventChip({ event, compact }) {
   );
 }
 
+function AttackTimeline({ events }) {
+  const rows = (events || [])
+    .filter((e) => e.timestamp)
+    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+  if (rows.length === 0) {
+    return <EmptyState title="No timed events" subtitle="Nothing to lay out chronologically" />;
+  }
+
+  const railColor = {
+    critical: "bg-red-500",
+    high: "bg-orange-500",
+    medium: "bg-amber-500",
+    low: "bg-blue-500",
+  };
+
+  return (
+    <div className="relative ml-2 space-y-2 border-l border-slate-700/60 pl-6">
+      {rows.map((e, idx) => {
+        const sev = (e.severity || "low").toLowerCase();
+        return (
+          <div key={idx} className="relative">
+            <span
+              className={`absolute -left-[27px] top-3.5 h-3 w-3 rounded-full border-2 border-slate-950 ${
+                railColor[sev] || railColor.low
+              } ${e.is_anomaly ? "shadow-[0_0_8px_rgba(139,92,246,0.9)]" : ""}`}
+            />
+            <div className="rounded-lg border border-slate-700/50 bg-slate-900/40 px-3.5 py-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-mono text-[10px] text-slate-500">
+                  Event {e.event_id}
+                  {e.is_anomaly && (
+                    <span className="ml-1.5 rounded bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-violet-400">
+                      ML anomaly
+                    </span>
+                  )}
+                </span>
+                <span className="font-mono text-[10px] text-slate-400">
+                  {new Date(e.timestamp).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </span>
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                {e.message || e.category}
+              </p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+                {e.user && (
+                  <span>
+                    user <strong className="text-slate-300">{e.user}</strong>
+                  </span>
+                )}
+                {e.host && (
+                  <span>
+                    host <strong className="text-slate-300">{e.host}</strong>
+                  </span>
+                )}
+                {e.risk_score != null && (
+                  <span>
+                    risk <strong className="text-slate-300">{e.risk_score.toFixed(0)}</strong>
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function InvolvedEntities({ data }) {
+  const seen = new Map();
+  const push = (kind, name) => {
+    if (!name || name === "-") return;
+    const key = `${kind}:${name}`;
+    if (!seen.has(key)) seen.set(key, { kind, name, count: 0 });
+    seen.get(key).count += 1;
+  };
+  for (const e of [...(data.evidence_events || []), ...(data.related_events || [])]) {
+    push("user", e.user);
+    push("device", e.host);
+  }
+  const rows = [...seen.values()].sort((a, b) => b.count - a.count).slice(0, 8);
+  if (rows.length === 0) return null;
+
+  return (
+    <Card>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-white">Involved Entities</h3>
+          <p className="mt-0.5 text-sm text-slate-400">
+            Users and hosts touching this alert — click to open in the entity graph
+          </p>
+        </div>
+        <NetworkIcon className="h-5 w-5 text-cyan-400" />
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {rows.map((e) => (
+          <Link
+            key={e.key}
+            to={`/entities?kind=${e.kind}&name=${encodeURIComponent(e.name)}`}
+            className="flex items-center justify-between gap-2 rounded-lg border border-slate-800/60 bg-slate-900/40 px-3 py-2 transition-colors hover:border-cyan-500/40"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[9px] font-bold text-slate-950"
+                style={{ backgroundColor: KINDS_COLOR[e.kind] || "#64748b" }}
+              >
+                {e.kind.slice(0, 1).toUpperCase()}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate font-mono text-xs text-slate-200">{e.name}</span>
+                <span className="block text-[10px] text-slate-500">
+                  {e.kind} · {e.count} event{e.count === 1 ? "" : "s"}
+                </span>
+              </span>
+            </span>
+            <span className="shrink-0 text-[10px] text-cyan-400">→</span>
+          </Link>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 export default function Investigation() {
   const [params, setParams] = useSearchParams();
   const [alerts, setAlerts] = useState([]);
@@ -104,10 +247,16 @@ export default function Investigation() {
     }
     setError("");
     setData(null);
-    setExplanation("");
     api
       .investigate(selected)
-      .then(setData)
+      .then((d) => {
+        setData(d);
+        // Auto-run the AI analyst once the investigation context is loaded.
+        api
+          .assistantExplain(selected ? Number(selected) : undefined)
+          .then((r) => setExplanation(r.reply))
+          .catch(() => setExplanation(""));
+      })
       .catch((e) => setError(e.message));
   }, [selected]);
 
@@ -259,6 +408,26 @@ export default function Investigation() {
                 ]}
                 attackChain={data.attack_chain}
                 windowMinutes={30}
+              />
+            </Card>
+
+            {/* Involved entities */}
+            <InvolvedEntities data={data} />
+
+            {/* Attack timeline */}
+            <Card>
+              <div className="mb-4 flex items-center gap-2">
+                <ActivityIcon className="h-5 w-5 text-cyan-400" />
+                <h3 className="text-base font-semibold text-white">Attack Timeline</h3>
+                <span className="text-[11px] text-slate-500">
+                  {[data.evidence_events, data.related_events]
+                    .flat()
+                    .filter((e) => e && e.timestamp).length}{" "}
+                  timed events
+                </span>
+              </div>
+              <AttackTimeline
+                events={[...(data.evidence_events || []), ...(data.related_events || [])]}
               />
             </Card>
 

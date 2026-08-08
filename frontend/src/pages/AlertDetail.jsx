@@ -454,60 +454,94 @@ export default function AlertDetail() {
               </button>
             </div>
             {intel ? (
-              intel.items.length > 0 ? (
-                <ul className="space-y-2">
-                  {intel.items.map((it) => (
-                    <li
-                      key={it.indicator}
-                      className={`rounded-lg border p-3 ${intelTone[it.category] || intelTone.unknown}`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="break-all font-mono text-xs font-semibold text-slate-200">
-                          {it.indicator}
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          <span className="flex items-center gap-1 rounded bg-black/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-                            <span className={`h-1.5 w-1.5 rounded-full ${intelDot[it.category] || intelDot.unknown}`} />
-                            {it.category}
+              <div className="space-y-3">
+                {intel.actors && intel.actors.length > 0 && (
+                  <div className="rounded-lg border border-rose-500/25 bg-rose-500/5 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-rose-300">
+                      🎭 Attributed actors
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {intel.actors.map((act) => (
+                        <span
+                          key={act.name}
+                          title={act.items?.join(", ")}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-rose-500/30 bg-black/30 px-2 py-1 text-[10px] font-semibold text-rose-200"
+                        >
+                          <span className={`h-1.5 w-1.5 rounded-full ${intelDot[act.category] || intelDot.unknown}`} />
+                          {act.name}
+                          <span className="font-mono text-[9px] text-slate-400">
+                            {act.risk_score}
                           </span>
-                        </div>
-                      </div>
-                      <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-                        {it.label}
-                      </p>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className="text-[10px] font-medium text-slate-400">
-                          {it.kind}
                         </span>
-                        <span className="text-[10px] text-slate-500">
-                          conf {(it.confidence * 100).toFixed(0)}%
-                        </span>
-                        {it.sources && it.sources.length > 0 && (
-                          <span className="text-[10px] text-slate-500">
-                            {it.sources.join(" · ")}
-                          </span>
-                        )}
-                        {it.category !== "malicious" && (
-                          <button
-                            type="button"
-                            onClick={() => markMalicious(it.indicator)}
-                            disabled={marking === it.indicator}
-                            className={`ml-auto rounded border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
-                              it.category === "suspicious"
-                                ? "border-rose-500/50 text-rose-400 hover:bg-rose-500/20"
-                                : "border-slate-600 text-slate-400 hover:bg-slate-700"
-                            } disabled:opacity-50`}
-                          >
-                            {marking === it.indicator ? "Marking..." : "⚠ Mark malicious"}
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <EmptyState title="No indicators" subtitle="No IPs, domains or hashes found in this alert's evidence" />
-              )
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {intel.items.length > 0 ? (
+                  <ul className="space-y-2">
+                    {intel.items.map((it) => {
+                      const attributed = (intel.actors || []).find((a) =>
+                        (a.items || []).includes(it.indicator),
+                      );
+                      return (
+                        <li
+                          key={it.indicator}
+                          className={`rounded-lg border p-3 ${intelTone[it.category] || intelTone.unknown}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="break-all font-mono text-xs font-semibold text-slate-200">
+                              {it.indicator}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              {attributed && (
+                                <span className="inline-flex items-center gap-1 rounded bg-black/20 px-1.5 py-0.5 text-[10px] font-semibold text-rose-300">
+                                  🎭 {attributed.name}
+                                </span>
+                              )}
+                              <span className="flex items-center gap-1 rounded bg-black/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                                <span className={`h-1.5 w-1.5 rounded-full ${intelDot[it.category] || intelDot.unknown}`} />
+                                {it.category}
+                              </span>
+                            </div>
+                          </div>
+                          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                            {it.label}
+                          </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className="text-[10px] font-medium text-slate-400">
+                              {it.kind}
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              conf {(it.confidence * 100).toFixed(0)}%
+                            </span>
+                            {it.sources && it.sources.length > 0 && (
+                              <span className="text-[10px] text-slate-500">
+                                {it.sources.join(" · ")}
+                              </span>
+                            )}
+                            {it.category !== "malicious" && (
+                              <button
+                                type="button"
+                                onClick={() => markMalicious(it.indicator)}
+                                disabled={marking === it.indicator}
+                                className={`ml-auto rounded border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                                  it.category === "suspicious"
+                                    ? "border-rose-500/50 text-rose-400 hover:bg-rose-500/20"
+                                    : "border-slate-600 text-slate-400 hover:bg-slate-700"
+                                } disabled:opacity-50`}
+                              >
+                                {marking === it.indicator ? "Marking..." : "⚠ Mark malicious"}
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <EmptyState title="No indicators" subtitle="No IPs, domains or hashes found in this alert's evidence" />
+                )}
+              </div>
             ) : (
               <EmptyState title="Not enriched" subtitle="No threat-intel enrichment available" />
             )}

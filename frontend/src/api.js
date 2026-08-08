@@ -125,6 +125,8 @@ export const api = {
   assistantExplain: (alertId) =>
     request("/api/assistant/explain", { method: "POST", body: JSON.stringify({ alert_id: alertId }) }),
   assistantSummarize: () => request("/api/assistant/summarize", { method: "POST" }),
+  assistantEntityExplain: (kind, name) =>
+    request("/api/assistant/explain-entity", { method: "POST", body: JSON.stringify({ kind, name }) }),
 
   generateReport: (reportType, format) =>
     request("/api/reports/generate", { method: "POST", body: JSON.stringify({ report_type: reportType, format }) }),

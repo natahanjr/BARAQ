@@ -12,11 +12,16 @@ from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from backend.audit import client_ip, log_action
 from backend.database.connection import get_db
-from backend.database.models import Alert, Incident, IncidentAlertLink, IncidentComment
+from backend.database.models import (
+    Alert,
+    Incident,
+    IncidentAlertLink,
+    IncidentComment,
+)
 from backend.security import actor_name, require_admin, require_auth
 
 logger = logging.getLogger("sentinel.api.incidents")
@@ -82,6 +87,14 @@ def _publish_incident(incident: Incident) -> None:
         logger.debug("Failed to publish incident #%s over realtime", incident.id, exc_info=True)
 
 
+def _with_links(stmt):
+    """Eager-load alert links (with their alert) and comments in one pass."""
+    return stmt.options(
+        selectinload(Incident.alerts).selectinload(IncidentAlertLink.alert),
+        selectinload(Incident.comments),
+    )
+
+
 @router.get("")
 def list_incidents(
     status: IncidentStatus | None = None,
@@ -89,7 +102,7 @@ def list_incidents(
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ):
-    stmt = select(Incident).order_by(Incident.created_at.desc()).limit(limit)
+    stmt = _with_links(select(Incident).order_by(Incident.created_at.desc()).limit(limit))
     if status:
         stmt = stmt.where(Incident.status == status.value)
     if severity:
@@ -100,7 +113,9 @@ def list_incidents(
 
 @router.get("/{incident_id}")
 def get_incident(incident_id: int, db: Session = Depends(get_db)):
-    incident = db.get(Incident, incident_id)
+    incident = db.scalars(
+        _with_links(select(Incident)).where(Incident.id == incident_id)
+    ).first()
     if not incident:
         raise HTTPException(404, "Incident not found")
     return incident.to_dict(include_links=True)

@@ -386,6 +386,30 @@ def ingest_batch(db, store: GraphStore, records: list[dict], alerts: list[Alert]
                 edges.append(_edge("device", alert.host, "EXHIBITS", "technique", mitre))
 
     if nodes:
-        store.upsert_entities(db, nodes)
+        store.upsert_entities(db, nodes, accumulate=True)
     if edges:
-        store.upsert_edges(db, edges)
+        store.upsert_edges(db, edges, accumulate=True)
+
+    _attribute_alert_actors(db, store, alerts)
+
+
+def _attribute_alert_actors(db, store: GraphStore, alerts: list[Alert]) -> None:
+    """Pipeline fast path: attribute actors from alerts' cached intel verdicts.
+
+    Uses :func:`lookup_indicator` with ``offline=True`` so the pipeline never
+    round-trips to online providers - verdicts come from the local cache,
+    the embedded IOC baseline or the offline classifier, then get clustered
+    into ``threat_actor`` nodes by :mod:`backend.graph.actors`.
+    """
+    try:
+        from backend.graph.actors import upsert_actors
+        from backend.threatintel.service import extract_indicators, lookup_indicator
+
+        items: list[dict] = []
+        for alert in alerts:
+            for ind in extract_indicators(f"{alert.evidence or ''} {alert.name or ''}", limit=6):
+                items.append(lookup_indicator(db, ind, offline=True))
+        if items:
+            upsert_actors(db, store, items)
+    except Exception as exc:  # pragma: no cover - graph must never break intake
+        logger.warning("Pipeline threat-actor attribution failed: %s", exc)

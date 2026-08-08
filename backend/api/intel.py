@@ -46,10 +46,20 @@ def alert_intel(
     alert = db.get(Alert, alert_id)
     if not alert:
         raise HTTPException(404, "Alert not found")
+    items = enrich_alert(db, alert, refresh=refresh)
+    actors: list[dict] = []
+    try:
+        from backend.graph import get_graph_store
+        from backend.graph.actors import upsert_actors
+
+        actors = upsert_actors(db, get_graph_store(), items)
+    except Exception as exc:
+        logger.warning("Threat-actor attribution failed for alert %s: %s", alert_id, exc)
     return {
         "alert_id": alert_id,
         "alert_name": alert.name,
-        "items": enrich_alert(db, alert, refresh=refresh),
+        "items": items,
+        "actors": actors,
     }
 
 

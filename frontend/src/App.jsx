@@ -5,6 +5,7 @@ import { useRealtime } from "./realtime.js";
 import Login from "./pages/Login.jsx";
 
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
+const CommandCenter = lazy(() => import("./pages/CommandCenter.jsx"));
 const Alerts = lazy(() => import("./pages/Alerts.jsx"));
 const AlertDetail = lazy(() => import("./pages/AlertDetail.jsx"));
 const Investigation = lazy(() => import("./pages/Investigation.jsx"));
@@ -20,6 +21,7 @@ const Users = lazy(() => import("./pages/Users.jsx"));
 
 import {
   DashboardIcon,
+  CommandIcon,
   AlertsIcon,
   InvestigationIcon,
   NetworkIcon,
@@ -39,6 +41,7 @@ import {
 } from "./components/icons.jsx";
 
 const NAV = [
+  { to: "/command-center", label: "Command Center", icon: CommandIcon },
   { to: "/", label: "Dashboard", icon: DashboardIcon, end: true },
   { to: "/alerts", label: "Alerts", icon: AlertsIcon },
   { to: "/investigation", label: "Investigation", icon: InvestigationIcon },
@@ -493,6 +496,7 @@ export default function App() {
           >
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/command-center" element={<CommandCenter />} />
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/alerts/:id" element={<AlertDetail />} />
               <Route path="/investigation" element={<Investigation />} />

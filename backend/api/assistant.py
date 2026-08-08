@@ -25,6 +25,11 @@ class ExplainRequest(BaseModel):
     query: str = Field(default="", max_length=2000)
 
 
+class EntityExplainRequest(BaseModel):
+    kind: str = Field(min_length=1, max_length=32)
+    name: str = Field(min_length=1, max_length=512)
+
+
 @router.post("/chat")
 def chat(body: ChatRequest, db: Session = Depends(get_db)):
     assistant = SecurityAssistant(db)
@@ -50,4 +55,11 @@ def explain(body: ExplainRequest, db: Session = Depends(get_db)):
 def summarize(db: Session = Depends(get_db)):
     assistant = SecurityAssistant(db)
     response = assistant.chat("summarize the current incidents", persist=False)
+    return {"reply": response}
+
+
+@router.post("/explain-entity")
+def explain_entity(body: EntityExplainRequest, db: Session = Depends(get_db)):
+    assistant = SecurityAssistant(db)
+    response = assistant.explain_entity(body.kind, body.name)
     return {"reply": response}

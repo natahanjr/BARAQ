@@ -88,13 +88,16 @@ def _hour_bucket(column, session: Session):
         return func.date_trunc("hour", column)
     if dialect in ("mysql", "mariadb"):
         return func.date_format(column, "%Y-%m-%dT%H:00:00")
-    return func.strftime("%Y-%m-%dT%H:00:00", func.datetime(column, "localtime"))
+    # Timestamps are stored as-naive UTC; avoid ``localtime`` which would
+    # shift already-UTC values by the server's local offset.
+    return func.strftime("%Y-%m-%dT%H:00:00", column)
 
 
 def _format_bucket(value) -> str:
     if isinstance(value, datetime):
         return value.strftime("%Y-%m-%dT%H:00:00")
-    return str(value)
+    text = str(value)
+    return text.replace("Z", "T")[:13] + ":00:00" if text.endswith("Z") else text[:19]
 
 
 def event_timeline(session: Session, hours: int = 24) -> list[dict]:
@@ -132,11 +135,14 @@ def threat_categories(session: Session) -> list[dict]:
 
 
 def severity_distribution(session: Session) -> list[dict]:
+    rows = session.execute(
+        select(Alert.severity, func.count(Alert.id))
+        .where(Alert.status == "open")
+        .group_by(Alert.severity)
+    ).all()
+    counts = dict(rows)
     return [
-        {"severity": s, "count": session.scalar(
-            select(func.count(Alert.id)).where(Alert.status == "open", Alert.severity == s)
-        ) or 0}
-        for s in SEVERITY_ORDER
+        {"severity": s, "count": int(counts.get(s, 0))} for s in SEVERITY_ORDER
     ]
 
 
@@ -152,23 +158,30 @@ def attack_stats(session: Session) -> list[dict]:
 
 def top_attackers(session: Session, limit: int = 5) -> list[dict]:
     """Most frequent users/IPs in open alert evidence (top talkers)."""
-    alerts = session.scalars(select(Alert).where(Alert.status == "open")).all()
+    # Filter to brute-force alerts in SQL so only candidate rows load;
+    # evidence is encrypted and must be parsed here.
+    import re
     from collections import Counter
 
+    alerts = session.scalars(
+        select(Alert)
+        .where(Alert.status == "open", Alert.mitre_id == "T1110", Alert.evidence != "")
+    ).all()
     users: Counter = Counter()
     for a in alerts:
-        if a.mitre_id == "T1110" and a.evidence:
-            import re
-            m = re.search(r"account '([^']+)'", a.evidence)
-            if m:
-                users[m.group(1)] += 1
+        m = re.search(r"account '([^']+)'", a.evidence or "")
+        if m:
+            users[m.group(1)] += 1
     return [{"user": u, "count": c} for u, c in users.most_common(limit)]
 
 
-def user_behavior(session: Session, limit: int = 8) -> list[dict]:
-    """Per-user login behavior statistics (success/failure/avg risk)."""
+def user_behavior(
+    session: Session, limit: int = 8, since_hours: int = 24
+) -> list[dict]:
+    """Per-user login behavior statistics for the last ``since_hours``."""
     from sqlalchemy import case, func as sa_func
 
+    since = datetime.now(timezone.utc) - timedelta(hours=since_hours)
     rows = session.execute(
         select(
             NormalizedEvent.user,
@@ -177,7 +190,10 @@ def user_behavior(session: Session, limit: int = 8) -> list[dict]:
             sa_func.avg(NormalizedEvent.risk_score).label("avg_risk"),
             sa_func.count(NormalizedEvent.id).label("total"),
         )
-        .where(NormalizedEvent.event_id.in_([4624, 4625]))
+        .where(
+            NormalizedEvent.event_id.in_([4624, 4625]),
+            NormalizedEvent.timestamp >= since,
+        )
         .group_by(NormalizedEvent.user)
         .order_by(sa_func.count(NormalizedEvent.id).desc())
         .limit(limit)

@@ -8,6 +8,7 @@ from backend.database.models import (
     AlertEventLink,
     DashboardSnapshot,
     NormalizedEvent,
+    ThreatIntelRecord,
 )
 from backend.database.retention import purge_old_data
 
@@ -92,3 +93,36 @@ def test_purge_cascades_alert_links(db):
 
     assert db.query(NormalizedEvent).count() == 0
     assert db.query(Alert).count() == 0
+
+
+def test_purge_removes_stale_threat_intel_cache(db):
+    db.add(ThreatIntelRecord(
+        indicator="8.8.8.8", kind="ip", category="malicious",
+        label="baseline", confidence=0.9, sources=["embedded-ioc"],
+        checked_at=_event_ts(45),
+    ))
+    db.add(ThreatIntelRecord(
+        indicator="1.1.1.1", kind="ip", category="benign",
+        checked_at=_event_ts(1),
+    ))
+    db.commit()
+
+    purged = purge_old_data(db, days=30)
+
+    assert purged["threat_intel_records"] == 1
+    remaining = db.query(ThreatIntelRecord).all()
+    assert len(remaining) == 1
+    assert remaining[0].indicator == "1.1.1.1"
+
+
+def test_purge_keeps_fresh_intel(db):
+    db.add(ThreatIntelRecord(
+        indicator="9.9.9.9", kind="ip", category="suspicious",
+        checked_at=_event_ts(2),
+    ))
+    db.commit()
+
+    purged = purge_old_data(db, days=30)
+
+    assert purged["threat_intel_records"] == 0
+    assert db.query(ThreatIntelRecord).count() == 1

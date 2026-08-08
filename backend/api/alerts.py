@@ -9,11 +9,11 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from backend.audit import client_ip, log_action
 from backend.database.connection import get_db
-from backend.database.models import Alert, AlertAction, AnalystNote
+from backend.database.models import Alert, AlertAction, AlertEventLink, AnalystNote
 from backend.detection.workflow import can_transition, is_valid_state, next_states
 from backend.reports.generator import generate_report
 from backend.security import actor_name, require_admin, require_auth
@@ -87,7 +87,14 @@ def list_alerts(
 
 @router.get("/{alert_id}")
 def get_alert(alert_id: int, db: Session = Depends(get_db)):
-    alert = db.get(Alert, alert_id)
+    alert = db.scalars(
+        select(Alert)
+        .where(Alert.id == alert_id)
+        .options(
+            selectinload(Alert.events).selectinload(AlertEventLink.event),
+            selectinload(Alert.notes),
+        )
+    ).first()
     if not alert:
         raise HTTPException(404, "Alert not found")
     return alert.to_dict(include_events=True)

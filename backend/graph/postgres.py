@@ -4,11 +4,16 @@ Stores entities in the existing database via the ``entity_nodes`` /
 ``entity_edges`` tables. The graph API stays behind :class:`GraphStore` so a
 Neo4j provider can be swapped in later via ``SENTINEL_GRAPH_PROVIDER`` without
 touching callers.
+
+Upsert semantics (mirrors the Neo4j adapter): on conflict, counters
+(``events_count`` / ``alerts_count`` / edge ``weight``) **accumulate** and
+``first_seen``/``last_seen`` run to the true min/max so re-syncing a batch
+never erases history or double-counts.
 """
 from __future__ import annotations
 
 import logging
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
@@ -31,12 +36,29 @@ _edge_columns = {
 _upsert_cls = pg_insert if IS_POSTGRES else sqlite_insert
 
 
-def _upsert_stmt(model, columns, conflict):
-    stmt = _upsert_cls(model).values()
-    return stmt.on_conflict_do_update(
-        index_elements=list(conflict),
-        set_={col: getattr(stmt.excluded, col) for col in columns - set(conflict)},
+def _earliest(existing, incoming):
+    """MIN of two nullable datetime columns, keeping the older one."""
+    return case(
+        (existing.is_(None), incoming),
+        (incoming.is_(None), existing),
+        (incoming < existing, incoming),
+        else_=existing,
     )
+
+
+def _latest(existing, incoming):
+    """MAX of two nullable datetime columns, keeping the newer one."""
+    return case(
+        (existing.is_(None), incoming),
+        (incoming.is_(None), existing),
+        (incoming > existing, incoming),
+        else_=existing,
+    )
+
+
+def _accumulate(existing, incoming):
+    """INCOMING + EXISTING, coalescing NULLs to 0 (portable)."""
+    return existing + func.coalesce(incoming, 0)
 
 
 class PostgresStore(GraphStore):
@@ -47,22 +69,64 @@ class PostgresStore(GraphStore):
 
     # -- mutations --------------------------------------------------------
 
-    def upsert_entities(self, db, entities: list[dict]) -> None:
+    def upsert_entities(self, db, entities: list[dict], accumulate: bool = False) -> None:
+        """Create-or-update nodes by (kind, name).
+
+        With ``accumulate=False`` every field is replaced with the incoming
+        value (full-sync totals). With ``accumulate=True`` (per-batch deltas)
+        counters add up and ``first_seen``/``last_seen`` keep the true
+        earliest/latest edge so re-syncing never erases history.
+        """
         if not entities:
             return
         rows = [{k: v for k, v in e.items() if k in _node_columns} for e in entities]
-        db.execute(_upsert_stmt(EntityNode, _node_columns, ("kind", "name")), rows)
+        stmt = _upsert_cls(EntityNode).values()
+        excluded = stmt.excluded
+        set_ = {
+            "display_name": excluded.display_name,
+            "label": excluded.label,
+            "risk_level": excluded.risk_level,
+            "risk_score": excluded.risk_score,
+            "properties": excluded.properties,
+        }
+        if accumulate:
+            set_["alerts_count"] = _accumulate(EntityNode.alerts_count, excluded.alerts_count)
+            set_["events_count"] = _accumulate(EntityNode.events_count, excluded.events_count)
+            set_["first_seen"] = _earliest(EntityNode.first_seen, excluded.first_seen)
+            set_["last_seen"] = _latest(EntityNode.last_seen, excluded.last_seen)
+        else:
+            set_["alerts_count"] = excluded.alerts_count
+            set_["events_count"] = excluded.events_count
+            set_["first_seen"] = excluded.first_seen
+            set_["last_seen"] = excluded.last_seen
+        db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=["kind", "name"],
+                set_=set_,
+            ),
+            rows,
+        )
         db.commit()
 
-    def upsert_edges(self, db, edges: list[dict]) -> None:
+    def upsert_edges(self, db, edges: list[dict], accumulate: bool = False) -> None:
         if not edges:
             return
         rows = [{k: v for k, v in e.items() if k in _edge_columns} for e in edges]
+        stmt = _upsert_cls(EntityEdge).values()
+        excluded = stmt.excluded
+        set_: dict = {"properties": excluded.properties}
+        if accumulate:
+            set_["weight"] = _accumulate(EntityEdge.weight, excluded.weight)
+            set_["first_seen"] = _earliest(EntityEdge.first_seen, excluded.first_seen)
+            set_["last_seen"] = _latest(EntityEdge.last_seen, excluded.last_seen)
+        else:
+            set_["weight"] = excluded.weight
+            set_["first_seen"] = excluded.first_seen
+            set_["last_seen"] = excluded.last_seen
         db.execute(
-            _upsert_stmt(
-                EntityEdge,
-                _edge_columns,
-                ("src_kind", "src_name", "rel", "dst_kind", "dst_name"),
+            stmt.on_conflict_do_update(
+                index_elements=["src_kind", "src_name", "rel", "dst_kind", "dst_name"],
+                set_=set_,
             ),
             rows,
         )
@@ -130,32 +194,46 @@ class PostgresStore(GraphStore):
             if node:
                 nodes[(kind, name)] = node
 
+        def _fetch_nodes(keys: list[tuple[str, str]]) -> None:
+            """Bulk-load a list of (kind, name) keys in one query."""
+            conditions = [
+                (EntityNode.kind == k) & (EntityNode.name == n) for k, n in keys
+            ]
+            for node in db.scalars(
+                select(EntityNode).where(or_(*conditions))
+            ).all():
+                nodes[(node.kind, node.name)] = node
+
         if center_kind and center_name:
             _add(center_kind, center_name)
             frontier = [(center_kind, center_name)]
             seen = set(frontier)
             for _hop in range(max(1, depth)):
-                nxt = []
+                # One query per hop for the whole frontier (no N+1).
+                conditions = []
                 for k, n in frontier:
-                    rels = db.scalars(
-                        select(EntityEdge).where(
-                            or_(
-                                (EntityEdge.src_kind == k) & (EntityEdge.src_name == n),
-                                (EntityEdge.dst_kind == k) & (EntityEdge.dst_name == n),
-                            )
-                        )
-                    ).all()
-                    for e in rels:
-                        edges[e.id] = e
-                        for ekind, ename in (
-                            (e.src_kind, e.src_name),
-                            (e.dst_kind, e.dst_name),
-                        ):
-                            if (ekind, ename) not in seen:
-                                _add(ekind, ename)
-                                seen.add((ekind, ename))
-                                nxt.append((ekind, ename))
-                frontier = nxt
+                    conditions.append(
+                        (EntityEdge.src_kind == k) & (EntityEdge.src_name == n)
+                    )
+                    conditions.append(
+                        (EntityEdge.dst_kind == k) & (EntityEdge.dst_name == n)
+                    )
+                rels = db.scalars(
+                    select(EntityEdge).where(or_(*conditions))
+                ).all() if conditions else []
+                nxt_keys: list[tuple[str, str]] = []
+                for e in rels:
+                    edges[e.id] = e
+                    for ekind, ename in (
+                        (e.src_kind, e.src_name),
+                        (e.dst_kind, e.dst_name),
+                    ):
+                        if (ekind, ename) not in seen:
+                            seen.add((ekind, ename))
+                            nxt_keys.append((ekind, ename))
+                # Load every node touched this hop in a single query.
+                _fetch_nodes(nxt_keys)
+                frontier = [k for k in nxt_keys if k in nodes]
                 if len(nodes) >= limit:
                     break
             return {

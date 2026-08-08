@@ -112,6 +112,17 @@ class SecurityAssistant:
         if m:
             return self.session.get(Alert, int(m.group(1)))
         lowered = query.lower()
+        # Scan recent alerts first (bounded), then the rest of the table.
+        recent = list(
+            self.session.scalars(
+                select(Alert).order_by(Alert.created_at.desc()).limit(50)
+            )
+        )
+        for alert in recent:  # fresh alerts match best
+            if alert.name and (
+                alert.name.lower() in lowered or lowered in alert.name.lower()
+            ):
+                return alert
         for alert in self.session.scalars(select(Alert)).all():
             if (
                 alert.name.lower() in lowered
@@ -179,6 +190,136 @@ class SecurityAssistant:
             )
         return "\n".join(lines)
 
+    # ------------------------------------------------------------------
+    # Entity intelligence (why is this entity suspicious)
+    # ------------------------------------------------------------------
+    def explain_entity(self, kind: str, name: str) -> str:
+        """Deterministic entity analyst report for a graph node.
+
+        Grounds the reply in the entity graph (risk + relationships) plus
+        live threat-intel verdicts and any recorded ML anomalies / alerts,
+        so the explanation always answers *why* an entity is suspicious.
+        """
+        from backend.graph import get_graph_store
+        from backend.threatintel.service import lookup_indicator
+
+        kind = "device" if kind == "host" else kind
+        store = get_graph_store()
+        entity = store.get_entity(self.session, kind, name)
+        if not entity:
+            return (
+                f"'{name}' ({kind}) is not in the entity graph. Run the pipeline "
+                "and rebuild the graph (Entity Graph -> Rebuild) so this entity "
+                "can be analysed."
+            )
+
+        lines = [
+            f"Entity Analysis - {entity['display_name']}"
+            f" [risk {entity['risk_level']} {entity['risk_score']:.0f}/100]",
+        ]
+        if entity.get("first_seen"):
+            lines.append(
+                f"First seen: {entity['first_seen']} | "
+                f"Last seen: {entity.get('last_seen') or 'n/a'}"
+            )
+
+        subgraph = store.graph(
+            self.session, center_kind=kind, center_name=name, depth=1
+        )
+        edges = sorted(
+            subgraph.get("edges", []), key=lambda e: -(e.get("weight") or 0)
+        )
+
+        evidences: list[str] = []
+        relations: list[str] = []
+        for e in edges[:8]:
+            src, dst = e["source"], e["target"]
+            if (src["kind"] == kind and src["name"] == name) or (
+                dst["kind"] == kind and dst["name"] == name
+            ):
+                other = dst if src["name"] == name and src["kind"] == kind else src
+                relations.append(f"- {other['kind']}:{other['name']} ({e['rel']})")
+
+        # 1) Threat-intel verdict for indicators
+        if kind in ("ip", "domain", "file") and name:
+            try:
+                verdict = lookup_indicator(self.session, name)
+                cat = (verdict or {}).get("category", "unknown")
+                label = (verdict or {}).get("label", "")
+                conf = (verdict or {}).get("confidence")
+                if verdict:
+                    evidences.append(
+                        f"Threat-intel: {kind} flagged {cat} "
+                        f"({label}) confidence {conf:.0%}"
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("entity intel lookup failed: %s", exc)
+
+        # 2) Related alerts + anomalies
+        total_events = int(entity.get("events_count") or 0)
+        alert_count = int(entity.get("alerts_count") or 0)
+        if alert_count:
+            evidences.append(
+                f"Linked to {alert_count} alert(s) - repeated engagement by the "
+                "detection rules is the strongest signal."
+            )
+
+        # 3) Neighbourhood weight (most frequent co-activity)
+        if relations:
+            evidences.append(
+                f"Connected to {len(edges)} other entities; densest link: "
+                + relations[0]
+            )
+
+        # 4) MITRE techniques shown by the subgraph
+        technique_nodes = [
+            n for n in subgraph.get("nodes", []) if n.get("kind") == "technique"
+        ]
+        if technique_nodes:
+            names = sorted({n["name"] for n in technique_nodes})[:4]
+            evidences.append("Exhibits MITRE techniques: " + ", ".join(names))
+
+        # 5) Live event / anomaly footprint
+        if kind in ("user", "device"):
+            event_col = NormalizedEvent.user if kind == "user" else NormalizedEvent.host
+            rows = self.session.scalars(
+                select(NormalizedEvent)
+                .where(event_col == name)
+                .order_by(NormalizedEvent.timestamp.desc())
+                .limit(400)
+            ).all()
+            recent_anomalies = sum(1 for r in rows if r.is_anomaly)
+            if rows:
+                peak = max((r.ml_score or 0.0) for r in rows)
+                evidences.append(
+                    f"{len(rows)} of {total_events} recent event log entries "
+                    f"examined; {recent_anomalies} ML-flagged; "
+                    f"peak ML anomaly score {peak:.2f}."
+                )
+
+        # Compose
+        if not evidences:
+            evidences.append(
+                "No active threats: the entity is within normal behavioural baseline "
+                "and carries no open alerts or suspicious relationships."
+            )
+
+        header = lines
+        body = ["", "Why it matters:"]
+        body += [f"  - {e}" for e in evidences][:6]
+        if relations:
+            body.append("")
+            body.append("Notable relationships:")
+            body += relations[:6]
+        if alert_count:
+            body.append("")
+            body.append(
+                "Recommended response: isolate/contain if still active, preserve "
+                "evidence, review the linked alerts and close them after action."
+            )
+        return "\n".join(header + body)
+
+    # ------------------------------------------------------------------
     def _respond(self, intent: str, message: str) -> str:
         alert = self._find_alert(message)
         alerts = self._latest_alerts()

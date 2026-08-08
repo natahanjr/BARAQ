@@ -23,6 +23,7 @@ from backend.database.models import (
     NetworkConnection,
     NormalizedEvent,
     ProcessRecord,
+    ThreatIntelRecord,
     UsbDevice,
     VulnFinding,
 )
@@ -43,6 +44,8 @@ _PURGE_TARGETS: list[tuple] = [
     (VulnFinding, VulnFinding.found_at),
     (DashboardSnapshot, DashboardSnapshot.timestamp),
     (Alert, Alert.created_at),
+    # Stale cached intel verdicts age out with telemetry; fresh lookups re-populate.
+    (ThreatIntelRecord, ThreatIntelRecord.checked_at),
 ]
 
 

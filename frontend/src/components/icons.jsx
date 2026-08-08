@@ -231,6 +231,20 @@ export function MoonIcon(props) {
   );
 }
 
+export function CommandIcon(props) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="4.5" />
+      <path d="M12 2v3.5" />
+      <path d="M12 18.5V22" />
+      <path d="M2 12h3.5" />
+      <path d="M18.5 12H22" />
+      <circle cx="12" cy="12" r="0.5" fill="currentColor" />
+    </Icon>
+  );
+}
+
 export function NetworkIcon(props) {
   return (
     <Icon {...props}>

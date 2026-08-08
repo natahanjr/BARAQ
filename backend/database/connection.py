@@ -39,6 +39,8 @@ IS_POSTGRES = not IS_SQLITE
 _ADDITIVE_MIGRATIONS = {
     "events": [
         ("risk_score", "REAL"),
+        ("is_anomaly", "BOOLEAN DEFAULT 0"),
+        ("ml_score", "REAL"),
     ],
     "alerts": [
         ("detection_method", "VARCHAR(16) DEFAULT 'rule'"),
@@ -59,6 +61,7 @@ _ADDITIVE_MIGRATIONS = {
     "users": [
         ("totp_secret", "TEXT DEFAULT ''"),
         ("totp_enabled", "BOOLEAN DEFAULT 0"),
+        ("last_login_at", "DATETIME"),
     ],
 }
 

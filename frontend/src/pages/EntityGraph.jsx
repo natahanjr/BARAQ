@@ -314,6 +314,21 @@ export default function EntityGraph() {
     load();
   }, [load]);
 
+  // Deep-link support: /entities?kind=user&name=Haaraphel focuses the entity.
+  useEffect(() => {
+    const qp = new URLSearchParams(window.location.search);
+    let k = qp.get("kind");
+    const n = qp.get("name");
+    if (k === "host") k = "device";
+    if (k) {
+      setSearchKind(k);
+      if (n) {
+        setSearch(n);
+        loadGraph(k, n);
+      }
+    }
+  }, [loadGraph]);
+
   const handleSearch = () => {
     const name = search.trim();
     if (!name) return;

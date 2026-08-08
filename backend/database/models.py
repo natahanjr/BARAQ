@@ -207,6 +207,10 @@ class NormalizedEvent(Base):
     ml_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     risk_score: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
 
+    verdict: Mapped["Verdict | None"] = relationship(
+        "Verdict", back_populates="event", uselist=False, passive_deletes=True
+    )
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -794,11 +798,19 @@ class Verdict(Base):
     __table_args__ = (UniqueConstraint("event_id", name="uq_verdict_event"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    event_id: Mapped[int] = mapped_column(Integer, index=True)
+    event_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("events.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
     verdict: Mapped[str] = mapped_column(String(32))  # true_positive | false_positive
     note: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    event: Mapped["NormalizedEvent"] = relationship("NormalizedEvent", back_populates="verdict")
+    __table_args__ = (UniqueConstraint("event_id", name="uq_verdict_event"),)
 
     def to_dict(self) -> dict:
         return {

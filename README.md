@@ -57,7 +57,7 @@ SentinelSOC/
 ├── logs/              # Runtime logs
 ├── reports/           # Generated security reports
 ├── scripts/           # Agent, agent.ps1, exe builder, cert generation, Postgres migration, launchers
-├── tests/             # pytest test suite (247 tests)
+├── tests/             # pytest test suite (255 tests)
 ├── tools/             # Realtime validation / SOC integration tooling
 ├── documentation/     # User manual, architecture, test results, evaluation report, combined guide
 ├── requirements.txt
@@ -275,7 +275,7 @@ Alerts fan out via webhook, SMTP email, and Windows toast notifications
 python -m pytest tests -v
 ```
 
-Result: **247 tests passed** (collectors incl. Sysmon/vuln scan, 29 detection rules + hold-out evaluation, pipeline, API + auth/RBAC, hybrid risk scoring, evaluation framework, alert aggregation/escalation/workflow verdicts, ML lifecycle + v2 generalization + async training, assistant RAG, multi-endpoint ingest/fleet + agent commands, data retention, encryption at rest, tamper-evident audit chain, LDAP + OIDC SSO, TOTP MFA, CSRF + request-size guards, parameter tuning).
+Result: **255 tests passed** (collectors incl. Sysmon/vuln scan, 29 detection rules + hold-out evaluation, pipeline, API + auth/RBAC, hybrid risk scoring, evaluation framework, alert aggregation/escalation/workflow verdicts, ML lifecycle + v2 generalization + async training, assistant RAG, multi-endpoint ingest/fleet + agent commands, data retention + schema migrations, entity-graph upsert integrity, encryption at rest, tamper-evident audit chain, LDAP + OIDC SSO, TOTP MFA, CSRF + request-size guards, parameter tuning).
 
 ---
 
