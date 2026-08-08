@@ -343,33 +343,28 @@ function Topbar({ onMenuClick, online, summary, theme, onToggleTheme, user, onLo
 
         <div className="flex items-center gap-3">
           {summary && (
-            <div className="hidden items-center gap-4 rounded-lg border border-white/5 bg-white/[0.03] px-4 py-1.5 md:flex">
-              <div className="text-center">
-                <p className={`text-base font-semibold leading-none ${scoreClass}`}>
-                  {Math.round(score)}
-                </p>
-                <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
-                  Score
-                </p>
-              </div>
-              <div className="h-5 w-px bg-white/10" />
-              <div className="text-center">
-                <p className="text-base font-semibold leading-none text-slate-200">
-                  {(summary.total_events ?? 0).toLocaleString()}
-                </p>
-                <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
-                  Events
-                </p>
-              </div>
-              <div className="h-5 w-px bg-white/10" />
-              <div className="text-center">
-                <p className="text-base font-semibold leading-none text-cyan-400">
-                  {summary.active_alerts ?? 0}
-                </p>
-                <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
-                  Alerts
-                </p>
-              </div>
+            <div className="hidden items-center overflow-hidden rounded-md border border-white/5 bg-white/[0.02] md:flex">
+              {[
+                { label: "Score", value: Math.round(score), cls: scoreClass },
+                {
+                  label: "Events",
+                  value: (summary.total_events ?? 0).toLocaleString(),
+                  cls: "text-slate-200",
+                },
+                { label: "Alerts", value: summary.active_alerts ?? 0, cls: "text-cyan-400" },
+              ].map((s, i) => (
+                <div
+                  key={s.label}
+                  className={`flex items-center gap-1.5 px-3 py-1 ${
+                    i > 0 ? "border-l border-white/5" : ""
+                  }`}
+                >
+                  <span className={`text-xs font-semibold tabular-nums ${s.cls}`}>{s.value}</span>
+                  <span className="text-[9px] font-medium uppercase tracking-wider text-slate-500">
+                    {s.label}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
 
