@@ -36,8 +36,6 @@ const RISK_COLORS = {
   LOW: "#10b981",
 };
 
-const DEPTHS = [1, 2, 3];
-
 //: Keep the DOM light on busy graphs: max rendered edges (the backend already
 //: caps the payload; this is a last-resort guard for very dense views).
 const MAX_RENDER_EDGES = 120;
@@ -204,7 +202,6 @@ export default function EntityGraph() {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
   const [graphKey, setGraphKey] = useState(null);
-  const [depth, setDepth] = useState(1);
   const [search, setSearch] = useState("");
   const [searchKind, setSearchKind] = useState("auto");
   const [loading, setLoading] = useState(true);
@@ -257,14 +254,14 @@ export default function EntityGraph() {
     (kind, name) => {
       setError("");
       return api
-        .entityGraph(kind, name, depth)
+        .entityGraph(kind, name, 1)
         .then((data) => {
           applyGraph(data, keyOf({ kind, name }));
           setGraphKey(`${kind}:${name}`);
         })
         .catch((e) => setError(e.message));
     },
-    [depth, applyGraph],
+    [applyGraph],
   );
 
   const focusAuto = useCallback(
@@ -276,7 +273,7 @@ export default function EntityGraph() {
           return Promise.resolve();
         }
         return api
-          .entityGraph(order[i], name, depth)
+          .entityGraph(order[i], name, 1)
           .then((data) => {
             applyGraph(data, keyOf({ kind: order[i], name }));
             setGraphKey(`${order[i]}:${name}`);
@@ -285,7 +282,7 @@ export default function EntityGraph() {
       };
       return attempt(0);
     },
-    [depth, applyGraph],
+    [applyGraph],
   );
 
   const load = useCallback(() => {
@@ -298,14 +295,14 @@ export default function EntityGraph() {
         if (top) {
           await loadGraph(top.kind, top.name);
         } else {
-          const ov = await api.entityOverview(depth);
+          const ov = await api.entityOverview(1);
           applyGraph(ov, null);
           setGraphKey(null);
         }
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [loadGraph, applyGraph, depth]);
+  }, [loadGraph, applyGraph]);
 
   useEffect(() => {
     load();
@@ -414,7 +411,7 @@ export default function EntityGraph() {
         }
       />
 
-      {/* Kind legend + entity search + depth */}
+      {/* Kind legend + entity search */}
       <Card pad={false} className="p-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -441,23 +438,6 @@ export default function EntityGraph() {
                   {k.kind}
                 </span>{" "}
                 {k.count.toLocaleString()}
-              </button>
-            ))}
-          </div>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <span className="text-[11px] uppercase tracking-wider text-slate-500">Focus depth</span>
-            {DEPTHS.map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => setDepth(d)}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                  depth === d
-                    ? "bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/40"
-                    : "bg-slate-900/40 text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                {d}
               </button>
             ))}
           </div>
@@ -493,7 +473,7 @@ export default function EntityGraph() {
             <button
               type="button"
               onClick={() =>
-                api.entityOverview(depth).then((ov) => {
+                api.entityOverview(1).then((ov) => {
                   applyGraph(ov, null);
                   setGraphKey(null);
                 })
