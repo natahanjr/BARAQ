@@ -134,11 +134,28 @@ export default function System() {
   const [cmdTarget, setCmdTarget] = useState("");
   const [cmdNote, setCmdNote] = useState("");
 
-  const refresh = () => {
-    api.systemStatus().then(setStatus).catch(() => {});
-    api.mlStatus().then(setMl).catch(() => {});
-    api.endpoints().then((r) => setEndpoints(r.items || [])).catch(() => {});
-    api.listCommands(30).then((r) => setCommands(r.items || [])).catch(() => {});
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      const [st, ml, eps, cmds] = await Promise.all([
+        api.systemStatus(),
+        api.mlStatus(),
+        api.endpoints(),
+        api.listCommands(30),
+      ]);
+      setStatus(st);
+      setMl(ml);
+      setEndpoints(eps.items || []);
+      setCommands(cmds.items || []);
+      setLastUpdated(new Date());
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setRefreshing(false);
+    }
   };
   useEffect(() => {
     refresh();
@@ -215,14 +232,22 @@ export default function System() {
         title="System Control"
         subtitle="Manage collection, ML training, and system operations"
         actions={
-          <button
-            type="button"
-            onClick={refresh}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3.5 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700/60"
-          >
-            <RefreshIcon className="h-4 w-4" />
-            Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            {lastUpdated && (
+              <span className="font-mono text-[11px] text-slate-500">
+                Updated {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3.5 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700/60 disabled:opacity-60"
+            >
+              <RefreshIcon className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
         }
       />
 
