@@ -27,6 +27,32 @@ function ActionButton({ busy, kind, onClick, children, variant = "primary" }) {
   );
 }
 
+function formatUptime(totalSeconds) {
+  const d = Math.floor(totalSeconds / 86400);
+  const h = Math.floor((totalSeconds % 86400) / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = Math.floor(totalSeconds % 60);
+  const pad = (n) => String(n).padStart(2, "0");
+  return d > 0
+    ? `${d}d ${pad(h)}h ${pad(m)}m ${pad(s)}s`
+    : `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+function UptimeTimer({ uptimeSeconds }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const startedAt = Date.now() - (uptimeSeconds || 0) * 1000;
+  const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
+  return (
+    <span className="font-mono tabular-nums" title={`${elapsed}s elapsed`}>
+      {formatUptime(elapsed)}
+    </span>
+  );
+}
+
 function ResultBox({ result }) {
   if (!result) return null;
   return (
@@ -205,8 +231,8 @@ export default function System() {
         />
         <StatCard
           label="Uptime"
-          value={`${Math.floor((status.uptime_seconds || 0) / 60)} min`}
-          sub={`${status.uptime_seconds ?? 0}s elapsed`}
+          value={<UptimeTimer uptimeSeconds={status.uptime_seconds || 0} />}
+          sub="live timer · d h m s"
           accent="text-slate-100"
         />
       </div>
