@@ -139,23 +139,19 @@ export default function System() {
 
   const refresh = async () => {
     setRefreshing(true);
-    try {
-      const [st, ml, eps, cmds] = await Promise.all([
-        api.systemStatus(),
-        api.mlStatus(),
-        api.endpoints(),
-        api.listCommands(30),
-      ]);
-      setStatus(st);
-      setMl(ml);
-      setEndpoints(eps.items || []);
-      setCommands(cmds.items || []);
-      setLastUpdated(new Date());
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setRefreshing(false);
-    }
+    const [st, ml, eps, cmds] = await Promise.allSettled([
+      api.systemStatus(),
+      api.mlStatus(),
+      api.endpoints(),
+      api.listCommands(30),
+    ]);
+    setStatus(st.status === "fulfilled" ? st.value : status);
+    setMl(ml.status === "fulfilled" ? ml.value : ml);
+    setEndpoints(eps.status === "fulfilled" ? eps.value.items || [] : endpoints);
+    setCommands(cmds.status === "fulfilled" ? cmds.value.items || [] : commands);
+    if (st.status !== "fulfilled") setError(st.reason.message);
+    setLastUpdated(new Date());
+    setRefreshing(false);
   };
   useEffect(() => {
     refresh();
