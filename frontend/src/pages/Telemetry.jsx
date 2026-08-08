@@ -62,25 +62,115 @@ const STATE_HELP = {
     "Closing — the session ended cleanly and the port is being released; it will disappear in seconds.",
 };
 
+const PORT_PURPOSE = {
+  20: "FTP data transfer",
+  21: "FTP (file transfer)",
+  22: "SSH (secure remote shell)",
+  23: "Telnet (unencrypted remote shell)",
+  25: "SMTP (sending email)",
+  53: "DNS (domain-name lookups)",
+  80: "HTTP (web, unencrypted)",
+  123: "NTP (time synchronisation)",
+  443: "HTTPS (secure web traffic)",
+  445: "SMB / Windows file sharing",
+  1900: "UPnP device discovery",
+  3306: "MySQL database",
+  3389: "RDP (Windows remote desktop)",
+  5353: "mDNS / local device discovery",
+  5432: "PostgreSQL database",
+  8001: "SentinelSOC API",
+};
+
+function portDetail(ip, port) {
+  const purpose = PORT_PURPOSE[port];
+  if (purpose) {
+    return `Port ${port} is the well-known port for ${purpose}, so this specific traffic type is expected here.`;
+  }
+  const host = !ip || ip === "0.0.0.0" || ip === "::" || ip === "*" ? "any interface" : ip;
+  return host === "any interface"
+    ? `Port ${port} is not a standard port, so the meaning is unclear — check which service uses it.`
+    : `Port ${port} is not a standard port — it is either a dynamically assigned (ephemeral) port or a custom service; the address is more meaningful than the port.`;
+}
+
+function meaningOf(ip) {
+  if (!ip) return "another host";
+  const p = ip.split(".").map(Number);
+  if (ip.includes(":")) return ip === "::1" ? "this computer itself (IPv6 loopback)" : "another host (IPv6)";
+  if (p.length === 4 && p.every((n) => Number.isInteger(n))) {
+    if (p[0] === 10 || (p[0] === 172 && p[1] >= 16 && p[1] <= 31) || (p[0] === 192 && p[1] === 168)) {
+      return "another device on your local network (RFC1918 private range)";
+    }
+    if (p[0] === 127) return "this computer itself (loopback)";
+    if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return "the ISP's CGNAT gateway (carrier-grade NAT)";
+    if (p[0] >= 224 && p[0] <= 239) return "a multicast group (broadcast-style traffic)";
+    return "a public server on the internet";
+  }
+  return "another host";
+}
+
 function connectionNote(connection) {
   const proc = connection.process || "This application";
+  const local = `${connection.local_ip}:${connection.local_port}`;
+  const hasRemote = connection.remote_ip && connection.remote_port != null;
+  const remote = hasRemote ? `${connection.remote_ip}:${connection.remote_port}` : null;
+
   if (connection.is_listening) {
-    return `${proc} is open for incoming connections — it listens on port ${connection.local_port} and will accept sessions from other devices (e.g. a web server or agent).`;
+    return [
+      {
+        title: "What is this?",
+        text: `${proc} keeps ${local} open and waits for other devices to connect to it. No connection is active in this row yet.`,
+      },
+      {
+        title: "How it works",
+        text: "A listening address is a door: the moment another device connects there, the OS records a separate ESTABLISHED pair. Web servers, database services, agents and game hosts all show up like this.",
+      },
+      {
+        title: "About the port",
+        text: portDetail(connection.local_ip, connection.local_port),
+      },
+      {
+        title: "When to worry",
+        text: "Listening is normal for software you installed (SentinelSOC API on 8001, web servers, etc.). A program you never installed that keeps an unusual port open can be a sign of malware accepting remote commands.",
+      },
+    ];
   }
-  const remote =
-    connection.remote_ip && connection.remote_port != null
-      ? `${connection.remote_ip}:${connection.remote_port}`
-      : "a remote host";
-  switch (connection.state) {
-    case "ESTABLISHED":
-      return `${proc} currently has an active session with ${remote} — packets are flowing in both directions. This is typical for sync traffic (browsers, API calls, updates), and is only suspicious if the remote address is unknown.`;
-    case "SYN_SENT":
-      return `${proc} is trying to open a session to ${remote} and is waiting for the remote host to respond.`;
-    case "TIME_WAIT":
-      return `${proc} just closed its session with ${remote}; the connection is almost gone and the port will be freed shortly.`;
-    default:
-      return `${proc} is in the '${connection.state}' state with ${remote}.`;
-  }
+
+  const stateText = {
+    ESTABLISHED:
+      "the connection succeeded and traffic flows in both directions — the normal state for a live session",
+    SYN_SENT:
+      "the local side sent a connection request and is still waiting for the remote host to accept it",
+    TIME_WAIT:
+      "the session ended cleanly and the operating system is briefly holding the port before it frees itself",
+  }[connection.state];
+
+  return [
+    {
+      title: "What is this?",
+      text: remote
+        ? `${proc} on this device has an active network session with ${remote}.`
+        : `${proc} currently shows a network session in state '${connection.state}'.`,
+    },
+    {
+      title: "Local side",
+      text: `${local} is this computer's own address and its chosen port. This port is usually assigned randomly by the operating system and carries no special meaning.`,
+    },
+    {
+      title: "Remote side",
+      text: remote
+        ? `${remote} is the other end of the session — ${meaningOf(connection.remote_ip)}. ${portDetail(connection.remote_ip, connection.remote_port)}`
+        : "—",
+    },
+    {
+      title: "State",
+      text: `${connection.state} — ${stateText}.`,
+    },
+    {
+      title: "Is this normal?",
+      text:
+        "For a browser this is routine traffic (HTTPS, fetch, updates) and is not a problem by itself. Pay attention when a process opens sessions you do not understand, the remote address is unknown/unexpected, or an unusual port appears repeatedly.",
+    },
+  ];
 }
 
 function NetworkRow({ connection }) {
@@ -95,7 +185,24 @@ function NetworkRow({ connection }) {
   const color = stateColor[connection.state] || "bg-slate-500/15 text-slate-400";
 
   return (
-    <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-colors hover:border-slate-600/60">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => setShowNote((s) => !s)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setShowNote((s) => !s);
+        }
+      }}
+      aria-expanded={showNote}
+      title="Tap for a detailed explanation"
+      className={`cursor-pointer rounded-xl border p-4 transition-all select-none ${
+        showNote
+          ? "border-cyan-500/40 bg-cyan-500/[0.06]"
+          : "border-slate-700/50 bg-slate-800/30 hover:border-cyan-500/30 active:scale-[0.995]"
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -105,6 +212,11 @@ function NetworkRow({ connection }) {
             {connection.is_listening && (
               <span className="rounded bg-blue-500/15 px-2 py-0.5 text-[10px] font-semibold text-blue-400">
                 LISTENING
+              </span>
+            )}
+            {!showNote && (
+              <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Tap for details
               </span>
             )}
           </div>
@@ -133,32 +245,24 @@ function NetworkRow({ connection }) {
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <span
-            className={`rounded px-2 py-1 font-mono text-[10px] font-semibold ${color}`}
-            title={STATE_HELP[connection.state]}
-          >
-            {connection.state}
-          </span>
-          <button
-            type="button"
-            onClick={() => setShowNote((s) => !s)}
-            aria-expanded={showNote}
-            title="What does this mean?"
-            className={`rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors ${
-              showNote
-                ? "border-cyan-500/40 bg-cyan-500/15 text-cyan-300"
-                : "border-slate-600/60 bg-slate-700/40 text-slate-300 hover:border-cyan-500/40 hover:text-cyan-300"
-            }`}
-          >
-            {showNote ? "Hide ×" : "Explain ?"}
-          </button>
-        </div>
+        <span
+          className={`shrink-0 rounded px-2 py-1 font-mono text-[10px] font-semibold ${color}`}
+          title={STATE_HELP[connection.state]}
+        >
+          {connection.state}
+        </span>
       </div>
       {showNote && (
-        <p className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-[11px] leading-relaxed text-cyan-100/90">
-          {connectionNote(connection)}
-        </p>
+        <div className="mt-3 space-y-2 rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2.5 text-[11px] leading-relaxed">
+          {connectionNote(connection).map(({ title, text }) => (
+            <p key={title}>
+              <span className="font-semibold uppercase tracking-wider text-cyan-300">
+                {title} —
+              </span>{" "}
+              <span className="text-cyan-50/90">{text}</span>
+            </p>
+          ))}
+        </div>
       )}
     </div>
   );
