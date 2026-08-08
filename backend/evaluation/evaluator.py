@@ -1,38 +1,36 @@
-"""Evaluation Framework (live-only mode).
+"""Evaluation Framework (isolated scenario mode).
 
-SentinelSOC is a pure-live analyzer: there is no attack simulator, so the
-framework no longer fabricates scenarios. Instead it measures the live
-detection pipeline over the real events already collected in the database:
+Runs the 5 attack scenarios plus a benign baseline through the full
+detection pipeline (rules engine + alerting) inside a throwaway temp
+database. The production DB is never touched by detection - only the
+resulting ``EvaluationRun`` metric rows are persisted as history.
 
-- how many rules evaluated and which of them fired (rule coverage),
-- how many findings and alerts the pipeline produced,
-- the hybrid detection-method breakdown,
-- ML model readiness.
+Per scenario the raw fixture records are persisted to the temp DB, the
+rules engine + alerting run over them, and a confusion matrix is built:
 
-This gives an operational accuracy/coverage picture of the live analyzer
-without injecting any simulated data.
+- TP: scenario events linked to an alert, or the scenario's expected
+  rule fired (aggregate/connection-level scenarios).
+- FN: scenario positives minus TP.
+- FP/TN: baseline records linked to alerts / clean baseline records.
 """
 from __future__ import annotations
 
 import logging
-import time
-from datetime import datetime, timedelta, timezone
-
-from sqlalchemy import func, select
-
-from backend.database.models import Alert, EvaluationRun, NormalizedEvent
 
 logger = logging.getLogger("sentinel.evaluation")
 
-SCENARIOS: list[str] = []  # no fabricated scenarios in live-only mode
+#: The five attack scenarios and the rule expected to catch each one.
+SCENARIO_RULE = {
+    "brute_force": "brute_force",
+    "powershell": "suspicious_powershell",
+    "privilege_escalation": "privilege_escalation",
+    "persistence": "persistence",
+    "port_scan": "network_recon",
+}
 
 
 def _metrics(tp: int, fp: int, tn: int, fn: int) -> dict:
-    """Standard confusion-matrix metrics with zero-division guards.
-
-    Kept as a reusable helper; in live-only mode TP = live findings,
-    FP = 0 and TN = evaluated events minus findings (a coverage proxy).
-    """
+    """Standard confusion-matrix metrics with zero-division guards."""
     total = tp + fp + tn + fn
     accuracy = (tp + tn) / total if total else 1.0
     precision = tp / (tp + fp) if (tp + fp) else 1.0
@@ -53,97 +51,157 @@ def _metrics(tp: int, fp: int, tn: int, fn: int) -> dict:
     }
 
 
-def _run_live_assessment(db, hours: int = 24) -> tuple[list[EvaluationRun], EvaluationRun, dict]:
-    from backend.detection.alerting import AlertingService
-    from backend.detection.rules_engine import RulesEngine
+def run_evaluation(db, with_ml: bool = True) -> dict:
+    """Run the 5 scenarios + baseline in an isolated temp DB.
 
-    since = datetime.now(timezone.utc) - timedelta(hours=hours)
-    total_events = db.scalar(
-        select(func.count(NormalizedEvent.id)).where(NormalizedEvent.timestamp >= since)
-    ) or 0
+    Returns the per-scenario + overall metrics and persists only the
+    ``EvaluationRun`` history rows into the production DB.
+    """
+    from tests import fixtures
 
-    start = time.perf_counter()
-    engine = RulesEngine(db)
-    findings = engine.run(window_minutes=10)
-    created = AlertingService(db).handle_findings(findings)
-    db.commit()
-    elapsed = (time.perf_counter() - start) * 1000.0
+    from backend.database.models import EvaluationRun
+    from backend.evaluation.holdout import (
+        _cleanup,
+        _empty_session,
+        _persist,
+        _run_test_detection,
+    )
 
-    # Per-rule coverage from live findings.
-    per_rule: dict[str, int] = {}
-    for f in findings:
-        per_rule[f.rule] = per_rule.get(f.rule, 0) + 1
+    test_db, engine, path = _empty_session()
+    try:
+        # ---- Negative class: benign baseline ------------------------------
+        baseline_records = fixtures.benign_baseline(60)
+        baseline_events, _baseline_conns, n_baseline = _persist(test_db, baseline_records)
 
-    open_alerts = db.scalar(
-        select(func.count(Alert.id)).where(Alert.status == "open")
-    ) or 0
+        # ---- Positive class: five attack scenarios ------------------------
+        per_scenario: dict[str, dict] = {}
+        all_events: list[int] = []
+        n_positives = 0
+        for scenario, rule in SCENARIO_RULE.items():
+            records = {
+                "brute_force": fixtures.brute_force,
+                "powershell": fixtures.suspicious_powershell,
+                "privilege_escalation": fixtures.privilege_escalation,
+                "persistence": fixtures.persistence,
+                "port_scan": fixtures.port_scan,
+            }[scenario]()
+            event_ids, conn_ids, total = _persist(test_db, records)
+            conn_ips = sorted({
+                r["remote_ip"] for r in records
+                if r.get("source") == "network" and r.get("remote_ip")
+            })
+            per_scenario[scenario] = {
+                "rule": rule,
+                "event_ids": event_ids,
+                "conn_ids": conn_ids,
+                "conn_ips": conn_ips,
+                "n_positives": total,
+            }
+            all_events += event_ids
+            n_positives += total
 
-    runs: list[EvaluationRun] = []
-    for rule, count in sorted(per_rule.items()):
-        metrics = _metrics(tp=count, fp=0, tn=max(0, total_events - count), fn=0)
-        run = EvaluationRun(
-            scenario=rule,
-            total_samples=total_events,
-            attack_samples=count,
-            baseline_samples=0,
-            true_positives=metrics["true_positives"],
-            false_positives=0,
-            true_negatives=metrics["true_negatives"],
+        detection = _run_test_detection(test_db)
+        fired = detection["fired_rules"]
+        linked = detection["linked_event_ids"]
+        elapsed = detection["elapsed_ms"]
+
+        # ---- Per-scenario + overall confusion matrices --------------------
+        runs: list[EvaluationRun] = []
+        fp_total = len([e for e in baseline_events if e in linked])
+        tp_total = 0
+        for scenario, info in per_scenario.items():
+            rule = info["rule"]
+            rule_fired = rule in fired
+            if scenario == "port_scan":
+                tp = info["n_positives"] if rule_fired else 0
+            else:
+                linked_tp = len([e for e in info["event_ids"] if e in linked])
+                tp = linked_tp if linked_tp else (info["n_positives"] if rule_fired else 0)
+            fn = max(0, info["n_positives"] - tp)
+            tn = max(0, n_baseline - fp_total)
+            metrics = _metrics(tp, fp_total, tn, fn)
+            tp_total += tp
+            runs.append(EvaluationRun(
+                scenario=scenario,
+                total_samples=metrics["total_samples"],
+                attack_samples=info["n_positives"],
+                baseline_samples=n_baseline,
+                true_positives=metrics["true_positives"],
+                false_positives=metrics["false_positives"],
+                true_negatives=metrics["true_negatives"],
+                false_negatives=metrics["false_negatives"],
+                accuracy=metrics["accuracy"],
+                precision=metrics["precision"],
+                recall=metrics["recall"],
+                f1_score=metrics["f1_score"],
+                false_positive_rate=metrics["false_positive_rate"],
+                detection_time_ms=elapsed,
+            ))
+
+        # Baseline row: TN = clean baseline, FP = baseline events linked.
+        baseline_metrics = _metrics(0, fp_total, max(0, n_baseline - fp_total), 0)
+        runs.append(EvaluationRun(
+            scenario="baseline",
+            total_samples=baseline_metrics["total_samples"],
+            attack_samples=0,
+            baseline_samples=n_baseline,
+            true_positives=0,
+            false_positives=baseline_metrics["false_positives"],
+            true_negatives=baseline_metrics["true_negatives"],
             false_negatives=0,
-            accuracy=metrics["accuracy"],
-            precision=metrics["precision"],
-            recall=metrics["recall"],
-            f1_score=metrics["f1_score"],
-            false_positive_rate=0.0,
+            accuracy=baseline_metrics["accuracy"],
+            precision=baseline_metrics["precision"],
+            recall=baseline_metrics["recall"],
+            f1_score=baseline_metrics["f1_score"],
+            false_positive_rate=baseline_metrics["false_positive_rate"],
+            detection_time_ms=elapsed,
+        ))
+
+        overall_metrics = _metrics(tp_total, fp_total, max(0, n_baseline - fp_total), n_positives - tp_total)
+        overall = EvaluationRun(
+            scenario="overall",
+            total_samples=overall_metrics["total_samples"],
+            attack_samples=n_positives,
+            baseline_samples=n_baseline,
+            true_positives=overall_metrics["true_positives"],
+            false_positives=overall_metrics["false_positives"],
+            true_negatives=overall_metrics["true_negatives"],
+            false_negatives=overall_metrics["false_negatives"],
+            accuracy=overall_metrics["accuracy"],
+            precision=overall_metrics["precision"],
+            recall=overall_metrics["recall"],
+            f1_score=overall_metrics["f1_score"],
+            false_positive_rate=overall_metrics["false_positive_rate"],
             detection_time_ms=elapsed,
         )
-        runs.append(run)
 
-    total_findings = len(findings)
-    metrics = _metrics(tp=total_findings, fp=0, tn=max(0, total_events - total_findings), fn=0)
-    overall = EvaluationRun(
-        scenario="overall",
-        total_samples=total_events,
-        attack_samples=total_findings,
-        baseline_samples=0,
-        true_positives=metrics["true_positives"],
-        false_positives=0,
-        true_negatives=metrics["true_negatives"],
-        false_negatives=0,
-        accuracy=metrics["accuracy"],
-        precision=metrics["precision"],
-        recall=metrics["recall"],
-        f1_score=metrics["f1_score"],
-        false_positive_rate=0.0,
-        detection_time_ms=elapsed,
-    )
+        # ---- Persist ONLY the metric history (never the alerts) -----------
+        db.add(overall)
+        for run in runs:
+            db.add(run)
+        db.commit()
 
-    info = {
-        "events_analyzed": total_events,
-        "findings": total_findings,
-        "rules_fired": len(per_rule),
-        "open_alerts": open_alerts,
-        "detection_time_ms": round(elapsed, 2),
-    }
-    return runs, overall, info
+        info = {
+            "events_analyzed": n_positives + n_baseline,
+            "findings": len(detection["findings"]),
+            "rules_fired": len(fired),
+            "open_alerts": 0,
+            "detection_time_ms": round(elapsed, 2),
+        }
+        logger.info(
+            "Scenario evaluation: %d positives, %d baseline, %d rules fired",
+            n_positives, n_baseline, len(fired),
+        )
 
+        result = {
+            "runs": [r.to_dict() for r in runs],
+            "overall": overall.to_dict(),
+            "info": info,
+        }
+        if with_ml:
+            from backend.ml.anomaly import MLAnomalyDetector
 
-def run_evaluation(db, with_ml: bool = True) -> dict:
-    """Assess the live detection pipeline over real collected events."""
-    from backend.ml.anomaly import MLAnomalyDetector
-
-    runs, overall, info = _run_live_assessment(db)
-    db.add(overall)
-    for run in runs:
-        db.add(run)
-    db.commit()
-
-    result = {"runs": [r.to_dict() for r in runs], "overall": overall.to_dict(), "info": info}
-    if with_ml:
-        detector = MLAnomalyDetector()
-        result["ml"] = detector.status()
-    logger.info(
-        "Live evaluation: %d events, %d findings, %d rules fired",
-        info["events_analyzed"], info["findings"], info["rules_fired"],
-    )
-    return result
+            result["ml"] = MLAnomalyDetector().status()
+        return result
+    finally:
+        _cleanup(test_db, engine, path)
