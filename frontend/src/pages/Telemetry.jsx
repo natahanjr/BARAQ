@@ -59,11 +59,6 @@ function ProcessRow({ process }) {
                 NEW
               </span>
             )}
-            {!showNote && (
-              <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                Tap for details
-              </span>
-            )}
           </div>
           <p className="mt-2 text-sm font-semibold text-white">{process.name}</p>
           <p className="mt-0.5 line-clamp-2 font-mono text-xs text-slate-400">
@@ -270,11 +265,6 @@ function NetworkRow({ connection }) {
             {connection.is_listening && (
               <span className="rounded bg-blue-500/15 px-2 py-0.5 text-[10px] font-semibold text-blue-400">
                 LISTENING
-              </span>
-            )}
-            {!showNote && (
-              <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                Tap for details
               </span>
             )}
           </div>
