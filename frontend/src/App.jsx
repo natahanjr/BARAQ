@@ -41,7 +41,7 @@ import {
 } from "./components/icons.jsx";
 
 const NAV = [
-  { to: "/command-center", label: "Command Center", icon: CommandIcon },
+  { to: "/command-center", label: "Command Center", icon: CommandIcon, adminOnly: true },
   { to: "/", label: "Dashboard", icon: DashboardIcon, end: true },
   { to: "/alerts", label: "Alerts", icon: AlertsIcon },
   { to: "/investigation", label: "Investigation", icon: InvestigationIcon },
@@ -508,7 +508,7 @@ export default function App() {
           >
             <Routes>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/command-center" element={<CommandCenter />} />
+              <Route path="/command-center" element={<AdminGate user={user}><CommandCenter /></AdminGate>} />
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/alerts/:id" element={<AlertDetail />} />
               <Route path="/investigation" element={<Investigation />} />
