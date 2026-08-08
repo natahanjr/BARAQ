@@ -4,7 +4,6 @@ import Card from "../components/Card.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import StatCard from "../components/StatCard.jsx";
 import { Loading, ErrorBanner } from "../components/Feedback.jsx";
-import { RefreshIcon } from "../components/icons.jsx";
 
 const ACTION_STYLES = {
   primary: "bg-gradient-to-r from-cyan-600 to-cyan-500 text-white hover:from-cyan-500 hover:to-cyan-400",
@@ -134,11 +133,9 @@ export default function System() {
   const [cmdTarget, setCmdTarget] = useState("");
   const [cmdNote, setCmdNote] = useState("");
 
-  const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
 
   const refresh = async () => {
-    setRefreshing(true);
     const [st, ml, eps, cmds] = await Promise.allSettled([
       api.systemStatus(),
       api.mlStatus(),
@@ -151,7 +148,6 @@ export default function System() {
     setCommands(cmds.status === "fulfilled" ? cmds.value.items || [] : commands);
     if (st.status !== "fulfilled") setError(st.reason.message);
     setLastUpdated(new Date());
-    setRefreshing(false);
   };
   useEffect(() => {
     refresh();
@@ -228,22 +224,11 @@ export default function System() {
         title="System Control"
         subtitle="Manage collection, ML training, and system operations"
         actions={
-          <div className="flex items-center gap-3">
-            {lastUpdated && (
-              <span className="font-mono text-[11px] text-slate-500">
-                Updated {lastUpdated.toLocaleTimeString()}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={refresh}
-              disabled={refreshing}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3.5 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700/60 disabled:opacity-60"
-            >
-              <RefreshIcon className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              {refreshing ? "Refreshing…" : "Refresh"}
-            </button>
-          </div>
+          lastUpdated && (
+            <span className="font-mono text-[11px] text-slate-500">
+              Updated {lastUpdated.toLocaleTimeString()}
+            </span>
+          )
         }
       />
 
