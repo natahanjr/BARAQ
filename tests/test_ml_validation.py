@@ -34,6 +34,33 @@ def ml_session():
     session.close()
 
 
+@pytest.fixture
+def frozen_ml_clock(monkeypatch):
+    """Pin the wall clock seen by ``backend.ml.anomaly`` to a fixed instant.
+
+    The ML feature space includes absolute ``hour_of_day`` / ``is_night``,
+    so any test whose fixtures are anchored to ``datetime.now`` silently
+    re-trains the IsolationForest on a different distribution depending on
+    the UTC hour the suite runs at — flipping the anomaly/drift assertions
+    without any code change (the two known clock-flaky tests). Replacing
+    ``backend.ml.anomaly.datetime`` with a frozen subclass makes the training
+    window, model boundary and drift accounting fully reproducible.
+    """
+    from datetime import datetime, timezone
+
+    reference = datetime(2026, 6, 15, 10, 0, 0, tzinfo=timezone.utc)
+
+    class _FrozenClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return reference.replace(tzinfo=None)
+            return reference.astimezone(tz)
+
+    monkeypatch.setattr("backend.ml.anomaly.datetime", _FrozenClock)
+    return reference
+
+
 class TestMLAnomalyDetector:
     """Test suite for ML anomaly detection."""
 
@@ -165,17 +192,20 @@ class TestDetectionMethodComparison:
         assert 0 <= rule_score <= 100
         assert rule_score > 40  # High severity should produce significant score
 
-    def test_ml_only_detection_sensitivity(self, ml_session):
+    def test_ml_only_detection_sensitivity(self, ml_session, frozen_ml_clock):
         """Test ML-only detection on attack vs baseline."""
         from datetime import datetime, timezone
 
         # Model features include time-of-day; training on "now"-stamped
-        # fixtures all within the same minute makes this test depend on the
-        # clock (hour/NIGHT boundaries collapse the hour feature to a constant
-        # and IsolationForest sees no variance -> zero anomalies). Anchor the
-        # timeline to "now" (so train(hours=24) always covers it) but spread
-        # records across a full day so hour/night features vary reproducibly.
-        NOW = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        # fixtures makes this test depend on the wall clock (the absolute
+        # hour/NIGHT features rotate with the UTC hour the suite runs at and
+        # the IsolationForest boundary — and the anomaly count — flips with
+        # it). ``frozen_ml_clock`` pins the ML module to a fixed reference
+        # instant, so the training distribution and every assertion below
+        # are reproducible on any host at any time of day. Anchor the
+        # timeline to that frozen now (so train(hours=24) always covers it)
+        # and spread records across a full day so hour/night features vary.
+        NOW = frozen_ml_clock.replace(minute=0, second=0, microsecond=0)
         DAY_START = NOW - timedelta(hours=24)
 
         def _spread(records, start_hours, step_minutes):
@@ -445,10 +475,10 @@ class TestMLv3BehavioralLayers:
                 flagged += 1
         assert flagged >= 2, f"ML caught only {flagged}/5 hold-out process attacks"
 
-    def test_drift_guard_triggers_on_attack_shift(self, ml_session):
+    def test_drift_guard_triggers_on_attack_shift(self, ml_session, frozen_ml_clock):
         """Sustained high-scoring behavior after training trips the drift
         guard so a retrain is scheduled."""
-        NOW = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        NOW = frozen_ml_clock.replace(minute=0, second=0, microsecond=0)
         DAY_START = NOW - timedelta(hours=24)
 
         baseline = benign_baseline(60)

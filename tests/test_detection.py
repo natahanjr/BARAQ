@@ -80,6 +80,47 @@ def test_brute_force_detection(db):
     assert len(findings[0].event_ids) == 12
 
 
+def test_brute_force_distributed_spray(db):
+    from backend.detection.rules.brute_force import BruteForceRule
+
+    records = [
+        logon_failure(user="victim", source_ip=f"203.0.113.{i}")
+        for i in range(1, 8)
+    ]
+    add_normalized(db, records)
+    findings = BruteForceRule(db, threshold=5).evaluate(10)
+    assert len(findings) == 1
+    assert findings[0].severity == "high"
+    assert "distinct source IPs" in findings[0].evidence
+    assert len(findings[0].event_ids) == 7
+
+
+def test_brute_force_moderate_spread(db):
+    from backend.detection.rules.brute_force import BruteForceRule
+
+    records = [
+        logon_failure(user="victim", source_ip=f"192.168.1.{1 + i % 3}")
+        for i in range(12)
+    ]
+    add_normalized(db, records)
+    findings = BruteForceRule(db, threshold=5).evaluate(10)
+    assert len(findings) == 1
+    assert findings[0].severity == "medium"
+    assert "possible distributed brute force" in findings[0].evidence
+
+
+def test_brute_force_no_spray_on_low_volume_spread(db):
+    """9 failures across 3 IPs stay below threshold*2: no finding."""
+    from backend.detection.rules.brute_force import BruteForceRule
+
+    records = [
+        logon_failure(user="victim", source_ip=f"192.168.1.{1 + i % 3}")
+        for i in range(9)
+    ]
+    add_normalized(db, records)
+    assert BruteForceRule(db, threshold=5).evaluate(10) == []
+
+
 def test_powershell_detection(db):
     from backend.detection.rules.powershell import SuspiciousPowerShellRule
 

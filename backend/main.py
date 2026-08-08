@@ -36,7 +36,9 @@ from backend.config import (
     API_KEYS,
     AUTH_ENABLED,
     CORS_ORIGINS,
+    IS_PRODUCTION,
     REPORT_DIR,
+    SENTINEL_ENV,
 )
 from backend.database.connection import SessionLocal, init_db
 from backend.logging_config import setup_logging
@@ -164,7 +166,11 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     from backend.streaming import start as start_streaming
 
     start_streaming()
-    logger.info("SentinelSOC API is ready")
+    logger.info(
+        "SentinelSOC API is ready (profile=%s%s)",
+        SENTINEL_ENV,
+        ", production gate active" if IS_PRODUCTION else "",
+    )
     yield
     _scheduler_stop.set()
     if _scheduler_thread:
@@ -180,6 +186,11 @@ app = FastAPI(
     ),
     version="1.0.0",
     lifespan=lifespan,
+    # Production profile hides the interactive API surface (schema leaks
+    # endpoints/fields and invites attack-surface probing).
+    docs_url=None if IS_PRODUCTION else "/docs",
+    redoc_url=None if IS_PRODUCTION else "/redoc",
+    openapi_url=None if IS_PRODUCTION else "/openapi.json",
 )
 
 app.add_middleware(
@@ -402,6 +413,13 @@ class _SPAMount(StaticFiles):
             response = await super().get_response(path, scope)
         except HTTPException as exc:
             if exc.status_code == 404:
+                # Production profile: the interactive API surface is disabled
+                # at construction; don't let the SPA fallback present those
+                # known paths as valid routes (masked 200s are probe bait).
+                if IS_PRODUCTION and path.lstrip("/").lower() in (
+                    "docs", "redoc", "openapi.json",
+                ):
+                    raise
                 index = FRONTEND_DIST / "index.html"
                 if index.is_file():
                     return self._apply_cache(

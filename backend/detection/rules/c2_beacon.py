@@ -61,6 +61,18 @@ class C2BeaconRule(BaseRule):
         "intervals or data stores on the host."
     )
 
+    def __init__(
+        self,
+        session,
+        bytes_threshold: int = BEACON_BYTES_THRESHOLD,
+        min_connections: int = BEACON_MIN_CONNECTIONS,
+        min_duration_seconds: float = BEACON_MIN_DURATION_SECONDS,
+    ):
+        super().__init__(session)
+        self.bytes_threshold = bytes_threshold
+        self.min_connections = min_connections
+        self.min_duration_seconds = min_duration_seconds
+
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
@@ -84,16 +96,16 @@ class C2BeaconRule(BaseRule):
 
         for (process, remote), stats in buckets.items():
             total = stats["sent"] + stats["recv"]
-            if total < BEACON_BYTES_THRESHOLD:
+            if total < self.bytes_threshold:
                 continue
-            if stats["count"] < BEACON_MIN_CONNECTIONS:
+            if stats["count"] < self.min_connections:
                 continue
-            if stats["max_duration"] < BEACON_MIN_DURATION_SECONDS:
+            if stats["max_duration"] < self.min_duration_seconds:
                 continue
 
             confidence = min(
                 0.95,
-                self.confidence + 0.05 * (stats["count"] >= BEACON_MIN_CONNECTIONS * 2),
+                self.confidence + 0.05 * (stats["count"] >= self.min_connections * 2),
             )
             findings.append(
                 self._result(

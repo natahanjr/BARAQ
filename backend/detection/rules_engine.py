@@ -79,7 +79,7 @@ def build_rules(session: Session, overrides: dict | None = None) -> list[BaseRul
         LolBinExecutionRule(session),
         ExfiltrationVolumeRule(session),
         LogClearingRule(session),
-        C2BeaconRule(session),
+        build(C2BeaconRule, "c2_beacon", session),
         RansomwareImpactRule(session),
         InhibitRecoveryRule(session),
         CredentialStoreTheftRule(session),

@@ -36,6 +36,7 @@ class DataStagingRule(BaseRule):
         self,
         session,
         archive_tools: list[str] | None = None,
+        min_archive_events: int = 1,
         temp_dir_access_threshold: int = 200,  # raised; count alone is low-signal
         window_minutes: int = 10,
     ):
@@ -44,6 +45,7 @@ class DataStagingRule(BaseRule):
         self.archive_tools = archive_tools or [
             "7z.exe", "7za.exe", "rar.exe", "winrar.exe", "zip.exe"
         ]
+        self.min_archive_events = min_archive_events
         self.temp_dir_access_threshold = temp_dir_access_threshold
         self.window_minutes = window_minutes
 
@@ -103,7 +105,7 @@ class DataStagingRule(BaseRule):
 
         # Create findings for users with archive activity
         for user, events in events_by_user.items():
-            if len(events) > 0:
+            if len(events) >= self.min_archive_events:
                 evidence = (
                     f"User '{user}' executed archive tool "
                     f"({len(events)} times) targeting common data locations. "

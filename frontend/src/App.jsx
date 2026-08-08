@@ -298,7 +298,7 @@ function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected }) {
               className={`ml-auto rounded-full px-1.5 py-0.5 text-[9px] ${
                 online ? "bg-cyan-500/15 text-cyan-400" : "bg-slate-700 text-slate-500"
               }`}
-              title={realtimeConnected ? "Live push connected" : "Live push unavailable (polling)"}
+              title={realtimeConnected ? "Live push connected - realtime stream" : "Live push on 15s polling (auto-detects realtime)"}
             >
               {realtimeConnected ? "LIVE" : "15s poll"}
             </span>

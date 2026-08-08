@@ -146,8 +146,8 @@ deterministically across repeated runs.
 - May have false positives on legitimate security tools (Nessus, antivirus scans)
 
 **Mitigation:**
-- Conduct red team exercises with real attack traffic
-- Test against public datasets (ATT&CK evaluation, DARPA TC)
+- Conduct red team exercises with real attack traffic — **DONE (2026-08):** 13-scenario live-dashboard guide (`documentation/red_team_validation.md`) + repeatable pipeline replay (`scripts/redteam_validate.py`); 13/13 detected in isolated and kill-chain modes
+- Test against public datasets (ATT&CK evaluation, DARPA TC) — still outstanding
 - Implement feedback loop: analyst labels new events; retrains ML models
 
 ---
@@ -327,14 +327,36 @@ constructor overrides via `build_rules(session, overrides=...)` and sweeps
   harness is reusable against a deployment's own historical data.
 
 The v2 grid confirmed the current defaults (5 / 20 ports / 120 s / 2.0) as
-best overall (F1 0.95 across 3 randomized variants, 0 FP on the benign
-corpus) **and uncovered a real robustness gap**: the brute-force rule groups
-failures by `(user, source_ip)`, so a distributed password spray from many
-source addresses never crosses the threshold in any randomized variant
-(`brute_force` 3/3 missed) — a distributed-spray detection improvement is
-tracked. **Outstanding:** fix the brute-force grouping, extend the grid to
-data staging / lateral movement / exfiltration-volume / C2 rules, and adopt
-Bayesian optimization for the parameter sweep.
+best overall (F1 up to 1.00 across 3 randomized variants, 0 FP on the benign
+corpus). The distributed-spray gap it surfaced is **RESOLVED (2026-08)**:
+`BruteForceRule._distributed_spray` now groups failures by account and fires
+when failures are spread across `spray_distinct_ips` (7) distinct sources,
+plus a moderate-spread tier (`min_spread_ips` 3, requires `threshold * 2`
+attempts) so multi-IP brute force no longer hides below the per-source
+threshold. All 13 scenarios now fire in every randomized variant at the
+defaults. **Methodology v3 (2026-08):** the sweep is now anchored in time
+(each combo scores a corpus re-stamped to "now", so long grid runs no
+longer age fixtures out of the rule windows) and `PER_RULE_GRID` sweeps
+data staging / lateral movement / exfiltration volume / C2 independently
+without the joint-grid combinatorial explosion; every scenario maintains
+F1 1.00 on the defaults. **Methodology v4 (2026-08), RESOLVED:** the joint
+sweep now supports Bayesian optimization — `--bayesian N` runs a Gaussian
+process expected-improvement search over the same lattice (corners +
+seeded initialization, GP EI for subsequent points, deterministic per seed).
+On the 81-combination joint grid an F1 1.00 recommendation is recovered in
+N=20 evaluations (25% of the exhaustive lattice), so deployments on large
+grids no longer need the full product sweep; the exhaustive grid remains
+available via the default path.
+
+**Real-world red-team validation assets (2026-08):** `scripts/redteam_validate.py`
+replays all 13 scenarios through the production pipeline (`run_pipeline`:
+normalize → persist → rules engine → alerting) in isolated temp DBs — the
+same entry point the agents use — with honest per-scenario verdicts, MITRE
+mappings, detection latency and exit codes. Manual-dashboard commands
+(including lateral movement, exfiltration, C2 beacon, log clearing and
+LOLBin abuse) are documented in `documentation/red_team_validation.md`
+(v1.1). Replay results: 13/13 detected in both isolated and kill-chain
+timeline modes (2026-08-08).
 
 ---
 
@@ -545,8 +567,8 @@ corpus"). Covered by `tests/test_holdout.py`.
 - Different user populations (accountants vs developers)?
 
 **Mitigation:**
-- Evaluate on public datasets: DARPA TC, ATT&CK Evaluations, Cyber DEfense eXercises (CDX)
-- Conduct red team assessment with real attack traffic
+- Evaluate on public datasets: DARPA TC, ATT&CK Evaluations, Cyber DEfense eXercises (CDX) — still outstanding
+- Conduct red team assessment with real attack traffic — **DONE (2026-08)**: guide + `scripts/redteam_validate.py`, 13/13 detected
 - Test on 5+ different organizational environments
 
 ---
@@ -558,8 +580,8 @@ corpus"). Covered by `tests/test_holdout.py`.
 1. **Multi-endpoint collection:** Extend from single machine to LAN/enterprise — **OPEN**
 2. **Persistent storage:** PostgreSQL engine + migration script — **DONE (2026-08)**
 3. **RBAC & authentication:** users, API keys, TOTP MFA, LDAP/OIDC SSO, audit chain — **DONE (2026-08)**
-4. **Real-world validation:** Red team exercises, real attack dataset evaluation — **OPEN**
-5. **Automated parameter tuning:** Auto-optimize rule thresholds — **PARTIAL** (grid-search harness `scripts/tune_parameters.py` added 2026-08; run on real data required)
+4. **Real-world validation:** Red team exercises, real attack dataset evaluation — **PARTIAL (2026-08)**: live guide + automated pipeline replay added (`scripts/redteam_validate.py`, 13/13 detected); public-dataset evaluation still OPEN
+5. **Automated parameter tuning:** Auto-optimize rule thresholds — **PARTIAL** (grid-search harness + Bayesian optimization `--bayesian` in `scripts/tune_parameters.py` added 2026-08; run on real data required)
 6. **Alert deduplication + throttling + workflow:** rule-level dedup, rate limiting, full Open→…→Closed state machine — **DONE (2026-08)**
 
 ### 8.2 High-Priority Enhancements

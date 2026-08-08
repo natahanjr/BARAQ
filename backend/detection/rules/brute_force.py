@@ -28,11 +28,13 @@ class BruteForceRule(BaseRule):
         "enable multi-factor authentication and reset the targeted account's password."
     )
 
-    def __init__(self, session, threshold: int = 5, window_minutes: int = 10, spray_distinct_ips: int = 7):
+    def __init__(self, session, threshold: int = 5, window_minutes: int = 10,
+                 spray_distinct_ips: int = 7, min_spread_ips: int = 3):
         super().__init__(session)
         self.threshold = threshold
         self.window_minutes = window_minutes
         self.spray_distinct_ips = spray_distinct_ips
+        self.min_spread_ips = min_spread_ips
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
@@ -119,10 +121,12 @@ class BruteForceRule(BaseRule):
         for row in self.session.execute(stmt).all():
             attempts = int(row.attempts)
             distinct_ips = int(row.distinct_ips)
-            if distinct_ips < self.spray_distinct_ips:
+            if distinct_ips >= self.spray_distinct_ips:
+                tier = "spray"
+            elif distinct_ips >= self.min_spread_ips and attempts >= self.threshold * 2:
+                tier = "spread"
+            else:
                 continue
-            # Skip cases already flagged by the single-source branch: the
-            # spray signal is meaningful only when failures are distributed.
             ev_ids = list(
                 self.session.scalars(
                     select(NormalizedEvent.id)
@@ -133,18 +137,34 @@ class BruteForceRule(BaseRule):
                     )
                 )
             )
-            evidence = (
-                f"{attempts} failed logons for account '{row.user}' across "
-                f"{distinct_ips} distinct source IPs between "
-                f"{row.first_ts.isoformat()} and {row.last_ts.isoformat()} "
-                f"({window_minutes} minute window) — distributed password spray."
-            )
-            findings.append(
-                self._result(
-                    evidence=evidence,
-                    event_ids=ev_ids,
-                    severity=self.severity,
-                    confidence=min(0.95, 0.75 + attempts * 0.01),
+            if tier == "spray":
+                evidence = (
+                    f"{attempts} failed logons for account '{row.user}' across "
+                    f"{distinct_ips} distinct source IPs between "
+                    f"{row.first_ts.isoformat()} and {row.last_ts.isoformat()} "
+                    f"({window_minutes} minute window) — distributed password spray."
                 )
-            )
+                findings.append(
+                    self._result(
+                        evidence=evidence,
+                        event_ids=ev_ids,
+                        severity=self.severity,
+                        confidence=min(0.95, 0.75 + attempts * 0.01),
+                    )
+                )
+            else:
+                evidence = (
+                    f"{attempts} failed logons for account '{row.user}' from "
+                    f"{distinct_ips} moderately spread source IPs between "
+                    f"{row.first_ts.isoformat()} and {row.last_ts.isoformat()} "
+                    f"({window_minutes} minute window) — possible distributed brute force."
+                )
+                findings.append(
+                    self._result(
+                        evidence=evidence,
+                        event_ids=ev_ids,
+                        severity="medium",
+                        confidence=min(0.85, 0.6 + attempts * 0.01),
+                    )
+                )
         return findings

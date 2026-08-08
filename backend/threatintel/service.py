@@ -25,7 +25,7 @@ from backend.threatintel import (
 logger = logging.getLogger("sentinel.threatintel")
 
 _IP_RE = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
-_URL_DOMAIN_RE = re.compile(r"\b(?:https?://)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9]?\.)+[a-z]{2,})(?:[/:\s]|$)", re.IGNORECASE)
+_URL_DOMAIN_RE = re.compile(r"\b(?:https?://)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9]?\.)+[a-z]{2,})(?=[/?#\s'\"\]\),;:>\|]|$)", re.IGNORECASE)
 _HASH_RE_64 = re.compile(r"\b[a-f0-9]{64}\b", re.IGNORECASE)
 
 #: Suffixes that are almost never real domains - file names, source paths and
@@ -35,7 +35,8 @@ _DOMAIN_DENYLIST = re.compile(
     r"\.(exe|dll|py|pyc|js|ts|json|xml|ini|cfg|txt|log|csv|html|htm|bin|sys|tmp|"
     r"png|jpg|jpeg|ico|svg|gif|zip|rar|7z|msi|bat|cmd|ps|ps1|tmp|c|h|o|min|map|"
     r"tsx|jsx|sln|csproj|pdb|dmp|dat|db|sqlite|so|dylib|main|app|local|localhost|"
-    r"server|home|default|internal|host|netlocal|lan|workgroup|smb|self|node)$",
+    r"server|home|default|internal|host|netlocal|lan|workgroup|smb|self|node|"
+    r"msix|msixbundle|appx|appxbundle)$",
     re.IGNORECASE,
 )
 

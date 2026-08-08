@@ -787,6 +787,8 @@ def add_normalized(db, records: list[dict], event_only: bool = False) -> None:
                 local_port=r["local_port"], remote_ip=r["remote_ip"],
                 remote_port=r["remote_port"], state=r["state"],
                 is_listening=r["is_listening"],
+                bytes_sent=r.get("bytes_sent", 0), bytes_recv=r.get("bytes_recv", 0),
+                duration_seconds=r.get("duration_seconds", 0.0),
                 observed_at=Normalizer._safe_ts(r["timestamp"]),
             ))
         elif r.get("source") == "http" and not event_only:

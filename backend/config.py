@@ -47,6 +47,15 @@ def _load_dotenv(path: Path) -> None:
 _load_dotenv(APP_DIR / ".env")
 
 # --------------------------------------------------------------------------
+# Runtime profile
+# --------------------------------------------------------------------------
+#: "development" (default - dev conveniences allowed), "production" (secure
+#: gate below refuses insecure defaults) or "test" (test-suite).
+SENTINEL_ENV = os.environ.get("SENTINEL_ENV", "development").strip().lower()
+IS_PRODUCTION = SENTINEL_ENV == "production"
+
+
+# --------------------------------------------------------------------------
 # First-run secure setup
 # --------------------------------------------------------------------------
 #: The project .env file (next to this file's parent, i.e. project root).
@@ -474,12 +483,12 @@ API_KEYS: dict[str, str] = (
 )
 
 #: Allow the public development keys (sentinel-dev-*) to authenticate. In
-#: production set SENTINEL_ALLOW_DEV_KEYS=0 (or set SENTINEL_API_KEYS) so the
-#: well-known keys are rejected. The dashboard setup banner warns while they
-#: are still accepted.
-ALLOW_DEV_KEYS = os.environ.get("SENTINEL_ALLOW_DEV_KEYS", "1").lower() in (
-    "1", "true", "yes", "on",
-)
+#: production they are always rejected regardless of this flag; elsewhere set
+#: SENTINEL_ALLOW_DEV_KEYS=0 (or set SENTINEL_API_KEYS) so the well-known keys
+#: are rejected. The dashboard setup banner warns while they are accepted.
+ALLOW_DEV_KEYS = (not IS_PRODUCTION) and os.environ.get(
+    "SENTINEL_ALLOW_DEV_KEYS", "1"
+).lower() in ("1", "true", "yes", "on")
 _USING_DEV_KEYS = bool(_env_keys) is False or set(_env_keys) & set(_DEFAULT_API_KEYS)
 if _USING_DEV_KEYS and not ALLOW_DEV_KEYS:
     raise RuntimeError(
@@ -497,6 +506,43 @@ SECRETS_CONFIGURED = bool(
 #: Bootstrap admin that is seeded into the users table on first startup.
 ADMIN_USERNAME = os.environ.get("SENTINEL_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = _secret("SENTINEL_ADMIN_PASSWORD", "sentineladmin")
+
+
+# --------------------------------------------------------------------------
+# Production-mode gate
+# --------------------------------------------------------------------------
+def _assert_production_safe() -> None:
+    """Refuse to boot with insecure defaults when ``SENTINEL_ENV=production``.
+
+    The development defaults (public dev API keys, hardcoded session secret,
+    well-known admin password, auth/CSRF toggles) are convenient for a lab but
+    are not acceptable for an operator-facing deployment. Each check names the
+    exact environment variable to fix, so a failed boot is self-explanatory.
+    """
+    if not IS_PRODUCTION:
+        return
+    if not SECRETS_CONFIGURED:
+        raise RuntimeError(
+            "Production mode (SENTINEL_ENV=production) requires configured "
+            "credentials: set SENTINEL_ADMIN_PASSWORD and SENTINEL_API_KEYS "
+            "via the environment, .env or the DPAPI vault before starting."
+        )
+    if not _secret("SENTINEL_TOKEN_SECRET"):
+        raise RuntimeError(
+            "Production mode requires a unique session secret: set "
+            "SENTINEL_TOKEN_SECRET (the hardcoded development fallback is "
+            "refused in production)."
+        )
+    if not AUTH_ENABLED:
+        raise RuntimeError("Production mode forbids SENTINEL_AUTH_ENABLED=0.")
+    if not CSRF_ENABLED:
+        raise RuntimeError("Production mode forbids SENTINEL_CSRF_ENABLED=0.")
+    if not THREAT_INTEL_ENABLED:
+        raise RuntimeError(
+            "Production mode requires threat intelligence: set "
+            "SENTINEL_THREAT_INTEL_ENABLED=1 (the disabled default is a "
+            "development convenience)."
+        )
 
 # --------------------------------------------------------------------------
 # LDAP / Active Directory SSO (SC5b)
@@ -681,3 +727,7 @@ GRAPH_MAX_NODES = int(os.environ.get("SENTINEL_GRAPH_MAX_NODES", "250"))
 #: Cap on edges served to the UI - unbounded edge lists are the main
 #: cause of entity-graph lag on busy fleets.
 GRAPH_MAX_EDGES = int(os.environ.get("SENTINEL_GRAPH_MAX_EDGES", "300"))
+
+# Run the production gate last: it references many of the flags above and
+# must only fire after every constant is bound.
+_assert_production_safe()

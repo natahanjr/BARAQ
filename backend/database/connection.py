@@ -155,6 +155,15 @@ def init_db() -> None:
         conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts (status)"
         )
+        # Composite entity-graph indexes: the BFS resolves neighbours via
+        # (src_kind, src_name) / (dst_kind, dst_name) pairs - the single-column
+        # indexes alone turn an entity subgraph query into a full scan.
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_edges_src ON entity_edges (src_kind, src_name)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_edges_dst ON entity_edges (dst_kind, dst_name)"
+        )
     _backfill_audit_chain()
     logger.info("Database initialised at %s", DATABASE_URL)
 
