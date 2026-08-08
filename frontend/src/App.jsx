@@ -221,7 +221,7 @@ function SentinelLogo() {
   );
 }
 
-function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected }) {
+function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user, onLogout }) {
   const location = useLocation();
 
   return (
@@ -284,7 +284,34 @@ function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected }) {
         </nav>
 
         {/* Footer status */}
-        <div className="border-t border-white/5 px-5 py-4">
+        <div className="space-y-3 border-t border-white/5 px-5 py-4">
+          {user && (
+            <>
+              <div className="flex items-center gap-2.5">
+                <span
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                    user.role === "admin" ? "bg-violet-400" : "bg-cyan-400"
+                  }`}
+                />
+                <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-200">
+                  {user.username}
+                </span>
+                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                  {user.role}
+                </span>
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  aria-label="Log out"
+                  title="Log out"
+                  className="rounded-md border border-white/10 bg-white/[0.04] p-1.5 text-slate-300 transition-colors hover:border-red-500/40 hover:text-red-400"
+                >
+                  <LogoutIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="h-px bg-white/5" />
+            </>
+          )}
           <div className="flex items-center gap-2.5">
             <span
               className={`h-1.5 w-1.5 rounded-full ${
@@ -309,7 +336,7 @@ function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected }) {
   );
 }
 
-function Topbar({ onMenuClick, online, summary, theme, onToggleTheme, user, onLogout }) {
+function Topbar({ onMenuClick, online, summary, theme, onToggleTheme }) {
   const location = useLocation();
   const page = NAV.find(
     (n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to))
@@ -381,29 +408,6 @@ function Topbar({ onMenuClick, online, summary, theme, onToggleTheme, user, onLo
               <SunIcon className="h-5 w-5" />
             )}
           </button>
-
-          {user && (
-            <div className="flex items-center gap-2">
-              <div className="hidden items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 sm:flex">
-                <span className={`h-1.5 w-1.5 rounded-full ${user.role === "admin" ? "bg-violet-400" : "bg-cyan-400"}`} />
-                <span className="max-w-[110px] truncate text-xs font-medium text-slate-200">
-                  {user.username}
-                </span>
-                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
-                  {user.role}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={onLogout}
-                aria-label="Log out"
-                title="Log out"
-                className="rounded-lg border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-colors hover:border-red-500/40 hover:text-red-400"
-              >
-                <LogoutIcon className="h-5 w-5" />
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </header>
@@ -466,6 +470,8 @@ export default function App() {
           online={online}
           realtimeConnected={realtimeConnected}
           activeAlerts={status?.summary?.active_alerts ?? 0}
+          user={user}
+          onLogout={logout}
         />
         <div className="flex min-h-screen flex-col lg:pl-64">
           <Topbar
@@ -474,8 +480,6 @@ export default function App() {
             summary={status?.summary}
             theme={theme}
             onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
-            user={user}
-            onLogout={logout}
           />
           <SetupBanner setup={status?.setup} user={user} setNavOpen={setNavOpen} />
         <main className="fade-in mx-auto w-full max-w-[1400px] flex-1 px-4 py-7 sm:px-6 lg:px-8">
