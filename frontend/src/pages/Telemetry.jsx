@@ -84,6 +84,7 @@ function connectionNote(connection) {
 }
 
 function NetworkRow({ connection }) {
+  const [showNote, setShowNote] = useState(false);
   const stateColor = {
     ESTABLISHED: "bg-emerald-500/15 text-emerald-400",
     LISTEN: "bg-blue-500/15 text-blue-400",
@@ -110,7 +111,7 @@ function NetworkRow({ connection }) {
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div
               className="rounded-lg bg-black/20 px-3 py-2"
-              title="Local — the address and port of THIS device used for the connection"
+              title="Local — the address on this device used for the connection"
             >
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                 Local
@@ -121,7 +122,7 @@ function NetworkRow({ connection }) {
             </div>
             <div
               className="rounded-lg bg-black/20 px-3 py-2"
-              title="Remote — the other end of the connection: the address and port this process is talking to"
+              title="Remote — the other end of the connection (the address this process is talking to)"
             >
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                 Remote
@@ -132,16 +133,33 @@ function NetworkRow({ connection }) {
             </div>
           </div>
         </div>
-        <span
-          className={`shrink-0 rounded px-2 py-1 font-mono text-[10px] font-semibold ${color}`}
-          title={STATE_HELP[connection.state]}
-        >
-          {connection.state}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <span
+            className={`rounded px-2 py-1 font-mono text-[10px] font-semibold ${color}`}
+            title={STATE_HELP[connection.state]}
+          >
+            {connection.state}
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowNote((s) => !s)}
+            aria-expanded={showNote}
+            title="What does this mean?"
+            className={`rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors ${
+              showNote
+                ? "border-cyan-500/40 bg-cyan-500/15 text-cyan-300"
+                : "border-slate-600/60 bg-slate-700/40 text-slate-300 hover:border-cyan-500/40 hover:text-cyan-300"
+            }`}
+          >
+            {showNote ? "Hide ×" : "Explain ?"}
+          </button>
+        </div>
       </div>
-      <p className="mt-3 rounded-lg bg-black/15 px-3 py-2 text-[11px] leading-relaxed text-slate-400">
-        {connectionNote(connection)}
-      </p>
+      {showNote && (
+        <p className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-[11px] leading-relaxed text-cyan-100/90">
+          {connectionNote(connection)}
+        </p>
+      )}
     </div>
   );
 }
