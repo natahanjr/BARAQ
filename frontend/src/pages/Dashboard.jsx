@@ -69,29 +69,30 @@ const KPI_ACCENT = {
   },
 };
 
-function MetricBox({ label, value, icon: Icon, trend, color = "cyan", sub }) {
-  const accent = KPI_ACCENT[color] || KPI_ACCENT.cyan;
+function KpiStrip({ items }) {
   return (
-    <div
-      className={`relative flex items-center gap-3 overflow-hidden rounded-lg border bg-gradient-to-br px-3.5 py-2.5 ${accent.grad}`}
-    >
-      <div
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
-        style={{ backgroundColor: `${accent.bar}1f`, color: accent.bar }}
-      >
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className={`truncate text-lg font-semibold leading-none tracking-tight ${accent.text}`}>
-          {value}
-        </p>
-        <p className="mt-1 truncate text-[10px] uppercase tracking-[0.08em] text-slate-500">
-          {label}
-        </p>
-        {trend && (
-          <p className="mt-0.5 truncate text-[10px] text-slate-500">{trend}</p>
-        )}
-      </div>
+    <div className="grid grid-cols-2 divide-y divide-slate-800/60 overflow-hidden rounded-lg border border-slate-800/60 bg-slate-900/40 lg:grid-cols-4 lg:divide-x lg:divide-y-0">
+      {items.map(({ label, value, color, hint }) => {
+        const accent = KPI_ACCENT[color] || KPI_ACCENT.cyan;
+        return (
+          <div
+            key={label}
+            title={hint || label}
+            className="flex items-center gap-2.5 px-4 py-2.5 transition-colors hover:bg-white/[0.03]"
+          >
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: accent.bar }}
+            />
+            <span className={`font-mono text-sm font-semibold tracking-tight ${accent.text}`}>
+              {value}
+            </span>
+            <span className="min-w-0 truncate text-[10px] uppercase tracking-[0.08em] text-slate-500">
+              {label}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -276,46 +277,40 @@ export default function Dashboard() {
         }
       />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricBox
-          label="Security Score"
-          value={Math.round(summary?.security_score ?? 0)}
-          icon={BoltIcon}
-          sub="/ 100"
-          trend={`Risk level: ${summary?.risk_level ?? summary?.system_status ?? "UNKNOWN"}`}
-          color={
-            summary?.risk_level === "CRITICAL" || summary?.system_status === "CRITICAL"
-              ? "red"
-              : summary?.risk_level === "HIGH" || summary?.system_status === "ATTENTION"
-                ? "orange"
-                : "green"
-          }
-        />
-        <MetricBox
-          label="Active Alerts"
-          value={summary?.active_alerts ?? 0}
-          icon={AlertsIcon}
-          trend="Open threats requiring attention"
-          color={(summary?.active_alerts ?? 0) > 5 ? "red" : "orange"}
-        />
-        <MetricBox
-          label="Total Events"
-          value={(summary?.total_events ?? 0).toLocaleString()}
-          icon={BoxesIcon}
-          sub="Normalized telemetry"
-          trend={`${summary?.events_last_hour ?? 0} in the last hour`}
-          color="cyan"
-        />
-        <MetricBox
-          label="Critical Threats"
-          value={summary?.critical_threats ?? 0}
-          icon={AlertIcon}
-          sub="Open critical / high alerts"
-          trend={summary?.anomalies_detected ? `${summary.anomalies_detected} ML anomalies` : "No ML anomalies"}
-          color={(summary?.critical_threats ?? 0) > 0 ? "red" : "green"}
-        />
-      </div>
+      {/* KPI strip */}
+      <KpiStrip
+        items={[
+          {
+            label: "Score",
+            value: Math.round(summary?.security_score ?? 0),
+            hint: `Risk level: ${summary?.risk_level ?? summary?.system_status ?? "UNKNOWN"}`,
+            color:
+              summary?.risk_level === "CRITICAL" || summary?.system_status === "CRITICAL"
+                ? "red"
+                : summary?.risk_level === "HIGH" || summary?.system_status === "ATTENTION"
+                  ? "orange"
+                  : "green",
+          },
+          {
+            label: "Events",
+            value: (summary?.total_events ?? 0).toLocaleString(),
+            hint: `${summary?.events_last_hour ?? 0} normalized events in the last hour`,
+            color: "cyan",
+          },
+          {
+            label: "Alerts",
+            value: summary?.active_alerts ?? 0,
+            hint: "Open threats requiring attention",
+            color: (summary?.active_alerts ?? 0) > 5 ? "red" : "orange",
+          },
+          {
+            label: "Critical",
+            value: summary?.critical_threats ?? 0,
+            hint: `Open critical / high alerts${summary?.anomalies_detected ? ` · ${summary.anomalies_detected} ML anomalies` : ""}`,
+            color: (summary?.critical_threats ?? 0) > 0 ? "red" : "green",
+          },
+        ]}
+      />
 
       {/* Primary charts */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
