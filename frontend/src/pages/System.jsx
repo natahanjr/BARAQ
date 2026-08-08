@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import Card from "../components/Card.jsx";
 import PageHeader from "../components/PageHeader.jsx";
@@ -40,12 +40,23 @@ function formatUptime(totalSeconds) {
 
 function UptimeTimer({ uptimeSeconds }) {
   const [now, setNow] = useState(Date.now());
+  const bootRef = useRef(null);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-  const startedAt = Date.now() - (uptimeSeconds || 0) * 1000;
-  const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
+  //: Latch the earliest observed boot time so status polls can never rewind
+  //: the counter; it only advances (or holds if the server restarts).
+  useEffect(() => {
+    if (bootRef.current === null) {
+      bootRef.current = Date.now() - (uptimeSeconds || 0) * 1000;
+      return;
+    }
+    const candidate = Date.now() - (uptimeSeconds || 0) * 1000;
+    if (candidate < bootRef.current) bootRef.current = candidate;
+  }, [uptimeSeconds]);
+  const bootedAt = bootRef.current ?? Date.now() - (uptimeSeconds || 0) * 1000;
+  const elapsed = Math.max(0, Math.floor((now - bootedAt) / 1000));
   return (
     <span className="font-mono tabular-nums" title={`${elapsed}s elapsed`}>
       {formatUptime(elapsed)}
