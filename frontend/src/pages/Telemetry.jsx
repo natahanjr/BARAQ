@@ -51,6 +51,38 @@ function ProcessRow({ process }) {
   );
 }
 
+const STATE_HELP = {
+  ESTABLISHED:
+    "Active connection — this process is talking to the remote address right now; data flows both ways. Normal for browsers, API clients and agents, but remote addresses you do not recognize can be worth investigating.",
+  LISTEN:
+    "Listening — the process keeps this local port open to accept incoming connections; it has no active remote partner yet (e.g. a web server or agent waiting for traffic).",
+  SYN_SENT:
+    "Connecting — the process just reached out and is waiting for the remote host to accept the session.",
+  TIME_WAIT:
+    "Closing — the session ended cleanly and the port is being released; it will disappear in seconds.",
+};
+
+function connectionNote(connection) {
+  const proc = connection.process || "This application";
+  if (connection.is_listening) {
+    return `${proc} is open for incoming connections — it listens on port ${connection.local_port} and will accept sessions from other devices (e.g. a web server or agent).`;
+  }
+  const remote =
+    connection.remote_ip && connection.remote_port != null
+      ? `${connection.remote_ip}:${connection.remote_port}`
+      : "a remote host";
+  switch (connection.state) {
+    case "ESTABLISHED":
+      return `${proc} currently has an active session with ${remote} — packets are flowing in both directions. This is typical for sync traffic (browsers, API calls, updates), and is only suspicious if the remote address is unknown.`;
+    case "SYN_SENT":
+      return `${proc} is trying to open a session to ${remote} and is waiting for the remote host to respond.`;
+    case "TIME_WAIT":
+      return `${proc} just closed its session with ${remote}; the connection is almost gone and the port will be freed shortly.`;
+    default:
+      return `${proc} is in the '${connection.state}' state with ${remote}.`;
+  }
+}
+
 function NetworkRow({ connection }) {
   const stateColor = {
     ESTABLISHED: "bg-emerald-500/15 text-emerald-400",
@@ -76,7 +108,10 @@ function NetworkRow({ connection }) {
             )}
           </div>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div className="rounded-lg bg-black/20 px-3 py-2">
+            <div
+              className="rounded-lg bg-black/20 px-3 py-2"
+              title="Local — the address and port of THIS device used for the connection"
+            >
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                 Local
               </p>
@@ -84,7 +119,10 @@ function NetworkRow({ connection }) {
                 {connection.local_ip}:{connection.local_port}
               </p>
             </div>
-            <div className="rounded-lg bg-black/20 px-3 py-2">
+            <div
+              className="rounded-lg bg-black/20 px-3 py-2"
+              title="Remote — the other end of the connection: the address and port this process is talking to"
+            >
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                 Remote
               </p>
@@ -94,10 +132,16 @@ function NetworkRow({ connection }) {
             </div>
           </div>
         </div>
-        <span className={`shrink-0 rounded px-2 py-1 font-mono text-[10px] font-semibold ${color}`}>
+        <span
+          className={`shrink-0 rounded px-2 py-1 font-mono text-[10px] font-semibold ${color}`}
+          title={STATE_HELP[connection.state]}
+        >
           {connection.state}
         </span>
       </div>
+      <p className="mt-3 rounded-lg bg-black/15 px-3 py-2 text-[11px] leading-relaxed text-slate-400">
+        {connectionNote(connection)}
+      </p>
     </div>
   );
 }
