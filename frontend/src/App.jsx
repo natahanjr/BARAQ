@@ -51,9 +51,9 @@ const NAV = [
   { to: "/assistant", label: "AI Assistant", icon: AssistantIcon },
   { to: "/reports", label: "Reports", icon: ReportsIcon },
   { to: "/incidents", label: "Incidents", icon: IncidentsIcon },
-  { to: "/evaluation", label: "Evaluation", icon: EvaluationIcon },
-  { to: "/system", label: "System", icon: SystemIcon },
-  { to: "/users", label: "Users & Audit", icon: UsersIcon },
+  { to: "/evaluation", label: "Evaluation", icon: EvaluationIcon, adminOnly: true },
+  { to: "/system", label: "System", icon: SystemIcon, adminOnly: true },
+  { to: "/users", label: "Users & Audit", icon: UsersIcon, adminOnly: true },
 ];
 
 function useBackendStatus() {
@@ -112,6 +112,19 @@ function useTheme() {
   }, [theme]);
 
   return [theme, setTheme];
+}
+
+function AdminGate({ user, children }) {
+  if (user?.role === "admin") return children;
+  return (
+    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-center">
+      <ShieldIcon className="h-10 w-10 text-slate-600" />
+      <p className="text-base font-semibold text-slate-300">Access denied</p>
+      <p className="max-w-sm text-sm text-slate-500">
+        This area requires administrator privileges. Contact your administrator if you need access.
+      </p>
+    </div>
+  );
 }
 
 function SetupBanner({ setup, user, setNavOpen }) {
@@ -250,7 +263,7 @@ function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user,
 
         {/* Navigation */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-          {NAV.map((item) => {
+          {NAV.filter((item) => (item.adminOnly ? user?.role === "admin" : true)).map((item) => {
             const isActive =
               item.end
                 ? location.pathname === item.to
@@ -505,9 +518,9 @@ export default function App() {
               <Route path="/assistant" element={<Assistant />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/incidents" element={<Incidents />} />
-              <Route path="/evaluation" element={<Evaluation />} />
-              <Route path="/system" element={<System />} />
-              <Route path="/users" element={<Users />} />
+              <Route path="/evaluation" element={<AdminGate user={user}><Evaluation /></AdminGate>} />
+              <Route path="/system" element={<AdminGate user={user}><System /></AdminGate>} />
+              <Route path="/users" element={<AdminGate user={user}><Users /></AdminGate>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
