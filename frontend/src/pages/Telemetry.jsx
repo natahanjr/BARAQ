@@ -4,9 +4,50 @@ import Card from "../components/Card.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import { Loading, EmptyState, ErrorBanner } from "../components/Feedback.jsx";
 
+function processNote(process) {
+  return [
+    {
+      title: "What is this?",
+      text: `${process.name} (PID ${process.pid}) is a running program at "${process.path || "unknown location"}". Every running program on the system appears here.`,
+    },
+    {
+      title: "Started by",
+      text: `It runs under the user account "${process.user || "unknown"}". Processes under Local System / Local Service / Network Service are Windows background services; processes under your account are programs you (or something you opened) started.`,
+    },
+    {
+      title: "Started from",
+      text: process.parent_name
+        ? `It was launched by ${process.parent_name} (PID ${process.ppid}) — the program that created it. This chain can help you understand who is starting what.`
+        : `No parent process was recorded (PID ${process.ppid}).`,
+    },
+    {
+      title: "When to worry",
+      text: "Alerts are meant for legitimate apps. Be suspicious of: a program you never installed, one running from a temp or config folder, or a process from an unexpected user. 'NEW' badge means the process did not exist on the previous scan.",
+    },
+  ];
+}
+
 function ProcessRow({ process }) {
+  const [showNote, setShowNote] = useState(false);
   return (
-    <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-colors hover:border-slate-600/60">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => setShowNote((s) => !s)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setShowNote((s) => !s);
+        }
+      }}
+      aria-expanded={showNote}
+      title="Tap for a detailed explanation"
+      className={`cursor-pointer rounded-xl border p-4 transition-all select-none ${
+        showNote
+          ? "border-cyan-500/40 bg-cyan-500/[0.06]"
+          : "border-slate-700/50 bg-slate-800/30 hover:border-cyan-500/30 active:scale-[0.995]"
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -16,6 +57,11 @@ function ProcessRow({ process }) {
             {process.is_new && (
               <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
                 NEW
+              </span>
+            )}
+            {!showNote && (
+              <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Tap for details
               </span>
             )}
           </div>
@@ -47,6 +93,18 @@ function ProcessRow({ process }) {
           </span>
         )}
       </div>
+      {showNote && (
+        <div className="mt-3 space-y-2 rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2.5 text-[11px] leading-relaxed">
+          {processNote(process).map(({ title, text }) => (
+            <p key={title}>
+              <span className="font-semibold uppercase tracking-wider text-cyan-300">
+                {title} —
+              </span>{" "}
+              <span className="text-cyan-50/90">{text}</span>
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -330,7 +388,7 @@ export default function Telemetry() {
       {!loading && tab === "processes" && (
         <Card>
           {processes.length > 0 ? (
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
               {processes.map((process) => (
                 <ProcessRow key={process.id} process={process} />
               ))}
