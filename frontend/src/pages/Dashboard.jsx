@@ -73,31 +73,24 @@ function MetricBox({ label, value, icon: Icon, trend, color = "cyan", sub }) {
   const accent = KPI_ACCENT[color] || KPI_ACCENT.cyan;
   return (
     <div
-      className={`relative overflow-hidden rounded-xl border bg-gradient-to-br backdrop-blur-sm ${accent.grad} ${accent.glow}`}
+      className={`relative flex items-center gap-3 overflow-hidden rounded-lg border bg-gradient-to-br px-3.5 py-2.5 ${accent.grad}`}
     >
-      <span
-        className="absolute inset-x-0 top-0 h-[2px]"
-        style={{
-          background: `linear-gradient(90deg, transparent, ${accent.bar}, transparent)`,
-        }}
-      />
-      <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full opacity-25 blur-2xl"
-        style={{ backgroundColor: accent.bar }}
-      />
-      <div className="flex items-start justify-between gap-2 p-5">
-        <div className="min-w-0">
-          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-slate-500">
-            {label}
-          </p>
-          <p className={`mt-2 text-3xl font-semibold tracking-tight ${accent.text}`}>{value}</p>
-          {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
-          {trend && (
-            <p className="mt-2.5 inline-flex truncate rounded-md bg-black/20 px-2 py-0.5 text-[11px] text-slate-300">
-              {trend}
-            </p>
-          )}
-        </div>
-        <Icon className="h-6 w-6 shrink-0 opacity-60" />
+      <div
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
+        style={{ backgroundColor: `${accent.bar}1f`, color: accent.bar }}
+      >
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className={`truncate text-lg font-semibold leading-none tracking-tight ${accent.text}`}>
+          {value}
+        </p>
+        <p className="mt-1 truncate text-[10px] uppercase tracking-[0.08em] text-slate-500">
+          {label}
+        </p>
+        {trend && (
+          <p className="mt-0.5 truncate text-[10px] text-slate-500">{trend}</p>
+        )}
       </div>
     </div>
   );
