@@ -202,6 +202,8 @@ class PostgresStore(GraphStore):
 
         def _fetch_nodes(keys: list[tuple[str, str]]) -> None:
             """Bulk-load a list of (kind, name) keys in one query."""
+            if not keys:
+                return
             conditions = [
                 (EntityNode.kind == k) & (EntityNode.name == n) for k, n in keys
             ]
@@ -215,9 +217,11 @@ class PostgresStore(GraphStore):
             frontier = [(center_kind, center_name)]
             seen = set(frontier)
             for _hop in range(max(1, depth)):
-                if len(edges) >= edge_limit:
+                if len(nodes) >= limit or len(edges) >= edge_limit:
                     break
-                # One query per hop for the whole frontier (no N+1).
+                # One query per hop for the whole frontier (no N+1), SQL-capped
+                # so a hub with tens of thousands of links can never flood
+                # Python or the UI.
                 conditions = []
                 for k, n in frontier:
                     conditions.append(
@@ -227,12 +231,14 @@ class PostgresStore(GraphStore):
                         (EntityEdge.dst_kind == k) & (EntityEdge.dst_name == n)
                     )
                 rels = db.scalars(
-                    select(EntityEdge).where(or_(*conditions))
+                    select(EntityEdge)
+                    .where(or_(*conditions))
+                    .order_by(EntityEdge.weight.desc(), EntityEdge.last_seen.desc())
+                    .limit(max(1, edge_limit - len(edges)))
                 ).all() if conditions else []
+
                 nxt_keys: list[tuple[str, str]] = []
                 for e in rels:
-                    if len(edges) >= edge_limit:
-                        break
                     edges[e.id] = e
                     for ekind, ename in (
                         (e.src_kind, e.src_name),
@@ -241,11 +247,15 @@ class PostgresStore(GraphStore):
                         if (ekind, ename) not in seen:
                             seen.add((ekind, ename))
                             nxt_keys.append((ekind, ename))
-                # Load every node touched this hop in a single query.
-                _fetch_nodes(nxt_keys)
-                frontier = [k for k in nxt_keys if k in nodes]
-                if len(nodes) >= limit:
-                    break
+
+                # Only fetch as many nodes as the remaining budget allows.
+                budget = max(0, limit - len(nodes))
+                _fetch_nodes(nxt_keys[:budget])
+                frontier = [k for k in nxt_keys[:budget] if k in nodes]
+            return {
+                "nodes": [n.to_dict() for n in nodes.values()],
+                "edges": [e.to_dict() for e in edges.values()],
+            }
             return {
                 "nodes": [n.to_dict() for n in nodes.values()],
                 "edges": [e.to_dict() for e in edges.values()],
@@ -260,13 +270,13 @@ class PostgresStore(GraphStore):
             for k, n in names:
                 conditions.append((EntityEdge.src_kind == k) & (EntityEdge.src_name == n))
                 conditions.append((EntityEdge.dst_kind == k) & (EntityEdge.dst_name == n))
-            rels = db.scalars(select(EntityEdge).where(or_(*conditions))).all()
-            # Keep the heaviest edges so a busy hub cannot flood the payload.
-            edge_rows = sorted(
-                (e.to_dict() for e in rels),
-                key=lambda d: d.get("weight") or 0,
-                reverse=True,
-            )[:edge_limit]
+            rels = db.scalars(
+                select(EntityEdge)
+                .where(or_(*conditions))
+                .order_by(EntityEdge.weight.desc(), EntityEdge.last_seen.desc())
+                .limit(edge_limit)
+            ).all()
+            edge_rows = [e.to_dict() for e in rels]
 
         node_ids: set[tuple] = set(names)
         for e in edge_rows:
