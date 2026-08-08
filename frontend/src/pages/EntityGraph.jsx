@@ -144,6 +144,7 @@ const GraphCanvas = memo(function GraphCanvas({ nodes, edges, onNodeClick }) {
       onNodeClick={(_, node) => onNodeClick(node.id)}
       fitView
       fitViewOptions={{ padding: 0.2 }}
+      onlyRenderVisibleElements
       minZoom={0.15}
       maxZoom={2.5}
       colorMode="dark"

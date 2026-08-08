@@ -204,13 +204,17 @@ class PostgresStore(GraphStore):
             """Bulk-load a list of (kind, name) keys in one query."""
             if not keys:
                 return
-            conditions = [
-                (EntityNode.kind == k) & (EntityNode.name == n) for k, n in keys
-            ]
-            for node in db.scalars(
-                select(EntityNode).where(or_(*conditions))
-            ).all():
-                nodes[(node.kind, node.name)] = node
+            #: Keep each statement small: a 500-way OR defeats query planning on
+            #: both SQLite and Postgres. 60 keys per chunk is plenty.
+            for i in range(0, len(keys), 60):
+                chunk = keys[i : i + 60]
+                conditions = [
+                    (EntityNode.kind == k) & (EntityNode.name == n) for k, n in chunk
+                ]
+                for node in db.scalars(
+                    select(EntityNode).where(or_(*conditions))
+                ).all():
+                    nodes[(node.kind, node.name)] = node
 
         if center_kind and center_name:
             _add(center_kind, center_name)
@@ -219,43 +223,46 @@ class PostgresStore(GraphStore):
             for _hop in range(max(1, depth)):
                 if len(nodes) >= limit or len(edges) >= edge_limit:
                     break
-                # One query per hop for the whole frontier (no N+1), SQL-capped
-                # so a hub with tens of thousands of links can never flood
-                # Python or the UI.
-                conditions = []
-                for k, n in frontier:
-                    conditions.append(
-                        (EntityEdge.src_kind == k) & (EntityEdge.src_name == n)
-                    )
-                    conditions.append(
-                        (EntityEdge.dst_kind == k) & (EntityEdge.dst_name == n)
-                    )
-                rels = db.scalars(
-                    select(EntityEdge)
-                    .where(or_(*conditions))
-                    .order_by(EntityEdge.weight.desc(), EntityEdge.last_seen.desc())
-                    .limit(max(1, edge_limit - len(edges)))
-                ).all() if conditions else []
-
+                # Per-hop, per-chunk queries (no N+1), SQL-capped and stopped
+                # early once the edge budget is spent. Chunking keeps each
+                # statement's OR-list short so the planner can use the
+                # (kind, name) composite indexes on both backends.
                 nxt_keys: list[tuple[str, str]] = []
-                for e in rels:
-                    edges[e.id] = e
-                    for ekind, ename in (
-                        (e.src_kind, e.src_name),
-                        (e.dst_kind, e.dst_name),
-                    ):
-                        if (ekind, ename) not in seen:
-                            seen.add((ekind, ename))
-                            nxt_keys.append((ekind, ename))
+                for i in range(0, len(frontier), 25):
+                    if len(edges) >= edge_limit:
+                        break
+                    chunk = frontier[i : i + 25]
+                    conditions = []
+                    for k, n in chunk:
+                        conditions.append(
+                            (EntityEdge.src_kind == k) & (EntityEdge.src_name == n)
+                        )
+                        conditions.append(
+                            (EntityEdge.dst_kind == k) & (EntityEdge.dst_name == n)
+                        )
+                    rels = db.scalars(
+                        select(EntityEdge)
+                        .where(or_(*conditions))
+                        .order_by(
+                            EntityEdge.weight.desc(), EntityEdge.last_seen.desc()
+                        )
+                        .limit(max(1, edge_limit - len(edges)))
+                    ).all()
+
+                    for e in rels:
+                        edges[e.id] = e
+                        for ekind, ename in (
+                            (e.src_kind, e.src_name),
+                            (e.dst_kind, e.dst_name),
+                        ):
+                            if (ekind, ename) not in seen:
+                                seen.add((ekind, ename))
+                                nxt_keys.append((ekind, ename))
 
                 # Only fetch as many nodes as the remaining budget allows.
                 budget = max(0, limit - len(nodes))
                 _fetch_nodes(nxt_keys[:budget])
                 frontier = [k for k in nxt_keys[:budget] if k in nodes]
-            return {
-                "nodes": [n.to_dict() for n in nodes.values()],
-                "edges": [e.to_dict() for e in edges.values()],
-            }
             return {
                 "nodes": [n.to_dict() for n in nodes.values()],
                 "edges": [e.to_dict() for e in edges.values()],
