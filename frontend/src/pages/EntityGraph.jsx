@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
 import {
   Background,
   Controls,
   Handle,
   MarkerType,
-  MiniMap,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -38,6 +37,10 @@ const RISK_COLORS = {
 };
 
 const DEPTHS = [1, 2, 3];
+
+//: Keep the DOM light on busy graphs: max rendered edges (the backend already
+//: caps the payload; this is a last-resort guard for very dense views).
+const MAX_RENDER_EDGES = 120;
 
 function keyOf({ kind, name }) {
   return `${kind}:${name}`;
@@ -80,14 +83,14 @@ function radialLayout(nodes, edges, centerKey) {
   return pos;
 }
 
-function EntityNodeWidget({ data, selected }) {
+const EntityNodeWidget = memo(function EntityNodeWidget({ data, selected }) {
   const meta = KINDS[data.kind] || { label: data.kind, color: "#64748b" };
   const riskColor = RISK_COLORS[data.risk_level] || "#64748b";
   const size = Math.min(64, data.risk_score || 16);
 
   return (
     <div
-      className="relative w-[168px] rounded-lg border bg-slate-900/90 px-2.5 py-2 shadow-[0_12px_30px_-12px_rgba(2,6,23,0.9)] backdrop-blur transition-shadow hover:shadow-cyan-500/10"
+      className="relative w-[168px] rounded-lg border bg-slate-900 px-2.5 py-2"
       style={{
         borderColor: selected ? "#22d3ee" : riskColor,
         outline: selected ? "2px solid rgba(34,211,238,0.35)" : "none",
@@ -124,15 +127,15 @@ function EntityNodeWidget({ data, selected }) {
       </div>
     </div>
   );
-}
+});
 
 const NODE_TYPES = { entity: EntityNodeWidget };
 
-function GraphCanvas({ nodes, edges, onNodeClick }) {
+const GraphCanvas = memo(function GraphCanvas({ nodes, edges, onNodeClick }) {
   const { fitView } = useReactFlow();
 
   useEffect(() => {
-    fitView({ padding: 0.2, duration: 400 });
+    fitView({ padding: 0.2, duration: 300 });
   }, [nodes, edges, fitView]);
 
   return (
@@ -150,18 +153,9 @@ function GraphCanvas({ nodes, edges, onNodeClick }) {
     >
       <Background gap={24} color="#1e293b" />
       <Controls showInteractive={false} />
-      <MiniMap
-        pannable
-        zoomable
-        nodeColor={(node) =>
-          RISK_COLORS[node.data.risk_level] || "#334155"
-        }
-        maskColor="rgba(2,6,23,0.75)"
-        style={{ backgroundColor: "#0f172a" }}
-      />
     </ReactFlow>
   );
-}
+});
 
 function RiskRing({ score, level }) {
   const clamped = Math.max(0, Math.min(100, score ?? 0));
@@ -210,7 +204,7 @@ export default function EntityGraph() {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
   const [graphKey, setGraphKey] = useState(null);
-  const [depth, setDepth] = useState(2);
+  const [depth, setDepth] = useState(1);
   const [search, setSearch] = useState("");
   const [searchKind, setSearchKind] = useState("auto");
   const [loading, setLoading] = useState(true);
@@ -223,7 +217,11 @@ export default function EntityGraph() {
 
   const applyGraph = useCallback((data, centerKey) => {
     const gf = data.nodes || [];
-    const ge = data.edges || [];
+    // Heaviest edges first, capped: keeps the view readable and the DOM light.
+    const ge = (data.edges || [])
+      .slice()
+      .sort((a, b) => (b.weight || 0) - (a.weight || 0))
+      .slice(0, MAX_RENDER_EDGES);
     const layout = radialLayout(
       gf.map((n) => ({ ...n, id: keyOf(n) })),
       ge.map((e) => ({ source: keyOf(e.source), target: keyOf(e.target) })),
@@ -247,7 +245,6 @@ export default function EntityGraph() {
           target,
           type: "smoothstep",
           label: String(e.rel).toUpperCase(),
-          labelBgStyle: { fill: "#0f172a", fillOpacity: 0.8 },
           labelStyle: { fontSize: 9, fill: "#94a3b8" },
           markerEnd: { type: MarkerType.ArrowClosed, color: "#334155" },
           style: { stroke: "#334155", strokeWidth: 1.2 },
@@ -346,6 +343,10 @@ export default function EntityGraph() {
       .finally(() => setSyncing(false));
   };
 
+  const handleNodeClick = useCallback((nodeId) => {
+    openProfile(nodeId);
+  }, [openProfile]);
+
   const openProfile = useCallback((nodeId) => {
     const sep = nodeId.indexOf(":");
     const [kind, name] = [nodeId.slice(0, sep), nodeId.slice(sep + 1)];
@@ -353,7 +354,7 @@ export default function EntityGraph() {
     setProfile(null);
     setProfileError("");
     api
-      .entityProfile(kind, name, 2)
+      .entityProfile(kind, name, 1)
       .then(setProfile)
       .catch((e) => setProfileError(e.message));
   }, []);
@@ -522,7 +523,7 @@ export default function EntityGraph() {
             />
           ) : (
             <ReactFlowProvider>
-              <GraphCanvas nodes={nodes} edges={edges} onNodeClick={openProfile} />
+              <GraphCanvas nodes={nodes} edges={edges} onNodeClick={handleNodeClick} />
             </ReactFlowProvider>
           )}
         </Card>

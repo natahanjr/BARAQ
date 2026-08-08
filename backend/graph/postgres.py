@@ -17,7 +17,7 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from backend.config import GRAPH_MAX_NODES
+from backend.config import GRAPH_MAX_EDGES, GRAPH_MAX_NODES
 from backend.database.connection import IS_POSTGRES, IS_SQLITE
 from backend.database.models import EntityEdge, EntityNode
 from backend.graph.base import GraphStore
@@ -178,8 +178,14 @@ class PostgresStore(GraphStore):
         depth: int = 1,
         limit: int | None = None,
     ) -> dict:
-        """Expand the subgraph around an entity (or the top-risk subgraph)."""
+        """Expand the subgraph around an entity (or the top-risk subgraph).
+
+        Both the node and edge payloads are capped so a busy hub entity
+        (thousands of links) can never flood the UI: ``limit`` bounds nodes,
+        :data:`GRAPH_MAX_EDGES` bounds edges.
+        """
         limit = limit or GRAPH_MAX_NODES
+        edge_limit = GRAPH_MAX_EDGES
         nodes: dict[tuple, EntityNode] = {}
         edges: dict[int, EntityEdge] = {}
 
@@ -209,6 +215,8 @@ class PostgresStore(GraphStore):
             frontier = [(center_kind, center_name)]
             seen = set(frontier)
             for _hop in range(max(1, depth)):
+                if len(edges) >= edge_limit:
+                    break
                 # One query per hop for the whole frontier (no N+1).
                 conditions = []
                 for k, n in frontier:
@@ -223,6 +231,8 @@ class PostgresStore(GraphStore):
                 ).all() if conditions else []
                 nxt_keys: list[tuple[str, str]] = []
                 for e in rels:
+                    if len(edges) >= edge_limit:
+                        break
                     edges[e.id] = e
                     for ekind, ename in (
                         (e.src_kind, e.src_name),
@@ -251,7 +261,12 @@ class PostgresStore(GraphStore):
                 conditions.append((EntityEdge.src_kind == k) & (EntityEdge.src_name == n))
                 conditions.append((EntityEdge.dst_kind == k) & (EntityEdge.dst_name == n))
             rels = db.scalars(select(EntityEdge).where(or_(*conditions))).all()
-            edge_rows = [e.to_dict() for e in rels]
+            # Keep the heaviest edges so a busy hub cannot flood the payload.
+            edge_rows = sorted(
+                (e.to_dict() for e in rels),
+                key=lambda d: d.get("weight") or 0,
+                reverse=True,
+            )[:edge_limit]
 
         node_ids: set[tuple] = set(names)
         for e in edge_rows:

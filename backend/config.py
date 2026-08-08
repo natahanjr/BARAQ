@@ -678,3 +678,6 @@ NEO4J_PASSWORD = _secret("SENTINEL_NEO4J_PASSWORD", "")
 NEO4J_DATABASE = os.environ.get("SENTINEL_NEO4J_DATABASE", "neo4j")
 #: Cap on graph expansion (neighbours / node count) served to the UI.
 GRAPH_MAX_NODES = int(os.environ.get("SENTINEL_GRAPH_MAX_NODES", "250"))
+#: Cap on edges served to the UI - unbounded edge lists are the main
+#: cause of entity-graph lag on busy fleets.
+GRAPH_MAX_EDGES = int(os.environ.get("SENTINEL_GRAPH_MAX_EDGES", "300"))
