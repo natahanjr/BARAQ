@@ -343,10 +343,6 @@ export default function EntityGraph() {
       .finally(() => setSyncing(false));
   };
 
-  const handleNodeClick = useCallback((nodeId) => {
-    openProfile(nodeId);
-  }, [openProfile]);
-
   const openProfile = useCallback((nodeId) => {
     const sep = nodeId.indexOf(":");
     const [kind, name] = [nodeId.slice(0, sep), nodeId.slice(sep + 1)];
@@ -358,6 +354,10 @@ export default function EntityGraph() {
       .then(setProfile)
       .catch((e) => setProfileError(e.message));
   }, []);
+
+  const handleNodeClick = useCallback((nodeId) => {
+    openProfile(nodeId);
+  }, [openProfile]);
 
   const neighbors = [];
   if (profile?.subgraph?.edges && selected) {
