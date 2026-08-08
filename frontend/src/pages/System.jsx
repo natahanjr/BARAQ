@@ -133,8 +133,6 @@ export default function System() {
   const [cmdTarget, setCmdTarget] = useState("");
   const [cmdNote, setCmdNote] = useState("");
 
-  const [lastUpdated, setLastUpdated] = useState(null);
-
   const refresh = async () => {
     const [st, ml, eps, cmds] = await Promise.allSettled([
       api.systemStatus(),
@@ -147,7 +145,6 @@ export default function System() {
     setEndpoints(eps.status === "fulfilled" ? eps.value.items || [] : endpoints);
     setCommands(cmds.status === "fulfilled" ? cmds.value.items || [] : commands);
     if (st.status !== "fulfilled") setError(st.reason.message);
-    setLastUpdated(new Date());
   };
   useEffect(() => {
     refresh();
@@ -223,13 +220,6 @@ export default function System() {
       <PageHeader
         title="System Control"
         subtitle="Manage collection, ML training, and system operations"
-        actions={
-          lastUpdated && (
-            <span className="font-mono text-[11px] text-slate-500">
-              Updated {lastUpdated.toLocaleTimeString()}
-            </span>
-          )
-        }
       />
 
       {/* Status cards */}
