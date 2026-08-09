@@ -39,7 +39,10 @@ class UsbDeviceRule(BaseRule):
         findings: list[DetectionResult] = []
 
         devices = self.session.scalars(
-            select(UsbDevice).where(UsbDevice.inserted_at >= since)
+            select(UsbDevice).where(
+                UsbDevice.inserted_at >= since,
+                *self._org_conds(UsbDevice),
+            )
         ).all()
 
         for dev in devices:

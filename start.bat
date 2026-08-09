@@ -2,10 +2,13 @@
 rem ===========================================================================
 rem  SentinelSOC - one-click launcher (Windows)
 rem  Usage:
-rem    start.bat          -> local only (127.0.0.1, HTTP)
-rem    start.bat lan      -> exposed to the local network (0.0.0.0) + firewall
-rem    start.bat secure   -> HTTPS with self-signed cert (localhost + LAN IPs)
-rem    start.bat secure lan -> HTTPS exposed to the network
+rem    start.bat secure       -> STANDARD: HTTPS (TLS) with self-signed cert
+rem    start.bat secure lan   -> standard + exposed to the local network
+rem    start.bat              -> local only (127.0.0.1, plain HTTP - dev/lab)
+rem    start.bat lan          -> plain HTTP exposed to the network (not recommended)
+rem  HTTPS is the documented deployment path for any shared/fleet use; plain
+rem  HTTP is intended for local development only - telemetry traverses the
+rem  network unencrypted otherwise.
 rem  Creates the venv and installs dependencies on first run, builds the
 rem  dashboard if missing, then starts the backend and opens the browser.
 rem ===========================================================================
@@ -107,13 +110,19 @@ if /i "%LAN_MODE%"=="lan" (
         echo  [WARN] Firewall rule not added - run this as Administrator if
         echo         other devices cannot connect.
     )
-    echo.
+echo.
+    for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do set "MY_IP=%%a"
     echo  Other devices on your network can now open:
-    for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do echo   %FW_PROTO%://%%a:%FW_PORT%
+    echo   %FW_PROTO%://%MY_IP%:%FW_PORT%
     echo.
     echo  Create a user account for each person in the dashboard:
     echo  Users ^& Audit -^> Add User (analyst role).
     echo.
+    if /i "%SECURE_MODE%"=="secure" (
+        echo  Remote agents should pin the TLS certificate when connecting:
+        echo  python scripts\agent.py --server https://%MY_IP%:%FW_PORT% --key ^<key^> --tls-ca certs\sentinel.crt
+        echo.
+    )
 )
 
 if /i "%SECURE_MODE%"=="secure" (

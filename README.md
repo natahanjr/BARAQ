@@ -148,16 +148,20 @@ These are printed to the console exactly once. The dashboard shows a **setup che
 | **Data retention** | Purges telemetry/alerts older than `EVENT_RETENTION_DAYS` (30) every hour — the database never grows unbounded |
 
 ---
-
 ## Distributing Without Source Code
 
 Two ways to hand the product to other people **without giving them the project files**:
 
-### Option 0 — HTTPS (production recommended)
+### Option 0 — HTTPS deployment (STANDARD for fleet/shared use)
+
+HTTPS is the documented way to run SentinelSOC for anything beyond a local
+development session: it is the only transport that protects credentials and
+telemetry in transit, and it is required for remote agents in a fleet.
+Plain `http://` (plain `start.bat`) is for local development only.
 
 ```powershell
 start.bat secure          # HTTPS on https://127.0.0.1:8443 (self-signed cert)
-start.bat secure lan      # HTTPS exposed to the network on port 8443
+start.bat secure lan      # standard: HTTPS exposed to the network on 8443
 ```
 
 `scripts\gen_cert.ps1` generates a self-signed certificate covering
@@ -168,16 +172,29 @@ into the *Trusted Root Certification Authorities* store of each client
 (`certmgr.msc`). The login endpoint is rate-limited (5 failures per IP per
 5 minutes) as brute-force protection.
 
+**Agent transport security:** remote agents must use `https://` and should
+pin the central certificate with `--tls-ca`:
+
+```powershell
+# on every fleet host - copy certs\sentinel.crt from the central server
+python scripts/agent.py --server https://<soc-host>:8443 --key <agent-key> --tls-ca certs\sentinel.crt --interval 15
+```
+
+`scripts\provision_agent.py add <host> https://<soc-host>:8443 --tls-cert certs\sentinel.crt`
+writes that pin into the host config automatically. `--no-verify` exists for
+isolated labs only and logs a warning on the agent.
+
 ### Option A — Run it on your machine, share the URL
 Users open a browser link and log in with accounts you create — they never touch the files.
 
 ```powershell
-start.bat lan        # or double-click start-lan.bat
+start.bat secure lan   # HTTPS sharing (recommended)
+start.bat lan          # plain HTTP (not recommended, unencrypted)
 ```
 
-This opens port 8000 in the firewall, prints your machine's LAN IP, and serves the
-dashboard at `http://<your-ip>:8000`. Create one account per person under
-**Users & Audit** (analyst role).
+This opens port 8001 (or 8443 under TLS) in the firewall, prints your
+machine's LAN IP, and serves the dashboard at the printed URL. Create one
+account per person under **Users & Audit** (analyst role).
 
 ### Option B — Build a standalone `.exe`
 Packages the whole platform (backend + dashboard + all dependencies) into a folder
@@ -244,22 +261,40 @@ curl.exe -X POST "http://127.0.0.1:8000/api/evaluation/holdout?use_real_baseline
 
 The same workflow is available in the dashboard under **Evaluation**.
 
-### Connect remote endpoint agents (multi-endpoint fleet)
+### Deploy a central multi-university console (deployment kit)
 
-Run `scripts/agent.py` on any monitored host to stream telemetry into the SOC:
+For a fleet spread across several universities (or any set of tenants), run
+one central SentinelSOC over HTTPS and provision hosts per campus:
+
+1. **Install the central server**: `start.bat secure lan` (HTTPS :8443).
+   Full step-by-step: [`documentation/deployment_guide.md`](documentation/deployment_guide.md).
+2. **Register a campus** — `scripts/provision_university.py setup` batches
+   the campus hosts, tags every host with the campus org, and writes a
+   manifest (`agent_configs/<org>-manifest.json`) with one launch line per host:
 
 ```powershell
-# On the remote host (agent ships real host telemetry to the SOC server)
-python scripts/agent.py --server http://<soc-host>:8000 --key sentinel-agent-dev --interval 30
+venv\Scripts\python scripts\provision_university.py setup univ-a https://soc.example.com:8443 ^
+    --org-name "University A" --hosts ws-lib-01,ws-lib-02,ws-chem-04 --tls-cert certs\sentinel.crt
+venv\Scripts\python scripts\provision_university.py list
+venv\Scripts\python scripts\provision_university.py revoke-org univ-a
 ```
 
-The agent authenticates with `X-Agent-Key` (configure `AGENT_KEYS` in `backend/config.py`),
-and every record is attributed to the reporting host. The fleet is visible in the
-dashboard under **System → Connected Endpoints** (online/offline, record/event/alert counters).
+3. **On each campus host**, run the agent with TLS pinning (restart the
+   console after provisioning so keys load):
+
+```powershell
+copy \\soc-host\share\sentinel.crt .\sentinel.crt
+python scripts\agent.py --server https://soc.example.com:8443 --key "<host-key>" --tls-ca .\sentinel.crt --interval 15
+```
+
+4. **Isolation is automatic**: the campus org tags every event, alert and
+   metric; campus analysts only see their own org; admins see all (and can
+   switch org in the UI). Per-campus rows land in the Grafana *Fleet per Org*
+   section.
 
 ```powershell
 # Fleet status API
-curl.exe http://127.0.0.1:8000/api/endpoints -H "X-API-Key: sentinel-dev-admin"
+curl.exe https://<soc-host>:8443/api/endpoints -H "X-API-Key: sentinel-dev-admin" -k
 ```
 
 ### Real-time alerting
@@ -454,7 +489,8 @@ readiness checklist.
 
 ## Roadmap
 
-Planned hardening for production deployment: TLS everywhere, secure secret
-management, multi-node/ha deployment, SOC2/ISO 27001-aligned audit trails,
-immutable evidence storage, and a managed-versioning/update channel. See the
-phased deployment plan for details.
+HTTPS is now the standard deployment path (`start.bat secure`, agent
+`--tls-ca` pinning). Remaining planned hardening: managed certificate
+rotation/CA integration, secure secret management, multi-node/ha deployment,
+SOC2/ISO 27001-aligned audit trails, immutable evidence storage, and a
+managed-versioning/update channel. See the phased deployment plan for details.

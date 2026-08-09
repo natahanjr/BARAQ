@@ -116,7 +116,7 @@ npm audit
 
 Status legend: `[x]` verified this session, `[ ]` queued for an explicit phase.
 
-Last verified: 2026-08-06 (217 tests passed: full `pytest tests` suite incl. OIDC SSO, MFA, CSRF/request-size, hold-out evaluation, ML v2 generalization; 0 pip-audit, 0 npm-audit).
+Last verified: 2026-08-09 (291+ tests passed: full `pytest tests` suite incl. OIDC SSO, TOTP MFA, CSRF/request-size, hold-out evaluation, ML v2 generalization, migrations, agent fleet, notification channels; `scripts/security_audit.py` green - pip-audit CVEs on `pip`/`pypdf` found and patched; `pip check` clean).
 
 ### Hold-out evaluation (external validity) - final verified numbers
 

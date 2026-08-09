@@ -73,6 +73,7 @@ class LateralMovementRule(BaseRule):
             .where(
                 NetworkConnection.observed_at >= since,
                 NetworkConnection.remote_port == 445,
+                *self._org_conds(NetworkConnection),
             )
             .group_by(NetworkConnection.local_ip)
             .having(func.count(func.distinct(NetworkConnection.remote_ip)) >= self.admin_share_threshold)
@@ -119,6 +120,7 @@ class LateralMovementRule(BaseRule):
             .where(
                 NormalizedEvent.event_id == 4625,
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
             .group_by(NormalizedEvent.user)
             .having(func.count(func.distinct(NormalizedEvent.host)) >= self.failed_logon_targets)
@@ -160,6 +162,7 @@ class LateralMovementRule(BaseRule):
             .where(
                 NormalizedEvent.event_id.in_([4720, 4732, 4672]),
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
             .group_by(NormalizedEvent.user)
             .having(func.count(func.distinct(NormalizedEvent.host)) >= 2)

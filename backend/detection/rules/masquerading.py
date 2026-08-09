@@ -54,6 +54,7 @@ class MasqueradingRule(BaseRule):
         rows = self.session.scalars(
             select(ProcessRecord).where(
                 ProcessRecord.observed_at >= since,
+                *self._org_conds(ProcessRecord),
                 ProcessRecord.name.isnot(None),
                 ProcessRecord.name != "",
             )
@@ -82,6 +83,7 @@ class MasqueradingRule(BaseRule):
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 4688,
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
         ).all():
             facts = (ev.raw_json or {}).get("facts", {}) if ev.raw_json else {}

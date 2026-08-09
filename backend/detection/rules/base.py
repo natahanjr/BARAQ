@@ -78,9 +78,22 @@ class BaseRule(ABC):
     mitre_id: str = "T0000"
     recommendation: str = "Investigate the evidence."
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, org: str | None = None):
         self.session = session
+        # Tenant scope: None = evaluate across all orgs (legacy/direct use),
+        # "" or a named org limits every query of this rule to that tenant.
+        self.org = org
         self.logger = logging.getLogger(f"sentinel.rules.{self.rule_id}")
+
+    def _org_conds(self, model):
+        """Extra WHERE conditions restricting a query to this rule's tenant.
+
+        Returns ``()`` when the rule is unscoped (``org is None``), or the
+        org equality expression otherwise - safe to unpack into ``where()``.
+        """
+        if self.org is None:
+            return ()
+        return (model.org == self.org,)
 
     @abstractmethod
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
@@ -106,6 +119,7 @@ class BaseRule(ABC):
         for pr in self.session.scalars(
             select(ProcessRecord).where(
                 ProcessRecord.observed_at >= since,
+                *self._org_conds(ProcessRecord),
                 ProcessRecord.command_line.isnot(None),
                 ProcessRecord.command_line != "",
             )
@@ -115,6 +129,7 @@ class BaseRule(ABC):
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id.in_([4688, 4104]),
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
         ).all():
             facts = (ev.raw_json or {}).get("facts", {}) if ev.raw_json else {}

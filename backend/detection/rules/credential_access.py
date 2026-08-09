@@ -46,6 +46,7 @@ class CredentialAccessRule(BaseRule):
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 10,
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
         ).all()
 

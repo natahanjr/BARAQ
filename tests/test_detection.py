@@ -552,3 +552,69 @@ def test_new_rules_no_false_positives_on_benign(db):
     assert CredentialStoreTheftRule(db).evaluate(10) == []
     assert BitsJobRule(db).evaluate(10) == []
     assert ShortcutModificationRule(db).evaluate(10) == []
+
+
+def _seed_org_events(db, org: str, attempts: int = 12) -> None:
+    from backend.analyzers.normalizer import Normalizer
+    from backend.database.models import NormalizedEvent
+
+    normalizer = Normalizer()
+    for record in brute_force(attempts=attempts):
+        db.add(NormalizedEvent(**normalizer.normalize(record), org=org))
+    db.commit()
+
+
+def test_brute_force_rule_is_scoped_to_org(db):
+    """Regression: a rule must only evaluate events from its own org."""
+    from backend.detection.rules.brute_force import BruteForceRule
+
+    _seed_org_events(db, "univ-a")
+    _seed_org_events(db, "univ-b")
+
+    rule_a = BruteForceRule(db, threshold=5)
+    rule_a.org = "univ-a"
+    findings_a = rule_a.evaluate(10)
+    assert len(findings_a) == 1
+    assert len(findings_a[0].event_ids) == 12
+
+    rule_b = BruteForceRule(db, threshold=5)
+    rule_b.org = "univ-b"
+    findings_b = rule_b.evaluate(10)
+    assert len(findings_b) == 1
+    assert len(findings_b[0].event_ids) == 12
+
+    rule_c = BruteForceRule(db, threshold=5)
+    rule_c.org = "univ-c"
+    assert rule_c.evaluate(10) == []
+
+    rule_admin = BruteForceRule(db, threshold=5)
+    admin_findings = rule_admin.evaluate(10)
+    assert sum(len(f.event_ids) for f in admin_findings) == 24
+
+
+def test_rule_engine_isolates_orgs_and_admin_sees_all(db):
+    """Full engine run: findings from one org never leak into another org's."""
+    from sqlalchemy import select
+
+    from backend.database.models import NormalizedEvent
+    from backend.detection.rules_engine import RulesEngine
+
+    _seed_org_events(db, "univ-a")
+    _seed_org_events(db, "univ-b")
+
+    engine_a = RulesEngine(db, org="univ-a")
+    engine_b = RulesEngine(db, org="univ-b")
+
+    ids_a = {eid for f in engine_a.run(10) for eid in f.event_ids}
+    ids_b = {eid for f in engine_b.run(10) for eid in f.event_ids}
+    assert ids_a and ids_b
+    assert ids_a.isdisjoint(ids_b)
+
+    all_ids = set(
+        db.scalars(select(NormalizedEvent.id).where(NormalizedEvent.org == "univ-a")).all()
+    )
+    assert ids_a <= all_ids
+
+    admin_engine = RulesEngine(db)
+    admin_ids = {eid for f in admin_engine.run(10) for eid in f.event_ids}
+    assert ids_a | ids_b == admin_ids

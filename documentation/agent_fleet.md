@@ -31,25 +31,32 @@ host.
 
 ```bash
 venv\Scripts\python scripts\provision_agent.py add edge-host-1 https://soc.example.com:8443
+venv\Scripts\python scripts\provision_agent.py add ws-eng-02 https://soc.example.com:8443 --org eng --tls-cert certs\sentinel.crt
 ```
 
-This generates a key, writes it to the vault, and saves the agent's launch
+This generates a key, writes it to the vault (and, with `--org`, maps the
+agent to a tenant in `SENTINEL_AGENT_ORGS`), and saves the agent's launch
 config to `agent_configs/edge-host-1.json`. **Restart the SentinelSOC
-service** afterwards so the new key is loaded (keys are read at startup).
+service** afterwards so the new key and org mapping are loaded (both are
+read at startup).
 
 Copy the shipper to the host and run:
 
 ```bash
-python scripts/agent.py --server https://soc.example.com:8443 --key "<key>" --interval 15
+python scripts/agent.py --server https://soc.example.com:8443 --key "<key>" --interval 15 --tls-ca certs/sentinel.crt
 ```
+
+For multi-campus fleets, `scripts/provision_university.py` batches a whole
+org at once and emits a manifest with one launch line per host — see
+`documentation/deployment_guide.md`.
 
 Recommended fleet ops:
 
 - Run the agent as a scheduled task at startup (or a service) so it always
-  reports; `--interval 15` is a good default for the 2-3 host reference
-  deployment.
-- Reach the server over HTTPS (reverse proxy) - the ingest channel is
-  bearer-key authenticated but is not encrypted in transit by itself.
+  reports; `--interval 15` is a good default for the reference deployment.
+- Serve the console over HTTPS (built-in: `start.bat secure lan`, port
+  8443); agents must pin the server certificate with `--tls-ca` so ingest
+  is encrypted and verified end-to-end.
 - Validate from the dashboard: Command Center > Endpoints shows the new
   host with `last_seen` refreshing every interval; volume counters increment
   per cycle. You can also hit `GET /api/endpoints` directly.

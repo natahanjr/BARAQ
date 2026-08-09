@@ -50,6 +50,7 @@ class SuspiciousPowerShellRule(BaseRule):
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id.in_([4104, 4103, 400, 403, 4688]),
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
         ).all()
 

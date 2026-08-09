@@ -3,12 +3,23 @@
 Run on any Windows host (including the server itself) to form a 2-3 host
 fleet:
 
-    python scripts/agent.py --server http://central:8000 --key <agent-key> --interval 15
+    python scripts/agent.py --server https://central:8443 --key <agent-key> --interval 15
+    python scripts/agent.py --server https://central:8443 --key <agent-key> --tls-ca certs/sentinel.crt
+
+HTTPS is the standard transport for fleet deployments: the server's
+self-signed certificate (certs/sentinel.crt) can be pinned on the agent with
+``--tls-ca`` so connections are verified end-to-end. ``--no-verify`` exists
+for lab use only and logs a warning. Plain ``http://`` works for local
+single-host setups.
 
 The agent runs the same collector set as the server, stamps every record
 with the local hostname, and POSTs it to ``POST /api/ingest``. The server
 validates the ``X-Agent-Key`` header, attributes the records to the agent,
 and runs the full detection pipeline centrally.
+
+On non-Windows hosts (where the Windows collectors cannot import) the agent
+falls back to the minimal Linux collectors in ``scripts/linux_collect.py``
+(auth.log logon events, network connections, new processes).
 """
 from __future__ import annotations
 
@@ -18,6 +29,7 @@ import logging
 import os
 import re
 import socket
+import ssl
 import subprocess
 import time
 import urllib.request
@@ -27,7 +39,31 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | 
 logger = logging.getLogger("sentinel.agent")
 
 
-def _request(base: str, path: str, key: str, payload: dict | None = None, method: str = "GET") -> dict:
+def make_tls_context(tls_ca: str | None = None, no_verify: bool = False) -> ssl.SSLContext | None:
+    """Build the SSL context used for https:// server URLs.
+
+    * ``tls_ca`` - PEM file to pin (the central server's self-signed cert);
+      verification then succeeds without touching the system store.
+    * ``no_verify`` - lab-only: accept any certificate (logs a warning).
+    * neither - the default system store is used (imported CAs only).
+    Returns ``None`` for plain http:// URLs (no TLS involved).
+    """
+    if no_verify:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        logger.warning("TLS verification disabled (--no-verify) - use only in isolated labs")
+        return ctx
+    if tls_ca:
+        ctx = ssl.create_default_context(cafile=tls_ca)
+        logger.info("Pinning central TLS certificate: %s", tls_ca)
+        return ctx
+    return None
+
+
+def _request(base: str, path: str, key: str, payload: dict | None = None,
+             method: str = "GET", tls_ca: str | None = None,
+             no_verify: bool = False) -> dict:
     url = base.rstrip("/") + path
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     req = urllib.request.Request(
@@ -36,7 +72,8 @@ def _request(base: str, path: str, key: str, payload: dict | None = None, method
         headers={"Content-Type": "application/json", "X-Agent-Key": key},
         method=method,
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    context = make_tls_context(tls_ca, no_verify)
+    with urllib.request.urlopen(req, timeout=30, context=context) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -85,7 +122,8 @@ def execute_command(cmd: dict) -> dict:
 
 
 def collect() -> list[dict]:
-    from backend.collectors import CollectorManager
+    """Collect telemetry: Windows collector stack, else the Linux fallback."""
+    from backend.collectors import CollectorManager  # noqa: F401
 
     host = socket.gethostname()
     records = []
@@ -95,11 +133,31 @@ def collect() -> list[dict]:
     return records
 
 
+def collect_fallback() -> list[dict]:
+    """Non-Windows hosts: use the minimal Linux collectors."""
+    host = socket.gethostname()
+    records = []
+    try:
+        from scripts.linux_collect import collect as linux_collect
+
+        for record in linux_collect():
+            record["host"] = host
+            records.append(record)
+    except ImportError as exc:  # noqa: BLE001
+        logger.warning("No collectors available on this platform: %s", exc)
+    return records
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="SentinelSOC remote telemetry agent")
-    parser.add_argument("--server", default="http://127.0.0.1:8000", help="Central SentinelSOC API")
+    parser.add_argument("--server", default="https://127.0.0.1:8443",
+                        help="Central SentinelSOC API (HTTPS standard, port 8443)")
     parser.add_argument("--key", default="sentinel-agent-dev", help="Agent key (X-Agent-Key)")
     parser.add_argument("--interval", type=int, default=15, help="Collection interval (seconds)")
+    parser.add_argument("--tls-ca", default=None,
+                        help="PEM cert file of the central server (certs/sentinel.crt) to pin")
+    parser.add_argument("--no-verify", action="store_true",
+                        help="LAB ONLY: skip TLS certificate verification")
     args = parser.parse_args()
 
     host = socket.gethostname()
@@ -107,19 +165,26 @@ def main() -> None:
     while True:
         try:
             try:
-                pending = _request(args.server, "/api/commands/pending", args.key)
+                pending = _request(args.server, "/api/commands/pending", args.key,
+                                   tls_ca=args.tls_ca, no_verify=args.no_verify)
                 for cmd in pending.get("items", []):
                     report = execute_command(cmd)
                     try:
                         _request(args.server, f"/api/commands/{cmd['id']}/result",
-                                 args.key, report, method="POST")
+                                 args.key, report, method="POST",
+                                 tls_ca=args.tls_ca, no_verify=args.no_verify)
                         logger.info("Command #%s (%s %s) -> %s", cmd["id"], cmd["action"], cmd["target"], report["status"])
                     except Exception as exc:  # noqa: BLE001
                         logger.warning("Failed to report command #%s: %s", cmd.get("id"), exc)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Command poll failed: %s", exc)
 
-            records = collect()
+            records = []
+            try:
+                records = collect()
+            except Exception as exc:  # noqa: BLE001 - non-Windows host
+                logger.debug("Windows collectors unavailable (%s); Linux fallback", exc)
+                records = collect_fallback()
             if records:
                 result = _request(
                     args.server,
@@ -127,6 +192,8 @@ def main() -> None:
                     args.key,
                     {"records": records, "host": host},
                     method="POST",
+                    tls_ca=args.tls_ca,
+                    no_verify=args.no_verify,
                 )
                 logger.info(
                     "Shipped %d records -> %s alerts",

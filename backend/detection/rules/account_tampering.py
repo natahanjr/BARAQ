@@ -44,6 +44,7 @@ class AccountTamperingRule(BaseRule):
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id.in_([4724, 4726, 4738, 4725, 4722]),
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
         ).all()
 

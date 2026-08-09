@@ -87,7 +87,11 @@ class KillChainCorrelationRule(BaseRule):
         findings: list[DetectionResult] = []
 
         alerts = self.session.scalars(
-            select(Alert).where(Alert.created_at >= since, Alert.status == "open")
+            select(Alert).where(
+                Alert.created_at >= since,
+                Alert.status == "open",
+                *self._org_conds(Alert),
+            )
         ).all()
 
         by_group: dict[str, dict[str, datetime]] = {}

@@ -48,7 +48,10 @@ class NetworkReconRule(BaseRule):
                 func.min(NetworkConnection.observed_at).label("first_ts"),
                 func.max(NetworkConnection.observed_at).label("last_ts"),
             )
-            .where(NetworkConnection.observed_at >= since)
+            .where(
+                NetworkConnection.observed_at >= since,
+                *self._org_conds(NetworkConnection),
+            )
             .group_by(NetworkConnection.local_ip, NetworkConnection.remote_ip)
             .having(func.count(func.distinct(NetworkConnection.remote_port)) >= self.distinct_ports)
         )

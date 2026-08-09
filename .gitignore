@@ -64,3 +64,5 @@ deploy/prometheus/.scrape-key
 # Database backups (large dumps / encrypted archives — never commit)
 backups/
 
+
+database/*.sentinel.lock

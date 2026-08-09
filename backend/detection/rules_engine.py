@@ -89,14 +89,16 @@ def build_rules(session: Session, overrides: dict | None = None) -> list[BaseRul
 
 
 class RulesEngine:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, org: str | None = None):
         self.session = session
+        self.org = org
         self.rules = build_rules(session)
 
     def run(self, window_minutes: int = 10) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         for rule in self.rules:
             try:
+                rule.org = self.org
                 rule_findings = rule.evaluate(window_minutes)
                 for f in rule_findings:
                     f.mitre_id = getattr(rule, "mitre_id", "T0000")

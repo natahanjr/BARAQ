@@ -72,6 +72,7 @@ class DataStagingRule(BaseRule):
             .where(
                 NormalizedEvent.event_id.in_([4688, 4104]),  # Process creation or PowerShell
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
         )
 
@@ -136,7 +137,10 @@ class DataStagingRule(BaseRule):
                 func.count(ProcessRecord.id).label("temp_accesses"),
                 func.min(ProcessRecord.observed_at).label("first_access"),
             )
-            .where(ProcessRecord.observed_at >= since)
+            .where(
+                ProcessRecord.observed_at >= since,
+                *self._org_conds(ProcessRecord),
+            )
             .group_by(ProcessRecord.user)
             .having(func.count(ProcessRecord.id) >= self.temp_dir_access_threshold)
         )
@@ -176,6 +180,7 @@ class DataStagingRule(BaseRule):
             .where(
                 NormalizedEvent.event_id.in_([4688, 4104]),
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
             .group_by(NormalizedEvent.user)
         )

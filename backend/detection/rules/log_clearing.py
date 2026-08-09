@@ -38,6 +38,7 @@ class LogClearingRule(BaseRule):
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id.in_([*_LOG_CLEAR_EVENTS, 23]),
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
         ).all()
 

@@ -49,6 +49,7 @@ class PrivilegeEscalationRule(BaseRule):
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 4720,
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
         ).all()
 
@@ -63,6 +64,7 @@ class PrivilegeEscalationRule(BaseRule):
                 select(NormalizedEvent).where(
                     NormalizedEvent.event_id.in_([4732, 4728]),
                     NormalizedEvent.timestamp >= since,
+                    *self._org_conds(NormalizedEvent),
                 )
             ).all()
             for add in admin_additions:
@@ -87,6 +89,7 @@ class PrivilegeEscalationRule(BaseRule):
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id.in_([4732, 4728]),
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
         ).all():
             if add.id in covered_event_ids:

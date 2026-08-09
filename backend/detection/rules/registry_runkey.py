@@ -47,6 +47,7 @@ class RegistryRunKeyRule(BaseRule):
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 13,
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
         ).all()
 

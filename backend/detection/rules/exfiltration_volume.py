@@ -43,7 +43,10 @@ class ExfiltrationVolumeRule(BaseRule):
         findings: list[DetectionResult] = []
         since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
-            select(HttpRequest).where(HttpRequest.observed_at >= since)
+            select(HttpRequest).where(
+                HttpRequest.observed_at >= since,
+                *self._org_conds(HttpRequest),
+            )
         ).all()
 
         totals: dict[str, dict] = defaultdict(lambda: {"bytes": 0, "count": 0})

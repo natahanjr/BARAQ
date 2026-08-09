@@ -50,6 +50,7 @@ class BruteForceRule(BaseRule):
             .where(
                 NormalizedEvent.event_id == 4625,
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
             .group_by(NormalizedEvent.user, NormalizedEvent.raw_json)
             .order_by(func.count(NormalizedEvent.id).desc())
@@ -73,6 +74,7 @@ class BruteForceRule(BaseRule):
                         NormalizedEvent.event_id == 4625,
                         NormalizedEvent.user == row.user,
                         NormalizedEvent.timestamp >= since,
+                        *self._org_conds(NormalizedEvent),
                     )
                 )
             )
@@ -112,6 +114,7 @@ class BruteForceRule(BaseRule):
             .where(
                 NormalizedEvent.event_id == 4625,
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
             .group_by(NormalizedEvent.user)
             .having(func.count(NormalizedEvent.id) >= self.threshold)
@@ -134,6 +137,7 @@ class BruteForceRule(BaseRule):
                         NormalizedEvent.event_id == 4625,
                         NormalizedEvent.user == row.user,
                         NormalizedEvent.timestamp >= since,
+                        *self._org_conds(NormalizedEvent),
                     )
                 )
             )

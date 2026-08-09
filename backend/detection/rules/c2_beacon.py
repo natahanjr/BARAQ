@@ -77,7 +77,10 @@ class C2BeaconRule(BaseRule):
         findings: list[DetectionResult] = []
         since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
-            select(NetworkConnection).where(NetworkConnection.observed_at >= since)
+            select(NetworkConnection).where(
+                NetworkConnection.observed_at >= since,
+                *self._org_conds(NetworkConnection),
+            )
         ).all()
 
         buckets: dict[tuple[str, str], dict] = defaultdict(

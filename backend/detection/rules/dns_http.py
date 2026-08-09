@@ -54,7 +54,10 @@ class DnsHttpExfilRule(BaseRule):
     def _dns_findings(self, since) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         rows = self.session.scalars(
-            select(DnsQuery).where(DnsQuery.observed_at >= since)
+            select(DnsQuery).where(
+                DnsQuery.observed_at >= since,
+                *self._org_conds(DnsQuery),
+            )
         ).all()
 
         by_query: Counter[str] = Counter()
@@ -101,7 +104,10 @@ class DnsHttpExfilRule(BaseRule):
     def _http_findings(self, since) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         rows = self.session.scalars(
-            select(HttpRequest).where(HttpRequest.observed_at >= since)
+            select(HttpRequest).where(
+                HttpRequest.observed_at >= since,
+                *self._org_conds(HttpRequest),
+            )
         ).all()
 
         big = [r for r in rows if (r.response_body_size or 0) >= HTTP_BODY_THRESHOLD]

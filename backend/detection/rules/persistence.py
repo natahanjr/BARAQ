@@ -50,6 +50,7 @@ class PersistenceRule(BaseRule):
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id.in_([7045, 4698, 4702]),
                 NormalizedEvent.timestamp >= since,
+                *self._org_conds(NormalizedEvent),
             )
         ).all()
 

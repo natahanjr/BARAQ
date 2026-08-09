@@ -73,7 +73,10 @@ class EmailPhishingRule(BaseRule):
         findings: list[DetectionResult] = []
 
         emails = self.session.scalars(
-            select(EmailMessage).where(EmailMessage.received_at >= since)
+            select(EmailMessage).where(
+                EmailMessage.received_at >= since,
+                *self._org_conds(EmailMessage),
+            )
         ).all()
 
         for email in emails:
