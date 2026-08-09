@@ -65,6 +65,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
                 parent_name="", user=record.get("user", ""),
                 is_new=record.get("is_new", False),
                 observed_at=Normalizer._safe_ts(record.get("timestamp")),
+                org=org,
             ))
             saved_processes += 1
         elif source == "network":
@@ -76,6 +77,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
                 bytes_sent=record.get("bytes_sent", 0), bytes_recv=record.get("bytes_recv", 0),
                 duration_seconds=record.get("duration_seconds", 0.0),
                 observed_at=Normalizer._safe_ts(record.get("timestamp")),
+                org=org,
             ))
             saved_connections += 1
         elif source == "dns":
@@ -84,6 +86,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
                 query=record.get("query", ""), response=record.get("response", ""),
                 response_size=record.get("response_size", 0),
                 observed_at=Normalizer._safe_ts(record.get("timestamp")),
+                org=org,
             ))
             saved_dns += 1
         elif source == "http":
@@ -94,6 +97,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
                 request_body_size=record.get("request_body_size", 0),
                 response_body_size=record.get("response_body_size", 0),
                 observed_at=Normalizer._safe_ts(record.get("timestamp")),
+                org=org,
             ))
             saved_http += 1
         elif source == "email":
@@ -103,6 +107,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
                 attachment_types=record.get("attachment_types", ""),
                 ip_address=record.get("ip_address", ""),
                 received_at=Normalizer._safe_ts(record.get("timestamp")),
+                org=org,
             ))
             saved_emails += 1
         elif source == "usb":
@@ -110,6 +115,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
                 device_name=record.get("device_name", ""), device_id=record.get("device_id", ""),
                 vendor=record.get("vendor", ""), serial=record.get("serial", ""),
                 inserted_at=Normalizer._safe_ts(record.get("timestamp")),
+                org=org,
             ))
             saved_usb += 1
         elif source == "malware":
@@ -120,6 +126,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
                 is_malicious=record.get("is_malicious", False),
                 signature_name=record.get("signature_name", ""),
                 scanned_at=Normalizer._safe_ts(record.get("timestamp")),
+                org=org,
             ))
             saved_files += 1
         elif source == "vuln":
@@ -133,6 +140,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
                 description=record.get("description", ""),
                 remediation=record.get("remediation", ""),
                 found_at=Normalizer._safe_ts(record.get("timestamp")),
+                org=org,
             ))
             saved_vulns += 1
         else:
@@ -142,7 +150,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
 
     db.commit()
 
-    engine = RulesEngine(db)
+    engine = RulesEngine(db, org=org)
     findings = engine.run(window_minutes=10)
     alerting = AlertingService(db)
     created = alerting.handle_findings(findings, org=org)
@@ -307,7 +315,7 @@ def system_status(request: Request, db: Session = Depends(get_db)):
         "application": "SentinelSOC",
         "version": "1.0.0",
         "collecting": True,
-        "database": "sqlite" if dialect == "sqlite" else dialect,
+        "database": dialect,
         "summary": dashboard.dashboard_summary(db, org=tenant_scope(request)),
         "uptime_seconds": int(time.time() - _START_TIME),
         "setup": {

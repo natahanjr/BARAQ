@@ -1,19 +1,43 @@
 """Migrations CI: the baseline must bootstrap a fresh database end-to-end."""
-import sqlite3
+import os
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
+import pytest
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.engine import make_url
+
 ROOT = Path(__file__).resolve().parent.parent
+ADMIN_URL = "postgresql+psycopg://postgres@127.0.0.1:55432/postgres"
 
 
-def test_migrations_baseline_bootstraps_fresh_sqlite(tmp_path):
-    db = tmp_path / "migrate.db"
-    import os
+def _fresh_db_name() -> str:
+    return f"sentinel_test_migrate_{uuid.uuid4().hex[:8]}"
 
+
+@pytest.fixture()
+def scratch_db():
+    """Create and drop a throwaway PostgreSQL database for the migration."""
+    name = _fresh_db_name()
+    admin = create_engine(ADMIN_URL, isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        conn.execute(text(f'CREATE DATABASE "{name}"'))
+    admin.dispose()
+    url = str(make_url(ADMIN_URL).set(database=name))
+    yield url, name
+    admin = create_engine(ADMIN_URL, isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+    admin.dispose()
+
+
+def test_migrations_baseline_bootstraps_fresh_postgres(scratch_db):
+    url, _name = scratch_db
     env = dict(os.environ)  # keep SystemRoot etc. or winsock breaks (WinError 10106)
     env.update({
-        "SENTINEL_DATABASE_URL": f"sqlite:///{db}",
+        "SENTINEL_DATABASE_URL": url,
         "SENTINEL_SKIP_SECRET_GEN": "1",
     })
     run = subprocess.run(
@@ -22,13 +46,12 @@ def test_migrations_baseline_bootstraps_fresh_sqlite(tmp_path):
         cwd=ROOT,
     )
     assert run.returncode == 0, run.stderr[-1500:]
-    conn = sqlite3.connect(db)
+    engine = create_engine(url)
     try:
-        tables = {r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )}
+        inspector = inspect(engine)
+        tables = set(inspector.get_table_names())
     finally:
-        conn.close()
+        engine.dispose()
     for expected in (
         "users", "alerts", "events", "entity_nodes", "entity_edges",
         "threat_intel_records", "audit_log", "alembic_version",
@@ -40,6 +63,6 @@ def test_baseline_revision_exists():
     versions = ROOT / "alembic" / "versions"
     baselines = list(versions.glob("*baseline*.py"))
     assert baselines, "no baseline migration"
-    text = baselines[0].read_text(encoding="utf-8")
-    assert "down_revision = None" in text
-    assert "def upgrade" in text
+    text_ = baselines[0].read_text(encoding="utf-8")
+    assert "down_revision = None" in text_
+    assert "def upgrade" in text_

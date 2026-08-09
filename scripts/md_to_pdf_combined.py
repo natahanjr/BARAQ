@@ -220,7 +220,7 @@ def build_html(md_text: str) -> str:
     cover_rows = "<tr><td class=lbl>Version</td><td><b>1.0.0</b></td></tr>"
     for label, value in [
         ("Platform", "Windows 10/11 · local-first SOC"),
-        ("Stack", "FastAPI + React 19 + SQLite/PostgreSQL"),
+        ("Stack", "FastAPI + React 19 + PostgreSQL"),
         ("Access", "Dashboard http(s)://127.0.0.1:8001 (or :8443)"),
     ]:
         cover_rows += f'<tr><td class="lbl">{label}</td><td><b>{value}</b></td></tr>'

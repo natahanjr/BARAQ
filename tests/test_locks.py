@@ -1,66 +1,53 @@
-"""Single-instance lock semantics (SQLite lockfile; Postgres in live env)."""
-import os
-
+"""Single-instance lock semantics (PostgreSQL advisory locks)."""
 import pytest
 from sqlalchemy import create_engine
 
-from backend.locks import InstanceLock, _pid_is_alive
+from backend.config import DATABASE_URL
+from backend.locks import InstanceLock
 
 
 @pytest.fixture
-def sqlite_db(tmp_path):
-    path = tmp_path / "soc.db"
-    return f"sqlite:///{path}", path
+def lock_engine():
+    return create_engine(DATABASE_URL, pool_pre_ping=True)
 
 
-def test_first_holds_second_denied(sqlite_db):
-    url, _ = sqlite_db
-    a = InstanceLock(create_engine(url))
-    b = InstanceLock(create_engine(url))
+def test_first_holds_second_denied(lock_engine):
+    a = InstanceLock(create_engine(DATABASE_URL))
+    b = InstanceLock(create_engine(DATABASE_URL))
     try:
         assert a.acquire() is True
         assert b.acquire() is False
     finally:
         a.release()
+        b.release()
 
 
-def test_release_allows_next(sqlite_db):
-    url, _ = sqlite_db
-    a = InstanceLock(create_engine(url))
-    b = InstanceLock(create_engine(url))
+def test_release_allows_next(lock_engine):
+    a = InstanceLock(create_engine(DATABASE_URL))
+    b = InstanceLock(create_engine(DATABASE_URL))
     assert a.acquire() is True
     a.release()
     assert b.acquire() is True
     b.release()
 
 
-def test_stale_lock_is_stolen(sqlite_db):
-    url, path = sqlite_db
-    lock_path = path.with_suffix(".db.sentinel.lock")
-    lock_path.parent.mkdir(exist_ok=True)
-    lock_path.write_text(str(999_999_999))  # PID that cannot exist
-    assert not _pid_is_alive(999_999_999)
-    lock = InstanceLock(create_engine(url))
-    assert lock.acquire() is True
-    lock.release()
+def test_dispose_releases_lock(lock_engine):
+    a = InstanceLock(create_engine(DATABASE_URL))
+    assert a.acquire() is True
+    a.release()
+    # Postgres releases advisory locks when their session closes; a.engine
+    # dispose must therefore make the lock reusable by a new lock instance.
+    b = InstanceLock(create_engine(DATABASE_URL))
+    assert b.acquire() is True
+    b.release()
 
 
-def test_active_pid_not_stolen(sqlite_db):
-    url, path = sqlite_db
-    lock_path = path.with_suffix(".db.sentinel.lock")
-    lock_path.parent.mkdir(exist_ok=True)
-    lock_path.write_text(str(os.getpid()))
-    assert _pid_is_alive(os.getpid())
-    lock = InstanceLock(create_engine(url))
-    assert lock.acquire() is False
-    lock_path.unlink(missing_ok=True)
-
-
-def test_sqlite_lockfile_removed_on_release(sqlite_db):
-    url, path = sqlite_db
-    lock = InstanceLock(create_engine(url))
-    lock.acquire()
-    lock_path = path.with_suffix(".db.sentinel.lock")
-    assert lock_path.exists()
-    lock.release()
-    assert not lock_path.exists()
+def test_different_name_does_not_conflict(lock_engine):
+    a = InstanceLock(create_engine(DATABASE_URL), name="lock-a")
+    b = InstanceLock(create_engine(DATABASE_URL), name="lock-b")
+    try:
+        assert a.acquire() is True
+        assert b.acquire() is True
+    finally:
+        a.release()
+        b.release()

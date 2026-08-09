@@ -263,10 +263,13 @@ for _d in (DATABASE_DIR, LOG_DIR, REPORT_DIR):
 # --------------------------------------------------------------------------
 # Database
 # --------------------------------------------------------------------------
-DATABASE_URL = os.environ.get(
-    "SENTINEL_DATABASE_URL",
-    f"sqlite:///{(DATABASE_DIR / 'sentinel.db').as_posix()}",
-)
+DATABASE_URL = os.environ.get("SENTINEL_DATABASE_URL", "")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "SentinelSOC requires SENTINEL_DATABASE_URL. The SQLite fallback has "
+        "been removed - set it to a postgresql:// URL (e.g. "
+        "postgresql+psycopg://user:pass@host:5432/sentinel)."
+    )
 ECHO_SQL = False
 EVENT_RETENTION_DAYS = 30
 
@@ -641,6 +644,10 @@ SMTP_FROM = os.environ.get("SENTINEL_SMTP_FROM", "sentinel@localhost")
 SMTP_TO = os.environ.get("SENTINEL_SMTP_TO", "")
 SMTP_PASSWORD = _secret("SENTINEL_SMTP_PASSWORD", "")
 NOTIFY_MIN_SEVERITY = os.environ.get("SENTINEL_NOTIFY_MIN_SEVERITY", "high")
+# Telegram push (bot). Bot token is stored in the vault/secret env; chat id
+# is a number (or @channelusername). Leave empty to disable.
+TELEGRAM_BOT_TOKEN = _secret("SENTINEL_TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("SENTINEL_TELEGRAM_CHAT_ID", "")
 # Windows toast notifications (PowerShell helper; best-effort).
 TOAST_ENABLED = os.environ.get("SENTINEL_TOAST_ENABLED", "1").lower() not in (
     "0", "false", "no", "off",

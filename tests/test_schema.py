@@ -1,6 +1,6 @@
 """Database migration + default-value regression tests.
 
-Covers the additive in-place migrations (so an older SQLite file upgrades
+Covers the additive in-place migrations (so an older schema upgrades
 cleanly), the verdict->event foreign key, and the entity-graph upsert
 semantics (accumulating counters, preserving first_seen).
 """
@@ -93,7 +93,7 @@ class TestGraphUpsertSemantics:
             "first_seen": t1, "last_seen": t2,
         }], accumulate=True)
 
-        def as_utc(dt):  # SQLite returns naive UTC datetimes
+        def as_utc(dt):  # some drivers return naive UTC datetimes
             return dt.replace(tzinfo=timezone.utc) if dt and dt.tzinfo is None else dt
 
         node = db.query(EntityNode).filter_by(kind="user", name="alice").one()

@@ -26,7 +26,6 @@ import json
 import os
 import random
 import sys
-import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -36,12 +35,14 @@ os.environ.setdefault("SENTINEL_SKIP_SECRET_GEN", "1")
 # notification channels during a CI/automation run.
 os.environ.setdefault("SENTINEL_TOAST_ENABLED", "0")
 os.environ.setdefault(
-    "SENTINEL_DATABASE_URL", f"sqlite:///{Path(tempfile.gettempdir()) / 'sentinel_redteam.db'}"
+    "SENTINEL_DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel"
 )
 
 from sqlalchemy import create_engine, select  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 
+from backend.config import DATABASE_URL  # noqa: E402
+from backend.database.connection import normalize_database_url  # noqa: E402
 from backend.api.system import run_pipeline  # noqa: E402
 from backend.database.models import Alert, Base  # noqa: E402
 
@@ -177,12 +178,55 @@ def _shift_latest_to(records: list[dict], target: datetime) -> list[dict]:
     return shifted
 
 
+_SCRATCH: list[tuple[object, object, str]] = []
+
+
 def _fresh_session():
-    fd, path = tempfile.mkstemp(suffix=".db", prefix="sentinel_redteam_")
-    os.close(fd)
-    engine = create_engine("sqlite:///" + path)
+    """Fresh isolated scratch PostgreSQL database; returns (session, engine, name)."""
+    import uuid
+
+    from sqlalchemy import text as sa_text
+    from sqlalchemy.engine import make_url
+
+    base_url = make_url(normalize_database_url(DATABASE_URL))
+    db_name = f"sentinel_scratch_{uuid.uuid4().hex[:12]}"
+
+    admin = create_engine(base_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    try:
+        with admin.connect() as conn:
+            conn.execute(sa_text(f'CREATE DATABASE "{db_name}"'))
+    finally:
+        admin.dispose()
+
+    engine = create_engine(base_url.set(database=db_name))
     Base.metadata.create_all(bind=engine)
-    return sessionmaker(bind=engine, expire_on_commit=False)()
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    _SCRATCH.append((session, engine, db_name))
+    return session
+
+
+def _drop_scratch() -> None:
+    """Close and drop every scratch database created during this run."""
+    from sqlalchemy import text as sa_text
+    from sqlalchemy.engine import make_url
+
+    base_url = make_url(normalize_database_url(DATABASE_URL))
+    admin = create_engine(base_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    try:
+        while _SCRATCH:
+            session, engine, db_name = _SCRATCH.pop()
+            try:
+                session.close()
+                engine.dispose()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                with admin.connect() as conn:
+                    conn.execute(sa_text(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)'))
+            except Exception:  # noqa: BLE001
+                pass
+    finally:
+        admin.dispose()
 
 
 def _scenario_records(name: str) -> list[dict]:
@@ -299,19 +343,22 @@ def main() -> int:
     parser.add_argument("--json-out", type=str, default="", help="write the verdict table to a JSON file")
     args = parser.parse_args()
 
-    if args.chain:
-        results = _replay_chain()
-        mode = "kill-chain timeline replay (one database)"
-    elif args.scenario:
-        name = args.scenario
-        if name not in SCENARIOS:
-            raise SystemExit(f"unknown scenario {name!r}; pick from: {', '.join(SCENARIOS)}")
-        rule, mitre, note = SCENARIOS[name]
-        results = [_replay_isolation(name, rule, mitre, note)]
-        mode = f"isolated replay: {name}"
-    else:
-        results = [_replay_isolation(name, rule, mitre, note) for name, (rule, mitre, note) in SCENARIOS.items()]
-        mode = "isolated per-scenario replay (fresh DB per scenario)"
+    try:
+        if args.chain:
+            results = _replay_chain()
+            mode = "kill-chain timeline replay (one database)"
+        elif args.scenario:
+            name = args.scenario
+            if name not in SCENARIOS:
+                raise SystemExit(f"unknown scenario {name!r}; pick from: {', '.join(SCENARIOS)}")
+            rule, mitre, note = SCENARIOS[name]
+            results = [_replay_isolation(name, rule, mitre, note)]
+            mode = f"isolated replay: {name}"
+        else:
+            results = [_replay_isolation(name, rule, mitre, note) for name, (rule, mitre, note) in SCENARIOS.items()]
+            mode = "isolated per-scenario replay (fresh DB per scenario)"
+    finally:
+        _drop_scratch()
 
     print(f"Red-team validation asset - mode: {mode}")
     print(f"{'scenario':22s} {'expected rule':18s} {'verdict':6s} {'severity':9s} {'method':10s} {'latency':9s}")

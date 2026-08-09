@@ -48,19 +48,22 @@ import json
 import os
 import random
 import sys
-import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("SENTINEL_DATABASE_URL", f"sqlite:///{Path(tempfile.gettempdir()) / 'sentinel_tune.db'}")
+os.environ.setdefault(
+    "SENTINEL_DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel"
+)
 os.environ.setdefault("SENTINEL_SKIP_SECRET_GEN", "1")
 
 from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 
+from backend.config import DATABASE_URL  # noqa: E402
+from backend.database.connection import normalize_database_url  # noqa: E402
 from backend.database.models import Base  # noqa: E402
 from backend.detection.rules_engine import build_rules  # noqa: E402
 from backend.evaluation.holdout import _randomize_records  # noqa: E402
@@ -158,12 +161,60 @@ def _anchored_at_now(records: list[dict]) -> list[dict]:
     return shifted
 
 
+_SCRATCH: list[tuple[object, object, str]] = []
+
+
 def _new_session():
-    fd, path = tempfile.mkstemp(suffix=".db", prefix="sentinel_tune_")
-    os.close(fd)
-    engine = create_engine("sqlite:///" + path)
+    """Fresh isolated scratch PostgreSQL database; returns a bound session.
+
+    Tuning sweeps isolate every evaluation (per variant, per benign corpus)
+    in its own throwaway database so results never leak across combos; all
+    scratch databases are dropped again at the end of the run.
+    """
+    import uuid
+
+    from sqlalchemy import text as sa_text
+    from sqlalchemy.engine import make_url
+
+    base_url = make_url(normalize_database_url(DATABASE_URL))
+    db_name = f"sentinel_scratch_{uuid.uuid4().hex[:12]}"
+
+    admin = create_engine(base_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    try:
+        with admin.connect() as conn:
+            conn.execute(sa_text(f'CREATE DATABASE "{db_name}"'))
+    finally:
+        admin.dispose()
+
+    engine = create_engine(base_url.set(database=db_name))
     Base.metadata.create_all(bind=engine)
-    return sessionmaker(bind=engine, expire_on_commit=False)()
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    _SCRATCH.append((session, engine, db_name))
+    return session
+
+
+def _drop_scratch() -> None:
+    """Close and drop every scratch database created during this run."""
+    from sqlalchemy import text as sa_text
+    from sqlalchemy.engine import make_url
+
+    base_url = make_url(normalize_database_url(DATABASE_URL))
+    admin = create_engine(base_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    try:
+        while _SCRATCH:
+            session, engine, db_name = _SCRATCH.pop()
+            try:
+                session.close()
+                engine.dispose()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                with admin.connect() as conn:
+                    conn.execute(sa_text(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)'))
+            except Exception:  # noqa: BLE001
+                pass
+    finally:
+        admin.dispose()
 
 
 def _build_attack_sessions(seed: int, variants: int, corpus_path: str | None) -> list[list[dict]]:
@@ -375,8 +426,15 @@ def main() -> int:
                         help="use GP expected-improvement search over the joint grid with this many evaluations (default: exhaustive grid)")
     args = parser.parse_args()
 
-    attack_sessions = _build_attack_sessions(args.seed, args.variants, args.corpus or None)
+    try:
+        attack_sessions = _build_attack_sessions(args.seed, args.variants, args.corpus or None)
+        _sweep(args, attack_sessions)
+    finally:
+        _drop_scratch()
+    return 0
 
+
+def _sweep(args, attack_sessions: list[list[dict]]) -> None:
     keys = [f"{rule}__{param}" for rule, params in GRID.items() for param in params]
     grids = {f"{rule}__{param}": vals for rule, params in GRID.items() for param, vals in params.items()}
     combos = _lattice(keys, grids)
@@ -451,8 +509,6 @@ def main() -> int:
         if rule_best_zero:
             combo, recall = rule_best_zero
             print(f"  -> best {rule} recall at zero FP ({recall:.4f}): {_combo_overrides(rkeys, combo)[rule]}")
-
-    return 0
 
 
 if __name__ == "__main__":

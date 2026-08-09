@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models for the SentinelSOC local database (SQLite/PostgreSQL)."""
+"""SQLAlchemy ORM models for the SentinelSOC local database (PostgreSQL)."""
 from __future__ import annotations
 
 import json
@@ -19,14 +19,11 @@ from sqlalchemy.types import JSON, TypeDecorator
 
 
 class JSONColumnType(TypeDecorator):
-    """JSON column that compiles to ``jsonb`` on PostgreSQL and ``json``
-    elsewhere.
+    """JSON column that compiles to ``jsonb`` on PostgreSQL.
 
     Plain ``json`` has no equality operator in PostgreSQL, so GROUP BY /
-    distinct on JSON columns requires ``jsonb``. SQLite keeps the generic
-    ``JSON`` type. Being a ``TypeDecorator`` the choice follows the engine
-    dialect at compile time, not the process-level DATABASE_URL, so mixed
-    SQLite/Postgres engines (tests, migrations) always render correctly.
+    distinct on JSON columns requires ``jsonb``. Being a ``TypeDecorator``
+    the choice follows the engine dialect at compile time.
     """
 
     impl = JSON
@@ -77,8 +74,8 @@ def utcnow() -> datetime:
 def canonical_timestamp(ts: datetime | None) -> str:
     """Normalise a timestamp to a deterministic UTC string (no microseconds).
 
-    SQLite drops tzinfo and may truncate microseconds on round-trip, so the
-    same instant must hash identically at write time and read time.
+    The same instant must hash identically at write time and read time, so
+    timestamps are canonicalised regardless of the timezone they carry.
     """
     if ts is None:
         return ""

@@ -15,10 +15,8 @@ from __future__ import annotations
 import logging
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from backend.config import GRAPH_MAX_EDGES, GRAPH_MAX_NODES
-from backend.database.connection import IS_POSTGRES, IS_SQLITE
 from backend.database.models import EntityEdge, EntityNode
 from backend.graph.base import GraphStore
 
@@ -33,7 +31,7 @@ _edge_columns = {
     "weight", "first_seen", "last_seen", "properties",
 }
 
-_upsert_cls = pg_insert if IS_POSTGRES else sqlite_insert
+_upsert_cls = pg_insert
 
 
 def _earliest(existing, incoming):
@@ -205,7 +203,7 @@ class PostgresStore(GraphStore):
             if not keys:
                 return
             #: Keep each statement small: a 500-way OR defeats query planning on
-            #: both SQLite and Postgres. 60 keys per chunk is plenty.
+            #: PostgreSQL. 60 keys per chunk is plenty.
             for i in range(0, len(keys), 60):
                 chunk = keys[i : i + 60]
                 conditions = [

@@ -1,15 +1,14 @@
-"""Database engine / session management (SQLite by default, PostgreSQL for fleets).
+"""Database engine / session management (PostgreSQL).
 
-The backend is dialect-portable through SQLAlchemy 2.0 ORM: switch to
-PostgreSQL by setting ``SENTINEL_DATABASE_URL=postgresql://user:pass@host:5432/db``
-and installing the driver (``pip install "psycopg[binary]"``). All schema,
-migrations and analytics queries are dialect-aware.
+The backend runs on PostgreSQL via SQLAlchemy 2.0 ORM:
+``SENTINEL_DATABASE_URL=postgresql://user:pass@host:5432/db`` with the
+psycopg3 driver (``pip install "psycopg[binary]"``).
 """
 from __future__ import annotations
 
 import logging
 
-from sqlalchemy import create_engine, event, inspect
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
 from backend.config import DATABASE_URL, ECHO_SQL
@@ -23,19 +22,15 @@ def normalize_database_url(url: str) -> str:
 
     SQLAlchemy would otherwise default to psycopg2, which is not installed.
     ``postgresql://`` / ``postgres://`` are rewritten to the psycopg3 scheme;
-    URLs with an explicit driver (``+psycopg``, ``+psycopg2``) and SQLite
-    URLs pass through untouched.
+    URLs with an explicit driver (``+psycopg``, ``+psycopg2``) pass through
+    untouched.
     """
     for prefix in ("postgresql://", "postgres://"):
         if url.startswith(prefix):
             return "postgresql+psycopg://" + url[len(prefix):]
     return url
 
-
-IS_SQLITE = normalize_database_url(DATABASE_URL).startswith("sqlite")
-IS_POSTGRES = not IS_SQLITE
-
-# In-place migrations for existing SQLite files (additive columns only).
+# In-place additive column migrations (idempotent; used for pre-Alembic DDL).
 _ADDITIVE_MIGRATIONS = {
     "events": [
         ("risk_score", "REAL"),
@@ -99,23 +94,20 @@ _ADDITIVE_MIGRATIONS = {
 }
 
 
-def _sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ARG001
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA synchronous=NORMAL")
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
+def _ddl_default(ddl_type: str) -> str:
+    """Translate boolean defaults for PostgreSQL (BOOLEAN DEFAULT 0 requires
+    TRUE/FALSE)."""
+    if "BOOLEAN" in ddl_type.upper() and "DEFAULT 0" in ddl_type.upper():
+        return ddl_type.replace("DEFAULT 0", "DEFAULT FALSE")
+    return ddl_type
 
 
 engine = create_engine(
     normalize_database_url(DATABASE_URL),
     echo=ECHO_SQL,
-    connect_args={"check_same_thread": False} if IS_SQLITE else {},
     pool_pre_ping=True,
+    connect_args={"options": "-c timezone=UTC"},
 )
-
-if IS_SQLITE:
-    event.listen(engine, "connect", _sqlite_pragmas)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
@@ -159,10 +151,7 @@ def _backfill_audit_chain() -> None:
 
 
 def _ddl_default(ddl_type: str) -> str:
-    """Translate boolean defaults for PostgreSQL (BOOLEAN DEFAULT 0 is
-    SQLite syntax; Postgres requires TRUE/FALSE)."""
-    if not IS_POSTGRES:
-        return ddl_type
+    """Translate boolean defaults for PostgreSQL (Postgres requires TRUE/FALSE)."""
     if "BOOLEAN" in ddl_type.upper() and "DEFAULT 0" in ddl_type.upper():
         return ddl_type.replace("DEFAULT 0", "DEFAULT FALSE")
     return ddl_type

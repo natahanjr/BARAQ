@@ -4,11 +4,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select
 
 from backend.analyzers.normalizer import Normalizer
-from backend.database.models import Base, NormalizedEvent, Verdict
+from backend.database.models import NormalizedEvent, Verdict
 from backend.ml.anomaly import MLAnomalyDetector, _load_behavior_features, _verdict_map
 from backend.config import ML_RETRAIN_MIN_NEW_VERDICTS
 from tests.fixtures import benign_baseline, ml_credential_spray, suspicious_powershell
@@ -16,10 +15,10 @@ from tests.fixtures import benign_baseline, ml_credential_spray, suspicious_powe
 
 @pytest.fixture
 def v_session():
-    """Isolated in-memory session for verdict/ML tests."""
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    session = sessionmaker(bind=engine)()
+    """Isolated session for verdict/ML tests (PostgreSQL test database)."""
+    from backend.database.connection import SessionLocal
+
+    session = SessionLocal()
     yield session
     session.close()
 

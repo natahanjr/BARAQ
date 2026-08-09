@@ -1,4 +1,4 @@
-"""Database backup / restore for SentinelSOC (PostgreSQL and SQLite).
+"""Database backup / restore for SentinelSOC (PostgreSQL).
 
 Usage::
 
@@ -8,14 +8,14 @@ Usage::
     venv\\Scripts\\python scripts\\db_backup.py restore <archive> [--yes] [--target DBURL]
 
 Behaviour:
-  * ``backup`` dumps the database configured in ``SENTINEL_DATABASE_URL``.
-    PostgreSQL uses ``pg_dump`` (custom format, consistent snapshot); SQLite
-    makes a safe, WAL-checkpointed copy. Every archive gets a SHA-256 manifest
-    sidecar and the newest ``--keep`` archives are retained.
+  * ``backup`` dumps the database configured in ``SENTINEL_DATABASE_URL``
+    with ``pg_dump`` (custom format, consistent snapshot). Every archive
+    gets a SHA-256 manifest sidecar and the newest ``--keep`` archives are
+    retained.
   * ``--encrypt`` wraps the archive with AES-256-GCM under the DPAPI vault
     master key (``backend.crypto``) so backups at rest stay confidential.
   * ``restore`` refuses to run unless ``--yes`` is passed (it replaces the
-    contents of the target database). PostgreSQL archives are validated with
+    contents of the target database) and validates archives with
     ``pg_restore --list`` first.
 """
 from __future__ import annotations
@@ -31,10 +31,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import create_engine, text  # noqa: E402
-
-from backend.database.connection import normalize_database_url  # noqa: E402
-
 #: Directories probed for embedded/portable PostgreSQL binaries.
 _PG_BIN_HINTS = [
     Path.home() / "AppData" / "Local" / "Temp" / "opencode" / "pg" / "pgsql" / "bin",
@@ -44,7 +40,7 @@ DEFAULT_DIR = Path(__file__).resolve().parent.parent / "backups"
 
 
 def dialect_of(url: str) -> str:
-    return "sqlite" if normalize_database_url(url).startswith("sqlite") else "postgres"
+    return "postgres"
 
 
 def find_pg_binary(tool: str) -> str:
@@ -143,30 +139,19 @@ def run_or_die(cmd: list[str]) -> None:
 
 
 def backup_db(url: str, backup_dir: Path, *, keep: int = 10, encrypt: bool = False) -> Path:
-    dialect = dialect_of(url)
     backup_dir.mkdir(parents=True, exist_ok=True)
-    archive = backup_dir / (archive_base(dialect) + (".enc" if encrypt else ".dump"))
+    archive = backup_dir / (archive_base("postgres") + (".enc" if encrypt else ".dump"))
 
-    if dialect == "postgres":
-        pg_dump = find_pg_binary("pg_dump")
-        plain = backup_dir / (archive_base(dialect) + ".dump")
-        run_or_die(
-            [
-                pg_dump, "-Fc", "-Z", "9", "--no-owner",
-                "--file", str(plain), pg_url_for_tools(url),
-            ]
-        )
-        data = plain.read_bytes()
-        plain.unlink(missing_ok=True)
-    else:
-        engine = create_engine(normalize_database_url(url))
-        try:
-            with engine.connect() as conn:
-                conn.execute(text("PRAGMA wal_checkpoint(FULL)"))
-            db_path = Path(url.split("///", 1)[1])
-            data = db_path.read_bytes()
-        finally:
-            engine.dispose()
+    pg_dump = find_pg_binary("pg_dump")
+    plain = backup_dir / (archive_base("postgres") + ".dump")
+    run_or_die(
+        [
+            pg_dump, "-Fc", "-Z", "9", "--no-owner",
+            "--file", str(plain), pg_url_for_tools(url),
+        ]
+    )
+    data = plain.read_bytes()
+    plain.unlink(missing_ok=True)
 
     if encrypt:
         from backend.crypto import encrypt_file_bytes
@@ -208,18 +193,13 @@ def restore_db(url: str, archive: Path, *, yes: bool = False) -> None:
         body_path = archive
 
     try:
-        if dialect_of(url) == "postgres":
-            pg_restore = find_pg_binary("pg_restore")
-            run_or_die(
-                [
-                    pg_restore, "--clean", "--if-exists", "--no-owner",
-                    "--dbname", pg_url_for_tools(url), str(body_path),
-                ]
-            )
-        else:
-            target = Path(normalize_database_url(url).split("///", 1)[1])
-            with archive.open("rb") as src, target.open("wb") as dst:
-                shutil.copyfileobj(src, dst)
+        pg_restore = find_pg_binary("pg_restore")
+        run_or_die(
+            [
+                pg_restore, "--clean", "--if-exists", "--no-owner",
+                "--dbname", pg_url_for_tools(url), str(body_path),
+            ]
+        )
     finally:
         if body_path is not archive:
             body_path.unlink(missing_ok=True)

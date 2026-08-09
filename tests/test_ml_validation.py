@@ -3,10 +3,7 @@ from __future__ import annotations
 
 import pytest
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-from backend.database.models import Base, NetworkConnection, NormalizedEvent
+from backend.database.models import NetworkConnection, NormalizedEvent
 from backend.ml.anomaly import MLAnomalyDetector, _behavior_of, event_feature_vector
 from backend.analyzers.normalizer import Normalizer
 from tests.fixtures import (
@@ -25,11 +22,10 @@ from tests.fixtures import (
 
 @pytest.fixture
 def ml_session():
-    """Create an isolated in-memory session for ML tests."""
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    """Create an isolated session for ML tests on the PostgreSQL test DB."""
+    from backend.database.connection import SessionLocal
+
+    session = SessionLocal()
     yield session
     session.close()
 

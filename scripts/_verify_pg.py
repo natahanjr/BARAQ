@@ -17,7 +17,6 @@ print("engine URL:", normalize_database_url(os.environ["SENTINEL_DATABASE_URL"])
 print("dialect:", engine.dialect.name)
 
 with TestClient(app) as c:
-    # login (bootstrap admin was migrated from SQLite)
     login = c.post("/api/auth/login", json={"username": "admin", "password": "sentineladmin"})
     print("login:", login.status_code, login.json().get("user", {}).get("username"))
     token = login.json().get("token")
@@ -31,7 +30,7 @@ with TestClient(app) as c:
     print("events:", e.status_code, "rows=", e.json().get("total"))
     inv = c.get("/api/alerts", params={"page_size": 3})
     print("alerts:", inv.status_code, "open=", inv.json().get("total"))
-    # exercise the analytics/aggregates that were SQLite-sensitive
+    # exercise the analytics/aggregates
     tl = c.get("/api/dashboard/timeline", params={"hours": 24})
     print("timeline:", tl.status_code, "buckets=", len(tl.json()))
     sd = c.get("/api/dashboard/severity-distribution")

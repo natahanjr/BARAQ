@@ -85,31 +85,31 @@ def test_key_persists_in_vault(encryption_on, tmp_path):
 def test_column_roundtrip_via_orm(encryption_on, tmp_path):
     from datetime import datetime, timezone
 
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy import text
 
-    from backend.database.models import AuditLog, Base, NormalizedEvent
+    from backend.database.connection import SessionLocal, engine
+    from backend.database.models import AuditLog, NormalizedEvent
 
-    engine = create_engine("sqlite:///" + str(tmp_path / "enc.db"))
-    Base.metadata.create_all(engine)
-    db = sessionmaker(bind=engine)()
-    db.add(NormalizedEvent(
-        event_id=4625, category="Login", source="Security", user="bob",
-        host="h1", risk="Medium", severity="medium",
-        message="Failed logon for ADM\\bob using password s3cr3t+",
-        timestamp=datetime.now(timezone.utc),
-    ))
-    db.add(AuditLog(actor="admin", action="config.set", detail="password rotated"))
-    db.commit()
+    db = SessionLocal()
+    try:
+        db.add(NormalizedEvent(
+            event_id=4625, category="Login", source="Security", user="bob",
+            host="h1", risk="Medium", severity="medium",
+            message="Failed logon for ADM\\bob using password s3cr3t+",
+            timestamp=datetime.now(timezone.utc),
+        ))
+        db.add(AuditLog(actor="admin", action="config.set", detail="password rotated"))
+        db.commit()
 
-    ev = db.query(NormalizedEvent).first()
-    assert ev.message == "Failed logon for ADM\\bob using password s3cr3t+"
-    au = db.query(AuditLog).first()
-    assert au.detail == "password rotated"
+        ev = db.query(NormalizedEvent).first()
+        assert ev.message == "Failed logon for ADM\\bob using password s3cr3t+"
+        au = db.query(AuditLog).first()
+        assert au.detail == "password rotated"
+    finally:
+        db.close()  # release the session so the next test's TRUNCATE is not blocked
 
-    raw = engine.raw_connection().execute(
-        "SELECT message FROM events"
-    ).fetchone()[0]
+    with engine.begin() as conn:
+        raw = conn.execute(text("SELECT message FROM events")).scalar_one()
     assert "s3cr3t" not in raw
     assert raw.startswith("sentinel-v1:")
 

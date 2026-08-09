@@ -2,18 +2,17 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import create_engine, delete
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import delete
 
 from backend.audit import log_action, verify_chain
-from backend.database.models import AuditLog, Base
+from backend.database.models import AuditLog
 
 
 @pytest.fixture()
-def db(tmp_path):
-    engine = create_engine(f"sqlite:///{tmp_path / 'audit.db'}")
-    Base.metadata.create_all(engine)
-    session = sessionmaker(bind=engine)()
+def db():
+    from backend.database.connection import SessionLocal
+
+    session = SessionLocal()
     yield session
     session.close()
 

@@ -7,7 +7,6 @@ import scripts.db_backup as bk
 
 
 def test_dialect_detection():
-    assert bk.dialect_of("sqlite:///data.db") == "sqlite"
     assert bk.dialect_of("postgresql+psycopg://u@h/db") == "postgres"
     assert bk.dialect_of("postgres://u@h/db") == "postgres"
 
@@ -61,6 +60,6 @@ def test_sha256_file(tmp_path):
 
 
 def test_iter_archives_ignores_manifests(tmp_path):
-    tmp_path.joinpath("sentinel_sqlite_a.dump").write_bytes(b"1")
-    tmp_path.joinpath("sentinel_sqlite_a.dump.sha256").write_text("x\n")
-    assert [p.name for p in bk.iter_archives(tmp_path)] == ["sentinel_sqlite_a.dump"]
+    tmp_path.joinpath("sentinel_postgres_a.dump").write_bytes(b"1")
+    tmp_path.joinpath("sentinel_postgres_a.dump.sha256").write_text("x\n")
+    assert [p.name for p in bk.iter_archives(tmp_path)] == ["sentinel_postgres_a.dump"]

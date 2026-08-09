@@ -12,7 +12,6 @@ Endpoints:
 """
 from __future__ import annotations
 
-import os
 import time
 
 from sqlalchemy import func, select
@@ -37,17 +36,15 @@ def _es(name: str, typ: str, help_: str) -> str:
     return f"# HELP {name} {help_}\n# TYPE {name} {typ}"
 
 
-def _sqlite_path() -> str:
-    if DATABASE_URL and DATABASE_URL.startswith("sqlite:///"):
-        return DATABASE_URL[len("sqlite:///"):]
-    return ""
+def _db_size_bytes(session=None) -> float:
+    """PostgreSQL database size in bytes (0.0 when unavailable)."""
+    from sqlalchemy import text
 
-
-def _db_size_bytes() -> float:
-    path = _sqlite_path()
-    if not path or not os.path.exists(path):
+    try:
+        with session or __import__("backend.database.connection", fromlist=["SessionLocal"]).SessionLocal() as db:
+            return float(db.execute(text("SELECT pg_database_size(current_database())")).scalar() or 0.0)
+    except Exception:  # noqa: BLE001
         return 0.0
-    return float(os.path.getsize(path))
 
 
 def collect_metrics(session=None) -> str:
@@ -84,22 +81,44 @@ def collect_metrics(session=None) -> str:
         lines.append(_fmt(name, labels, float(value)))
 
     try:
-        # Normalized events, bucketed by channel/source.
-        _emit("sentinel_events_total", "counter", "Normalized events persisted, per channel source.")
+        # Normalized events, bucketed by channel source within each org + host.
+        _emit("sentinel_events_total", "counter",
+              "Normalized events persisted, per org, host and channel source.")
         rows = session.execute(
-            select(NormalizedEvent.source, func.count(NormalizedEvent.id)).group_by(
-                NormalizedEvent.source
+            select(
+                NormalizedEvent.org, NormalizedEvent.host,
+                NormalizedEvent.source, func.count(NormalizedEvent.id),
+            ).group_by(
+                NormalizedEvent.org, NormalizedEvent.host, NormalizedEvent.source
             )
         ).all()
         if rows:
-            for source, n in rows:
+            for org, host, source, n in rows:
                 _emit("sentinel_events_total", "counter",
-                      "Normalized events persisted, per channel source.",
-                      {"source": source or "unknown"}, n)
+                      "Normalized events persisted, per org, host and channel source.",
+                      {"org": org or "system", "host": host or "-", "source": source or "unknown"}, n)
         else:
             _emit("sentinel_events_total", "counter",
-                  "Normalized events persisted, per channel source.",
-                  {"source": "none"}, 0)
+                  "Normalized events persisted, per org, host and channel source.",
+                  {"org": "system", "host": "-", "source": "none"}, 0)
+
+        # Active reporting hosts per org (org owns the fleet of agent hosts).
+        _emit("sentinel_hosts_total", "gauge",
+              "Distinct hosts that have persisted events, per org.")
+        host_rows = session.execute(
+            select(NormalizedEvent.org, func.count(func.distinct(NormalizedEvent.host)))
+            .where(NormalizedEvent.host != "", NormalizedEvent.host != "-")
+            .group_by(NormalizedEvent.org)
+        ).all()
+        if host_rows:
+            for org, n in host_rows:
+                _emit("sentinel_hosts_total", "gauge",
+                      "Distinct hosts that have persisted events, per org.",
+                      {"org": org or "system"}, n)
+        else:
+            _emit("sentinel_hosts_total", "gauge",
+                  "Distinct hosts that have persisted events, per org.",
+                  {"org": "system"}, 0)
 
         for name, help_, model in (
             ("sentinel_processes_total", "Process records persisted.", ProcessRecord),
@@ -112,26 +131,42 @@ def collect_metrics(session=None) -> str:
         ):
             _emit(name, "counter", help_, None, _count(model))
 
-        _emit("sentinel_alerts_total", "counter", "Alerts created, labelled by severity and status.")
+        _emit("sentinel_alerts_total", "counter",
+              "Alerts created, labelled by org, severity and status.")
         alert_rows = session.execute(
-            select(Alert.severity, Alert.status, func.count(Alert.id)).group_by(
-                Alert.severity, Alert.status
+            select(Alert.org, Alert.severity, Alert.status, func.count(Alert.id)).group_by(
+                Alert.org, Alert.severity, Alert.status
             )
         ).all()
         if alert_rows:
-            for severity, status, n in alert_rows:
+            for org, severity, status, n in alert_rows:
                 _emit("sentinel_alerts_total", "counter",
-                      "Alerts created, labelled by severity and status.",
-                      {"severity": severity, "status": status}, n)
+                      "Alerts created, labelled by org, severity and status.",
+                      {"org": org or "system", "severity": severity, "status": status}, n)
         else:
             _emit("sentinel_alerts_total", "counter",
-                  "Alerts created, labelled by severity and status.",
-                  {"severity": "none", "status": "none"}, 0)
+                  "Alerts created, labelled by org, severity and status.",
+                  {"org": "system", "severity": "none", "status": "none"}, 0)
 
+        open_alerts_by_org = session.execute(
+            select(Alert.org, func.count(Alert.id))
+            .where(Alert.status == "open")
+            .group_by(Alert.org)
+        ).all()
+        if open_alerts_by_org:
+            for org, n in open_alerts_by_org:
+                _emit("sentinel_open_alerts", "gauge",
+                      "Current number of open alerts, per org.",
+                      {"org": org or "system"}, n)
+        else:
+            _emit("sentinel_open_alerts", "gauge",
+                  "Current number of open alerts, per org.",
+                  {"org": "system"}, 0)
         open_alerts = int(
             session.scalar(select(func.count(Alert.id)).where(Alert.status == "open")) or 0
         )
-        _emit("sentinel_open_alerts", "gauge", "Current number of open alerts.", None, open_alerts)
+        _emit("sentinel_open_alerts_total", "gauge", "Current number of open alerts (all orgs).",
+              None, open_alerts)
         _emit("sentinel_incidents_total", "gauge", "Incidents created.", None, _count(Incident))
 
         try:
@@ -159,8 +194,8 @@ def collect_metrics(session=None) -> str:
         _emit("sentinel_uptime_seconds", "gauge", "Wall-clock seconds since process start.", None,
               max(0.0, time.time() - _START))
         _emit("sentinel_db_size_bytes", "gauge",
-              "Size of the local SQLite database file (0 for non-SQLite engines).", None,
-              _db_size_bytes())
+              "Size of the PostgreSQL database in bytes.", None,
+              _db_size_bytes(session))
     finally:
         if close:
             session.close()

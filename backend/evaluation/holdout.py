@@ -32,14 +32,14 @@ DB is never touched):
 from __future__ import annotations
 
 import logging
-import os
-import tempfile
 import time
 from datetime import datetime, timezone
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from backend.config import DATABASE_URL
+from backend.database.connection import normalize_database_url
 from backend.database.models import (
     Alert,
     AlertEventLink,
@@ -146,13 +146,30 @@ def _fn_debug_report(runs: list[dict]) -> list[dict]:
 
 
 def _empty_session() -> tuple[Session, object, str]:
-    """Fresh isolated file-backed temp database; returns (session, engine, path)."""
-    fd, path = tempfile.mkstemp(suffix=".db", prefix="sentinel_holdout_")
-    os.close(fd)
-    engine = create_engine(f"sqlite:///{path}")
+    """Fresh isolated scratch PostgreSQL database; returns (session, engine, marker).
+
+    A throwaway database (``sentinel_scratch_``) is created on the same
+    cluster and dropped again in :func:`_cleanup`.
+    """
+    import uuid
+
+    from sqlalchemy import text as sa_text
+    from sqlalchemy.engine import make_url
+
+    base_url = make_url(normalize_database_url(DATABASE_URL))
+    db_name = f"sentinel_scratch_{uuid.uuid4().hex[:12]}"
+
+    admin = create_engine(base_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    try:
+        with admin.connect() as conn:
+            conn.execute(sa_text(f'CREATE DATABASE "{db_name}"'))
+    finally:
+        admin.dispose()
+
+    engine = create_engine(base_url.set(database=db_name))
     Base.metadata.create_all(bind=engine)
     session = sessionmaker(bind=engine, expire_on_commit=False)()
-    return session, engine, path
+    return session, engine, db_name
 
 
 def _cleanup(session: Session, engine, path: str) -> None:
@@ -161,21 +178,26 @@ def _cleanup(session: Session, engine, path: str) -> None:
         engine.dispose()
     except Exception:  # noqa: BLE001
         pass
+    if not path:
+        return
+    _drop_scratch_postgres(path)
+
+
+def _drop_scratch_postgres(db_name: str) -> None:
+    from sqlalchemy import text as sa_text
+    from sqlalchemy.engine import make_url
+
     try:
-        if path and os.path.exists(path):
-            resolved = os.path.realpath(path)
-            temp_root = os.path.realpath(tempfile.gettempdir())
-            name = os.path.basename(resolved)
-            if (
-                resolved.startswith(temp_root)
-                and name.startswith("sentinel_holdout_")
-                and name.endswith(".db")
-            ):
-                os.remove(resolved)
-            else:
-                logger.warning("Refusing to remove unexpected path %s", path)
-    except OSError:
-        logger.warning("Could not remove temp hold-out DB %s", path)
+        base = make_url(normalize_database_url(DATABASE_URL))
+        admin = create_engine(base.set(database="postgres"), isolation_level="AUTOCOMMIT")
+        try:
+            with admin.connect() as conn:
+                conn.execute(sa_text(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)'))
+        finally:
+            admin.dispose()
+        logger.info("Dropped scratch hold-out database %s", db_name)
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not drop scratch hold-out database %s", db_name)
 
 
 def _fixture_records(scenario: str) -> list[dict]:
