@@ -1,0 +1,32 @@
+# Prometheus scrape configuration for SentinelSOC.
+#
+# Authentication: Prometheus v3 removed custom HTTP headers, so the shared
+# API key is sent as `Authorization: Bearer <key>` and mounted from
+# .scrape-key (see compose.yml - the backend accepts the shared key there).
+# Replace the file content with a real admin key in production.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # SentinelSOC backend (runs on the host; Windows-native platform).
+  - job_name: sentinel
+    metrics_path: /api/system/metrics
+    scheme: http
+    # The backend listens on 127.0.0.1:8001 by default; bind it to a LAN
+    # interface for remote collection and point this at the machine's IP.
+    static_configs:
+      - targets: ["host.docker.internal:8001"]
+        labels:
+          instance: "sentinel-host"
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/.scrape-key
+    # Sentinel is a single-node SOC; scrape rarely to keep the SQLite reads cheap.
+    scrape_interval: 30s
+    honor_labels: true
+
+  # The stack itself.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

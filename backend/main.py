@@ -7,10 +7,11 @@ import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 
 from backend.api import (
@@ -37,10 +38,12 @@ from backend.config import (
     AUTH_ENABLED,
     CORS_ORIGINS,
     IS_PRODUCTION,
+    METRICS_PUBLIC,
     REPORT_DIR,
     SENTINEL_ENV,
+    SINGLE_INSTANCE,
 )
-from backend.database.connection import SessionLocal, init_db
+from backend.database.connection import SessionLocal, get_db, init_db
 from backend.logging_config import setup_logging
 
 setup_logging()
@@ -254,12 +257,20 @@ async def api_key_auth(request: Request, call_next):
                 authorization = f"Bearer {session}"
                 from_cookie = True
         if authorization.lower().startswith("bearer "):
-            payload = verify_token(authorization[7:].strip())
+            secret = authorization[7:].strip()
+            payload = verify_token(secret)
             if not payload:
-                return JSONResponse(
-                    {"detail": "Invalid or expired session token"},
-                    status_code=401,
-                )
+                # Prometheus-style scrapers send the shared key as a Bearer
+                # secret (Prometheus v3 no longer supports custom headers).
+                role = API_KEYS.get(secret)
+                if not role:
+                    return JSONResponse(
+                        {"detail": "Invalid or expired session token"},
+                        status_code=401,
+                    )
+                request.state.api_role = role
+                request.state.token_user = None
+                return await call_next(request)
             request.state.api_role = payload.get("role", "analyst")
             request.state.token_user = payload
             # CSRF: when the session came from the cookie (browser flow),
@@ -359,6 +370,19 @@ app.mount("/reports", StaticFiles(directory=REPORT_DIR), name="reports")
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+def prometheus_metrics(db: Session = Depends(get_db)):
+    """Public Prometheus scrape target. Requires SENTINEL_METRICS_PUBLIC=1
+    (otherwise a scraper must use the authenticated /api/system/metrics route)."""
+    from fastapi.responses import Response
+
+    if not METRICS_PUBLIC:
+        raise HTTPException(status_code=401, detail="Metrics endpoint is private")
+    from backend.metrics import collect_metrics
+
+    return Response(collect_metrics(db), media_type="text/plain; version=0.0.4")
 
 
 # ---------------------------------------------------------------------------

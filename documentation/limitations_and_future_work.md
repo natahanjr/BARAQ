@@ -587,7 +587,7 @@ corpus"). Covered by `tests/test_holdout.py`.
 ### 8.2 High-Priority Enhancements
 
 1. **Expand rule coverage:** Added T1555, T1486/T1490, T1197, T1547.009 (2026-08) — **DONE (2026-08)**; T1021 and further techniques remain
-2. **Sysmon integration:** integration layer added — **DONE (2026-08)**; wiring/config docs remain
+2. **Sysmon integration:** integration layer added — **DONE (2026-08)**; wiring/config docs remain — **DONE (2026-08)**: see `documentation/sysmon_guide.md` (install, minimal config, verification, troubleshooting)
 3. **Concept drift detection:** automatic drift check + stale-model auto-retrain — **DONE (2026-08)** (`backend/mitigation/ML` drift scheduler; online learning remains **OPEN**)
 4. **Online learning:** Incremental ML model updates — **OPEN**
 5. **Kill chain analysis:** correlation rule implemented — **DONE (2026-08)**; timing-composed scenarios remain
@@ -626,8 +626,9 @@ The hybrid rule+ML approach shows promise; the optimal balance (60% rule, 40% ML
 - [x] PostgreSQL backend for scalability (`scripts/migrate_to_postgres.py`)
 - [x] RBAC, SSO (LDAP/AD + OIDC), MFA, audit chain
 - [x] 10+ additional detection rules (29 rules + kill-chain correlation)
-- [ ] Red team exercise validation
+- [x] Red team exercise validation (2026-08: `scripts/redteam_validate.py`, 13/13 scenarios, isolated + kill-chain modes; manual live guide in `documentation/red_team_validation.md`) — public-dataset evaluation (DARPA TC / ATT&CK Evals) remains
 - [x] Alert workflow state machine + throttling (2026-08)
+- [x] Automated parameter tuning (2026-08: grid search + Bayesian `--bayesian` in `scripts/tune_parameters.py`; re-run on real deployment data required)
 
 ### Phase 3: Advanced ML (12-18 months)
 - [ ] Federated learning across organizations

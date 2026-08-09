@@ -1,0 +1,70 @@
+# Prometheus + Grafana observability stack for SentinelSOC.
+#
+# SentinelSOC itself stays on the host (it is Windows-native: Sysmon
+# collectors, toast notifications, DPAPI vault); these containers only:
+#   - scrape /api/system/metrics (authenticated with an API key), and
+#   - serve Grafana dashboards fed by that Prometheus instance.
+#
+# Start:
+#   docker compose up -d
+#   open http://localhost:3000   (Grafana, default admin / admin)
+#   prometheus: http://localhost:9090
+#
+# The scrape credential lives in deploy/prometheus/.scrape-key (development
+# default: "sentinel-dev-admin" - replace it with a real admin key). Point
+# the scrape target at the host machine's LAN IP in
+# deploy/prometheus/prometheus.yml for remote collection.
+#
+# ${VAR:-default} spans are filled from your .env file (or the shell) by
+# docker compose itself; defaults match the development setup.
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.3.1
+    container_name: sentinel-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/.scrape-key:/etc/prometheus/.scrape-key:ro
+      - sentinel-prometheus-data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:11.6.1
+    container_name: sentinel-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:-http://localhost:3000}"
+      # Provision the Prometheus datasource automatically.
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    volumes:
+      - ./deploy/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./deploy/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - sentinel-grafana-data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+volumes:
+  sentinel-prometheus-data:
+  sentinel-grafana-data:

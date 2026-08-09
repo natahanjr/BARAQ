@@ -645,6 +645,21 @@ NOTIFY_MIN_SEVERITY = os.environ.get("SENTINEL_NOTIFY_MIN_SEVERITY", "high")
 TOAST_ENABLED = os.environ.get("SENTINEL_TOAST_ENABLED", "1").lower() not in (
     "0", "false", "no", "off",
 )
+# Prometheus scrape without auth: only when explicitly enabled; the
+# authenticated /api/system/metrics endpoint is always available.
+METRICS_PUBLIC = os.environ.get("SENTINEL_METRICS_PUBLIC", "0").lower() in (
+    "1", "true", "yes", "on",
+)
+
+# --------------------------------------------------------------------------
+# Single-instance guard
+# --------------------------------------------------------------------------
+# Acquire a DB-scoped advisory lock at startup. A second process pointed at
+# the same database fails the acquisition and disables its scheduler (it
+# keeps serving API reads) instead of double-running collection/detection.
+SINGLE_INSTANCE = os.environ.get("SENTINEL_SINGLE_INSTANCE", "1").lower() not in (
+    "0", "false", "no", "off",
+)
 
 # --------------------------------------------------------------------------
 # Multi-endpoint ingest

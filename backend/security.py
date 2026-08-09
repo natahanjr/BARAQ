@@ -53,6 +53,14 @@ def _bearer_payload(request: Request):
     return verify_token(auth[7:].strip())
 
 
+def _bearer_key_role(request: Request) -> str | None:
+    """Shared API key presented as a Bearer secret (Prometheus v3 scrape)."""
+    auth = request.headers.get("Authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return None
+    return API_KEYS.get(auth[7:].strip())
+
+
 def actor_name(request: Request) -> str:
     """Shortcut for audit endpoints: username from token or the API key."""
     payload = _bearer_payload(request)
@@ -98,6 +106,8 @@ def require_role(*roles: str) -> Callable:
             return user.username
         key = request.headers.get(API_KEY_HEADER)
         role = API_KEYS.get((key or "").strip()) if key else None
+        if not role:
+            role = _bearer_key_role(request)
         if not role:
             raise HTTPException(status_code=401, detail="Missing or invalid API key")
         if role not in roles:

@@ -5,6 +5,7 @@ import logging
 import time
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from backend.analyzers import dashboard
@@ -277,6 +278,14 @@ def stream_status():
     from backend.streaming import status
 
     return status()
+
+
+@router.get("/metrics")
+def system_metrics(db: Session = Depends(get_db)):
+    """Prometheus text exposition (authenticated)."""
+    from backend.metrics import collect_metrics
+
+    return Response(collect_metrics(db), media_type="text/plain; version=0.0.4")
 
 
 @router.get("/status")

@@ -56,6 +56,27 @@ class IngestRequest(BaseModel):
     agent_id: str = Field(default="", max_length=64)
 
 
+def _validate_ingest_records(records: list[dict]) -> None:
+    """Reject malformed agent records with a 400 before they reach the pipeline.
+
+    The normalizer coerces ``event_id`` to int, so a non-numeric value would
+    otherwise bubble up as an unhelpful 500.
+    """
+    for idx, record in enumerate(records):
+        if not isinstance(record, dict):
+            raise HTTPException(400, f"record[{idx}] must be an object")
+        event_id = record.get("event_id", 0)
+        if not isinstance(event_id, int) and not str(event_id).isdigit():
+            raise HTTPException(
+                400,
+                f"record[{idx}].event_id must be numeric, got {event_id!r}",
+            )
+        if not str(record.get("source", "")).strip():
+            raise HTTPException(400, f"record[{idx}] missing source")
+        if not str(record.get("timestamp", "")).strip():
+            raise HTTPException(400, f"record[{idx}] missing timestamp")
+
+
 @router.post("/ingest")
 def ingest(
     body: IngestRequest,
@@ -67,6 +88,7 @@ def ingest(
     if not agent_id:
         raise HTTPException(401, "Missing or invalid agent key (X-Agent-Key header)")
 
+    _validate_ingest_records(body.records)
     host = (body.host or agent_id)[:128]
     for record in body.records:
         record["host"] = host

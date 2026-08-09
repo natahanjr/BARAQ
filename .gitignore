@@ -57,3 +57,10 @@ Thumbs.db
 .idea/
 .vscode/
 database/model_meta.json
+
+# Prometheus scrape credential (dev default; never commit real keys)
+deploy/prometheus/.scrape-key
+
+# Database backups (large dumps / encrypted archives — never commit)
+backups/
+

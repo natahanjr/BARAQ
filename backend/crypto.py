@@ -120,3 +120,39 @@ def decrypt_maybe(value) -> str | None:
     if not isinstance(value, str):
         return value
     return decrypt_text(value)
+
+
+# ---------------------------------------------------------------------------
+# File-level encryption (backups, exports). Same master key, binary envelope:
+#     sentinel-file-v1:<base64url(nonce)>:<base64url(ciphertext+tag)>
+# ---------------------------------------------------------------------------
+_FILE_PREFIX = "sentinel-file-v1:"
+
+
+def encrypt_file_bytes(plaintext: bytes) -> bytes:
+    """Encrypt arbitrary bytes with AES-256-GCM under the vault master key.
+
+    The result is self-describing (``sentinel-file-v1:`` header) and can be
+    decrypted on any machine whose vault holds the same master key.
+    """
+    nonce = os.urandom(_NONCE_SIZE)
+    ciphertext = AESGCM(_load_key()).encrypt(nonce, plaintext, None)
+    return (
+        _FILE_PREFIX.encode("ascii")
+        + base64.urlsafe_b64encode(nonce)
+        + b":"
+        + base64.urlsafe_b64encode(ciphertext)
+    )
+
+
+def decrypt_file_bytes(value: bytes) -> bytes | None:
+    """Decrypt a ``sentinel-file-v1:`` blob. Returns None on tamper/error."""
+    if not value.startswith(_FILE_PREFIX.encode("ascii")):
+        return None
+    try:
+        _, nonce_b64, cipher_b64 = value.decode("ascii").split(":", 2)
+        nonce = base64.urlsafe_b64decode(nonce_b64)
+        ciphertext = base64.urlsafe_b64decode(cipher_b64)
+        return AESGCM(_load_key()).decrypt(nonce, ciphertext, None)
+    except Exception:  # noqa: BLE001 - tampered/corrupt backup: caller decides
+        return None

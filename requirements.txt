@@ -4,6 +4,8 @@ sqlalchemy>=2.0
 # PostgreSQL backend for fleet-scale deployments. Only strictly required when
 # SENTINEL_DATABASE_URL points at a postgres:// URL.
 psycopg[binary]>=3.1
+# Schema migrations (alembic upgrade head on deploy; alembic revision --autogenerate on model changes).
+alembic>=1.13
 # Field-level AES-256-GCM encryption at rest (backend.crypto). Present since
 # Phase 1 hardening; only active when SENTINEL_ENCRYPT_AT_REST=1 or FROZEN.
 cryptography>=41.0
