@@ -15,6 +15,18 @@ const PAGE_SIZE = 25;
 const selectClass =
   "rounded-lg border border-slate-700 bg-slate-800/70 px-4 py-2 text-sm text-slate-200 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors";
 
+function OrgChip({ org }) {
+  if (!org) return null;
+  return (
+    <span
+      className="max-w-[120px] truncate rounded bg-violet-500/10 px-2 py-0.5 font-mono text-[10px] font-semibold text-violet-300"
+      title={`Organization: ${org}`}
+    >
+      {org}
+    </span>
+  );
+}
+
 function AlertRow({ alert, onFix }) {
   return (
     <div className="group flex items-start gap-3 rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-all hover:border-cyan-500/30 hover:bg-slate-800/50">
@@ -32,6 +44,7 @@ function AlertRow({ alert, onFix }) {
               <SeverityBadge severity={alert.severity} />
               <StatusBadge status={alert.status} />
               <RiskBadge level={alert.risk_level} score={alert.risk_score} />
+              {isAdmin() && <OrgChip org={alert.org} />}
               {alert.mitre_id && (
                 <span className="rounded bg-black/30 px-2 py-0.5 font-mono text-[10px] text-slate-300">
                   {alert.mitre_id}

@@ -53,11 +53,14 @@ def _token_secret() -> bytes:
     return hashlib.sha256(AUTH_TOKEN_SECRET.encode("utf-8")).digest()
 
 
-def create_token(user_id: int, username: str, role: str, ttl_seconds: int = 12 * 3600) -> str:
+def create_token(
+    user_id: int, username: str, role: str, org: str = "", ttl_seconds: int = 12 * 3600
+) -> str:
     payload = {
         "uid": user_id,
         "sub": username,
         "role": role,
+        "org": org,
         "exp": int(time.time()) + ttl_seconds,
         "jti": secrets.token_hex(8),
     }

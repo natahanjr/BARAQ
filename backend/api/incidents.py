@@ -22,7 +22,7 @@ from backend.database.models import (
     IncidentAlertLink,
     IncidentComment,
 )
-from backend.security import actor_name, require_admin, require_auth
+from backend.security import actor_name, tenant_scope, require_admin, require_auth
 
 logger = logging.getLogger("sentinel.api.incidents")
 
@@ -97,12 +97,16 @@ def _with_links(stmt):
 
 @router.get("")
 def list_incidents(
+    request: Request,
     status: IncidentStatus | None = None,
     severity: IncidentSeverity | None = None,
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ):
+    scope = tenant_scope(request)
     stmt = _with_links(select(Incident).order_by(Incident.created_at.desc()).limit(limit))
+    if scope is not None:
+        stmt = stmt.where(Incident.org == scope)
     if status:
         stmt = stmt.where(Incident.status == status.value)
     if severity:
@@ -112,10 +116,12 @@ def list_incidents(
 
 
 @router.get("/{incident_id}")
-def get_incident(incident_id: int, db: Session = Depends(get_db)):
-    incident = db.scalars(
-        _with_links(select(Incident)).where(Incident.id == incident_id)
-    ).first()
+def get_incident(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    scope = tenant_scope(request)
+    stmt = _with_links(select(Incident)).where(Incident.id == incident_id)
+    if scope is not None:
+        stmt = stmt.where(Incident.org == scope)
+    incident = db.scalars(stmt).first()
     if not incident:
         raise HTTPException(404, "Incident not found")
     return incident.to_dict(include_links=True)
@@ -134,6 +140,7 @@ def create_incident(
         severity=body.severity.value,
         owner=body.owner,
         host=body.host,
+        org="",
         mitre_id=body.mitre_id,
         mitre_name=body.mitre_name,
         opened_at=datetime.now(timezone.utc),
@@ -142,8 +149,10 @@ def create_incident(
     db.flush()
 
     for alert_id in body.alert_ids:
-        if db.get(Alert, alert_id):
+        alert = db.get(Alert, alert_id)
+        if alert:
             db.add(IncidentAlertLink(incident_id=incident.id, alert_id=alert_id))
+            incident.org = alert.org or incident.org
 
     db.add(IncidentComment(
         incident_id=incident.id,
@@ -223,14 +232,18 @@ def link_alerts(
     incident = db.get(Incident, incident_id)
     if not incident:
         raise HTTPException(404, "Incident not found")
+
     linked: list[int] = []
     existing = {l.alert_id for l in incident.alerts}
     for alert_id in body.alert_ids:
         if alert_id in existing:
             continue
-        if not db.get(Alert, alert_id):
+        alert = db.get(Alert, alert_id)
+        if not alert:
             raise HTTPException(404, f"Alert {alert_id} not found")
         db.add(IncidentAlertLink(incident_id=incident_id, alert_id=alert_id))
+        if not incident.org:
+            incident.org = alert.org
         linked.append(alert_id)
 
     actor = actor_name(request)
@@ -256,7 +269,11 @@ def add_comment(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    incident = db.get(Incident, incident_id)
+    scope = tenant_scope(request)
+    stmt = select(Incident).where(Incident.id == incident_id)
+    if scope is not None:
+        stmt = stmt.where(Incident.org == scope)
+    incident = db.scalars(stmt).first()
     if not incident:
         raise HTTPException(404, "Incident not found")
     comment = IncidentComment(

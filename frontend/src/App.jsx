@@ -234,7 +234,7 @@ function SentinelLogo() {
   );
 }
 
-function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user, onLogout }) {
+function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user, onLogout, org, onOrg, orgOptions }) {
   const location = useLocation();
 
   return (
@@ -300,6 +300,26 @@ function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user,
         <div className="space-y-3 border-t border-white/5 px-5 py-4">
           {user && (
             <>
+              {user.role === "admin" && orgOptions.length > 0 && (
+                <label className="block">
+                  <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Organization
+                  </span>
+                  <select
+                    value={org}
+                    onChange={(e) => onOrg(e.target.value)}
+                    className="w-full rounded-lg border border-slate-700/70 bg-slate-900/80 px-2.5 py-1.5 text-xs font-medium text-slate-200 outline-none transition-colors focus:border-cyan-500/60"
+                    title="Narrow the whole console to one organization (admins)"
+                  >
+                    <option value="">All organizations</option>
+                    {orgOptions.map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <div className="flex items-center gap-2.5">
                 <span
                   className={`h-1.5 w-1.5 shrink-0 rounded-full ${
@@ -312,6 +332,14 @@ function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user,
                 <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
                   {user.role}
                 </span>
+                {user.role !== "admin" && user.org ? (
+                  <span
+                    className="max-w-[90px] truncate rounded-full bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-300"
+                    title={`Organization: ${user.org}`}
+                  >
+                    {user.org}
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   onClick={onLogout}
@@ -433,6 +461,8 @@ export default function App() {
   const [theme, setTheme] = useTheme();
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  const [org, setOrg] = useState(() => authStore.org || "");
+  const [orgOptions, setOrgOptions] = useState([]);
 
   useEffect(() => {
     // Session may be restored from the httpOnly cookie on reload; an
@@ -443,6 +473,30 @@ export default function App() {
       .catch(() => {})
       .finally(() => setAuthReady(true));
   }, []);
+
+  // Admins: build the organization list from operator accounts so the
+  // sidebar switcher can narrow the whole console to one tenant.
+  useEffect(() => {
+    if (user?.role !== "admin") return;
+    api
+      .users()
+      .then((res) => {
+        const orgs = [
+          ...new Set(
+            (res.items || []).map((u) => String(u.org || "").trim()).filter(Boolean),
+          ),
+        ].sort((a, b) => a.localeCompare(b));
+        setOrgOptions(orgs);
+        if (org && !orgs.includes(org)) setOrg("");
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const changeOrg = (value) => {
+    setOrg(value);
+    authStore.org = value;
+  };
 
   useEffect(() => {
     authStore.user = user;
@@ -489,6 +543,9 @@ export default function App() {
           activeAlerts={status?.summary?.active_alerts ?? 0}
           user={user}
           onLogout={logout}
+          org={org}
+          onOrg={changeOrg}
+          orgOptions={user?.role === "admin" ? orgOptions : []}
         />
         <div className="flex min-h-screen flex-col lg:pl-64">
           <Topbar
@@ -510,7 +567,7 @@ export default function App() {
               </div>
             }
           >
-            <Routes>
+            <Routes key={`${user.role}:${org}`}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/command-center" element={<AdminGate user={user}><CommandCenter /></AdminGate>} />
               <Route path="/alerts" element={<Alerts />} />

@@ -1,19 +1,25 @@
 """Events, processes, network API endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
 from backend.database.models import NetworkConnection, NormalizedEvent, ProcessRecord
-from backend.security import require_auth
+from backend.security import require_auth, tenant_scope
 
 router = APIRouter(prefix="/api", tags=["events"], dependencies=[Depends(require_auth)])
 
 
+def _events_scope(request: Request) -> str | None:
+    """Tenant predicate for the events table (admin sees all)."""
+    return tenant_scope(request)
+
+
 @router.get("/events")
 def list_events(
+    request: Request,
     event_id: int | None = None,
     user: str | None = None,
     category: str | None = None,
@@ -22,7 +28,10 @@ def list_events(
     page_size: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
 ):
+    scope = _events_scope(request)
     stmt = select(NormalizedEvent)
+    if scope is not None:
+        stmt = stmt.where(NormalizedEvent.org == scope)
     if event_id:
         stmt = stmt.where(NormalizedEvent.event_id == event_id)
     if user:
@@ -41,15 +50,21 @@ def list_events(
 
 
 @router.get("/events/statistics")
-def event_statistics(db: Session = Depends(get_db)):
+def event_statistics(request: Request, db: Session = Depends(get_db)):
+    scope = _events_scope(request)
+    stmt_event = select(NormalizedEvent.event_id, func.count(NormalizedEvent.id))
+    stmt_category = select(NormalizedEvent.category, func.count(NormalizedEvent.id))
+    if scope is not None:
+        stmt_event = stmt_event.where(NormalizedEvent.org == scope)
+        stmt_category = stmt_category.where(NormalizedEvent.org == scope)
     by_event = db.execute(
-        select(NormalizedEvent.event_id, func.count(NormalizedEvent.id))
+        stmt_event
         .group_by(NormalizedEvent.event_id)
         .order_by(func.count(NormalizedEvent.id).desc())
         .limit(20)
     ).all()
     by_category = db.execute(
-        select(NormalizedEvent.category, func.count(NormalizedEvent.id))
+        stmt_category
         .group_by(NormalizedEvent.category)
     ).all()
     return {
@@ -59,8 +74,12 @@ def event_statistics(db: Session = Depends(get_db)):
 
 
 @router.get("/events/{event_id}")
-def get_event(event_id: int, db: Session = Depends(get_db)):
-    event = db.get(NormalizedEvent, event_id)
+def get_event(event_id: int, request: Request, db: Session = Depends(get_db)):
+    scope = _events_scope(request)
+    stmt = select(NormalizedEvent).where(NormalizedEvent.id == event_id)
+    if scope is not None:
+        stmt = stmt.where(NormalizedEvent.org == scope)
+    event = db.scalars(stmt).first()
     if not event:
         raise HTTPException(404, "Event not found")
     return event.to_dict()

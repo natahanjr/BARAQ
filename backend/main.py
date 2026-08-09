@@ -155,11 +155,26 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     hub.bind(asyncio.get_running_loop())
     init_db()
     _seed_admin_user()
+    from backend.locks import acquire_instance_lock, release_instance_lock
+
     global _scheduler_thread
     no_scheduler = os.environ.get("SENTINEL_NO_SCHEDULER", "0").lower() in (
         "1", "true", "yes", "on",
     )
-    if not no_scheduler and (not _scheduler_thread or not _scheduler_thread.is_alive()):
+    scheduler_owner = True
+    if SINGLE_INSTANCE:
+        from backend.database.connection import engine as app_engine
+
+        scheduler_owner = acquire_instance_lock(app_engine)
+        if not scheduler_owner:
+            logger.critical(
+                "Another SentinelSOC instance holds the instance lock; "
+                "scheduler is DISABLED here (API reads still served). Start "
+                "only one server or set SENTINEL_SINGLE_INSTANCE=0."
+            )
+    if scheduler_owner and not no_scheduler and (
+        not _scheduler_thread or not _scheduler_thread.is_alive()
+    ):
         _scheduler_stop.clear()
         from backend.config import COLLECT_INTERVAL_SECONDS
         _scheduler_thread = threading.Thread(
@@ -170,14 +185,16 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 
     start_streaming()
     logger.info(
-        "SentinelSOC API is ready (profile=%s%s)",
+        "SentinelSOC API is ready (profile=%s%s, scheduler=%s)",
         SENTINEL_ENV,
         ", production gate active" if IS_PRODUCTION else "",
+        "on" if scheduler_owner and not no_scheduler else "off",
     )
     yield
     _scheduler_stop.set()
     if _scheduler_thread:
         _scheduler_thread.join(timeout=5)
+    release_instance_lock()
     logger.info("SentinelSOC API shut down")
 
 
@@ -369,7 +386,9 @@ app.mount("/reports", StaticFiles(directory=REPORT_DIR), name="reports")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    from backend.locks import instance_lock_status
+
+    return {"status": "ok", "single_instance": instance_lock_status()}
 
 
 @app.get("/metrics")

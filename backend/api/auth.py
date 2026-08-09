@@ -1,4 +1,4 @@
-"""Multi-user authentication and audit endpoints.
+﻿"""Multi-user authentication and audit endpoints.
 
 Operators log in with username + password to receive an HMAC-signed token that
 the frontend sends as ``Authorization: Bearer <token>``. Admins can create /
@@ -93,6 +93,7 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=8, max_length=256)
     role: str = Field("analyst", pattern="^(admin|analyst)$")
     full_name: str = Field("", max_length=128)
+    org: str = Field("", max_length=64)
 
 
 class UserUpdate(BaseModel):
@@ -100,6 +101,7 @@ class UserUpdate(BaseModel):
     role: str | None = Field(None, pattern="^(admin|analyst)$")
     full_name: str | None = Field(None, max_length=128)
     password: str | None = Field(None, min_length=8, max_length=256)
+    org: str | None = Field(None, max_length=64)
 
 
 def _public_user(user: User) -> dict:
@@ -310,7 +312,7 @@ def oidc_callback(code: str, state: str, request: Request, db: Session = Depends
         return RedirectResponse("/", status_code=302)
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
-    token = create_token(user.id, user.username, user.role)
+    token = create_token(user.id, user.username, user.role, user.org)
     log_action(db, user.username, "login", "user", str(user.id),
                f"role={user.role} via-oidc", client_ip(request))
     resp = RedirectResponse("/", status_code=302)
@@ -331,18 +333,18 @@ def mfa_verify(body: MfaVerifyRequest, request: Request, db: Session = Depends(g
     payload = verify_token(body.challenge)
     if not payload or not payload.get("mfa"):
         _record_login_failure(request)
-        raise HTTPException(401, "Challenge expired — log in again")
+        raise HTTPException(401, "Challenge expired â€” log in again")
     user = db.get(User, payload.get("uid"))
     if not user or not user.is_active or not user.totp_enabled:
         _record_login_failure(request)
-        raise HTTPException(401, "Challenge invalid — log in again")
+        raise HTTPException(401, "Challenge invalid â€” log in again")
     if not verify_code(user.totp_secret, body.code):
         _record_login_failure(request)
         log_action(db, user.username, "login.mfa_failed", "user", str(user.id),
                    "invalid TOTP code", client_ip(request))
         raise HTTPException(401, "Invalid verification code")
     _clear_login_rate_limit(request)
-    token = create_token(user.id, user.username, user.role)
+    token = create_token(user.id, user.username, user.role, user.org)
     log_action(db, user.username, "login", "user", str(user.id),
                f"role={user.role} via-mfa", client_ip(request))
     resp = JSONResponse({"token": token, "user": _public_user(user)})
@@ -353,7 +355,7 @@ def mfa_verify(body: MfaVerifyRequest, request: Request, db: Session = Depends(g
 def _complete_login(request: Request, db: Session, user: User, source: str = "local"):
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
-    token = create_token(user.id, user.username, user.role)
+    token = create_token(user.id, user.username, user.role, user.org)
     log_action(db, user.username, "login", "user", str(user.id),
                f"role={user.role}" + (f" via-{source}" if source != "local" else ""),
                client_ip(request))
@@ -418,7 +420,7 @@ def mfa_confirm(body: MfaConfirmRequest, request: Request, db: Session = Depends
     if not user:
         raise HTTPException(401, "Invalid or expired session")
     if not user.totp_secret:
-        raise HTTPException(400, "No pending TOTP secret — call /mfa/setup first")
+        raise HTTPException(400, "No pending TOTP secret â€” call /mfa/setup first")
     if not verify_code(user.totp_secret, body.code):
         log_action(db, user.username, "mfa.confirm_failed", "user", str(user.id),
                    "TOTP code mismatch during activation", client_ip(request))
@@ -493,6 +495,7 @@ def create_user(body: UserCreate, request: Request, db: Session = Depends(get_db
         password_hash=hash_password(body.password),
         role=body.role,
         full_name=body.full_name.strip(),
+        org=body.org.strip(),
         is_active=True,
     )
     db.add(user)
@@ -518,6 +521,8 @@ def update_user(
         user.full_name = body.full_name.strip()
     if body.is_active is not None:
         user.is_active = bool(body.is_active)
+    if body.org is not None:
+        user.org = body.org.strip()
     if body.password:
         user.password_hash = hash_password(body.password)
     db.commit()

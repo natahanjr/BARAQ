@@ -5,6 +5,10 @@ const API_KEY = import.meta.env.VITE_API_KEY || "sentinel-dev-admin";
 // via an httpOnly cookie so XSS can never read it (CWE-312 mitigation).
 let sessionToken = null;
 
+// Admin org filter ("" = all organizations). Analysts are always locked to
+// their own org by the backend, so this is only ever attached for admins.
+const ORG_KEY = "sentinel-org-filter";
+
 export const authStore = {
   get token() {
     return sessionToken;
@@ -13,6 +17,21 @@ export const authStore = {
     sessionToken = token || null;
   },
   user: null,
+  get org() {
+    try {
+      return localStorage.getItem(ORG_KEY) || "";
+    } catch {
+      return "";
+    }
+  },
+  set org(value) {
+    try {
+      if (value) localStorage.setItem(ORG_KEY, value);
+      else localStorage.removeItem(ORG_KEY);
+    } catch {
+      /* private mode etc. */
+    }
+  },
 };
 
 export const isAdmin = () => authStore.user?.role === "admin";
@@ -21,6 +40,10 @@ async function request(path, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
   if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
   else headers["X-API-Key"] = API_KEY;
+
+  // Multi-tenant: admins can narrow their view to one organization; the
+  // backend ignores this header for non-admin callers.
+  if (isAdmin() && authStore.org) headers["X-Org"] = authStore.org;
 
   // Double-submit CSRF token: the backend requires X-CSRF-Token to match the
   // sentinel_csrf cookie on state-changing requests authenticated via the

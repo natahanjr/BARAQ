@@ -16,7 +16,7 @@ export default function Users() {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [form, setForm] = useState({ username: "", password: "", role: "analyst", full_name: "" });
+  const [form, setForm] = useState({ username: "", password: "", role: "analyst", full_name: "", org: "" });
 
   // --- Two-factor authentication (self-service, active session) ---
   const [mfaState, setMfaState] = useState("idle"); // idle | setup | confirm | disabled
@@ -96,7 +96,7 @@ export default function Users() {
     try {
       const u = await api.createUser(form);
       setMessage(`User "${u.username}" created (${u.role})`);
-      setForm({ username: "", password: "", role: "analyst", full_name: "" });
+      setForm({ username: "", password: "", role: "analyst", full_name: "", org: "" });
       refresh();
     } catch (err) {
       setError(err.message);
@@ -191,6 +191,14 @@ export default function Users() {
                       {!u.is_active && (
                         <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400">
                           DISABLED
+                        </span>
+                      )}
+                      {u.org && (
+                        <span
+                          className="max-w-[110px] truncate rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300"
+                          title={`Organization: ${u.org}`}
+                        >
+                          {u.org}
                         </span>
                       )}
                     </div>
@@ -344,6 +352,13 @@ export default function Users() {
               <option value="analyst">Analyst (read + investigate)</option>
               <option value="admin">Admin (full control)</option>
             </select>
+            <input
+              value={form.org}
+              onChange={(e) => setForm({ ...form, org: e.target.value })}
+              placeholder="organization (e.g. univ-a; blank = platform-wide)"
+              maxLength={64}
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-cyan-500"
+            />
             <button
               type="submit"
               disabled={busy === "create"}

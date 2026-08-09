@@ -382,35 +382,42 @@ anomaly scores are labelled `hybrid`. Weights are configurable in
 The backend exposes two Prometheus text-exposition endpoints (no extra
 Python dependencies):
 
-- `GET /api/system/metrics` — always available, requires an API key
-  (`X-API-Key` header).
-- `GET /metrics` — same payload, but only when
-  `SENTINEL_METRICS_PUBLIC=1` is set (for scrapers that cannot send headers).
+- `GET /api/system/metrics` — always available; authenticates with an API
+  key sent either as the `X-API-Key` header or as `Authorization: Bearer
+  <key>` (the latter is what Prometheus uses, since v3 removed custom
+  request headers).
+- `GET /metrics` — same payload, but only when `SENTINEL_METRICS_PUBLIC=1`
+  is set (for scrapers that cannot authenticate).
 
 Metrics include event ingestion (by source), process/network/DNS/USB/
 file-scan counters, alerts by severity/status, open alerts, incidents,
 security score, rule count, ML stream readiness, collector state, uptime
-and SQLite DB size. Sensitive event data is **not** exposed — only
-aggregate counters.
+and DB size. Sensitive event data is **not** exposed — only aggregate
+counters.
 
 ### Docker stack (recommended)
 
 A ready-made Prometheus + Grafana stack lives in the repo root:
 
 ```powershell
-# optional: real API key instead of the dev key
-$env:SENTINEL_SCRAPE_KEY = "sentinel-dev-admin"
 docker compose up -d
 ```
 
 - Grafana: http://localhost:3000 (default `admin`/`admin`)
 - Prometheus: http://localhost:9090
 
-The provided `sentinel-overview` dashboard is provisioned automatically
-(security score, ingestion rates, alert volumes, collector/ML/DB state).
-The sidecars scrape `host.docker.internal:8001` — point `static_configs` in
+The stack is provisioned automatically: the Prometheus datasource and the
+`sentinel-overview` dashboard (security score, ingestion rates, alert
+volumes, collector/ML/DB state).
+
+Scrape authentication: Prometheus reads the API key from
+`deploy/prometheus/.scrape-key` (starts as a dev default, gitignored;
+replace with a real admin key). The sidecars scrape
+`host.docker.internal:8001` — point `static_configs` in
 `deploy/prometheus/prometheus.yml` at the backend LAN IP when the host is
 bound non-loopback (`uvicorn backend.main:app --host 0.0.0.0 --port 8001`).
+`GRAFANA_PORT` (from `.env` or the shell) overrides the host port when
+3000 is already taken.
 
 ### Scraping without Docker
 
@@ -419,7 +426,9 @@ scrape_configs:
   - job_name: sentinel
     metrics_path: /api/system/metrics
     static_configs: [{ targets: ["127.0.0.1:8001"] }]
-    headers: { X-API-Key: "<your-api-key>" }
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/.scrape-key   # your API key
 ```
 
 ---

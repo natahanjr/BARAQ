@@ -61,6 +61,44 @@ def _bearer_key_role(request: Request) -> str | None:
     return API_KEYS.get(auth[7:].strip())
 
 
+def tenant_scope(request: Request) -> str | None:
+    """Tenant filter a caller may observe.
+
+    Returns ``None`` for unrestricted (admin roles and disabled auth), a
+    concrete org id for analysts (session users), and ``""`` for legacy API
+    keys - the system/central scope, which sees only local-host data and
+    nothing tagged with an organization.
+
+    Admins may additionally narrow their view to a single organization by
+    sending the ``X-Org`` header (used by the frontend org switcher); the
+    header is ignored for everyone else so analysts can never widen scope.
+    """
+    if not AUTH_ENABLED:
+        return None
+    if getattr(request.state, "api_role", "") == "admin":
+        return _admin_org_header(request)
+    if getattr(request.state, "token_user", None):
+        user = request.state.token_user
+        role = user.get("role", "analyst")
+        if role == "admin":
+            return _admin_org_header(request)
+        return str(user.get("org") or "")
+    # Legacy X-API-Key / Bearer shared key: system scope only.
+    return ""
+
+
+def _admin_org_header(request: Request) -> str | None:
+    """Optional org narrowing for admin callers (X-Org header).
+
+    ``None`` means "all organizations"; an empty or oversized value is
+    treated exactly like no header at all.
+    """
+    requested = (request.headers.get("X-Org") or "").strip()
+    if not requested or len(requested) > 64:
+        return None
+    return requested
+
+
 def actor_name(request: Request) -> str:
     """Shortcut for audit endpoints: username from token or the API key."""
     payload = _bearer_payload(request)

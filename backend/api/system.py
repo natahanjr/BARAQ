@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -22,8 +22,12 @@ router = APIRouter(
 )
 
 
-def run_pipeline(db: Session, records: list[dict]) -> dict:
-    """Full pipeline: normalize -> persist -> detect -> alert."""
+def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
+    """Full pipeline: normalize -> persist -> detect -> alert.
+
+    ``org`` is the tenant every record in this batch belongs to (agent
+    ingest passes the agent's organization; local collection keeps "").
+    """
     from backend.analyzers.normalizer import Normalizer
     from backend.analyzers.normalizer import Normalizer
     from backend.database.models import (
@@ -133,7 +137,7 @@ def run_pipeline(db: Session, records: list[dict]) -> dict:
             saved_vulns += 1
         else:
             normalized = normalizer.normalize(record)
-            db.add(NormalizedEvent(**normalized))
+            db.add(NormalizedEvent(**normalized, org=org))
             saved_events += 1
 
     db.commit()
@@ -141,7 +145,8 @@ def run_pipeline(db: Session, records: list[dict]) -> dict:
     engine = RulesEngine(db)
     findings = engine.run(window_minutes=10)
     alerting = AlertingService(db)
-    created = alerting.handle_findings(findings)
+    created = alerting.handle_findings(findings, org=org)
+    db.commit()
 
     # Outbound streaming: forward the freshly-persisted records to configured
     # Kafka / Redis / Elasticsearch sinks. Never blocks the pipeline - records
@@ -289,24 +294,28 @@ def system_metrics(db: Session = Depends(get_db)):
 
 
 @router.get("/status")
-def system_status(db: Session = Depends(get_db)):
+def system_status(request: Request, db: Session = Depends(get_db)):
     from backend.config import EVENT_RETENTION_DAYS, SECRETS_CONFIGURED
     from backend.database.connection import DATABASE_URL
+    from backend.security import tenant_scope
 
     detector = get_detector()
     dialect = DATABASE_URL.split(":", 1)[0]
+    from backend.locks import instance_lock_status
+
     return {
         "application": "SentinelSOC",
         "version": "1.0.0",
         "collecting": True,
         "database": "sqlite" if dialect == "sqlite" else dialect,
-        "summary": dashboard.dashboard_summary(db),
+        "summary": dashboard.dashboard_summary(db, org=tenant_scope(request)),
         "uptime_seconds": int(time.time() - _START_TIME),
         "setup": {
             "credentials_configured": SECRETS_CONFIGURED,
             "ml_trained": bool(detector.trained_at),
             "retention_days": EVENT_RETENTION_DAYS,
         },
+        "single_instance": instance_lock_status(),
     }
 
 

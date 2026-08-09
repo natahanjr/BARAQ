@@ -41,6 +41,7 @@ _ADDITIVE_MIGRATIONS = {
         ("risk_score", "REAL"),
         ("is_anomaly", "BOOLEAN DEFAULT 0"),
         ("ml_score", "REAL"),
+        ("org", "VARCHAR(64) DEFAULT ''"),
     ],
     "alerts": [
         ("detection_method", "VARCHAR(16) DEFAULT 'rule'"),
@@ -53,6 +54,28 @@ _ADDITIVE_MIGRATIONS = {
         ("bytes_sent", "INTEGER DEFAULT 0"),
         ("bytes_recv", "INTEGER DEFAULT 0"),
         ("duration_seconds", "REAL DEFAULT 0"),
+        ("org", "VARCHAR(64) DEFAULT ''"),
+    ],
+    "processes": [
+        ("org", "VARCHAR(64) DEFAULT ''"),
+    ],
+    "dns_queries": [
+        ("org", "VARCHAR(64) DEFAULT ''"),
+    ],
+    "http_requests": [
+        ("org", "VARCHAR(64) DEFAULT ''"),
+    ],
+    "emails": [
+        ("org", "VARCHAR(64) DEFAULT ''"),
+    ],
+    "usb_devices": [
+        ("org", "VARCHAR(64) DEFAULT ''"),
+    ],
+    "file_scans": [
+        ("org", "VARCHAR(64) DEFAULT ''"),
+    ],
+    "vuln_findings": [
+        ("org", "VARCHAR(64) DEFAULT ''"),
     ],
     "audit_log": [
         ("prev_hash", "VARCHAR(64) DEFAULT '" + ("0" * 64) + "'"),
@@ -62,6 +85,16 @@ _ADDITIVE_MIGRATIONS = {
         ("totp_secret", "TEXT DEFAULT ''"),
         ("totp_enabled", "BOOLEAN DEFAULT 0"),
         ("last_login_at", "DATETIME"),
+        ("org", "VARCHAR(64) DEFAULT ''"),
+    ],
+    "alerts": [
+        ("org", "VARCHAR(64) DEFAULT ''"),
+    ],
+    "incidents": [
+        ("org", "VARCHAR(64) DEFAULT ''"),
+    ],
+    "endpoints": [
+        ("org", "VARCHAR(64) DEFAULT ''"),
     ],
 }
 
@@ -164,6 +197,24 @@ def init_db() -> None:
         conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS idx_edges_dst ON entity_edges (dst_kind, dst_name)"
         )
+        # Tenant-scoped reads: every alert/event/incident query filters on org.
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_events_org ON events (org)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_alerts_org ON alerts (org)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_incidents_org ON incidents (org)"
+        )
+        # Tenant-scoped detection: rules filter every telemetry table by org.
+        for _aux_table in (
+            "processes", "network_connections", "dns_queries", "http_requests",
+            "emails", "usb_devices", "file_scans", "vuln_findings",
+        ):
+            conn.exec_driver_sql(
+                f"CREATE INDEX IF NOT EXISTS idx_{_aux_table}_org ON {_aux_table} (org)"
+            )
     _backfill_audit_chain()
     logger.info("Database initialised at %s", DATABASE_URL)
 

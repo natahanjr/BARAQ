@@ -107,6 +107,9 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(512))
     role: Mapped[str] = mapped_column(String(16), default="analyst")  # admin | analyst
+    #: Tenant scoping: "" (system/central), an organization id, or "all" for
+    #: admins who must oversee every tenant. Analysts are pinned to their org.
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
     full_name: Mapped[str] = mapped_column(String(128), default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     totp_secret: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # User
@@ -119,6 +122,7 @@ class User(Base):
             "id": self.id,
             "username": self.username,
             "role": self.role,
+            "org": self.org,
             "full_name": self.full_name,
             "is_active": self.is_active,
             "totp_enabled": self.totp_enabled,
@@ -198,6 +202,9 @@ class NormalizedEvent(Base):
     source: Mapped[str] = mapped_column(String(32), index=True, default="unknown")
     user: Mapped[str] = mapped_column(String(128), index=True, default="-")
     host: Mapped[str] = mapped_column(String(128), default="-")
+    #: Tenant scoping: telemetry from remote agents is tagged with the
+    #: organization the agent key belongs to; "" is the local/system host.
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
     risk: Mapped[str] = mapped_column(String(16), index=True, default="Low")
     severity: Mapped[str] = mapped_column(String(16), index=True, default="info")
     message: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # NormalizedEvent
@@ -219,6 +226,7 @@ class NormalizedEvent(Base):
             "source": self.source,
             "user": self.user,
             "host": self.host,
+            "org": self.org,
             "risk": self.risk,
             "risk_score": self.risk_score,
             "severity": self.severity,
@@ -249,6 +257,8 @@ class Alert(Base):
     evidence: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # Alert
     rule: Mapped[str] = mapped_column(String(64), index=True, default="")
     host: Mapped[str] = mapped_column(String(128), index=True, default="")
+    #: Tenant scoping: inherits the org of the evidence events ("" = system).
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
     event_count: Mapped[int] = mapped_column(Integer, default=0)
     trigger_count: Mapped[int] = mapped_column(Integer, default=1)
     detection_method: Mapped[str] = mapped_column(String(16), index=True, default="rule")
@@ -286,6 +296,7 @@ class Alert(Base):
             "evidence": self.evidence,
             "rule": self.rule,
             "host": self.host,
+            "org": self.org,
             "event_count": self.event_count,
             "trigger_count": self.trigger_count,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -325,6 +336,8 @@ class Endpoint(Base):
 
     agent_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     host: Mapped[str] = mapped_column(String(128), index=True, default="")
+    #: Tenant scoping: the organization owning this agent ("" = system fleet).
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
     last_seen: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
@@ -337,6 +350,7 @@ class Endpoint(Base):
         return {
             "agent_id": self.agent_id,
             "host": self.host,
+            "org": self.org,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
             "records_total": self.records_total,
             "events_total": self.events_total,
@@ -359,6 +373,7 @@ class ProcessRecord(Base):
     user: Mapped[str] = mapped_column(String(128), default="")
     is_new: Mapped[bool] = mapped_column(Boolean, default=False)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -372,6 +387,7 @@ class ProcessRecord(Base):
             "user": self.user,
             "is_new": self.is_new,
             "observed_at": self.observed_at.isoformat() if self.observed_at else None,
+            "org": self.org,
         }
 
 
@@ -393,6 +409,7 @@ class NetworkConnection(Base):
     bytes_recv: Mapped[int] = mapped_column(Integer, default=0)
     duration_seconds: Mapped[float] = mapped_column(Float, default=0.0)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -409,6 +426,7 @@ class NetworkConnection(Base):
             "bytes_recv": self.bytes_recv,
             "duration_seconds": self.duration_seconds,
             "observed_at": self.observed_at.isoformat() if self.observed_at else None,
+            "org": self.org,
         }
 
 
@@ -429,6 +447,7 @@ class DnsQuery(Base):
     response: Mapped[str] = mapped_column(String(512), default="")
     response_size: Mapped[int] = mapped_column(Integer, default=0)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -439,6 +458,7 @@ class DnsQuery(Base):
             "response": self.response,
             "response_size": self.response_size,
             "observed_at": self.observed_at.isoformat() if self.observed_at else None,
+            "org": self.org,
         }
 
 
@@ -461,6 +481,7 @@ class HttpRequest(Base):
     request_body_size: Mapped[int] = mapped_column(Integer, default=0)
     response_body_size: Mapped[int] = mapped_column(Integer, default=0)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -474,6 +495,7 @@ class HttpRequest(Base):
             "request_body_size": self.request_body_size,
             "response_body_size": self.response_body_size,
             "observed_at": self.observed_at.isoformat() if self.observed_at else None,
+            "org": self.org,
         }
 
 
@@ -495,6 +517,7 @@ class EmailMessage(Base):
     attachment_types: Mapped[str] = mapped_column(String(512), default="")
     ip_address: Mapped[str] = mapped_column(String(64), default="")
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -505,6 +528,7 @@ class EmailMessage(Base):
             "attachment_types": self.attachment_types,
             "ip_address": self.ip_address,
             "received_at": self.received_at.isoformat() if self.received_at else None,
+            "org": self.org,
         }
 
 
@@ -523,6 +547,7 @@ class UsbDevice(Base):
     vendor: Mapped[str] = mapped_column(String(128), default="")
     serial: Mapped[str] = mapped_column(String(128), default="")
     inserted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -532,6 +557,7 @@ class UsbDevice(Base):
             "vendor": self.vendor,
             "serial": self.serial,
             "inserted_at": self.inserted_at.isoformat() if self.inserted_at else None,
+            "org": self.org,
         }
 
 
@@ -550,6 +576,7 @@ class FileScan(Base):
     is_malicious: Mapped[bool] = mapped_column(Boolean, default=False)
     signature_name: Mapped[str] = mapped_column(String(128), default="")
     scanned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -563,6 +590,7 @@ class FileScan(Base):
             "is_malicious": self.is_malicious,
             "signature_name": self.signature_name,
             "scanned_at": self.scanned_at.isoformat() if self.scanned_at else None,
+            "org": self.org,
         }
 
 
@@ -585,6 +613,7 @@ class VulnFinding(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     remediation: Mapped[str] = mapped_column(Text, default="")
     found_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -598,6 +627,7 @@ class VulnFinding(Base):
             "description": self.description,
             "remediation": self.remediation,
             "found_at": self.found_at.isoformat() if self.found_at else None,
+            "org": self.org,
         }
 
 
@@ -845,6 +875,8 @@ class Incident(Base):
     mitre_id: Mapped[str] = mapped_column(String(16), default="T0000")
     mitre_name: Mapped[str] = mapped_column(String(128), default="")
     host: Mapped[str] = mapped_column(String(128), index=True, default="")
+    #: Tenant scoping: the org of the alerts that make up the case.
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
     risk_score: Mapped[float] = mapped_column(Float, default=0.0)
     risk_level: Mapped[str] = mapped_column(String(16), index=True, default="MEDIUM")
     created_at: Mapped[datetime] = mapped_column(
@@ -882,6 +914,7 @@ class Incident(Base):
             "mitre_id": self.mitre_id,
             "mitre_name": self.mitre_name,
             "host": self.host,
+            "org": self.org,
             "risk_score": self.risk_score,
             "risk_level": self.risk_level,
             "alert_count": len(self.alerts),

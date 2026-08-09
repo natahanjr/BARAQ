@@ -675,6 +675,21 @@ AGENT_KEYS: dict[str, str] = {
     **{str(k): str(v) for k, v in _env_agent_keys.items()},
 }
 
+#: Tenant attribution for remote agents: {"agent-id": "org-id"}. Agents
+#: without an entry are treated as system/central telemetry (org ""), which
+#: only global (admin) roles can read. Use stable org ids - e.g. the short
+#: name of the university/faculty - so they survive renames.
+try:
+    _env_agent_orgs = json.loads(_secret("SENTINEL_AGENT_ORGS", "{}") or "{}")
+except (ValueError, TypeError):
+    _env_agent_orgs = {}
+AGENT_ORGS: dict[str, str] = {str(k): str(v) for k, v in _env_agent_orgs.items()}
+
+
+def agent_org(agent_id: str) -> str:
+    """Organization a reporting agent belongs to ("" = system/central)."""
+    return AGENT_ORGS.get(agent_id, "")
+
 # --------------------------------------------------------------------------
 # AI assistant
 # --------------------------------------------------------------------------

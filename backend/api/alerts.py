@@ -16,7 +16,7 @@ from backend.database.connection import get_db
 from backend.database.models import Alert, AlertAction, AlertEventLink, AnalystNote
 from backend.detection.workflow import can_transition, is_valid_state, next_states
 from backend.reports.generator import generate_report
-from backend.security import actor_name, require_admin, require_auth
+from backend.security import actor_name, tenant_scope, require_admin, require_auth
 
 logger = logging.getLogger("sentinel.api.alerts")
 
@@ -63,15 +63,38 @@ class ActionRequest(BaseModel):
     triggered_by: Literal["manual", "auto", "api"] = "manual"
 
 
+def _scoped_alert(request: Request, alert_id: int, db: Session) -> Alert:
+    """Fetch an alert (with evidence) or 404 if outside the caller's scope."""
+    scope = tenant_scope(request)
+    stmt = (
+        select(Alert)
+        .options(
+            selectinload(Alert.events).selectinload(AlertEventLink.event),
+            selectinload(Alert.notes),
+        )
+        .where(Alert.id == alert_id)
+    )
+    if scope is not None:
+        stmt = stmt.where(Alert.org == scope)
+    alert = db.scalars(stmt).first()
+    if not alert:
+        raise HTTPException(404, "Alert not found")
+    return alert
+
+
 @router.get("")
 def list_alerts(
+    request: Request,
     status: AlertStatus | None = None,
     severity: Literal["critical", "high", "medium", "low", "info"] | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
+    scope = tenant_scope(request)
     stmt = select(Alert)
+    if scope is not None:
+        stmt = stmt.where(Alert.org == scope)
     if status:
         stmt = stmt.where(Alert.status == status.value)
     if severity:
@@ -86,25 +109,14 @@ def list_alerts(
 
 
 @router.get("/{alert_id}")
-def get_alert(alert_id: int, db: Session = Depends(get_db)):
-    alert = db.scalars(
-        select(Alert)
-        .where(Alert.id == alert_id)
-        .options(
-            selectinload(Alert.events).selectinload(AlertEventLink.event),
-            selectinload(Alert.notes),
-        )
-    ).first()
-    if not alert:
-        raise HTTPException(404, "Alert not found")
+def get_alert(alert_id: int, request: Request, db: Session = Depends(get_db)):
+    alert = _scoped_alert(request, alert_id, db)
     return alert.to_dict(include_events=True)
 
 
 @router.patch("/{alert_id}/status")
 def update_status(alert_id: int, body: StatusUpdate, request: Request, db: Session = Depends(get_db)):
-    alert = db.get(Alert, alert_id)
-    if not alert:
-        raise HTTPException(404, "Alert not found")
+    alert = _scoped_alert(request, alert_id, db)
     target = body.status.value
     if target == "in_progress":  # legacy alias -> canonical state
         target = "investigating"
@@ -128,9 +140,7 @@ def update_status(alert_id: int, body: StatusUpdate, request: Request, db: Sessi
 
 @router.post("/{alert_id}/notes")
 def add_note(alert_id: int, body: NoteCreate, request: Request, db: Session = Depends(get_db)):
-    alert = db.get(Alert, alert_id)
-    if not alert:
-        raise HTTPException(404, "Alert not found")
+    alert = _scoped_alert(request, alert_id, db)
     note = AnalystNote(alert_id=alert_id, note=body.note)
     db.add(note)
     db.commit()
@@ -199,9 +209,7 @@ def _execute_action(action: str, target: str) -> tuple[str, str]:
 
 @router.post("/{alert_id}/actions", dependencies=[Depends(require_admin)])
 def take_action(alert_id: int, body: ActionRequest, request: Request, db: Session = Depends(get_db)):
-    alert = db.get(Alert, alert_id)
-    if not alert:
-        raise HTTPException(404, "Alert not found")
+    alert = _scoped_alert(request, alert_id, db)
     action = body.action.value
 
     target = body.target or _extract_target(alert, action)
@@ -244,9 +252,8 @@ def _bump_severity(alert: Alert) -> None:
 
 
 @router.get("/{alert_id}/actions")
-def list_actions(alert_id: int, db: Session = Depends(get_db)):
-    if not db.get(Alert, alert_id):
-        raise HTTPException(404, "Alert not found")
+def list_actions(alert_id: int, request: Request, db: Session = Depends(get_db)):
+    _scoped_alert(request, alert_id, db)
     rows = db.scalars(
         select(AlertAction)
         .where(AlertAction.alert_id == alert_id)

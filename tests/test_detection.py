@@ -289,6 +289,60 @@ def test_kill_chain_correlation(db):
     assert findings[0].severity == "critical"
 
 
+def test_kill_chain_timing_composition(db):
+    """Timing-composed correlation: stages arriving in canonical order with
+    an exfiltration terminal stage score a coherent critical chain."""
+    from backend.database.models import Alert
+    from backend.detection.rules.correlation import KillChainCorrelationRule
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc)
+    for name, rule, offset in (
+        ("Network Service Discovery", "network_recon", 45),
+        ("Brute Force Attack", "brute_force", 30),
+        ("Data Staging", "data_staging", 12),
+        ("Data Exfiltration", "dns_http_exfil", 3),
+    ):
+        db.add(Alert(
+            name=name, rule=rule, status="open", severity="high", mitre_id="T1046",
+            mitre_name="Discovery", mitre_tactic="Discovery",
+            evidence="Brute force detected for account 'administrator' from 192.168.99.77.",
+            created_at=now - timedelta(minutes=offset),
+        ))
+    db.commit()
+    findings = KillChainCorrelationRule(db, threshold=2).evaluate(10)
+    assert len(findings) == 1
+    assert findings[0].severity == "critical"
+    assert "canonical kill-chain order" in findings[0].evidence
+    assert "terminal stage" in findings[0].evidence
+    assert findings[0].confidence >= 0.9
+
+
+def test_kill_chain_timing_reversed_sequence(db):
+    """Scrambled stage arrival (exfiltration before discovery) still fires
+    on stage count but must report the ordering deviation and a softer
+    confidence than a coherent chain."""
+    from backend.database.models import Alert
+    from backend.detection.rules.correlation import KillChainCorrelationRule
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc)
+    for name, rule, offset in (
+        ("Data Exfiltration", "dns_http_exfil", 3),
+        ("Network Service Discovery", "network_recon", 12),
+    ):
+        db.add(Alert(
+            name=name, rule=rule, status="open", severity="high", mitre_id="T1048",
+            mitre_name="Exfiltration", mitre_tactic="Exfiltration",
+            evidence="from 192.168.99.77.", created_at=now - timedelta(minutes=offset),
+        ))
+    db.commit()
+    findings = KillChainCorrelationRule(db, threshold=2, window_minutes=60).evaluate(10)
+    assert len(findings) == 1
+    assert "ordering deviates" in findings[0].evidence
+    assert findings[0].confidence < 0.9
+
+
 def test_credential_access_lsass_dump(db):
     from backend.detection.rules.credential_access import CredentialAccessRule
 

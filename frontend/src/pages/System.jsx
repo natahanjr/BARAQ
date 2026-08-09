@@ -419,6 +419,11 @@ export default function System() {
                     </span>
                   </div>
                   <p className="mt-1 truncate font-mono text-[10px] text-slate-500">{ep.agent_id}</p>
+                  {ep.org ? (
+                    <span className="mt-1 inline-block max-w-full truncate rounded bg-violet-500/10 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-violet-300" title={`Organization: ${ep.org}`}>
+                      {ep.org}
+                    </span>
+                  ) : null}
                   <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                     <div className="rounded bg-slate-800/50 py-1.5">
                       <p className="text-xs font-bold text-cyan-400">{ep.records}</p>

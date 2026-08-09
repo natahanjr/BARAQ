@@ -24,10 +24,10 @@ from sqlalchemy.orm import Session
 
 from backend.api.system import run_pipeline
 from backend.audit import client_ip, log_action
-from backend.config import AGENT_KEYS
+from backend.config import AGENT_KEYS, agent_org
 from backend.database.connection import get_db
 from backend.database.models import AgentCommand, Endpoint, NormalizedEvent, Verdict
-from backend.security import actor_name, require_admin, require_auth
+from backend.security import actor_name, tenant_scope, require_admin, require_auth
 
 logger = logging.getLogger("sentinel.api.endpoints")
 router = APIRouter(
@@ -90,11 +90,12 @@ def ingest(
 
     _validate_ingest_records(body.records)
     host = (body.host or agent_id)[:128]
+    org = agent_org(agent_id)
     for record in body.records:
         record["host"] = host
 
     try:
-        result = run_pipeline(db, body.records)
+        result = run_pipeline(db, body.records, org=org)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Ingest from agent %s failed", agent_id)
         raise HTTPException(500, f"Ingest pipeline failed: {exc}")
@@ -104,12 +105,14 @@ def ingest(
         endpoint = Endpoint(
             agent_id=agent_id,
             host=host,
+            org=org,
             records_total=0,
             events_total=0,
             alerts_total=0,
         )
         db.add(endpoint)
     endpoint.host = host
+    endpoint.org = org
     endpoint.last_seen = datetime.now(timezone.utc)
     endpoint.records_total += len(body.records)
     endpoint.events_total += result["saved_events"]
@@ -117,19 +120,24 @@ def ingest(
     db.commit()
 
     logger.info(
-        "Agent %s (%s) ingested %d records -> %d alerts",
-        agent_id, host, len(body.records), result["alerts_created"],
+        "Agent %s (%s) org=%s ingested %d records -> %d alerts",
+        agent_id, host, org or "(system)", len(body.records), result["alerts_created"],
     )
-    return {"agent_id": agent_id, "host": host, **result}
+    return {"agent_id": agent_id, "host": host, "org": org, **result}
 
 
 @router.get("/endpoints", dependencies=[Depends(require_auth)])
 def list_endpoints(
+    request: Request,
     limit: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
 ):
+    scope = tenant_scope(request)
+    stmt = select(Endpoint)
+    if scope is not None:
+        stmt = stmt.where(Endpoint.org == scope)
     rows = db.scalars(
-        select(Endpoint).order_by(Endpoint.last_seen.desc()).limit(limit)
+        stmt.order_by(Endpoint.last_seen.desc()).limit(limit)
     ).all()
     return {"items": [ep.to_dict() for ep in rows], "total": len(rows)}
 
@@ -195,9 +203,15 @@ def queue_command(
 @router.get("/endpoints/{agent_id}/commands", dependencies=[Depends(require_auth)])
 def list_agent_commands(
     agent_id: str,
+    request: Request,
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ):
+    scope = tenant_scope(request)
+    if scope is not None and not db.scalar(
+        select(Endpoint).where(Endpoint.agent_id == agent_id, Endpoint.org == scope)
+    ):
+        raise HTTPException(404, "Unknown agent")
     rows = db.scalars(
         select(AgentCommand)
         .where(AgentCommand.agent_id == agent_id)
@@ -209,13 +223,22 @@ def list_agent_commands(
 
 @router.get("/commands", dependencies=[Depends(require_auth)])
 def list_commands(
+    request: Request,
     status: str | None = None,
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ):
-    stmt = select(AgentCommand).order_by(AgentCommand.created_at.desc()).limit(limit)
+    stmt = select(AgentCommand)
+    scope = tenant_scope(request)
+    if scope is not None:
+        stmt = stmt.where(
+            AgentCommand.agent_id.in_(
+                select(Endpoint.agent_id).where(Endpoint.org == scope)
+            )
+        )
     if status:
-        stmt = select(AgentCommand).where(AgentCommand.status == status).order_by(AgentCommand.created_at.desc()).limit(limit)
+        stmt = stmt.where(AgentCommand.status == status)
+    stmt = stmt.order_by(AgentCommand.created_at.desc()).limit(limit)
     rows = db.scalars(stmt).all()
     return {"items": [c.to_dict() for c in rows]}
 

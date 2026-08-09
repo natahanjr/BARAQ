@@ -23,7 +23,9 @@ import uvicorn
 # Import the ASGI application module so PyInstaller analyses and bundles the
 # whole backend package (the uvicorn.run() app path is only a string).
 import backend.main  # noqa: F401  isort:skip
-from backend.config import LOG_DIR
+from backend.config import LOG_DIR, TLS_CERT_FILE, TLS_ENABLED, TLS_KEY_FILE, TLS_PORT
+
+logger = logging.getLogger("sentinel.server")
 
 
 def _redirect_nulls() -> None:
@@ -101,9 +103,18 @@ def main() -> None:
     _add_file_logging()
 
     host = os.environ.get("SENTINEL_HOST", "0.0.0.0" if args.lan else "127.0.0.1")
-    port = args.port or int(os.environ.get("SENTINEL_PORT", "8001"))
+    port = args.port or int(os.environ.get("SENTINEL_PORT", str(TLS_PORT if TLS_ENABLED else 8001)))
+    ssl_kwargs = {}
+    if TLS_ENABLED:
+        ssl_kwargs = {
+            "ssl_certfile": TLS_CERT_FILE,
+            "ssl_keyfile": TLS_KEY_FILE,
+        }
+        logger.info("TLS enabled: serving HTTPS on %s with %s", host, TLS_CERT_FILE)
     try:
-        uvicorn.run("backend.main:app", host=host, port=port, log_level="info")
+        uvicorn.run(
+            "backend.main:app", host=host, port=port, log_level="info", **ssl_kwargs
+        )
     except BaseException as exc:  # noqa: BLE001 - surface daemon crashes in log
         _log_failure(exc)
         raise

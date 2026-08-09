@@ -126,7 +126,7 @@ class AlertingService:
         method = "hybrid" if ml_present else "rule"
         return final, level, method
 
-    def _throttle(self, rule: str) -> Alert | None:
+    def _throttle(self, rule: str, org: str = "") -> Alert | None:
         """Return an open alert to refresh when a rule exceeds its alert quota.
 
         Once a rule has opened ALERT_THROTTLE_MAX_PER_WINDOW alerts within the
@@ -138,6 +138,7 @@ class AlertingService:
         recent = self.session.scalars(
             select(Alert).where(
                 Alert.rule == rule,
+                Alert.org == org,
                 Alert.created_at >= since,
             )
         ).all()
@@ -145,7 +146,13 @@ class AlertingService:
             return None
         return max(recent, key=lambda a: a.created_at)
 
-    def handle_findings(self, findings: list) -> list[Alert]:
+    def handle_findings(self, findings: list, org: str = "") -> list[Alert]:
+        """Persist rule findings as alerts, scoped to ``org``.
+
+        ``org`` is the tenant this batch belongs to; every alert opened or
+        refreshed here stays inside that organization, so alerts from
+        different tenants never merge even when the signature matches.
+        """
         created: list[Alert] = []
         linked: set[tuple[int, int]] = set()  # (alert_id, event_id) already queued
 
@@ -181,6 +188,7 @@ class AlertingService:
                 select(Alert).where(
                     Alert.status.in_(ACTIVE_STATES),
                     Alert.name == result.name,
+                    Alert.org == org,
                 )
             ).all()
 
@@ -206,7 +214,7 @@ class AlertingService:
                     alert.id, alert.trigger_count,
                     " -> severity %s" % escalated if escalated else "",
                 )
-            elif (throttle_target := self._throttle(result.rule)):
+            elif (throttle_target := self._throttle(result.rule, org)):
                 # Rule is above its per-window quota: refresh the newest open
                 # alert instead of opening another one (anti-fatigue).
                 alert = throttle_target
@@ -237,6 +245,7 @@ class AlertingService:
                     rule=result.rule,
                     host=self._result_host(result.event_ids),
                     event_count=len(result.event_ids),
+                    org=org,
                 )
                 self.session.add(alert)
                 self.session.flush()

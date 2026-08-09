@@ -57,7 +57,16 @@ def test_ingest_host_override_tags_alerts(client):
     resp = client.post(
         "/api/ingest",
         headers={"X-Agent-Key": "sentinel-agent-dev"},
-        json={"records": [{"event_id": 1}], "host": "corp-laptop-42"},
+        json={
+            "records": [
+                {
+                    "event_id": 1,
+                    "source": "test",
+                    "timestamp": "2026-08-01T12:00:00Z",
+                }
+            ],
+            "host": "corp-laptop-42",
+        },
     )
     assert resp.status_code == 200
 
@@ -78,7 +87,16 @@ def test_agent_pipeline_events_carry_host(client):
     client.post(
         "/api/ingest",
         headers={"X-Agent-Key": "sentinel-agent-dev"},
-        json={"records": [{"event_id": 1, "source": "test", "message": "x"}]},
+        json={
+            "records": [
+                {
+                    "event_id": 1,
+                    "source": "test",
+                    "message": "x",
+                    "timestamp": "2026-08-01T12:00:00Z",
+                }
+            ]
+        },
     )
     db = SessionLocal()
     try:
