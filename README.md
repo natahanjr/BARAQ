@@ -1,5 +1,7 @@
 # SentinelSOC
 
+[![Python Package](https://github.com/natahanjr/SentinelSOC/actions/workflows/python-package.yml/badge.svg)](https://github.com/natahanjr/SentinelSOC/actions/workflows/python-package.yml)
+
 **SentinelSOC: An Intelligent Lightweight Security Operations Center Framework for Real-Time Windows Endpoint Threat Detection and Incident Analysis**
 
 A lightweight, production-oriented SOC framework for Windows endpoints — no cloud, no heavy infrastructure. It collects real Windows telemetry, normalizes events, detects attacks with a **hybrid rule-based + machine-learning engine**, maps findings to MITRE ATT&CK, computes **hybrid risk scores**, displays everything in a professional SOC dashboard, generates executive/technical reports, and includes an **evaluation framework** that measures detection accuracy.
