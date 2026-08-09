@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { api } from "../api.js";
+import { api, isAdmin } from "../api.js";
 import Card from "../components/Card.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import Pagination from "../components/Pagination.jsx";
@@ -56,7 +56,7 @@ function AlertRow({ alert, onFix }) {
           </div>
         </div>
       </Link>
-      {alert.status !== "closed" && (
+      {isAdmin() && alert.status !== "closed" && (
         <button
           type="button"
           title="Fix alert and restore security score"
@@ -145,15 +145,17 @@ export default function Alerts() {
                 alerts
               </span>
             ) : null}
-            <button
-              type="button"
-              onClick={clearAll}
-              disabled={clearing || !data || data.total === 0}
-              title="Close all open alerts and force-generate an incident report"
-              className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-sm font-semibold text-rose-300 transition-colors hover:bg-rose-500/25 disabled:opacity-40"
-            >
-              {clearing ? "Clearing..." : "Clear Alerts"}
-            </button>
+            {isAdmin() && (
+              <button
+                type="button"
+                onClick={clearAll}
+                disabled={clearing || !data || data.total === 0}
+                title="Close all open alerts and force-generate an incident report"
+                className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-sm font-semibold text-rose-300 transition-colors hover:bg-rose-500/25 disabled:opacity-40"
+              >
+                {clearing ? "Clearing..." : "Clear Alerts"}
+              </button>
+            )}
           </div>
         }
       />

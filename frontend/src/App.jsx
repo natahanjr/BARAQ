@@ -445,6 +445,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    authStore.user = user;
+  }, [user]);
+
+  useEffect(() => {
     const onLogout = () => setUser(null);
     window.addEventListener("sentinel:logout", onLogout);
     return () => window.removeEventListener("sentinel:logout", onLogout);

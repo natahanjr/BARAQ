@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router";
-import { api } from "../api.js";
+import { api, isAdmin } from "../api.js";
 import Card from "../components/Card.jsx";
 import SeverityBadge from "../components/SeverityBadge.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
@@ -422,24 +422,26 @@ export default function AlertDetail() {
             )}
           </Card>
 
-          <Card>
-            <SectionHeading>SOAR Actions</SectionHeading>
-            <div className="grid grid-cols-1 gap-2">
-              {soarButtons.map((b) => (
-                <button
-                  key={b.key}
-                  type="button"
-                  onClick={() => runSoar(b.key)}
-                  disabled={running[b.key] || alert.status === "closed"}
-                  className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-all disabled:opacity-40 ${b.tone} ${
-                    running[b.key] ? "animate-pulse" : ""
-                  }`}
-                >
-                  {running[b.key] ? "Running..." : b.label}
-                </button>
-              ))}
-            </div>
-          </Card>
+          {isAdmin() && (
+            <Card>
+              <SectionHeading>SOAR Actions</SectionHeading>
+              <div className="grid grid-cols-1 gap-2">
+                {soarButtons.map((b) => (
+                  <button
+                    key={b.key}
+                    type="button"
+                    onClick={() => runSoar(b.key)}
+                    disabled={running[b.key] || alert.status === "closed"}
+                    className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-all disabled:opacity-40 ${b.tone} ${
+                      running[b.key] ? "animate-pulse" : ""
+                    }`}
+                  >
+                    {running[b.key] ? "Running..." : b.label}
+                  </button>
+                ))}
+              </div>
+            </Card>
+          )}
 
           <Card>
             <div className="mb-3 flex items-center justify-between">
@@ -549,6 +551,7 @@ export default function AlertDetail() {
 
           <Card>
             <SectionHeading>Status Management</SectionHeading>
+            {isAdmin() && (
             <button
               type="button"
               onClick={fixAlert}
@@ -559,6 +562,7 @@ export default function AlertDetail() {
                 ? "✓ Alert Fixed — Security Score Restored"
                 : "✓ Fix Alert (Restore Score to 100)"}
             </button>
+          )}
             <div className="grid grid-cols-2 gap-2">
               {STATUSES.map((s) => (
                 <button

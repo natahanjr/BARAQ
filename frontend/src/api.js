@@ -12,7 +12,10 @@ export const authStore = {
   set(token) {
     sessionToken = token || null;
   },
+  user: null,
 };
+
+export const isAdmin = () => authStore.user?.role === "admin";
 
 async function request(path, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };

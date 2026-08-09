@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../api.js";
+import { api, isAdmin } from "../api.js";
 import Card from "../components/Card.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import SeverityBadge from "../components/SeverityBadge.jsx";
@@ -124,13 +124,15 @@ function CreateIncident({ onCreated }) {
     <Card>
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold text-white">New Incident</h3>
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 transition-colors hover:bg-cyan-500/20"
-        >
-          {open ? "Cancel" : "Create"}
-        </button>
+        {isAdmin() && (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 transition-colors hover:bg-cyan-500/20"
+          >
+            {open ? "Cancel" : "Create"}
+          </button>
+        )}
       </div>
       {open && (
         <form onSubmit={submit} className="mt-4 space-y-3">
@@ -271,23 +273,30 @@ function IncidentDetail({ incident, onChanged }) {
 
       <Card>
         <h3 className="mb-3 text-base font-semibold text-white">Status</h3>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-          {STATUSES.map((s) => (
-            <button
-              key={s.value}
-              type="button"
-              onClick={() => changeStatus(s.value)}
-              disabled={saving || incident.status === s.value}
-              className={`rounded-lg border px-3 py-2 text-xs font-semibold capitalize transition-all disabled:opacity-40 ${
-                incident.status === s.value
-                  ? "border-cyan-500/50 bg-cyan-500/20 text-cyan-300"
-                  : "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
+        {isAdmin() ? (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {STATUSES.map((s) => (
+              <button
+                key={s.value}
+                type="button"
+                onClick={() => changeStatus(s.value)}
+                disabled={saving || incident.status === s.value}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold capitalize transition-all disabled:opacity-40 ${
+                  incident.status === s.value
+                    ? "border-cyan-500/50 bg-cyan-500/20 text-cyan-300"
+                    : "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">
+            Current status: <strong className="text-slate-300">{incident.status}</strong> — only
+            administrators can change it.
+          </p>
+        )}
       </Card>
 
       <Card>
@@ -310,21 +319,23 @@ function IncidentDetail({ incident, onChanged }) {
         ) : (
           <EmptyState title="No linked alerts" subtitle="Link alerts to build this case" />
         )}
-        <form onSubmit={linkAlerts} className="mt-3 flex gap-2">
-          <input
-            value={linkIds}
-            onChange={(e) => setLinkIds(e.target.value)}
-            placeholder="Alert IDs to link, comma separated"
-            className={inputClass}
-          />
-          <button
-            type="submit"
-            disabled={saving}
-            className="shrink-0 rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-cyan-500 disabled:opacity-50"
-          >
-            Link
-          </button>
-        </form>
+                {isAdmin() && (
+          <form onSubmit={linkAlerts} className="mt-3 flex gap-2">
+            <input
+              value={linkIds}
+              onChange={(e) => setLinkIds(e.target.value)}
+              placeholder="Alert IDs to link, comma separated"
+              className={inputClass}
+            />
+            <button
+              type="submit"
+              disabled={saving}
+              className="shrink-0 rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-cyan-500 disabled:opacity-50"
+            >
+              Link
+            </button>
+          </form>
+        )}
       </Card>
 
       <Card>

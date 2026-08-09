@@ -11,7 +11,7 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { api } from "../api.js";
+import { api, isAdmin } from "../api.js";
 import Card from "../components/Card.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import RiskBadge from "../components/RiskBadge.jsx";
@@ -399,6 +399,7 @@ export default function EntityGraph() {
               <RefreshIcon className="h-4 w-4" />
               Refresh
             </button>
+            {isAdmin() && (
             <button
               type="button"
               onClick={handleSync}
@@ -408,6 +409,7 @@ export default function EntityGraph() {
               <NetworkIcon className="h-4 w-4" />
               {syncing ? "Rebuilding…" : "Rebuild graph"}
             </button>
+          )}
           </div>
         }
       />
