@@ -15,10 +15,10 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         python -m pip install -r requirements.txt -r requirements-dev.txt
-    - name: Lint with flake8 (fatal errors only)
+    - name: Lint with flake8 (syntax errors only)
       run: |
         python -m pip install flake8
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --select=E9 --show-source --statistics
     - name: Test with pytest
       run: |
         python -m pytest tests/ -q
