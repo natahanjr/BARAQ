@@ -22,7 +22,7 @@ database/realtime_policy_state.json
 database/campaigns/
 
 # Generated artifacts
-reports/
+/reports/
 logs/
 build/
 *.log
