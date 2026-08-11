@@ -14,11 +14,18 @@ jobs:
       shell: pwsh
       run: |
         choco install postgresql16 -y --no-progress --params '/Password:postgres'
-        $hba = "C:\Program Files\PostgreSQL\16\data\pg_hba.conf"
+        $pgBin = "C:\Program Files\PostgreSQL\16\bin"
+        $data = "C:\Program Files\PostgreSQL\16\data"
+        $hba = Join-Path $data "pg_hba.conf"
         Add-Content $hba "host all all 127.0.0.1/32 trust"
         Add-Content $hba "host all all ::1/128 trust"
-        Restart-Service "postgresql-x64-16"
-        $psql = "C:\Program Files\PostgreSQL\16\bin\psql.exe"
+        $reloaded = $false
+        try { & (Join-Path $pgBin "pg_ctl.exe") reload -D $data *> $null; $reloaded = ($LASTEXITCODE -eq 0) } catch { }
+        if (-not $reloaded) {
+          $svc = Get-Service | Where-Object { $_.Name -like "postgresql*" -and $_.Status -eq "Running" } | Select-Object -First 1
+          if ($svc) { Restart-Service $svc.Name } else { throw "no running postgresql service found" }
+        }
+        $psql = Join-Path $pgBin "psql.exe"
         $ok = $false
         for ($i = 0; $i -lt 30; $i++) {
           try { & $psql -U postgres -h 127.0.0.1 -p 5432 -c "SELECT 1;" *> $null; if ($LASTEXITCODE -eq 0) { $ok = $true; break } } catch { }
