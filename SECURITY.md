@@ -19,8 +19,7 @@ coordinated disclosure process.
 
 Report vulnerabilities privately to the maintainers:
 
-- **Email:** `security@baraq-soc.example` (replace with the real maintainer address)
-- **PGP:** fingerprint `A1B2 C3D4 E5F6 7890 ...` (key published on the repo; replace)
+- **Email:** `securitybaraqsoc@gmail.com`
 
 Include as much of the following as possible:
 
