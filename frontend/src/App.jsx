@@ -353,24 +353,6 @@ function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user,
               <div className="h-px bg-white/5" />
             </>
           )}
-          <div className="flex items-center gap-2.5">
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                online ? "bg-emerald-400" : "bg-red-400"
-              }`}
-            />
-            <span className="text-xs font-medium text-slate-500">
-              {online ? "System Online" : "Backend Offline"}
-            </span>
-            <span
-              className={`ml-auto rounded-full px-1.5 py-0.5 text-[9px] ${
-                online ? "bg-cyan-500/15 text-cyan-400" : "bg-slate-700 text-slate-500"
-              }`}
-              title={realtimeConnected ? "Live push connected - realtime stream" : "Live push on 15s polling (auto-detects realtime)"}
-            >
-              {realtimeConnected ? "LIVE" : "15s poll"}
-            </span>
-          </div>
         </div>
       </aside>
     </>
