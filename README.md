@@ -35,6 +35,69 @@ A lightweight, production-oriented SOC framework for Windows endpoints — no cl
 
 ---
 
+## Dashboard
+
+Live SOC command view: security score, current risk level, system status,
+event/alert timelines, severity distribution, attack statistics, detection
+method breakdown, top targets, and open alerts — refreshed in real time.
+
+![BARAQ Dashboard](docs/screenshots/dashboard.png)
+
+![BARAQ Alerts](docs/screenshots/alerts.png)
+
+---
+
+## Architecture
+
+```
+                ┌──────────────────────────────────────────────┐
+                │              ENDPOINT AGENTS                 │
+                │  eventlog │ process │ network │ PowerShell │ │
+                │  Sysmon   │ USB     │ simulator            │ │
+                └──────────────┬───────────────────────────────┘
+                               │  HTTPS + agent key (TLS pinning)
+                               ▼
+                ┌──────────────────────────────────────────────┐
+                │          BARAQ BACKEND (FastAPI)             │
+                │  Normalizer ─► risk 0-100 ─► PostgreSQL      │
+                │         │                                    │
+                │         ├─► Rule-Based Detection (29 rules)  │
+                │         ├─► ML Anomaly Engine (IF/RF/XGB)    │
+                │         └─► Hybrid Risk Score (60/40)        │
+                │                   │                          │
+                │         MITRE ATT&CK enrichment              │
+                │         Alert aggregation + escalation       │
+                │         Threat intel IOC enrichment          │
+                └──────────────┬───────────────────────────────┘
+                               │
+              ┌────────────────┼──────────────────┐
+              ▼                ▼                  ▼
+     ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+     │ SOC Dashboard│  │   Alerts /   │  │  Streaming   │
+     │  (React SPA) │  │ Incidents /  │  │  Kafka/Redis │
+     │  WebSocket   │  │  Audit trail │  │  /ES export  │
+     └──────────────┘  └──────────────┘  └──────────────┘
+```
+
+## Detection Pipeline
+
+1. **Collect** — agents push Windows telemetry (event log, processes, network,
+   PowerShell, Sysmon) over HTTPS with agent-key auth and TLS CA pinning.
+2. **Normalize** — each event is normalized to a common schema and assigned a
+   numeric risk score (0-100).
+3. **Detect** — a rule engine (29 MITRE ATT&CK-mapped rules) plus per-behavior
+   ML anomaly detection (Isolation Forest / Random Forest / XGBoost) evaluate
+   the normalized stream.
+4. **Score** — hybrid risk scoring blends rule and ML signals
+   (60% rule / 40% ML) into a 0-100 score with LOW · MEDIUM · HIGH · CRITICAL.
+5. **Enrich** — MITRE ATT&CK technique mapping, threat-intel IOC lookup
+   (AbuseIPDB / OTX / VirusTotal), and entity-graph context are attached.
+6. **Act** — alerts aggregate with severity escalation, notify via webhook /
+   SMTP / Windows toast, stream to Kafka/Redis/Elasticsearch, and feed the
+   incident workflow with AI-assisted investigation.
+
+---
+
 ## Project Structure
 
 ```
