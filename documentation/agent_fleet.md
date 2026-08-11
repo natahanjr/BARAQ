@@ -1,4 +1,4 @@
-# SentinelSOC - Agent Fleet
+# BARAQ - Agent Fleet
 
 Remote hosts run `scripts/agent.py` (a small, dependency-light telemetry
 shipper) and authenticate to the central server with a per-host key. The
@@ -10,7 +10,7 @@ host.
 
 ```
 +------------------+   POST /api/ingest            +----------------------+
-|  host agent      | -- X-Agent-Key: <key> ------> |  central SentinelSOC |
+|  host agent      | -- X-Agent-Key: <key> ------> |  central BARAQ |
 |  scripts/agent.py|                               |  - validates key     |
 |                  | <--- GET /api/commands/pending|  - runs pipeline     |
 |  executes        | --- POST /api/commands/{id}/result (block_ip,        |
@@ -19,7 +19,7 @@ host.
 ```
 
 - Agent keys are a JSON map `{"<key>": "<agent-id>"}` stored encrypted in
-  the app vault (`secrets.dat`, key `SENTINEL_AGENT_KEYS`).
+  the app vault (`secrets.dat`, key `BARAQ_AGENT_KEYS`).
 - `/api/endpoints` lists the fleet with per-host record/event/alert volume
   and last-seen. The dashboard Endpoints view renders this live.
 - Command flow: admin queues a command for an agent; the agent polls
@@ -31,19 +31,19 @@ host.
 
 ```bash
 venv\Scripts\python scripts\provision_agent.py add edge-host-1 https://soc.example.com:8443
-venv\Scripts\python scripts\provision_agent.py add ws-eng-02 https://soc.example.com:8443 --org eng --tls-cert certs\sentinel.crt
+venv\Scripts\python scripts\provision_agent.py add ws-eng-02 https://soc.example.com:8443 --org eng --tls-cert certs\baraq.crt
 ```
 
 This generates a key, writes it to the vault (and, with `--org`, maps the
-agent to a tenant in `SENTINEL_AGENT_ORGS`), and saves the agent's launch
-config to `agent_configs/edge-host-1.json`. **Restart the SentinelSOC
+agent to a tenant in `BARAQ_AGENT_ORGS`), and saves the agent's launch
+config to `agent_configs/edge-host-1.json`. **Restart the BARAQ
 service** afterwards so the new key and org mapping are loaded (both are
 read at startup).
 
 Copy the shipper to the host and run:
 
 ```bash
-python scripts/agent.py --server https://soc.example.com:8443 --key "<key>" --interval 15 --tls-ca certs/sentinel.crt
+python scripts/agent.py --server https://soc.example.com:8443 --key "<key>" --interval 15 --tls-ca certs/baraq.crt
 ```
 
 For multi-campus fleets, `scripts/provision_university.py` batches a whole
@@ -80,7 +80,7 @@ venv\Scripts\python scripts\provision_agent.py revoke edge-host-1
 - Rotation: provision a new key under the same agent-id after revoking the
   old one; update the host's launch command, then restart the server.
 - Revocation is immediate on the next server restart - the key is dropped
-  from `SENTINEL_AGENT_KEYS` and any further ingest from it returns 401.
+  from `BARAQ_AGENT_KEYS` and any further ingest from it returns 401.
 - The endpoint row (historical volume) is retained after revoke; only the
   credential is removed.
 
@@ -91,5 +91,5 @@ venv\Scripts\python scripts\provision_agent.py revoke edge-host-1
   bad host cannot wedge the API.
 - Records per ingest capped at 2000; agent collections are small in
   practice.
-- The dev default key `sentinel-agent-dev` (agent-id `agent-dev`) is baked
+- The dev default key `baraq-agent-dev` (agent-id `agent-dev`) is baked
   into development builds; production builds drop it via the G3 gate.

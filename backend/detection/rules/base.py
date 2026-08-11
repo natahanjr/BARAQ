@@ -83,7 +83,7 @@ class BaseRule(ABC):
         # Tenant scope: None = evaluate across all orgs (legacy/direct use),
         # "" or a named org limits every query of this rule to that tenant.
         self.org = org
-        self.logger = logging.getLogger(f"sentinel.rules.{self.rule_id}")
+        self.logger = logging.getLogger(f"baraq.rules.{self.rule_id}")
 
     def _org_conds(self, model):
         """Extra WHERE conditions restricting a query to this rule's tenant.

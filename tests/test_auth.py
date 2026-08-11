@@ -4,8 +4,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-ADMIN_KEY = "sentinel-dev-admin"
-ANALYST_KEY = "sentinel-dev-analyst"
+ADMIN_KEY = "baraq-dev-admin"
+ANALYST_KEY = "baraq-dev-analyst"
 
 
 @pytest.fixture(scope="module")

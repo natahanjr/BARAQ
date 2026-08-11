@@ -1,7 +1,7 @@
 """Email / phishing telemetry collector (live only).
 
 Ingests message metadata from a configured directory of exported messages
-(``SENTINEL_MAIL_DIR`` env var, default empty). Supported files: .eml,
+(``BARAQ_MAIL_DIR`` env var, default empty). Supported files: .eml,
 .msg and .json mail exports. The collector parses sender, recipient,
 subject, body snippet, attachments and source IP so the phishing rule can
 score real messages.
@@ -19,7 +19,7 @@ from pathlib import Path
 from backend.collectors.base import BaseCollector
 from backend.config import MAIL_INGEST_DIR, MAIL_INGEST_EXTENSIONS
 
-logger = logging.getLogger("sentinel.collectors.email")
+logger = logging.getLogger("baraq.collectors.email")
 
 ATTACHMENT_RE = re.compile(
     r"attachment|\.exe|\.scr|\.js|\.vbs|\.ps1|\.bat|\.cmd|\.rar|\.7z|\.zip|\.docm|\.xlsm|\.lnk",

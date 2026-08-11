@@ -41,7 +41,7 @@ def test_slack_payload():
     att = p["attachments"][0]
     assert att["color"] == "#e74c3c"
     assert att["mrkdwn_in"] == ["text"]
-    assert "SentinelSOC alert #42" in att["title"]
+    assert "BARAQ alert #42" in att["title"]
     assert "*mitre_id:* T1071.001" in att["text"]
 
 

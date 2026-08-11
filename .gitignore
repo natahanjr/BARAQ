@@ -35,10 +35,10 @@ dist/
 dev/
 
 # Certificates (ephemeral, machine-specific)
-certs/sentinel.crt
-certs/sentinel.key
-certs/sentinel.pfx
-certs/sentinel.thumbprint
+certs/baraq.crt
+certs/baraq.key
+certs/baraq.pfx
+certs/baraq.thumbprint
 certs/_c.pub
 certs/_k.pub
 

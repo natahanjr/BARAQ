@@ -12,7 +12,7 @@ from backend.collectors.base import BaseCollector
 from backend.collectors.eventlog import WindowsEventLogCollector
 from backend.config import POWERSHELL_CHANNELS
 
-logger = logging.getLogger("sentinel.collectors.powershell")
+logger = logging.getLogger("baraq.collectors.powershell")
 
 
 class PowerShellCollector(BaseCollector):

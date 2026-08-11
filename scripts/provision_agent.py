@@ -1,25 +1,25 @@
-"""Provision, list, and revoke SentinelSOC agent credentials.
+"""Provision, list, and revoke BARAQ agent credentials.
 
 Agents authenticate to ``POST /api/ingest`` (and the command channel) with a
 per-``X-Agent-Key`` header. Keys live inside the app's DPAPI vault under
-``SENTINEL_AGENT_KEYS`` (JSON map {"key": "agent-id"}). This script is the
+``BARAQ_AGENT_KEYS`` (JSON map {"key": "agent-id"}). This script is the
 single supported way to add or remove a fleet member - never hand-edit the
 vault and never paste keys into chats/CI logs.
 
     venv\\Scripts\\python scripts\\provision_agent.py add edge-host-1 https://soc.example.com:8443
-    venv\\Scripts\\python scripts\\provision_agent.py add ws-eng-02 https://soc:8443 --org eng --tls-cert certs\\sentinel.crt
+    venv\\Scripts\\python scripts\\provision_agent.py add ws-eng-02 https://soc:8443 --org eng --tls-cert certs\\baraq.crt
     venv\\Scripts\\python scripts\\provision_agent.py list
     venv\\Scripts\\python scripts\\provision_agent.py revoke edge-host-1
 
-``--org`` maps the new agent-id to a tenant (``SENTINEL_AGENT_ORGS`` in the
+``--org`` maps the new agent-id to a tenant (``BARAQ_AGENT_ORGS`` in the
 vault) so its telemetry is tagged with the university and only that org's
 analysts can read it. For fleet deployments the central server runs HTTPS
-(``start.bat secure lan``, port 8443). Pass ``--tls-cert certs\\sentinel.crt``
+(``start.bat secure lan``, port 8443). Pass ``--tls-cert certs\\baraq.crt``
 so the agent can pin the server's self-signed certificate; the generated host
 config then carries the pin and the printed agent command includes
 ``--tls-ca``.
 
-After ``add``, restart the SentinelSOC service so the new keys are loaded.
+After ``add``, restart the BARAQ service so the new keys are loaded.
 """
 from __future__ import annotations
 
@@ -35,8 +35,8 @@ sys.path.insert(0, str(ROOT))
 from backend.vault import SecretVault, get_vault_path  # noqa: E402
 from backend.config import APP_DIR  # noqa: E402
 
-AGENT_KEYS_SECRET = "SENTINEL_AGENT_KEYS"
-AGENT_ORGS_SECRET = "SENTINEL_AGENT_ORGS"
+AGENT_KEYS_SECRET = "BARAQ_AGENT_KEYS"
+AGENT_ORGS_SECRET = "BARAQ_AGENT_ORGS"
 AGENT_CONFIG_DIR = APP_DIR / "agent_configs"
 
 
@@ -65,7 +65,7 @@ def save_org_map(vault: SecretVault, orgmap: dict[str, str]) -> None:
 
 
 def generate_key() -> str:
-    return "sentinel-agent-" + secrets.token_urlsafe(27)
+    return "baraq-agent-" + secrets.token_urlsafe(27)
 
 
 def write_agent_config(agent_id: str, key: str, server: str, tls_cert: str = "",
@@ -94,7 +94,7 @@ def provision_host(vault: SecretVault, agent_id: str, server: str, org: str = ""
     """Register one fleet host: key in the vault, optional org mapping, config file.
 
     Returns ``(key, config_path)``. The org mapping (``agent_id -> org``) is
-    stored under ``SENTINEL_AGENT_ORGS`` so ingest attribution scopes the
+    stored under ``BARAQ_AGENT_ORGS`` so ingest attribution scopes the
     host's telemetry to its tenant.
     """
     keymap = load_key_map(vault)
@@ -123,9 +123,9 @@ def cmd_add(args: argparse.Namespace) -> int:
     print(f"\nOn the agent host:")
     ca = f" --tls-ca {args.tls_cert}" if args.tls_cert else ""
     if args.server.startswith("https://") and not ca:
-        ca = " --tls-ca certs\\sentinel.crt"
+        ca = " --tls-ca certs\\baraq.crt"
     print(f"  python scripts/agent.py --server {args.server} --key \"{key}\" --interval {args.interval}{ca}")
-    print("\nRestart the SentinelSOC service to load the new key.")
+    print("\nRestart the BARAQ service to load the new key.")
 
 
 def cmd_list(_: argparse.Namespace) -> None:
@@ -163,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     add.add_argument("--server", default="https://127.0.0.1:8443",
                      help="central server base URL (HTTPS standard, port 8443)")
     add.add_argument("--tls-cert", default="",
-                     help="path to central server PEM cert (certs/sentinel.crt) for agent pinning")
+                     help="path to central server PEM cert (certs/baraq.crt) for agent pinning")
     add.add_argument("--org", default="",
                      help="tenant/org id this agent belongs to (e.g. university short name)")
     add.add_argument("--interval", type=int, default=15, help="agent upload interval in seconds")

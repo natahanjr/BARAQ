@@ -1,6 +1,6 @@
-# SentinelSOC — Central University Deployment Guide
+# BARAQ — Central University Deployment Guide
 
-This guide covers the supported deployment of SentinelSOC as the central
+This guide covers the supported deployment of BARAQ as the central
 console for a multi-tenant university consortium: one central server, several
 campuses ("orgs"), analyst accounts that only see their own campus traffic,
 admins that see everything, and campus agents shipping host telemetry over
@@ -10,15 +10,71 @@ Reference topology: **1 central Windows server + 1..N hosts per campus**.
 
 ---
 
+## 0. Portable deployment (no Python / Node / system PostgreSQL needed)
+
+The recommended way to stand up a Windows server fast. Two equivalent
+options are shipped in `dist\`:
+
+| Option | Artifact | Requires | Notes |
+|--------|----------|----------|-------|
+| A. Installer | `dist\BARAQ-Setup-1.0.0.exe` (Inno Setup) | Windows 10/11 64-bit, ~1 GB free | Installs the frozen server, bundled PostgreSQL and scripts to `Program Files\BARAQ` (cluster data under the user's `AppData\Local\BARAQ\postgres`); creates start-menu shortcuts; uninstaller removes app + autostart task, keeps the DB cluster and vault |
+| B. Portable | `dist\BARAQ.exe` + `dist\pg\` + `dist\scripts\` | Windows 10 1809+ | Whole folder is copy-portable; run `BARAQ.exe` or `scripts\provision_postgres.ps1` from the editor of choice |
+
+The bundled build is path-portable: the frozen server locates its data,
+scripts, certs and the `pg\` toolkit relative to its own executable
+(`sys.executable`), never hard-coded drive letters. Environment config
+(`BARAQ_PORT`, `BARAQ_DATABASE_URL`, TLS settings, …) is read from
+`.env` next to the exe if present; otherwise defaults apply (port 8001,
+`pg\data` cluster on 127.0.0.1:55432).
+
+Steps (option A) - one click:
+
+1. Copy `BARAQ-Setup-1.0.0.exe` to the server (or a USB drive / share) and
+   double-click it. Accept the UAC prompt. Two setup pages list optional
+   tasks - both default to ON and you can just click through:
+   - **Provision local PostgreSQL** (bundled - installs from the payload,
+     nothing to download unless the binaries are missing)
+   - **Register BARAQ to start automatically** (logon task, or NSSM service)
+2. That's it. The installer, in order: lays out `Program Files\BARAQ`
+   (server + bundled PostgreSQL binaries), creates the portable cluster
+   under `%LOCALAPPDATA%\BARAQ\postgres` (data REALLY stays there, per
+   user, never in Program Files), starts it on 127.0.0.1:55432, creates
+   the `baraq` role + `baraq` database and writes `BARAQ_DATABASE_URL`
+   into `Program Files\BARAQ\.env`, registers the autostart task and
+   launches the backend. If the "launch now" checkbox appears at the end
+   (only when autostart was deselected) it starts the console directly.
+
+First boot with an empty database seeds the application role, a TOTP-less
+`baraqadmin` super-user and a bootstrap API key, all printed to the
+console log — capture and store them (the API key also lives in
+`data\secrets.dat`, the app vault). After provisioning, follow the
+first-run checklist in section 3 (change the admin password, enroll MFA,
+create analysts per campus). TLS enforcement is identical to source runs:
+use `BARAQ_ENV=production` + the `start_pg_server.cmd` HTTPS launcher,
+or the documented self-signed setup, before putting agents on it.
+
+Upgrade / reinstall: the installer is idempotent — re-running it over an
+existing `%LOCALAPPDATA%\BARAQ\postgres` cluster leaves the operator data
+untouched; if the new install finds no `BARAQ_DATABASE_URL` in `.env` it
+rotates the `baraq` role password and writes a fresh one. Uninstall
+removes the app and the autostart task but keeps the database cluster and
+vault (back up first when they matter, see
+`documentation/backup_restore.md`).
+
 ## 1. Prerequisites (central server)
+
+Installation prerequisites apply to **source runs** (`start.bat`) only;
+the portable build (section 0) bundles Python, Node build output and
+PostgreSQL.
 
 | Requirement | Detail |
 |-------------|--------|
 | OS          | Windows 10/11 (Windows Server 2019+ recommended) |
-| Python      | 3.11+ on PATH |
-| Node.js     | 18+ (one-time dashboard build) |
+| Python      | 3.11+ on PATH — source runs only |
+| Node.js     | 18+ (one-time dashboard build) — source runs only |
+| PostgreSQL  | 16+ on 127.0.0.1:55432, or use `scripts\download_postgres.ps1` + `scripts\pg_setup.ps1` to provision a portable `pg\data` cluster with no system install |
 | Network     | Inbound TCP **8443** (HTTPS) from agent hosts and analysts |
-| Storage     | ~1 GB headroom + growth per fleet host (SQLite default; PostgreSQL optional via `SENTINEL_DATABASE_URL`) |
+| Storage     | ~1 GB headroom + growth per fleet host |
 
 ## 2. Install the central server (one time)
 
@@ -30,9 +86,9 @@ What this does:
 
 - creates `venv`, installs dependencies, builds the dashboard (first run only),
 - generates a self-signed TLS certificate in `certs\` (SANs = localhost + all
-  LAN IPv4 addresses; rotate by deleting `certs\sentinel.thumbprint` and rerunning),
+  LAN IPv4 addresses; rotate by deleting `certs\baraq.thumbprint` and rerunning),
 - opens TCP 8443 in the Windows Firewall (needs an admin shell),
-- starts uvicorn with `--ssl-certfile certs\sentinel.crt --ssl-keyfile certs\sentinel.key`
+- starts uvicorn with `--ssl-certfile certs\baraq.crt --ssl-keyfile certs\baraq.key`
   and serves the console at **https://<server-ip>:8443**.
 
 HTTPS is the standard deployment path. Plain `start.bat` (http, :8001) is for
@@ -40,14 +96,42 @@ local development only — campus telemetry must never cross the network
 unencrypted. For a production server, run it as a Windows service instead
 (see `scripts/install_service.ps1` and `documentation/windows_service.md`).
 
+### 2a. Provision PostgreSQL (required — no SQLite fallback exists)
+
+BARAQ is PostgreSQL-only. Before the first backend start, provision the
+cluster and app credentials (idempotent — safe to re-run):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\provision_postgres.ps1
+```
+
+This reachability-checks the cluster (default `127.0.0.1:55432`), creates the
+application role `baraq` (generated password) and database `baraq`, and
+writes `BARAQ_DATABASE_URL` into `.env`. The backend then runs entirely
+against PostgreSQL — the SQLite fallback was removed. Migration of a legacy
+SQLite dataset is still possible via `scripts\migrate_to_postgres.py`.
+
+### 2b. Daily encrypted backups
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install_backup_task.ps1 -Time 03:00
+```
+
+Registers a daily `db_backup.py backup --encrypt --keep 14` scheduled task.
+Procedure and restore drill: `documentation/backup_restore.md`.
+
 ## 3. First-run security checklist
 
-1. **Change the admin password** — Console > Users & Audit.
-2. **Create analysts** — one per campus; the user's `org` must match the
+1. **Change the admin password** — the production gate refuses the
+   well-known `baraqadmin` bootstrap value on boot (`BARAQ_ENV=production`).
+2. **Enroll admin TOTP 2FA** — with `BARAQ_ENFORCE_ADMIN_MFA=1` (production
+   default), admin API features stay locked until every admin has a TOTP
+   second factor (Account > Security in the console).
+3. **Create analysts** — one per campus; the user's `org` must match the
    campus org id exactly (e.g. `univ-a`).
-3. **Create global admins** — for operators who must see every campus.
-4. Optionally wire alerting: webhook / SMTP env vars (see README).
-5. Back up `secrets.dat` and the database (see `documentation/backup_restore.md`).
+4. **Create global admins** — for operators who must see every campus.
+5. Optionally wire alerting: webhook / SMTP env vars (see README).
+6. Back up `secrets.dat` and the database (see `documentation/backup_restore.md`).
 
 ## 4. Provision campuses (orgs) and agents
 
@@ -59,7 +143,7 @@ trusted channel and treat them as secrets.
 Single host, with tenant:
 
 ```powershell
-venv\Scripts\python scripts\provision_agent.py add ws-lib-01 https://soc.example.com:8443 --org univ-a --tls-cert certs\sentinel.crt
+venv\Scripts\python scripts\provision_agent.py add ws-lib-01 https://soc.example.com:8443 --org univ-a --tls-cert certs\baraq.crt
 ```
 
 Whole campus at once (recommended for on-boarding a university):
@@ -67,15 +151,15 @@ Whole campus at once (recommended for on-boarding a university):
 ```powershell
 venv\Scripts\python scripts\provision_university.py setup univ-a https://soc.example.com:8443 ^
     --org-name "University A" --hosts ws-lib-01,ws-lib-02,ws-chem-04,prn-lab-07 ^
-    --tls-cert certs\sentinel.crt
+    --tls-cert certs\baraq.crt
 
 venv\Scripts\python scripts\provision_university.py list          # campuses + hosts
 venv\Scripts\python scripts\provision_university.py revoke-org univ-a
 ```
 
 The script writes `agent_configs\univ-a-manifest.json` with one launch line
-per host. **Restart the SentinelSOC console** so the new keys and the org
-map are loaded (`SENTINEL_AGENT_KEYS` / `SENTINEL_AGENT_ORGS` are read at
+per host. **Restart the BARAQ console** so the new keys and the org
+map are loaded (`BARAQ_AGENT_KEYS` / `BARAQ_AGENT_ORGS` are read at
 startup).
 
 The org map is what makes isolation end-to-end: detection rules and every
@@ -84,13 +168,21 @@ metrics are labeled per campus.
 
 ## 5. Deploy the agent on each campus host
 
-On each host: copy the server certificate `certs\sentinel.crt` from the
+On each host: copy the server certificate `certs\baraq.crt` from the
 central server, then run the launch line from the manifest:
 
 ```bat
-copy \\soc\share\sentinel.crt .\sentinel.crt
-python scripts\agent.py --server https://soc.example.com:8443 --key "<host-key>" --tls-ca .\sentinel.crt --interval 15
+copy \\soc\share\baraq.crt .\baraq.crt
+python scripts\agent.py --server https://soc.example.com:8443 --key "<host-key>" --tls-ca .\baraq.crt --interval 15
 ```
+
+Hosts without Python can run the packaged fleet agent: copy
+`dist\agent\<host-name>\` (a PyInstaller build with the launch line baked
+in) and run `agent.exe --install` from an admin shell to register it as an
+always-on Windows service, `--uninstall` to remove it. `--verbose` logs
+each ship cycle. In both modes the agent re-registers with the server as
+an "endpoint" automatically; volume counters in the console confirm the
+pipeline end-to-end.
 
 Make the agent auto-start with the host (startup scheduled task or service).
 `--no-verify` exists for isolated labs only.
@@ -112,16 +204,17 @@ campus org.
 docker compose up -d prometheus grafana
 ```
 
-`deploy\grafana\dashboards\sentinel-overview.json` ships with the
+`deploy\grafana\dashboards\baraq-overview.json` ships with the
 **Fleet per Org** row: per-campus ingestion rates, alert counts by
 org+severity, reporting hosts, open alerts. The `org` template variable
 focuses the view on one campus.
 
 ## 8. Backups & lifecycle
 
-- DB + vault backup schedule: see `documentation/backup_restore.md`.
-- Cert rotation: delete `certs\sentinel.thumbprint`, re-run the server
-  launcher, redistribute `sentinel.crt` to clients/agents.
+- DB + vault backup schedule: see `documentation/backup_restore.md` (daily
+  task installed with `scripts\install_backup_task.ps1`).
+- Cert rotation: delete `certs\baraq.thumbprint`, re-run the server
+  launcher, redistribute `baraq.crt` to clients/agents.
 - Key rotation: `revoke` the host, `add` it again, update the launch line,
   restart the service.
 
@@ -132,6 +225,6 @@ focuses the view on one campus.
 | Analyst sees wrong (or no) data | the user's `org` must equal the campus org id |
 | Agent never connects | open TCP 8443; agent must use `https://` and `--tls-ca <server cert>` |
 | New key returns 401 | restart the service — keys are loaded at startup |
-| Browser cert warning | import `certs\sentinel.crt` into Trusted Root on the client |
+| Browser cert warning | import `certs\baraq.crt` into Trusted Root on the client |
 | Prometheus scrape 401 | use the bearer key from `deploy\prometheus\.my-scrape-key` |
 | Agent ships nothing | check `--interval`, host collectors, agent log lines |

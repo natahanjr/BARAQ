@@ -1,8 +1,8 @@
-# SentinelSOC — System Architecture
+# BARAQ — System Architecture
 
 **Document:** Architecture Overview
 **Version:** 2.0 (upgraded: hybrid risk scoring + ML + evaluation framework)
-**Scope:** SentinelSOC v1.1 prototype (single Windows 11 laptop)
+**Scope:** BARAQ v1.1 prototype (single Windows 11 laptop)
 
 ---
 
@@ -13,7 +13,7 @@
                     │              WINDOWS 11 HOST               │
                     │                                            │
                     │   ┌────────────────────────────────────┐   │
-                    │   │        SentinelSOC Backend         │   │
+                    │   │        BARAQ Backend         │   │
                     │   │        (FastAPI / Uvicorn)         │   │
                     │   │              :8000                 │   │
                     │   └───────────────┬────────────────────┘   │
@@ -51,7 +51,7 @@
                     │                      ▼                     │
                     │   ┌────────────────────────────────────┐   │
                     │   │         Local Database             │   │
-                    │   │   (SQLite: sentinel.db)            │   │
+                    │   │   (SQLite: baraq.db)            │   │
                     │   └───────────┬────────────┬───────────┘   │
                     │               │            │               │
                     │      ┌────────▼───┐  ┌─────▼─────────┐     │
@@ -136,7 +136,7 @@ Risk mapping: event ID → risk level; severity derived per category (Authentica
 `attack.py` + `techniques.json` provide technique name, tactic, and recommended response for every mapped technique (T1046, T1059.001, T1068, T1110, T1547, plus T1078, T1036, T1497, T1005, T1027, T1040, T1555 fallbacks).
 
 ### 2.5 Local Database (`backend/database/`)
-SQLite at `database/sentinel.db` via SQLAlchemy 2.0. Seven tables (see `database_schema.md`). Retention default 30 days.
+SQLite at `database/baraq.db` via SQLAlchemy 2.0. Seven tables (see `database_schema.md`). Retention default 30 days.
 
 ### 2.6 SOC Dashboard (`frontend/`)
 React 18 + Tailwind CSS 4 + Recharts, served by Vite on port 5173. Talks to the backend exclusively through the Vite dev proxy (`/api` → `127.0.0.1:8000`), so no CORS issues and no configuration. Pages: Dashboard, Alerts, Alert Detail, Investigation, Events, Processes & Network, AI Assistant, Reports, System.
@@ -145,7 +145,7 @@ React 18 + Tailwind CSS 4 + Recharts, served by Vite on port 5173. Talks to the 
 `generator.py` builds an executive or technical report context from live DB analytics; `exporters.py` renders PDF (ReportLab), HTML, JSON, and CSV into `reports/`. Metadata stored in the `reports` table.
 
 ### 2.8 AI Assistant (`backend/ai/`)
-`assistant.py` implements a fully local engine (intent matching + TF-IDF keyword retrieval against a threat knowledge base in `knowledge.py`). It can explain alerts, summarize incidents, recommend remediation, and produce analyst notes. Optional: delegate to an OpenAI-compatible endpoint via `SENTINEL_AI_API_URL` env vars.
+`assistant.py` implements a fully local engine (intent matching + TF-IDF keyword retrieval against a threat knowledge base in `knowledge.py`). It can explain alerts, summarize incidents, recommend remediation, and produce analyst notes. Optional: delegate to an OpenAI-compatible endpoint via `BARAQ_AI_API_URL` env vars.
 
 ### 2.9 Evaluation Framework (`backend/evaluation/`)
 Runs the five attack scenarios + baseline through the complete pipeline (normalize → persist → rules → alert) inside an **isolated temporary SQLite database** (production data is never touched), then computes per-scenario and overall detection metrics:
@@ -155,7 +155,7 @@ Runs the five attack scenarios + baseline through the complete pipeline (normali
 Results persist to `evaluation_runs` for reporting and history. Exposed via `/api/evaluation/*` and the **Evaluation** page in the dashboard.
 
 ### 2.10 Data Layer Migrations (`backend/database/connection.py`)
-`init_db()` performs additive in-place migrations on existing SQLite files (new columns on `events`/`alerts`, new tables), so upgrading an older SentinelSOC database is seamless.
+`init_db()` performs additive in-place migrations on existing SQLite files (new columns on `events`/`alerts`, new tables), so upgrading an older BARAQ database is seamless.
 
 ---
 

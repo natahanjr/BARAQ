@@ -2,7 +2,7 @@
 
 Reads real DNS query activity from the Sysmon operational channel
 (Event 22 = DNS query) and, when a local HTTP monitor log is configured
-(``SENTINEL_HTTP_LOG`` env var, JSON-lines), HTTP request metadata.
+(``BARAQ_HTTP_LOG`` env var, JSON-lines), HTTP request metadata.
 
 Pure-live: when Sysmon is unavailable / pywin32 missing, the DNS part is a
 no-op and no simulation is generated.
@@ -20,9 +20,9 @@ from backend.collectors.base import BaseCollector
 from backend.collectors.eventlog import WindowsEventLogCollector
 from backend.config import SYSMON_CHANNELS
 
-logger = logging.getLogger("sentinel.collectors.dns_http")
+logger = logging.getLogger("baraq.collectors.dns_http")
 
-HTTP_LOG = os.environ.get("SENTINEL_HTTP_LOG", "")
+HTTP_LOG = os.environ.get("BARAQ_HTTP_LOG", "")
 MAX_RECORDS_PER_CYCLE = 500
 
 

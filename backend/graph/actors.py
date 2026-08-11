@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from backend.graph.base import GraphStore
 from backend.graph.extract import _edge, _node, _risk_level
 
-logger = logging.getLogger("sentinel.graph.actors")
+logger = logging.getLogger("baraq.graph.actors")
 
 
 def attribute_verdict(item: dict) -> str | None:

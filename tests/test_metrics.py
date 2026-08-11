@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 def client():
     from backend.main import app
 
-    with TestClient(app, headers={"X-API-Key": "sentinel-dev-admin"}) as test_client:
+    with TestClient(app, headers={"X-API-Key": "baraq-dev-admin"}) as test_client:
         yield test_client
 
 
@@ -19,11 +19,11 @@ def test_authenticated_metrics_endpoint(client):
     assert resp.status_code == 200
     assert "text/plain" in resp.headers["content-type"]
     body = resp.text
-    assert "# HELP sentinel_events_total" in body
-    assert "# TYPE sentinel_events_total counter" in body
-    assert "sentinel_alerts_total{" in body
-    assert "sentinel_uptime_seconds " in body
-    assert "sentinel_collectors_enabled{collector=" in body
+    assert "# HELP baraq_events_total" in body
+    assert "# TYPE baraq_events_total counter" in body
+    assert "baraq_alerts_total{" in body
+    assert "baraq_uptime_seconds " in body
+    assert "baraq_collectors_enabled{collector=" in body
 
 
 def test_public_metrics_endpoint_private_by_default(client):
@@ -38,10 +38,10 @@ def test_metrics_accepts_bearer_api_key():
     with TestClient(app) as bare:
         ok = bare.get(
             "/api/system/metrics",
-            headers={"Authorization": "Bearer sentinel-dev-admin"},
+            headers={"Authorization": "Bearer baraq-dev-admin"},
         )
         assert ok.status_code == 200
-        assert "sentinel_events_total" in ok.text
+        assert "baraq_events_total" in ok.text
         bad = bare.get(
             "/api/system/metrics",
             headers={"Authorization": "Bearer not-a-real-key"},
@@ -97,17 +97,17 @@ def test_metrics_events_labeled_by_org_and_host(client, db):
     _seed_fleet(db)
     body = client.get("/api/system/metrics").text
 
-    assert 'sentinel_events_total{org="univ-a",host="host-0",source="eventlog"}' in body
-    assert 'sentinel_events_total{org="univ-a",host="host-1",source="eventlog"}' in body
-    assert 'sentinel_events_total{org="univ-b",host="host-x",source="eventlog"}' in body
-    assert 'sentinel_hosts_total{org="univ-a"}' in body
-    assert 'sentinel_hosts_total{org="univ-b"}' in body
+    assert 'baraq_events_total{org="univ-a",host="host-0",source="eventlog"}' in body
+    assert 'baraq_events_total{org="univ-a",host="host-1",source="eventlog"}' in body
+    assert 'baraq_events_total{org="univ-b",host="host-x",source="eventlog"}' in body
+    assert 'baraq_hosts_total{org="univ-a"}' in body
+    assert 'baraq_hosts_total{org="univ-b"}' in body
 
 
 def test_metrics_alerts_labeled_by_org_and_open_gauge_per_org(client, db):
     _seed_fleet(db)
     body = client.get("/api/system/metrics").text
 
-    assert 'sentinel_alerts_total{org="univ-a",severity="high",status="open"}' in body
-    assert 'sentinel_open_alerts{org="univ-a"}' in body
-    assert 'sentinel_open_alerts_total 1' in body
+    assert 'baraq_alerts_total{org="univ-a",severity="high",status="open"}' in body
+    assert 'baraq_open_alerts{org="univ-a"}' in body
+    assert 'baraq_open_alerts_total 1' in body

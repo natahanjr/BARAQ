@@ -1,19 +1,19 @@
-# SentinelSOC standalone telemetry agent + remote control (single file, no installation)
+# BARAQ standalone telemetry agent + remote control (single file, no installation)
 #
-# Run on any Windows 10/11 host to stream telemetry to a central SentinelSOC
+# Run on any Windows 10/11 host to stream telemetry to a central BARAQ
 # and execute remote commands queued by the SOC operator:
 #
-#   powershell -ExecutionPolicy Bypass -File agent.ps1 -Server http://10.0.0.1:8000 -Key sentinel-agent-laptop2
+#   powershell -ExecutionPolicy Bypass -File agent.ps1 -Server http://10.0.0.1:8000 -Key baraq-agent-laptop2
 #
 # Options:
-#   -Server   central SentinelSOC URL   (default http://localhost:8000)
-#   -Key      agent key (X-Agent-Key)   (default sentinel-agent-laptop2)
+#   -Server   central BARAQ URL   (default http://localhost:8000)
+#   -Key      agent key (X-Agent-Key)   (default baraq-agent-laptop2)
 #   -Interval seconds between cycles    (default 15)
 #   -Once     send a single batch and exit (for testing / Task Scheduler)
 
 param(
-    [string]$Server = "http://localhost:8000",
-    [string]$Key = "sentinel-agent-laptop2",
+    [string]$Server = "http://localhost:8001",
+    [string]$Key = "baraq-agent-laptop2",
     [int]$Interval = 15,
     [switch]$Once
 )
@@ -99,7 +99,7 @@ function Invoke-Command {
     try {
         switch ($action) {
             "block_ip" {
-                $rule = "SentinelSOC Block $target"
+                $rule = "BARAQ Block $target"
                 & netsh advfirewall firewall add rule name=$rule dir=in action=block remoteip=$target enable=yes | Out-Null
                 & netsh advfirewall firewall add rule name=$rule dir=out action=block remoteip=$target enable=yes | Out-Null
                 return @{ status = "success"; detail = "blocked $target (in+out)" }
@@ -110,7 +110,7 @@ function Invoke-Command {
             }
             "quarantine" {
                 if (-not (Test-Path -LiteralPath $target)) { return @{ status = "failed"; detail = "path not found: $target" } }
-                $quarantine = Join-Path $env:SystemDrive "SentinelSOC-Quarantine"
+                $quarantine = Join-Path $env:SystemDrive "BARAQ-Quarantine"
                 if (-not (Test-Path -LiteralPath $quarantine)) { New-Item -ItemType Directory -Path $quarantine | Out-Null }
                 Move-Item -LiteralPath $target -Destination $quarantine -Force
                 return @{ status = "success"; detail = "quarantined $target" }
@@ -142,7 +142,7 @@ function Invoke-PendingCommands {
     }
 }
 
-Write-Host "[$hostname] SentinelSOC agent starting -> $Server (key: $Key)"
+Write-Host "[$hostname] BARAQ agent starting -> $Server (key: $Key)"
 do {
     Invoke-PendingCommands
     Send-Batch

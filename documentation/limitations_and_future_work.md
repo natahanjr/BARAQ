@@ -1,4 +1,4 @@
-# SentinelSOC — Limitations & Future Work
+# BARAQ — Limitations & Future Work
 
 **Document:** Scope Limitations and Research Directions
 **Version:** 1.1
@@ -16,7 +16,7 @@
 
 ### 1.1 Single-Machine Architecture
 
-**Limitation:** SentinelSOC is designed to run entirely on a single Windows 11 laptop with no external infrastructure.
+**Limitation:** BARAQ is designed to run entirely on a single Windows 11 laptop with no external infrastructure.
 
 **Implications:**
 - No distributed collection from multiple endpoints
@@ -214,7 +214,7 @@ deterministically across repeated runs.
 
 **Sample Size Analysis:**
 
-| Data Requirement | Typical ML | SentinelSOC | Gap |
+| Data Requirement | Typical ML | BARAQ | Gap |
 |------------------|-----------|------------|-----|
 | Baseline events | 1,000+ | 50-100 | 10× |
 | Attack samples | 500+ | Simulated | Real-world unknown |
@@ -435,7 +435,7 @@ deliberately retained.
 
 **Status: RESOLVED (scale-out path, 2026-08).** The data layer is now
 dialect-agnostic (`backend/database/models.py`, `backend/database/connection.py`)
-and supports PostgreSQL via `SENTINEL_DATABASE_URL` + the psycopg3 driver;
+and supports PostgreSQL via `BARAQ_DATABASE_URL` + the psycopg3 driver;
 `scripts/migrate_to_postgres.py` migrates an existing SQLite database to
 Postgres (with identity-sequence fixups). SQLite remains the default for
 single-host deployments, for which the practical ceiling (~1M events) still applies.
@@ -603,7 +603,7 @@ corpus"). Covered by `tests/test_holdout.py`.
 
 ## 9. Conclusion
 
-SentinelSOC demonstrates feasible, lightweight, hybrid threat detection on resource-constrained Windows endpoints. On the v2 external-validity evaluation, the rule layer reaches recall 0.939 with precision 1.0 (zero false positives on real host telemetry), and — after the v2.1 per-stream supervised training fix — the ML layer reaches recall 0.786 and the combined hybrid layer 0.951 recall / 0.975 F1, demonstrating that the core architecture soundly generalises beyond the data used to build it.
+BARAQ demonstrates feasible, lightweight, hybrid threat detection on resource-constrained Windows endpoints. On the v2 external-validity evaluation, the rule layer reaches recall 0.939 with precision 1.0 (zero false positives on real host telemetry), and — after the v2.1 per-stream supervised training fix — the ML layer reaches recall 0.786 and the combined hybrid layer 0.951 recall / 0.975 F1, demonstrating that the core architecture soundly generalises beyond the data used to build it.
 
 Remaining production-readiness gaps:
 - Scaling from 1 machine to enterprise (multi-endpoint collection)

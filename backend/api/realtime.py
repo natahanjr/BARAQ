@@ -14,7 +14,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from backend.auth import verify_token
 from backend.realtime import hub
 
-logger = logging.getLogger("sentinel.api.realtime")
+logger = logging.getLogger("baraq.api.realtime")
 router = APIRouter(prefix="/api/realtime", tags=["realtime"])
 
 

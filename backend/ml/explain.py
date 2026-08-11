@@ -39,7 +39,7 @@ from backend.ml.anomaly import (
     get_detector,
 )
 
-logger = logging.getLogger("sentinel.ml.explain")
+logger = logging.getLogger("baraq.ml.explain")
 
 try:
     import shap  # type: ignore

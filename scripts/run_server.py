@@ -1,9 +1,9 @@
-"""Entry point for the packaged SentinelSOC server executable.
+"""Entry point for the packaged BARAQ server executable.
 
 Usage:
-    SentinelSOC.exe            listen on 127.0.0.1:8000
-    SentinelSOC.exe --lan      listen on 0.0.0.0:8000 (LAN access)
-    SENTINEL_HOST / SENTINEL_PORT env vars override host and port.
+    BARAQ.exe            listen on 127.0.0.1:8000
+    BARAQ.exe --lan      listen on 0.0.0.0:8000 (LAN access)
+    BARAQ_HOST / BARAQ_PORT env vars override host and port.
 
 The executable is built windowed (PyInstaller console=False), so double
 clicking it starts the SOC in the background with no console window.
@@ -25,7 +25,7 @@ import uvicorn
 import backend.main  # noqa: F401  isort:skip
 from backend.config import LOG_DIR, TLS_CERT_FILE, TLS_ENABLED, TLS_KEY_FILE, TLS_PORT
 
-logger = logging.getLogger("sentinel.server")
+logger = logging.getLogger("baraq.server")
 
 
 def _redirect_nulls() -> None:
@@ -53,6 +53,8 @@ def _self_elevate() -> bool:
     logon task with highest privileges - no UAC prompt appears and the
     existing instance just proceeds.
     """
+    if os.environ.get("BARAQ_NO_ELEVATE", "") == "1":
+        return False
     if _is_elevated():
         return False
     args = " ".join(f'"{a}"' for a in sys.argv[1:])
@@ -63,9 +65,9 @@ def _self_elevate() -> bool:
 
 
 def _add_file_logging() -> None:
-    """Persist app + uvicorn logs to dist\\logs\\sentinel.log."""
+    """Persist app + uvicorn logs to dist\\logs\\baraq.log."""
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    handler = logging.FileHandler(LOG_DIR / "sentinel.log", encoding="utf-8")
+    handler = logging.FileHandler(LOG_DIR / "baraq.log", encoding="utf-8")
     handler.setFormatter(
         logging.Formatter("%(asctime)s | %(levelname)-7s | %(name)s | %(message)s")
     )
@@ -78,14 +80,14 @@ def _log_failure(exc: BaseException) -> None:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         with open(LOG_DIR / "daemon.err.log", "a", encoding="utf-8") as fh:
             stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            fh.write(f"\n[{stamp}] SentinelSOC exited ({exc!r})\n")
+            fh.write(f"\n[{stamp}] BARAQ exited ({exc!r})\n")
             fh.write(traceback.format_exc())
     except OSError:
         pass
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SentinelSOC server")
+    parser = argparse.ArgumentParser(description="BARAQ server")
     parser.add_argument(
         "--lan",
         action="store_true",
@@ -102,8 +104,8 @@ def main() -> None:
 
     _add_file_logging()
 
-    host = os.environ.get("SENTINEL_HOST", "0.0.0.0" if args.lan else "127.0.0.1")
-    port = args.port or int(os.environ.get("SENTINEL_PORT", str(TLS_PORT if TLS_ENABLED else 8001)))
+    host = os.environ.get("BARAQ_HOST", "0.0.0.0" if args.lan else "127.0.0.1")
+    port = args.port or int(os.environ.get("BARAQ_PORT", str(TLS_PORT if TLS_ENABLED else 8001)))
     ssl_kwargs = {}
     if TLS_ENABLED:
         ssl_kwargs = {

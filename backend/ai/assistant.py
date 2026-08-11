@@ -22,7 +22,7 @@ from backend.ai.knowledge import INTENTS
 from backend.config import AI_API_KEY, AI_API_URL, AI_MODEL
 from backend.database.models import Alert, AssistantMessage, NormalizedEvent
 
-logger = logging.getLogger("sentinel.ai")
+logger = logging.getLogger("baraq.ai")
 
 try:
     from sklearn.feature_extraction.text import TfidfVectorizer
@@ -326,7 +326,7 @@ class SecurityAssistant:
 
         if intent == "greeting":
             return (
-                "Hello, I am the SentinelSOC Security Assistant. I can explain alerts, "
+                "Hello, I am the BARAQ Security Assistant. I can explain alerts, "
                 "summarize incidents, recommend remediation, and generate analyst notes. "
                 f"There are currently {len(alerts)} open alerts."
             )
@@ -489,7 +489,7 @@ class SecurityAssistant:
                         {
                             "role": "system",
                             "content": (
-                                "You are the SentinelSOC security analyst assistant. "
+                                "You are the BARAQ security analyst assistant. "
                                 "Answer concisely using the provided SOC context. "
                                 "Ground all statements in MITRE ATT&CK where applicable.\n\n"
                                 f"LIVE SOC CONTEXT:\n{self._context_block()}"

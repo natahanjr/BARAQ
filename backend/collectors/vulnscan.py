@@ -15,7 +15,7 @@ from backend.collectors.base import BaseCollector
 from backend.vulnscan.engine import load_cves, scan_inventory
 from backend.vulnscan.inventory import host_inventory
 
-logger = logging.getLogger("sentinel.collectors.vulnscan")
+logger = logging.getLogger("baraq.collectors.vulnscan")
 
 
 class VulnScanCollector(BaseCollector):

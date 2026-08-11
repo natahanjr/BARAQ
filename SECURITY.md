@@ -1,6 +1,6 @@
 # Security Policy
 
-SentinelSOC is designed for production use in security-sensitive environments
+BARAQ is designed for production use in security-sensitive environments
 (enterprise SOC teams, universities, financial institutions). We take the
 security of the platform and its deployments seriously and follow a
 coordinated disclosure process.
@@ -19,7 +19,7 @@ coordinated disclosure process.
 
 Report vulnerabilities privately to the maintainers:
 
-- **Email:** `security@sentinel-soc.example` (replace with the real maintainer address)
+- **Email:** `security@baraq-soc.example` (replace with the real maintainer address)
 - **PGP:** fingerprint `A1B2 C3D4 E5F6 7890 ...` (key published on the repo; replace)
 
 Include as much of the following as possible:
@@ -87,7 +87,7 @@ Implemented and verified in the current codebase:
   (audit details, alert evidence, process command lines, email bodies, AI chat
   content); key protected by the Windows DPAPI vault
 - **Secret management** — no plaintext secrets in `.env`; DPAPI-encrypted
-  `secrets.dat` vault; dev keys rejected in production (`SENTINEL_ALLOW_DEV_KEYS=0`)
+  `secrets.dat` vault; dev keys rejected in production (`BARAQ_ALLOW_DEV_KEYS=0`)
 - **Tamper-evident audit log** — SHA-256 hash-chained audit entries with an
   integrity verification endpoint (`GET /api/auth/audit/verify`)
 - **Centralized logging** — structured JSON logs with optional syslog (UDP/TCP)
@@ -102,5 +102,5 @@ release. See the release notes for the advisory list of each version.
 
 ## Thanks
 
-We thank the researchers who report responsibly and help make SentinelSOC
+We thank the researchers who report responsibly and help make BARAQ
 safer for everyone.

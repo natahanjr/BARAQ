@@ -22,7 +22,7 @@ from backend.config import (
     ML_DETECTION_WEIGHT,
 )
 
-logger = logging.getLogger("sentinel.risk")
+logger = logging.getLogger("baraq.risk")
 
 SEVERITY_BASE = {"info": 15, "low": 30, "medium": 50, "high": 70, "critical": 90}
 

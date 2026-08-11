@@ -1,6 +1,6 @@
 """Test fixture record builders.
 
-SentinelSOC is a pure-live analyzer; these builders create deterministic
+BARAQ is a pure-live analyzer; these builders create deterministic
 raw collector-shaped records so unit tests can exercise the pipeline
 without a runtime simulator. They are NOT registered collectors and are
 never used by the live SOC.

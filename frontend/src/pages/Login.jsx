@@ -68,7 +68,7 @@ export default function Login({ onAuthenticated }) {
             <path d="M28.5 28 L31 30.5 L35.5 25.5" stroke="#34d399" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-wide text-white">SentinelSOC</h1>
+            <h1 className="text-2xl font-bold tracking-wide text-white">BARAQ</h1>
             <p className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-cyan-400">
               Operator Access
             </p>
@@ -187,7 +187,7 @@ export default function Login({ onAuthenticated }) {
           )}
 
           <p className="text-center text-[11px] text-slate-600">
-            Default account: <span className="font-mono text-slate-500">admin / sentineladmin</span>
+            Default account: <span className="font-mono text-slate-500">admin / baraqadmin</span>
           </p>
         </form>
       </div>

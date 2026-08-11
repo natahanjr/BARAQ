@@ -1,8 +1,8 @@
-# SentinelSOC — Database Schema
+# BARAQ — Database Schema
 
 **Document:** Database Schema & ER Reference
 **Version:** 2.0 (adds hybrid risk fields + evaluation runs)
-**Engine:** SQLite (`database/sentinel.db`) via SQLAlchemy 2.0 ORM
+**Engine:** SQLite (`database/baraq.db`) via SQLAlchemy 2.0 ORM
 **Models:** `backend/database/models.py`
 
 ---
@@ -19,7 +19,7 @@ dashboard_snapshots
 assistant_messages
 ```
 
-> **Migration:** existing SentinelSOC databases are upgraded automatically at
+> **Migration:** existing BARAQ databases are upgraded automatically at
 > startup (`init_db` in `backend/database/connection.py`) — new columns and
 > tables are added in place without data loss.
 

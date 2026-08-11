@@ -57,7 +57,7 @@ def verify_code(secret: str, code: str, at: float | None = None) -> bool:
     )
 
 
-def provisioning_uri(username: str, secret: str, issuer: str = "SentinelSOC") -> str:
+def provisioning_uri(username: str, secret: str, issuer: str = "BARAQ") -> str:
     """otpauth:// URI for authenticator apps (Google Authenticator etc.)."""
     from urllib.parse import quote
 

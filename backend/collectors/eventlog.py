@@ -18,7 +18,7 @@ from backend.config import (
     SECURITY_LOG_CHANNELS,
 )
 
-logger = logging.getLogger("sentinel.collectors.eventlog")
+logger = logging.getLogger("baraq.collectors.eventlog")
 
 try:
     import win32evtlog

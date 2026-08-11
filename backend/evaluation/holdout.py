@@ -49,7 +49,7 @@ from backend.database.models import (
     NormalizedEvent,
 )
 
-logger = logging.getLogger("sentinel.evaluation.holdout")
+logger = logging.getLogger("baraq.evaluation.holdout")
 
 #: Scenarios used to TRAIN the ML detector (seen during training).
 TRAIN_SCENARIOS = [
@@ -148,7 +148,7 @@ def _fn_debug_report(runs: list[dict]) -> list[dict]:
 def _empty_session() -> tuple[Session, object, str]:
     """Fresh isolated scratch PostgreSQL database; returns (session, engine, marker).
 
-    A throwaway database (``sentinel_scratch_``) is created on the same
+    A throwaway database (``baraq_scratch_``) is created on the same
     cluster and dropped again in :func:`_cleanup`.
     """
     import uuid
@@ -157,7 +157,7 @@ def _empty_session() -> tuple[Session, object, str]:
     from sqlalchemy.engine import make_url
 
     base_url = make_url(normalize_database_url(DATABASE_URL))
-    db_name = f"sentinel_scratch_{uuid.uuid4().hex[:12]}"
+    db_name = f"baraq_scratch_{uuid.uuid4().hex[:12]}"
 
     admin = create_engine(base_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
     try:

@@ -1,4 +1,4 @@
-# SentinelSOC - Running as a Windows Service
+# BARAQ - Running as a Windows Service
 
 The SOC must stay up across reboots and analyst logouts. Two supported
 mechanisms, both driven by `scripts\run_server.ps1` (sets the production
@@ -35,12 +35,12 @@ The script re-launches itself elevated if you forget to run as admin.
 
 ```powershell
 scripts\install_service.ps1 status          # service/task state + pid + port
-net start SentinelSOC | net stop SentinelSOC  (NSSM mode)
-schtasks /End /TN SentinelSOC                (task mode)
+net start BARAQ | net stop BARAQ  (NSSM mode)
+schtasks /End /TN BARAQ                (task mode)
 ```
 
 Logs: `logs\server.err.log` (app), `logs\nssm.err.log` (NSSM), or the
-sentinel.log written by `run_server.py`.
+baraq.log written by `run_server.py`.
 
 ## Upgrades
 

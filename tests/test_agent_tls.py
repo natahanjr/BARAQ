@@ -17,10 +17,10 @@ def test_default_context_no_tls_for_http():
 
 
 def test_tls_ca_pins_certificate(tmp_path):
-    src = ROOT / "certs" / "sentinel.crt"
+    src = ROOT / "certs" / "baraq.crt"
     if not src.exists():
-        pytest.skip("certs/sentinel.crt not present")
-    pem = tmp_path / "sentinel.crt"
+        pytest.skip("certs/baraq.crt not present")
+    pem = tmp_path / "baraq.crt"
     shutil.copyfile(src, pem)
     ctx = make_tls_context(tls_ca=str(pem))
     assert isinstance(ctx, ssl.SSLContext)

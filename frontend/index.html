@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark light" />
-    <title>SentinelSOC &mdash; Security Operations Center</title>
+    <title>BARAQ &mdash; Security Operations Center</title>
     <link rel="icon" href="data:," />
     <script>
       (function () {
         try {
-          var saved = localStorage.getItem("sentinel-theme");
+          var saved = localStorage.getItem("baraq-theme");
           var light = saved
             ? saved === "light"
             : window.matchMedia("(prefers-color-scheme: light)").matches;
@@ -32,7 +32,7 @@
           root.innerHTML =
             '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f172a;font-family:system-ui,sans-serif;color:#e2e8f0;padding:24px;text-align:center">' +
             '<div style="max-width:520px">' +
-            '<div style="font-size:22px;font-weight:700;color:#22d3ee;margin-bottom:8px">SentinelSOC failed to load</div>' +
+            '<div style="font-size:22px;font-weight:700;color:#22d3ee;margin-bottom:8px">BARAQ failed to load</div>' +
             '<div style="font-size:14px;color:#94a3b8;margin-bottom:16px">' + message + '</div>' +
             '<button onclick="location.reload(true)" style="background:#0e7490;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer">Reload</button>' +
             "</div></div>";

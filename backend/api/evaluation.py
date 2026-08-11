@@ -13,7 +13,7 @@ from backend.evaluation.evaluator import run_evaluation
 from backend.evaluation.holdout import run_holdout_evaluation
 from backend.security import require_admin, require_auth
 
-logger = logging.getLogger("sentinel.api.evaluation")
+logger = logging.getLogger("baraq.api.evaluation")
 router = APIRouter(
     prefix="/api/evaluation",
     tags=["evaluation"],

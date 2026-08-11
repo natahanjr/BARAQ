@@ -6,7 +6,7 @@ a tamper-evident hash-chained audit stream.
 - ``setup_logging()`` wires the root logger once: console (text or JSON),
   optional rotating file, and an optional remote syslog forwarder.
 - The audit hash chain (see ``backend/audit.py``) is re-emitted on every
-  ``log_action`` through the "sentinel.audit" logger; SIEM-side consumers can
+  ``log_action`` through the "baraq.audit" logger; SIEM-side consumers can
   re-verify chain integrity against the database copy.
 """
 from __future__ import annotations
@@ -27,7 +27,7 @@ from backend.config import (
     SYSLOG_PROTO,
 )
 
-logger = logging.getLogger("sentinel.logging")
+logger = logging.getLogger("baraq.logging")
 
 
 class JSONFormatter(logging.Formatter):
@@ -43,7 +43,7 @@ class JSONFormatter(logging.Formatter):
         }
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
-        extra = getattr(record, "sentinel", None)
+        extra = getattr(record, "baraq", None)
         if isinstance(extra, dict):
             payload.update(extra)
         return json.dumps(payload, ensure_ascii=False, default=str)
@@ -111,7 +111,7 @@ def setup_logging() -> None:
         console.setFormatter(formatter)
         root.addHandler(console)
         fileh = logging.handlers.RotatingFileHandler(
-            LOG_DIR / "sentinel.log", maxBytes=10 * 1024 * 1024, backupCount=5
+            LOG_DIR / "baraq.log", maxBytes=10 * 1024 * 1024, backupCount=5
         )
         fileh.setFormatter(formatter)
         root.addHandler(fileh)
@@ -126,7 +126,7 @@ def setup_logging() -> None:
         console.setFormatter(formatter)
         root.addHandler(console)
         fileh = logging.handlers.RotatingFileHandler(
-            LOG_DIR / "sentinel.log", maxBytes=10 * 1024 * 1024, backupCount=5
+            LOG_DIR / "baraq.log", maxBytes=10 * 1024 * 1024, backupCount=5
         )
         fileh.setFormatter(formatter)
         root.addHandler(fileh)
@@ -154,5 +154,5 @@ def audit_syslog(payload: dict) -> None:
     """Emit one audit entry to the syslog/SIEM stream (no-op when disabled)."""
     if not SYSLOG_HOST or not SYSLOG_AUDIT:
         return
-    audit_logger = logging.getLogger("sentinel.audit")
-    audit_logger.info("audit", extra={"sentinel": payload})
+    audit_logger = logging.getLogger("baraq.audit")
+    audit_logger.info("audit", extra={"baraq": payload})

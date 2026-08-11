@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 
-logger = logging.getLogger("sentinel.evaluation")
+logger = logging.getLogger("baraq.evaluation")
 
 #: The five attack scenarios and the rule expected to catch each one.
 SCENARIO_RULE = {

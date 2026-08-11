@@ -12,7 +12,7 @@ import threading
 from backend.database.connection import SessionLocal
 from backend.ml.anomaly import get_detector
 
-logger = logging.getLogger("sentinel.ml.tasks")
+logger = logging.getLogger("baraq.ml.tasks")
 
 _train_lock = threading.Lock()
 
@@ -35,7 +35,7 @@ def train_in_background(hours: int = 24, validate: bool = True, force: bool = Fa
             db.close()
             _train_lock.release()
 
-    threading.Thread(target=_work, daemon=True, name="sentinel-ml-train").start()
+    threading.Thread(target=_work, daemon=True, name="baraq-ml-train").start()
     return True
 
 

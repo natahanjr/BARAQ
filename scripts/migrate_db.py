@@ -5,7 +5,7 @@ Convenience wrapper around Alembic so operators never handle CLI details::
     venv\\Scripts\\python scripts\\migrate_db.py            # upgrade to head
     venv\\Scripts\\python scripts\\migrate_db.py --stamp   # mark head on existing DBs
 
-Migrations read ``SENTINEL_DATABASE_URL`` exactly like the application.
+Migrations read ``BARAQ_DATABASE_URL`` exactly like the application.
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def _config() -> Config:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Apply SentinelSOC schema migrations")
+    parser = argparse.ArgumentParser(description="Apply BARAQ schema migrations")
     parser.add_argument("--stamp", action="store_true",
                         help="mark the current schema as head without running DDL "
                              "(for deployments that predate Alembic)")

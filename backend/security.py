@@ -1,4 +1,4 @@
-"""Authentication & RBAC dependencies for the SentinelSOC API.
+"""Authentication & RBAC dependencies for the BARAQ API.
 
 Supports two client credentials:
 
@@ -8,7 +8,7 @@ Supports two client credentials:
 - ``X-API-Key`` header - legacy shared key (``analyst`` / ``admin`` roles).
 
 The agent channel uses its own ``X-Agent-Key`` scheme and is exempt from this
-middleware. When auth is disabled (``SENTINEL_AUTH_ENABLED=0``) every caller is
+middleware. When auth is disabled (``BARAQ_AUTH_ENABLED=0``) every caller is
 treated as ``admin`` so local development and the test suite keep working.
 """
 from __future__ import annotations
@@ -20,11 +20,11 @@ from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy import select
 
 from backend.auth import verify_token
-from backend.config import API_KEYS, AUTH_ENABLED
+from backend.config import API_KEYS, AUTH_ENABLED, ENFORCE_ADMIN_MFA
 from backend.database.connection import get_db
 from backend.database.models import User
 
-logger = logging.getLogger("sentinel.auth")
+logger = logging.getLogger("baraq.auth")
 
 API_KEY_HEADER = "X-API-Key"
 
@@ -45,7 +45,7 @@ def _bearer_payload(request: Request):
     auth = request.headers.get("Authorization", "")
     if not auth.lower().startswith("bearer "):
         # Session restored from the httpOnly cookie (set on login).
-        session = request.cookies.get("sentinel_session", "")
+        session = request.cookies.get("baraq_session", "")
         if session:
             auth = f"Bearer {session}"
     if not auth.lower().startswith("bearer "):
@@ -141,6 +141,20 @@ def require_role(*roles: str) -> Callable:
                     status_code=403,
                     detail=f"Requires role(s): {', '.join(roles)}",
                 )
+            if (
+                ENFORCE_ADMIN_MFA
+                and user.role == "admin"
+                and "admin" in roles
+                and not user.totp_enabled
+            ):
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "Admin MFA is enforced on this deployment: enroll a "
+                        "TOTP second factor via the dashboard (Account > "
+                        "Security) before using admin features."
+                    ),
+                )
             return user.username
         key = request.headers.get(API_KEY_HEADER)
         role = API_KEYS.get((key or "").strip()) if key else None
@@ -161,3 +175,26 @@ def require_role(*roles: str) -> Callable:
 require_auth = require_role("analyst", "admin")
 #: Admin-only operations.
 require_admin = require_role("admin")
+
+
+def require_auth_enroll_mfa(request: Request, db=Depends(get_db)):
+    """Authenticate for the TOTP enrollment endpoints without the admin-MFA
+    gate, so an admin blocked by enforcement can still enroll a second
+    factor (the gate would otherwise lock the bootstrap account out)."""
+    if not AUTH_ENABLED:
+        return "admin"
+    payload = _bearer_payload(request)
+    if payload:
+        user = db.get(User, payload.get("uid"))
+        if not user or not user.is_active:
+            raise HTTPException(
+                status_code=401, detail="Invalid or expired session"
+            )
+        return user.username
+    key = request.headers.get(API_KEY_HEADER)
+    role = API_KEYS.get((key or "").strip()) if key else None
+    if not role:
+        role = _bearer_key_role(request)
+        if not role:
+            raise HTTPException(status_code=401, detail="Missing or invalid API key")
+    return key or "unknown"

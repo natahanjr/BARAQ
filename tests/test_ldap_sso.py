@@ -24,7 +24,7 @@ def test_admin_group_maps_to_admin():
 
 
 def test_admin_group_by_cn_only():
-    groups = ["CN=Sentinel Admins,OU=Groups,DC=corp,DC=local"]
+    groups = ["CN=BARAQ Admins,OU=Groups,DC=corp,DC=local"]
     assert ldap_sso._role_for(groups) == "admin"
 
 
@@ -72,7 +72,7 @@ def _bootstrap_admin():
         if not db.query(User).filter(User.username == "admin").first():
             db.add(User(
                 username="admin",
-                password_hash=hash_password("sentineladmin"),
+                password_hash=hash_password("baraqadmin"),
                 role="admin",
                 is_active=True,
             ))
@@ -167,7 +167,7 @@ def test_directory_unavailable_falls_back_gracefully(client, ldap_on):
 def test_local_password_wins_over_ldap(client, ldap_on):
     # Even with LDAP enabled, an existing local account authenticates locally.
     ldap_on.setattr(ldap_sso, "_authenticate_impl", lambda u, p: None)
-    resp = client.post("/api/auth/login", json={"username": "admin", "password": "sentineladmin"})
+    resp = client.post("/api/auth/login", json={"username": "admin", "password": "baraqadmin"})
     assert resp.status_code == 200
     assert resp.json()["user"]["username"] == "admin"
 

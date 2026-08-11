@@ -48,7 +48,7 @@ from backend.ml.anomaly import (
     event_feature_vector,
 )
 
-logger = logging.getLogger("sentinel.realtime.validation")
+logger = logging.getLogger("baraq.realtime.validation")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CAMPAIGNS_DIR = PROJECT_ROOT / "database" / "campaigns"

@@ -25,7 +25,7 @@ from tests.fixtures import brute_force
 def _make_user(db, username: str, role: str = "analyst", org: str = "") -> User:
     user = User(
         username=username,
-        password_hash=hash_password("sentinel-test-password"),
+        password_hash=hash_password("baraq-test-password"),
         role=role,
         full_name=username,
         org=org,
@@ -49,7 +49,7 @@ def _headers(user: User) -> dict:
 def admin_client():
     from backend.main import app
 
-    with TestClient(app, headers={"X-API-Key": "sentinel-dev-admin"}) as c:
+    with TestClient(app, headers={"X-API-Key": "baraq-dev-admin"}) as c:
         yield c
 
 
@@ -85,7 +85,7 @@ def test_pipeline_default_org_is_empty(db):
 
 
 # ---------------------------------------------------------------------------
-# ingest attribution via SENTINEL_AGENT_ORGS mapping
+# ingest attribution via BARAQ_AGENT_ORGS mapping
 # ---------------------------------------------------------------------------
 
 
@@ -100,7 +100,7 @@ def test_ingest_attributes_org_from_agent_mapping(admin_client, monkeypatch):
     resp = admin_client.post(
         "/api/ingest",
         json=body,
-        headers={"X-Agent-Key": "sentinel-agent-dev"},
+        headers={"X-Agent-Key": "baraq-agent-dev"},
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["org"] == "univ-a"

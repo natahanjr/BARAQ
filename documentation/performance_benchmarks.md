@@ -1,4 +1,4 @@
-# SentinelSOC — Performance Benchmarking
+# BARAQ — Performance Benchmarking
 
 **Document:** Throughput, Latency and Resource Footprint on the Target Laptop
 **Version:** 1.0
@@ -24,10 +24,10 @@ All timings below are measured with the built-in evaluation harness and
 python -m pytest tests/test_evaluation.py -v
 
 # Hold-out evaluation reports detection_time_ms per layer:
-curl.exe -X POST http://127.0.0.1:8000/api/evaluation/holdout -H "X-API-Key: sentinel-dev-admin" -H "Content-Type: application/json" -d "{\"with_ml\": false, \"use_real_baseline\": true}"
+curl.exe -X POST http://127.0.0.1:8000/api/evaluation/holdout -H "X-API-Key: baraq-dev-admin" -H "Content-Type: application/json" -d "{\"with_ml\": false, \"use_real_baseline\": true}"
 
 # ML train + inference timing
-curl.exe -X POST http://127.0.0.1:8000/api/system/ml/train -H "X-API-Key: sentinel-dev-admin"
+curl.exe -X POST http://127.0.0.1:8000/api/system/ml/train -H "X-API-Key: baraq-dev-admin"
 ```
 
 ---
@@ -45,7 +45,7 @@ curl.exe -X POST http://127.0.0.1:8000/api/system/ml/train -H "X-API-Key: sentin
 | Isolation Forest memory footprint | ~15 MB | 3 models, 60 estimators each |
 | Scheduler idle CPU (15 s interval) | ~0.5 % | Task Manager, 10-minute idle window |
 | REST API p95 response (list alerts) | ~45 ms | `httpx` loop, 50 requests |
-| SQLite DB growth | ~60 KB per 1,000 events | `database/sentinel.db` |
+| SQLite DB growth | ~60 KB per 1,000 events | `database/baraq.db` |
 
 ---
 

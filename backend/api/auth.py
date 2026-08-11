@@ -1,11 +1,11 @@
-﻿"""Multi-user authentication and audit endpoints.
+"""Multi-user authentication and audit endpoints.
 
 Operators log in with username + password to receive an HMAC-signed token that
 the frontend sends as ``Authorization: Bearer <token>``. Admins can create /
 disable accounts and pull the audit trail. The agent channel (X-Agent-Key) and
 the legacy X-API-Key header remain supported alongside this.
 
-SSO: when LDAP/AD is configured (SENTINEL_LDAP_ENABLED=1), login falls back
+SSO: when LDAP/AD is configured (BARAQ_LDAP_ENABLED=1), login falls back
 to the directory when local credentials fail, auto-provisioning the operator
 as a local account (see backend/ldap.py).
 """
@@ -39,14 +39,14 @@ from backend.config import AUTH_TOKEN_SECRET, COOKIE_SECURE
 from backend.database.connection import get_db
 from backend.database.models import AuditLog, User
 from backend import ldap as ldap_sso
-from backend.security import require_admin, require_auth, resolve_user
+from backend.security import require_admin, require_auth, require_auth_enroll_mfa, resolve_user
 from backend.totp import generate_secret, provisioning_uri, verify_code
 
-logger = logging.getLogger("sentinel.api.auth")
+logger = logging.getLogger("baraq.api.auth")
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-SESSION_COOKIE = "sentinel_session"
-CSRF_COOKIE = "sentinel_csrf"
+SESSION_COOKIE = "baraq_session"
+CSRF_COOKIE = "baraq_csrf"
 
 #: Brute-force protection on the login endpoint. In-memory sliding window:
 #: at most LOGIN_MAX_ATTEMPTS failures per IP within LOGIN_WINDOW_SECONDS.
@@ -206,14 +206,14 @@ def _provision_sso_user(db: Session, profile: dict, request: Request,
 # OpenID Connect SSO (SC5c)
 #
 # Step 1 (/oidc/login): generate state + nonce + PKCE verifier, stash them on
-#   a signed "sentinel_oidc" cookie, and 302 to the provider.
+#   a signed "baraq_oidc" cookie, and 302 to the provider.
 # Step 2 (/oidc/callback): exchange the code, validate the id_token (see
 #   backend/oidc.py), provision the operator, restore the session and bounce
 #   back to the SPA. Both routes are public (like /login): the code exchange
 #   IS the authentication.
 # ---------------------------------------------------------------------------
 
-OIDC_COOKIE = "sentinel_oidc"
+OIDC_COOKIE = "baraq_oidc"
 OIDC_COOKIE_TTL = 600  # seconds to complete the flow
 
 
@@ -333,11 +333,11 @@ def mfa_verify(body: MfaVerifyRequest, request: Request, db: Session = Depends(g
     payload = verify_token(body.challenge)
     if not payload or not payload.get("mfa"):
         _record_login_failure(request)
-        raise HTTPException(401, "Challenge expired â€” log in again")
+        raise HTTPException(401, "Challenge expired — log in again")
     user = db.get(User, payload.get("uid"))
     if not user or not user.is_active or not user.totp_enabled:
         _record_login_failure(request)
-        raise HTTPException(401, "Challenge invalid â€” log in again")
+        raise HTTPException(401, "Challenge invalid — log in again")
     if not verify_code(user.totp_secret, body.code):
         _record_login_failure(request)
         log_action(db, user.username, "login.mfa_failed", "user", str(user.id),
@@ -393,7 +393,7 @@ class MfaSetupResult(BaseModel):
     otpauth_url: str
 
 
-@router.post("/mfa/setup", dependencies=[Depends(require_auth)])
+@router.post("/mfa/setup", dependencies=[Depends(require_auth_enroll_mfa)])
 def mfa_setup(request: Request, db: Session = Depends(get_db)):
     """Provision TOTP for the authenticated user (returns the shared secret
     exactly once; the secret is only activated after ``/mfa/confirm``)."""
@@ -413,14 +413,14 @@ class MfaConfirmRequest(BaseModel):
     code: str = Field(min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
 
 
-@router.post("/mfa/confirm", dependencies=[Depends(require_auth)])
+@router.post("/mfa/confirm", dependencies=[Depends(require_auth_enroll_mfa)])
 def mfa_confirm(body: MfaConfirmRequest, request: Request, db: Session = Depends(get_db)):
     """Activate 2FA after the user proves they can generate codes."""
     user = resolve_user(request, db)
     if not user:
         raise HTTPException(401, "Invalid or expired session")
     if not user.totp_secret:
-        raise HTTPException(400, "No pending TOTP secret â€” call /mfa/setup first")
+        raise HTTPException(400, "No pending TOTP secret — call /mfa/setup first")
     if not verify_code(user.totp_secret, body.code):
         log_action(db, user.username, "mfa.confirm_failed", "user", str(user.id),
                    "TOTP code mismatch during activation", client_ip(request))
@@ -432,7 +432,7 @@ def mfa_confirm(body: MfaConfirmRequest, request: Request, db: Session = Depends
     return {"ok": True, "totp_enabled": True}
 
 
-@router.post("/mfa/disable", dependencies=[Depends(require_auth)])
+@router.post("/mfa/disable", dependencies=[Depends(require_auth_enroll_mfa)])
 def mfa_disable(body: MfaConfirmRequest, request: Request, db: Session = Depends(get_db)):
     """Disable 2FA (requires a valid code from the current authenticator)."""
     user = resolve_user(request, db)
@@ -536,7 +536,7 @@ def _actor(request: Request | None) -> str:
         return "unknown"
     auth = request.headers.get("Authorization", "")
     if not auth.lower().startswith("bearer "):
-        auth = f"Bearer {request.cookies.get('sentinel_session', '')}"
+        auth = f"Bearer {request.cookies.get('baraq_session', '')}"
     if auth.lower().startswith("bearer "):
         payload = verify_token(auth[7:].strip())
         if payload:

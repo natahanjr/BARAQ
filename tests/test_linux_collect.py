@@ -25,7 +25,7 @@ def fake_authlog(tmp_path, monkeypatch):
         "from 198.51.100.50 port 50000 ssh2\n"
     )
     path.write_text(content, encoding="utf-8")
-    monkeypatch.setenv("SENTINEL_AUTH_LOG", str(path))
+    monkeypatch.setenv("BARAQ_AUTH_LOG", str(path))
     fixed_now = datetime(2026, 8, 9, 10, 5, 0).astimezone()
 
     class _FixedClock(datetime):

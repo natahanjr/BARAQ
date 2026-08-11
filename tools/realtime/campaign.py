@@ -1,7 +1,7 @@
 """Real attack campaign runner with recorded ground truth.
 
 Executes a set of *safe, contained* attack simulations against the local host
-while the Sentinel collector runs, and records what was actually launched into
+while the BARAQ collector runs, and records what was actually launched into
 ``database/campaigns/campaign_<run-id>.json`` so real-telemetry validation can
 score detections honestly against real ground truth (no synthetic rows).
 

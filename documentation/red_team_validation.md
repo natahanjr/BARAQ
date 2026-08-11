@@ -1,4 +1,4 @@
-# SentinelSOC — Red-Team Validation
+# BARAQ — Red-Team Validation
 
 **Document:** Independent Detection Validation Against Realistic Attacks
 **Version:** 1.1
@@ -61,8 +61,8 @@ powershell.exe -NoP -NonI -W Hidden -EncodedCommand $payload
 ### 3.3 Persistence via Scheduled Task (T1547)
 
 ```powershell
-schtasks /create /tn "SentinelTestPersistence" /tr "C:\Users\Public\svchost_test.exe" /sc onlogon /ru SYSTEM
-# ... then remove: schtasks /delete /tn "SentinelTestPersistence" /f
+schtasks /create /tn "BARAQTestPersistence" /tr "C:\Users\Public\svchost_test.exe" /sc onlogon /ru SYSTEM
+# ... then remove: schtasks /delete /tn "BARAQTestPersistence" /f
 ```
 
 **Expected:** `Persistence Mechanism Installed` alert (T1547).
@@ -80,9 +80,9 @@ $target = "192.168.1.1"
 
 ```powershell
 # Requires admin; creates a local user and adds it to Administrators
-net user SentinelTestPass /add
-net localgroup Administrators SentinelTestPass /add
-# ... then remove: net localgroup Administrators SentinelTestPass /delete; net user SentinelTestPass /delete
+net user BARAQTestPass /add
+net localgroup Administrators BARAQTestPass /add
+# ... then remove: net localgroup Administrators BARAQTestPass /delete; net user BARAQTestPass /delete
 ```
 
 **Expected:** `Suspicious Privilege Escalation` alert (T1068).

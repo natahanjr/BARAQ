@@ -1,4 +1,4 @@
-# SentinelSOC — Test Results
+# BARAQ — Test Results
 
 **Document:** Test Suite Execution Report
 **Date:** 2026-08-03
@@ -114,5 +114,5 @@ Beyond unit/integration tests, the running prototype was verified end-to-end:
 ## 7. Notes
 
 - 1 warning: Starlette deprecation notice for `httpx` in `fastapi.testclient` (upstream, non-blocking).
-- Test DB is isolated via fixture (`tests/conftest.py`) — running the suite does not touch the live `database/sentinel.db`.
+- Test DB is isolated via fixture (`tests/conftest.py`) — running the suite does not touch the live `database/baraq.db`.
 - The evaluation framework additionally uses its own isolated temporary database at runtime.

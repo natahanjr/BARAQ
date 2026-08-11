@@ -15,7 +15,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture()
 def encryption_on(monkeypatch, tmp_path):
     """Force encryption on and redirect the vault to a temp file."""
-    monkeypatch.setenv("SENTINEL_ENCRYPT_AT_REST", "1")
+    monkeypatch.setenv("BARAQ_ENCRYPT_AT_REST", "1")
     import backend.crypto as crypto_mod
     from backend.vault import SecretVault
 
@@ -36,7 +36,7 @@ def test_roundtrip(encryption_on):
     secret = "Failed logon for 'adm in'; password: s3cr3t!"
     enc = encrypt_text(secret)
     assert enc is not None
-    assert enc.startswith("sentinel-v1:")
+    assert enc.startswith("baraq-v1:")
     assert secret not in enc
     assert decrypt_text(enc) == secret
 
@@ -44,7 +44,7 @@ def test_roundtrip(encryption_on):
 def test_encryption_disabled_passthrough(monkeypatch):
     from backend.crypto import decrypt_text, encrypt_text
 
-    monkeypatch.setenv("SENTINEL_ENCRYPT_AT_REST", "0")
+    monkeypatch.setenv("BARAQ_ENCRYPT_AT_REST", "0")
     import importlib
 
     crypto = importlib.import_module("backend.crypto")
@@ -64,8 +64,8 @@ def test_legacy_plaintext_passthrough():
 def test_corrupt_blob_returns_none():
     from backend.crypto import decrypt_text
 
-    assert decrypt_text("sentinel-v1:AAAA:BBBB") is None
-    assert decrypt_text("sentinel-v1:not-base64!!:not-base64!!") is None
+    assert decrypt_text("baraq-v1:AAAA:BBBB") is None
+    assert decrypt_text("baraq-v1:not-base64!!:not-base64!!") is None
 
 
 def test_key_persists_in_vault(encryption_on, tmp_path):
@@ -111,7 +111,7 @@ def test_column_roundtrip_via_orm(encryption_on, tmp_path):
     with engine.begin() as conn:
         raw = conn.execute(text("SELECT message FROM events")).scalar_one()
     assert "s3cr3t" not in raw
-    assert raw.startswith("sentinel-v1:")
+    assert raw.startswith("baraq-v1:")
 
 
 def test_key_round_trip_across_vault_reload(encryption_on):

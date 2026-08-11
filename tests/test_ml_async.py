@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 def client():
     from backend.main import app
 
-    with TestClient(app, headers={"X-API-Key": "sentinel-dev-admin"}) as c:
+    with TestClient(app, headers={"X-API-Key": "baraq-dev-admin"}) as c:
         yield c
 
 

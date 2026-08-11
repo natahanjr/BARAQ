@@ -14,7 +14,7 @@ from backend.database.connection import get_db, init_db
 from backend.ml.anomaly import get_detector
 from backend.security import require_admin, require_auth
 
-logger = logging.getLogger("sentinel.api.system")
+logger = logging.getLogger("baraq.api.system")
 router = APIRouter(
     prefix="/api/system",
     tags=["system"],
@@ -167,7 +167,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
             host = records[0].get("host", "") if records else ""
             for i, record in enumerate(records):
                 payload = dict(record)
-                payload["sentinel.seq"] = i
+                payload["baraq.seq"] = i
                 if host:
                     payload["host"] = host
                 record_event(payload)
@@ -312,7 +312,7 @@ def system_status(request: Request, db: Session = Depends(get_db)):
     from backend.locks import instance_lock_status
 
     return {
-        "application": "SentinelSOC",
+        "application": "BARAQ",
         "version": "1.0.0",
         "collecting": True,
         "database": dialect,

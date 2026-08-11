@@ -24,7 +24,7 @@ from backend import oidc as oidc_sso
 # ---------------------------------------------------------------------------
 
 _ISSUER = "https://idp.corp.local"
-_CLIENT_ID = "sentinel-soc"
+_CLIENT_ID = "baraq-soc"
 
 
 @pytest.fixture(scope="module")
@@ -208,7 +208,7 @@ def _bootstrap_admin():
         if not db.query(User).filter(User.username == "admin").first():
             db.add(User(
                 username="admin",
-                password_hash=hash_password("sentineladmin"),
+                password_hash=hash_password("baraqadmin"),
                 role="admin",
                 is_active=True,
             ))
@@ -226,7 +226,7 @@ def test_oidc_login_redirects_to_provider(client, fake_provider, monkeypatch):
     assert "code_challenge_method=S256" in location
     assert "state=" in location and "nonce=" in location
     # The flow cookie is set so the callback can reconstruct state.
-    assert resp.headers.get("set-cookie") and "sentinel_oidc" in resp.headers["set-cookie"]
+    assert resp.headers.get("set-cookie") and "baraq_oidc" in resp.headers["set-cookie"]
 
 
 def test_oidc_callback_rejects_bad_state(client, fake_provider, monkeypatch):
@@ -258,7 +258,7 @@ def _run_full_oidc_login(client, provider_keys, monkeypatch, group=None):
     step2 = client.get(f"/api/auth/oidc/callback?code=abc123&state={state}", follow_redirects=False)
     assert step2.status_code == 302
     assert step2.headers["location"] == "/"
-    assert "sentinel_session=" in step2.headers.get("set-cookie", "")
+    assert "baraq_session=" in step2.headers.get("set-cookie", "")
     return step2
 
 

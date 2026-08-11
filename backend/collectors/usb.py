@@ -16,7 +16,7 @@ from backend.collectors.base import BaseCollector
 from backend.collectors.eventlog import WindowsEventLogCollector
 from backend.config import SECURITY_LOG_CHANNELS, USB_EVENT_IDS
 
-logger = logging.getLogger("sentinel.collectors.usb")
+logger = logging.getLogger("baraq.collectors.usb")
 
 
 class UsbCollector(BaseCollector):

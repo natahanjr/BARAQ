@@ -18,7 +18,7 @@ from backend.detection.workflow import can_transition, is_valid_state, next_stat
 from backend.reports.generator import generate_report
 from backend.security import actor_name, tenant_scope, require_admin, require_auth
 
-logger = logging.getLogger("sentinel.api.alerts")
+logger = logging.getLogger("baraq.api.alerts")
 
 router = APIRouter(
     prefix="/api/alerts",

@@ -37,7 +37,7 @@ from backend.database.models import (
 )
 from backend.graph.base import GraphStore
 
-logger = logging.getLogger("sentinel.graph")
+logger = logging.getLogger("baraq.graph")
 
 RISK_INTEL_BOOST = {"malicious": 0.95, "suspicious": 0.7, "abusive": 0.5}
 

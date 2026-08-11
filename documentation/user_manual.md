@@ -1,4 +1,4 @@
-# SentinelSOC — User Manual
+# BARAQ — User Manual
 
 **Document:** Operator Guide
 **Version:** 2.0 (hybrid risk scoring + evaluation framework)
@@ -8,7 +8,7 @@
 
 ## 1. Introduction
 
-SentinelSOC is a lightweight SOC platform that runs entirely on a single Windows 11 laptop. It collects real host telemetry, detects attacks via a rules engine and machine learning, maps threats to MITRE ATT&CK, visualizes everything in a SOC dashboard, and produces professional reports.
+BARAQ is a lightweight SOC platform that runs entirely on a single Windows 11 laptop. It collects real host telemetry, detects attacks via a rules engine and machine learning, maps threats to MITRE ATT&CK, visualizes everything in a SOC dashboard, and produces professional reports.
 
 ---
 
@@ -61,7 +61,7 @@ Open **http://localhost:5173**.
 - **Analyst notes**: add notes; they persist and appear in investigation.
 
 ### 3.4 Investigation
-- Select an alert → SentinelSOC reconstructs the **attack chain** (kill-chain steps: credential probing → access granted → privilege assignment → script execution → persistence ...).
+- Select an alert → BARAQ reconstructs the **attack chain** (kill-chain steps: credential probing → access granted → privilege assignment → script execution → persistence ...).
 - **Incident timeline**: visual sequence of surrounding events (Failed Login → Account Locked → ... → Alert Created).
 - **Related events** within ±30 minutes of the first evidence event.
 - **Network context** table for reconnaissance (T1046) alerts.
@@ -138,7 +138,7 @@ py -m backend.pipeline --collect
 | `ML_CONTAMINATION` | 0.05 | IF anomaly rate |
 | `SECURITY_SCORE_PENALTY` | 14/8/4/1 | Score deduction per severity |
 
-Environment variables: `SENTINEL_INTERVAL`, `SENTINEL_DATABASE_URL`, `SENTINEL_AI_API_URL`, `SENTINEL_AI_API_KEY`, `SENTINEL_AI_MODEL`.
+Environment variables: `BARAQ_INTERVAL`, `BARAQ_DATABASE_URL`, `BARAQ_AI_API_URL`, `BARAQ_AI_API_KEY`, `BARAQ_AI_MODEL`.
 
 ---
 
@@ -151,7 +151,7 @@ Environment variables: `SENTINEL_INTERVAL`, `SENTINEL_DATABASE_URL`, `SENTINEL_A
 | Simulation produces no alerts | Run the *full suite*; single scenarios need matching rule thresholds (e.g. ≥5 failed logins). |
 | PDF report fails | Verify `reportlab` installed and `reports/` directory writable. |
 | Port 5173 busy | Change port in `frontend/vite.config.js` and matching `CORS_ORIGINS` in `backend/config.py`. |
-| AI assistant gives generic answers | It is a local rule/TF-IDF engine by design; set `SENTINEL_AI_API_URL`/`KEY` to delegate to an OpenAI-compatible endpoint for generative answers. |
+| AI assistant gives generic answers | It is a local rule/TF-IDF engine by design; set `BARAQ_AI_API_URL`/`KEY` to delegate to an OpenAI-compatible endpoint for generative answers. |
 | Alerts show "rule" not "hybrid" | Hybrid labels require ML scores on evidence events — train the model (System → ML → Train) and run **ML analyze** after collecting more data. |
 
 ---
@@ -160,7 +160,7 @@ Environment variables: `SENTINEL_INTERVAL`, `SENTINEL_DATABASE_URL`, `SENTINEL_A
 
 | Artifact | Path |
 |---|---|
-| SQLite database | `database/sentinel.db` |
+| SQLite database | `database/baraq.db` |
 | Generated reports | `reports/` |
 | Logs | `logs/server.out.log`, `logs/server.err.log` |
 | MITRE data | `backend/mitre/techniques.json` |

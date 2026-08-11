@@ -1,16 +1,16 @@
 """Migrate the existing SQLite database into PostgreSQL.
 
 One-time migration for fleet-scale deployments (100+ endpoints). Copies every
-table from the current SQLite ``sentinel.db`` into a target PostgreSQL
+table from the current SQLite ``baraq.db`` into a target PostgreSQL
 database, preserving primary keys and relationships, then fixes the identity
 sequences so future inserts never collide.
 
 Usage:
-    python scripts/migrate_to_postgres.py --pg-url postgresql://user:pass@host:5432/sentinel
+    python scripts/migrate_to_postgres.py --pg-url postgresql://user:pass@host:5432/baraq
 
 Options:
-    --pg-url    target PostgreSQL URL (or env SENTINEL_PG_URL)
-    --sqlite    source SQLite file (default: current SENTINEL_DATABASE_URL)
+    --pg-url    target PostgreSQL URL (or env BARAQ_PG_URL)
+    --sqlite    source SQLite file (default: current BARAQ_DATABASE_URL)
     --force     overwrite target tables that already contain rows
     --batch     rows per insert batch (default 1000)
 """
@@ -25,7 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(message)s")
-logger = logging.getLogger("sentinel.migrate")
+logger = logging.getLogger("baraq.migrate")
 
 _BATCH = 1000
 
@@ -124,9 +124,9 @@ def main() -> None:
     global _BATCH
     _BATCH = args.batch
 
-    pg_url = args.pg_url or __import__("os").environ.get("SENTINEL_PG_URL", "")
+    pg_url = args.pg_url or __import__("os").environ.get("BARAQ_PG_URL", "")
     if not pg_url:
-        raise SystemExit("Provide --pg-url or set SENTINEL_PG_URL")
+        raise SystemExit("Provide --pg-url or set BARAQ_PG_URL")
 
     if args.sqlite:
         sqlite_url = f"sqlite:///{Path(args.sqlite).resolve().as_posix()}"
@@ -155,8 +155,8 @@ def main() -> None:
 
     _fix_sequences(dst)
     logger.info("Migration complete: %d rows copied in total", total)
-    logger.info("Point SentinelSOC at the new database:")
-    logger.info('  set SENTINEL_DATABASE_URL=%s', pg_url)
+    logger.info("Point BARAQ at the new database:")
+    logger.info('  set BARAQ_DATABASE_URL=%s', pg_url)
     logger.info("  python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000")
 
 

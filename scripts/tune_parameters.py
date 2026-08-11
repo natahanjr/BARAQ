@@ -55,9 +55,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault(
-    "SENTINEL_DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel"
+    "BARAQ_DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:55432/baraq"
 )
-os.environ.setdefault("SENTINEL_SKIP_SECRET_GEN", "1")
+os.environ.setdefault("BARAQ_SKIP_SECRET_GEN", "1")
 
 from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
@@ -177,7 +177,7 @@ def _new_session():
     from sqlalchemy.engine import make_url
 
     base_url = make_url(normalize_database_url(DATABASE_URL))
-    db_name = f"sentinel_scratch_{uuid.uuid4().hex[:12]}"
+    db_name = f"baraq_scratch_{uuid.uuid4().hex[:12]}"
 
     admin = create_engine(base_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
     try:

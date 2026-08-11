@@ -24,7 +24,7 @@ from backend.database.models import (
 )
 from backend.security import actor_name, tenant_scope, require_admin, require_auth
 
-logger = logging.getLogger("sentinel.api.incidents")
+logger = logging.getLogger("baraq.api.incidents")
 
 router = APIRouter(
     prefix="/api/incidents",

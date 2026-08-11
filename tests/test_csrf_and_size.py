@@ -30,7 +30,7 @@ def seeded_admin():
         if not db.query(User).filter(User.username == "admin").first():
             db.add(User(
                 username="admin",
-                password_hash=hash_password("sentineladmin"),
+                password_hash=hash_password("baraqadmin"),
                 role="admin",
                 is_active=True,
             ))
@@ -46,7 +46,7 @@ def cookie_browser(app, seeded_admin):
     with TestClient(app) as client:
         resp = client.post("/api/auth/login", json={
             "username": "admin",
-            "password": "sentineladmin",
+            "password": "baraqadmin",
         })
         assert resp.status_code == 200, resp.text
         yield client
@@ -58,8 +58,8 @@ def _post(client, path, json_body=None):
 
 def test_login_sets_csrf_cookie(cookie_browser):
     cookies = cookie_browser.cookies
-    assert "sentinel_csrf" in cookies
-    assert "sentinel_session" in cookies
+    assert "baraq_csrf" in cookies
+    assert "baraq_session" in cookies
 
 
 def test_cookie_state_change_without_token_rejected(cookie_browser):
@@ -69,7 +69,7 @@ def test_cookie_state_change_without_token_rejected(cookie_browser):
 
 
 def test_cookie_state_change_with_valid_token_allowed(cookie_browser):
-    csrf = cookie_browser.cookies["sentinel_csrf"]
+    csrf = cookie_browser.cookies["baraq_csrf"]
     resp = cookie_browser.post(
         "/api/system/collect",
         headers={"X-CSRF-Token": csrf},
@@ -108,7 +108,7 @@ def test_api_key_caller_skips_csrf(app):
     with TestClient(app) as client:
         resp = client.post(
             "/api/system/collect",
-            headers={"X-API-Key": "sentinel-dev-admin"},
+            headers={"X-API-Key": "baraq-dev-admin"},
         )
         assert resp.status_code in (200, 201, 202), resp.text
 
@@ -118,19 +118,19 @@ def test_public_login_no_csrf_needed(app, seeded_admin):
     with TestClient(app) as client:
         resp = client.post("/api/auth/login", json={
             "username": "admin",
-            "password": "sentineladmin",
+            "password": "baraqadmin",
         })
         assert resp.status_code == 200, resp.text
 
 
 def test_csrf_cookie_reissued_on_relogin(cookie_browser):
-    first = cookie_browser.cookies["sentinel_csrf"]
+    first = cookie_browser.cookies["baraq_csrf"]
     resp = cookie_browser.post("/api/auth/login", json={
         "username": "admin",
-        "password": "sentineladmin",
+        "password": "baraqadmin",
     })
     assert resp.status_code == 200
-    assert cookie_browser.cookies["sentinel_csrf"] != first
+    assert cookie_browser.cookies["baraq_csrf"] != first
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +147,7 @@ def test_content_length_over_limit_rejected(app, seeded_admin, monkeypatch):
         resp = client.post(
             "/api/assistant/chat",
             json=big,
-            headers={"X-API-Key": "sentinel-dev-admin"},
+            headers={"X-API-Key": "baraq-dev-admin"},
         )
         assert resp.status_code == 413, resp.text
 
@@ -156,6 +156,6 @@ def test_content_length_within_limit_allowed(cookie_browser):
     resp = cookie_browser.post(
         "/api/assistant/chat",
         json={"message": "hello"},
-        headers={"X-CSRF-Token": cookie_browser.cookies["sentinel_csrf"]},
+        headers={"X-CSRF-Token": cookie_browser.cookies["baraq_csrf"]},
     )
     assert resp.status_code == 200, resp.text

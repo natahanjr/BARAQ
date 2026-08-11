@@ -32,7 +32,7 @@ from backend.config import (
     THREAT_INTEL_VT_KEY,
 )
 
-logger = logging.getLogger("sentinel.threatintel")
+logger = logging.getLogger("baraq.threatintel")
 
 _IPV4_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 _DOMAIN_RE = re.compile(r"^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$", re.IGNORECASE)

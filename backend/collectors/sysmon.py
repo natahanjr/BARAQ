@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from backend.collectors.base import BaseCollector
 from backend.config import EVENT_LOG_POLL_BATCH, SYSMON_CHANNELS
 
-logger = logging.getLogger("sentinel.collectors.sysmon")
+logger = logging.getLogger("baraq.collectors.sysmon")
 
 try:
     import win32evtlog

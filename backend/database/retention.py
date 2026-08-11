@@ -28,7 +28,7 @@ from backend.database.models import (
     VulnFinding,
 )
 
-logger = logging.getLogger("sentinel.db")
+logger = logging.getLogger("baraq.db")
 
 #: (model, timestamp column) for every telemetry/history table with a time column.
 #: Chat history, audit logs, reports and users are operator data and are kept.

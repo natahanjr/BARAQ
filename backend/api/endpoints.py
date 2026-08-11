@@ -1,6 +1,6 @@
 """Multi-endpoint ingest + fleet status + remote agent control API.
 
-Remote SentinelSOC agents POST collected telemetry to :func:`ingest`, which
+Remote BARAQ agents POST collected telemetry to :func:`ingest`, which
 attributes every record to the reporting host and pushes it through the
 standard pipeline. Endpoint rows track per-host volume and last-seen so the
 dashboard can show an endpoint fleet at a glance.
@@ -29,7 +29,7 @@ from backend.database.connection import get_db
 from backend.database.models import AgentCommand, Endpoint, NormalizedEvent, Verdict
 from backend.security import actor_name, tenant_scope, require_admin, require_auth
 
-logger = logging.getLogger("sentinel.api.endpoints")
+logger = logging.getLogger("baraq.api.endpoints")
 router = APIRouter(
     prefix="/api",
     tags=["endpoints"],

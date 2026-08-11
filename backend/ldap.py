@@ -1,12 +1,12 @@
 """LDAP / Active Directory SSO adapter (SC5b).
 
 Authenticates operators against an external directory and maps group
-membership onto SentinelSOC roles. The ``ldap3`` library is imported lazily:
+membership onto BARAQ roles. The ``ldap3`` library is imported lazily:
 deployments without LDAP configured never load (or need) it.
 
 Flow (see ``_authenticate_impl``):
-1. Bind with the optional service account (anonymous when ``SENTINEL_LDAP_BIND_DN``
-   is empty) and locate the user's DN using ``SENTINEL_LDAP_USER_FILTER``.
+1. Bind with the optional service account (anonymous when ``BARAQ_LDAP_BIND_DN``
+   is empty) and locate the user's DN using ``BARAQ_LDAP_USER_FILTER``.
 2. Verify the operator's password by re-binding as that DN.
 3. Read group membership (``memberOf``), map to a role, and return a profile
    that the login endpoint auto-provisions as a local operator account.
@@ -29,7 +29,7 @@ from backend.config import (
     LDAP_USER_FILTER,
 )
 
-logger = logging.getLogger("sentinel.ldap")
+logger = logging.getLogger("baraq.ldap")
 
 
 class LDAPError(Exception):
@@ -49,8 +49,8 @@ def _group_names(member_of: list[str] | None) -> list[str]:
     """Normalise memberOf DNs to plain group names for role matching.
 
     Returns both the full DN and the leading CN, so admin groups can be
-    configured either as ``CN=Sentinel Admins,OU=Groups,DC=corp,DC=local``
-    or simply ``Sentinel Admins``.
+    configured either as ``CN=BARAQ Admins,OU=Groups,DC=corp,DC=local``
+    or simply ``BARAQ Admins``.
     """
     names: list[str] = []
     for dn in member_of or []:
@@ -63,7 +63,7 @@ def _group_names(member_of: list[str] | None) -> list[str]:
 
 
 def _role_for(member_of: list[str] | None) -> str:
-    """Map directory group membership to a SentinelSOC role."""
+    """Map directory group membership to a BARAQ role."""
     names = [n.lower() for n in _group_names(member_of)]
     for admin_group in LDAP_ADMIN_GROUPS:
         if any(admin_group.lower() in n for n in names):

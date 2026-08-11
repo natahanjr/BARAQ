@@ -1,13 +1,13 @@
-"""Per-university fleet provisioning for a multi-tenant SentinelSOC console.
+"""Per-university fleet provisioning for a multi-tenant BARAQ console.
 
 Batch-registers the agent hosts of one campus at a time against the central
 server, tagging every host with the university's org id so its telemetry,
 alerts and dashboards are isolated from other tenants (see
-``SENTINEL_AGENT_ORGS`` / ``agent_org`` in backend/config.py).
+``BARAQ_AGENT_ORGS`` / ``agent_org`` in backend/config.py).
 
     venv\\Scripts\\python scripts\\provision_university.py setup univ-a https://soc.example.com:8443 ^
         --org-name "University A" --hosts ws-lib-01,ws-lib-02,ws-chem-04 ^
-        --tls-cert certs\\sentinel.crt
+        --tls-cert certs\\baraq.crt
 
     venv\\Scripts\\python scripts\\provision_university.py list
     venv\\Scripts\\python scripts\\provision_university.py revoke-org univ-a
@@ -16,7 +16,7 @@ The manifest written to ``agent_configs/<org>-manifest.json`` contains one
 launch command per host (key included once). Distribute each command to its
 host over a trusted channel, start it, and the host appears in
 **System -> Connected Endpoints** tagged with the org after its first cycle.
-Restart the SentinelSOC service after setup so the new keys load.
+Restart the BARAQ service after setup so the new keys load.
 """
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ MANIFEST_DIR = APP_DIR / "agent_configs"
 def _resolve_tls_cert(server: str, tls_cert: str) -> str:
     if tls_cert:
         return tls_cert
-    return "certs\\sentinel.crt" if server.startswith("https://") else ""
+    return "certs\\baraq.crt" if server.startswith("https://") else ""
 
 
 def _agent_cmd(server: str, key: str, interval: int, tls_cert: str) -> str:
@@ -118,7 +118,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     for agent_id, info in data["hosts"].items():
         print(f"\n  [{agent_id}]")
         print(f"  {info['command']}")
-    print("\nRestart the SentinelSOC service to load the new keys.")
+    print("\nRestart the BARAQ service to load the new keys.")
     return 0
 
 
@@ -148,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
                        help="comma-separated agent ids of the campus hosts")
     setup.add_argument("--tls-cert", default="",
                        help="PEM cert of the central server "
-                            "(defaults to certs\\sentinel.crt for https servers)")
+                            "(defaults to certs\\baraq.crt for https servers)")
     setup.add_argument("--interval", type=int, default=15)
     setup.set_defaults(func=cmd_setup)
     sub.add_parser("list", help="list orgs and their hosts").set_defaults(func=cmd_list)

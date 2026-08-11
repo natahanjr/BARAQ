@@ -1,5 +1,5 @@
 {
-  "framework": "SentinelSOC CVE Database",
+  "framework": "BARAQ CVE Database",
   "note": "Curated, locally-matched CVE subset for the vulnerability scanner. match is a case-insensitive substring of the installed product name; version_lt means the product is vulnerable below that version. Extend freely.",
   "cves": [
     {

@@ -57,7 +57,7 @@ from backend.database.models import (
     Verdict,
 )
 
-logger = logging.getLogger("sentinel.ml")
+logger = logging.getLogger("baraq.ml")
 
 try:
     from sklearn.ensemble import IsolationForest, RandomForestClassifier

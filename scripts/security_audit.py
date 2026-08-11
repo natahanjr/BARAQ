@@ -1,4 +1,4 @@
-"""SentinelSOC static security audit.
+"""BARAQ static security audit.
 
 Runs a battery of checks an operator can run on any deployment to catch the
 common mistakes (secrets in the repo, missing prod gates, broken deps) and
@@ -59,8 +59,8 @@ def _scan(patterns: list[tuple[str, re.Pattern]], roots: list[Path], skip: set[P
 @check("secrets-in-repo")
 def secrets_in_repo():
     patterns = [
-        ("sentinel-admin-key", re.compile(r"sentinel-admin-[A-Za-z0-9_-]{10,}")),
-        ("sentinel-analyst-key", re.compile(r"sentinel-analyst-[A-Za-z0-9_-]{10,}")),
+        ("baraq-admin-key", re.compile(r"baraq-admin-[A-Za-z0-9_-]{10,}")),
+        ("baraq-analyst-key", re.compile(r"baraq-analyst-[A-Za-z0-9_-]{10,}")),
         ("private-key-block", re.compile(r"-----BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY-----")),
         ("password-assignment", re.compile(r"(?i)password\s*[:=]\s*['\"][^'\"]{6,}['\"]")),
     ]

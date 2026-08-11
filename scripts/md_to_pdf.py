@@ -22,7 +22,7 @@ from reportlab.platypus import (
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "documentation"
-OUT = ROOT / "documentation" / "SentinelSOC_Documentation.pdf"
+OUT = ROOT / "documentation" / "BARAQ_Documentation.pdf"
 
 FILES = [
     ("user_manual.md", "User Manual"),
@@ -166,11 +166,11 @@ def build() -> None:
     doc = SimpleDocTemplate(
         str(OUT), pagesize=A4,
         leftMargin=2 * cm, rightMargin=2 * cm, topMargin=2 * cm, bottomMargin=2 * cm,
-        title="SentinelSOC Documentation",
-        author="SentinelSOC",
+        title="BARAQ Documentation",
+        author="BARAQ",
     )
     cover_style = ParagraphStyle("Cover", fontSize=13, leading=18, alignment=1, spaceAfter=12)
-    flow = [Paragraph("SentinelSOC", ParagraphStyle("C", fontSize=30, alignment=1, textColor=ACCENT)),
+    flow = [Paragraph("BARAQ", ParagraphStyle("C", fontSize=30, alignment=1, textColor=ACCENT)),
             Paragraph("Documentation Package", cover_style),
             Spacer(1, 10)]
 

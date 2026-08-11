@@ -1,7 +1,7 @@
-# SentinelSOC - Schema Migrations (Alembic)
+# BARAQ - Schema Migrations (Alembic)
 
 Alembic controls the database schema going forward. It reads the exact same
-connection string as the application (`SENTINEL_DATABASE_URL`), so there is
+connection string as the application (`BARAQ_DATABASE_URL`), so there is
 never a second place to configure the database.
 
 ## Quick reference
@@ -21,7 +21,7 @@ venv\Scripts\python -m alembic revision --autogenerate -m "describe change"
 venv\Scripts\python -m alembic current
 ```
 
-The raw Alembic CLI requires `SENTINEL_DATABASE_URL` to be exported in the
+The raw Alembic CLI requires `BARAQ_DATABASE_URL` to be exported in the
 shell (the project `.env` does not set it; the dev stack does so inline).
 
 ## How the baseline works

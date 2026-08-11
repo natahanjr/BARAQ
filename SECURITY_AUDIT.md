@@ -2,7 +2,7 @@
 
 Part of the commercialization workstream. This document is the operational
 checklist a reviewer (or external penetration tester) follows to validate a
-SentinelSOC deployment, plus the current results of each control.
+BARAQ deployment, plus the current results of each control.
 
 ## Dependency Vulnerability Scan (current result)
 
@@ -30,15 +30,15 @@ npm audit
 
 - [x] HTTPS enforcement via `start.bat secure` (port 8443), `start.bat secure lan`
 - [x] Self-signed SAN certificate (`scripts\gen_cert.ps1`) covering `localhost` + LAN IPv4
-- [x] Certificate rotation via thumbprint file (`certs\sentinel.thumbprint`)
+- [x] Certificate rotation via thumbprint file (`certs\baraq.thumbprint`)
 - [x] Session cookie forced `Secure` under TLS
 - [x] Login brute-force rate limiting (5 failures / IP / 5 min)
 
 ### 2. Secrets
 
 - [x] DPAPI-encrypted vault `secrets.dat` (Windows) — no plaintext secrets in `.env`
-- [x] Dev API keys rejected when `SENTINEL_ALLOW_DEV_KEYS=0`
-- [x] Encryption key for at-rest data (`SENTINEL_ENCRYPTION_KEY`) stored in vault
+- [x] Dev API keys rejected when `BARAQ_ALLOW_DEV_KEYS=0`
+- [x] Encryption key for at-rest data (`BARAQ_ENCRYPTION_KEY`) stored in vault
 - [ ] Enforce vault on non-Windows (Linux container support) — open for Phase 3
 - [ ] Key rotation workflow documented
 
@@ -79,21 +79,21 @@ npm audit
 ### 7. Host-level
 
 - [x] `scripts\gen_cert.ps1` ACL-locks the private key to the current user
-- [ ] Run the service as a dedicated non-admin principal (e.g. `sentinel` service account)
+- [ ] Run the service as a dedicated non-admin principal (e.g. `baraq` service account)
 - [ ] Firewall exclusions documented (`start.bat lan` opens only port 8000/8443)
 - [ ] Auto-update / managed-versioning channel
 
 ### 8. Monitoring & response
 
 - [x] Every audit entry forwarded to SIEM for off-box integrity verification
-- [ ] External backup of `database\sentinel.db` + `secrets.dat` (documented restore)
+- [ ] External backup of `database\baraq.db` + `secrets.dat` (documented restore)
 - [ ] Incidence-response runbook (link from `documentation\user_manual.md`)
 
 ---
 
 ## Self-audit against common OWASP Top-10 items
 
-| OWASP | SentinelSOC status |
+| OWASP | BARAQ status |
 |---|---|
 | A01 Broken Access Control | RBAC enforced on every `/api/*` route except health/docs; tests cover analyst-blocked user mutation |
 | A02 Cryptographic Failures | TLS optional-but-secure; DPAPI vault; AES-256-GCM at rest; scrypt-style password hashing |
@@ -106,7 +106,7 @@ npm audit
 
 ## Pen-test readiness checklist (handoff to an external party)
 
-- [ ] Provide a test instance at `SENTINEL_ALLOW_DEV_KEYS=0` + TLS
+- [ ] Provide a test instance at `BARAQ_ALLOW_DEV_KEYS=0` + TLS
 - [ ] Provide read access to the audit-chain verify endpoint for integrity checks
 - [ ] Share in/out-of-scope guidance from `SECURITY.md`
 - [ ] Document the deployment topology (frontend served by backend static mount, DB isolation)

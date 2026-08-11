@@ -4,20 +4,20 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-os.environ["SENTINEL_DATABASE_URL"] = "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel"
-os.environ["SENTINEL_NO_SCHEDULER"] = "1"
-os.environ["SENTINEL_SCHEDULER_ENABLED"] = "0"
-os.environ["SENTINEL_TOAST_ENABLED"] = "0"
+os.environ["BARAQ_DATABASE_URL"] = "postgresql+psycopg://postgres@127.0.0.1:55432/baraq"
+os.environ["BARAQ_NO_SCHEDULER"] = "1"
+os.environ["BARAQ_SCHEDULER_ENABLED"] = "0"
+os.environ["BARAQ_TOAST_ENABLED"] = "0"
 
 from fastapi.testclient import TestClient  # noqa: E402
 from backend.database.connection import engine, normalize_database_url  # noqa: E402
 from backend.main import app  # noqa: E402
 
-print("engine URL:", normalize_database_url(os.environ["SENTINEL_DATABASE_URL"]))
+print("engine URL:", normalize_database_url(os.environ["BARAQ_DATABASE_URL"]))
 print("dialect:", engine.dialect.name)
 
 with TestClient(app) as c:
-    login = c.post("/api/auth/login", json={"username": "admin", "password": "sentineladmin"})
+    login = c.post("/api/auth/login", json={"username": "admin", "password": "baraqadmin"})
     print("login:", login.status_code, login.json().get("user", {}).get("username"))
     token = login.json().get("token")
     h = {"Authorization": f"Bearer {token}"}
@@ -38,7 +38,7 @@ with TestClient(app) as c:
     # agent ingest path (the fleet-scale reason for Postgres)
     ingest = c.post(
         "/api/ingest",
-        headers={"X-Agent-Key": "sentinel-agent-dev"},
+        headers={"X-Agent-Key": "baraq-agent-dev"},
         json={"records": [{"event_id": 901, "source": "process", "name": "whoami.exe",
                            "pid": 1, "timestamp": "2026-08-05T20:00:00Z"}],
               "host": "pg-test-host"},

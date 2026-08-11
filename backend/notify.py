@@ -33,7 +33,7 @@ from backend.config import (
     WEBHOOK_URL,
 )
 
-logger = logging.getLogger("sentinel.notify")
+logger = logging.getLogger("baraq.notify")
 
 _SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 
@@ -70,9 +70,9 @@ def _slack_payload(alert: dict) -> dict:
         "attachments": [
             {
                 "color": color,
-                "fallback": f"[SentinelSOC] {body.get('severity','').upper()} "
+                "fallback": f"[BARAQ] {body.get('severity','').upper()} "
                             f"{body.get('name','')} ({body.get('mitre_id','')})",
-                "title": f"SentinelSOC alert #{body.get('alert_id')} - {body.get('name','')}",
+                "title": f"BARAQ alert #{body.get('alert_id')} - {body.get('name','')}",
                 "text": lines,
                 "mrkdwn_in": ["text"],
             }
@@ -94,8 +94,8 @@ def _teams_payload(alert: dict) -> dict:
         "@type": "MessageCard",
         "@context": "http://schema.org/extensions",
         "themeColor": color,
-        "summary": f"SentinelSOC alert {body.get('name','')}",
-        "title": f"SentinelSOC alert #{body.get('alert_id')} - {body.get('name','')}",
+        "summary": f"BARAQ alert {body.get('name','')}",
+        "title": f"BARAQ alert #{body.get('alert_id')} - {body.get('name','')}",
         "text": body.get("evidence", ""),
         "sections": [{"facts": facts}],
     }
@@ -126,7 +126,7 @@ def _send_telegram(alert: dict) -> None:
         return
     body = _payload(alert)
     text = (
-        f"\U0001f6a8 [SentinelSOC] {body.get('severity','').upper()} alert "
+        f"\U0001f6a8 [BARAQ] {body.get('severity','').upper()} alert "
         f"#{body.get('alert_id')} - {body.get('name','')} "
         f"({body.get('mitre_id','')})\n"
         f"Score: {body.get('risk_score')} | {body.get('mitre_tactic','')}\n"
@@ -150,13 +150,13 @@ def _send_email(alert: dict) -> None:
     if not SMTP_STARTTLS:
         logger.warning(
             "SMTP STARTTLS is disabled: alert email will be sent in cleartext "
-            "(enable SENTINEL_SMTP_STARTTLS in production)"
+            "(enable BARAQ_SMTP_STARTTLS in production)"
         )
     body = _payload(alert)
     text = "\n".join(f"{k}: {v}" for k, v in body.items())
     msg = MIMEText(text)
     msg["Subject"] = (
-        f"[SentinelSOC] {alert.get('severity', '').upper()} alert: "
+        f"[BARAQ] {alert.get('severity', '').upper()} alert: "
         f"{alert.get('name', '')} ({alert.get('mitre_id', '')})"
     )
     msg["From"] = SMTP_FROM or SMTP_HOST
@@ -175,7 +175,7 @@ def _send_toast(alert: dict) -> None:
     """Windows toast notification via a small PowerShell helper (best-effort)."""
     if not TOAST_ENABLED or os.name != "nt":
         return
-    title = f"SentinelSOC: {alert.get('severity', '').upper()} alert {alert.get('mitre_id', '')}"
+    title = f"BARAQ: {alert.get('severity', '').upper()} alert {alert.get('mitre_id', '')}"
     message = f"{alert.get('name', '')} - {alert.get('evidence', '')[:240]}"
     script = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "toast.ps1"
@@ -207,4 +207,4 @@ def notify_alert(alert: dict) -> None:
                 if isinstance(exc, subprocess.TimeoutExpired):
                     logger.warning("Windows toast timed out (suppressed)")
 
-    threading.Thread(target=_run, daemon=True, name="sentinel-notify").start()
+    threading.Thread(target=_run, daemon=True, name="baraq-notify").start()

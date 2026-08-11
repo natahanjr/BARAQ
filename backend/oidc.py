@@ -38,7 +38,7 @@ from backend.config import (
     OIDC_SCOPES,
 )
 
-logger = logging.getLogger("sentinel.oidc")
+logger = logging.getLogger("baraq.oidc")
 
 
 class OIDCError(Exception):
@@ -277,7 +277,7 @@ def validate_id_token(token: str, nonce: str, issuer: str | None = None,
 
 
 def profile_from_claims(claims: dict[str, Any]) -> dict[str, Any]:
-    """Map validated OIDC claims onto a SentinelSOC operator profile."""
+    """Map validated OIDC claims onto a BARAQ operator profile."""
     username = (
         claims.get("preferred_username")
         or claims.get("sub")

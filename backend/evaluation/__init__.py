@@ -1,1 +1,1 @@
-"""SentinelSOC evaluation framework package."""
+"""BARAQ evaluation framework package."""

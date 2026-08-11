@@ -26,18 +26,18 @@ def test_provision_org_writes_manifest_and_org_map(monkeypatch, tmp_path):
     manifest = univ.provision_org(
         vault, "univ-a", "https://soc.example.com:8443",
         ["ws-lib-01", "ws-chem-04"], org_name="University A",
-        tls_cert="certs/sentinel.crt",
+        tls_cert="certs/baraq.crt",
     )
 
     data = json.loads(manifest.read_text(encoding="utf-8"))
     assert data["org"] == "univ-a"
     assert data["org_name"] == "University A"
-    assert data["tls_ca"] == "certs/sentinel.crt"
+    assert data["tls_ca"] == "certs/baraq.crt"
     assert set(data["hosts"]) == {"ws-lib-01", "ws-chem-04"}
     cmd = data["hosts"]["ws-lib-01"]["command"]
     assert cmd.startswith("python scripts/agent.py --server https://soc.example.com:8443")
     assert '--key "' in cmd
-    assert "--tls-ca certs/sentinel.crt" in cmd
+    assert "--tls-ca certs/baraq.crt" in cmd
 
     assert prov.load_org_map(vault) == {"ws-lib-01": "univ-a", "ws-chem-04": "univ-a"}
     assert len(prov.load_key_map(vault)) == 2
@@ -49,7 +49,7 @@ def test_https_server_defaults_to_cert_pin(monkeypatch, tmp_path):
 
     manifest = univ.provision_org(vault, "univ-b", "https://soc:8443", ["ws-1"])
     cmd = json.loads(manifest.read_text(encoding="utf-8"))["hosts"]["ws-1"]["command"]
-    assert "--tls-ca certs\\sentinel.crt" in cmd
+    assert "--tls-ca certs\\baraq.crt" in cmd
 
 
 def test_http_server_omits_tls_ca(monkeypatch, tmp_path):

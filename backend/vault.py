@@ -5,7 +5,7 @@ single encrypted blob (`secrets.dat`) protected by the current Windows user's
 DPAPI key — only the same user account on the same machine can decrypt it.
 
 Storage layout: the file is one DPAPI-encrypted JSON object:
-    {"version": 1, "secrets": {"SENTINEL_ADMIN_PASSWORD": "...", ...}}
+    {"version": 1, "secrets": {"BARAQ_ADMIN_PASSWORD": "...", ...}}
 
 Fallback behaviour: on non-Windows platforms (or if crypt32 is unavailable)
 the vault degrades to an environment-variable-only provider so the test suite

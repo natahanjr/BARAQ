@@ -1,4 +1,4 @@
-# SentinelSOC — Sysmon Wiring & Configuration Guide
+# BARAQ — Sysmon Wiring & Configuration Guide
 
 **Document:** Installing, configuring and verifying the Sysmon telemetry
 channel that the platform's advanced rules consume.
@@ -93,14 +93,14 @@ wevtutil gl "Microsoft-Windows-Sysmon/Operational" | Select-String "enabled|rete
 Get-WinEvent -LogName "Microsoft-Windows-Sysmon/Operational" -MaxEvents 5 | Select TimeCreated, Id
 ```
 
-## 4. Wiring into SentinelSOC
+## 4. Wiring into BARAQ
 
 No code change is needed — the collector is registered in
 `backend/collectors/__init__.py::CollectorManager` and reads the channel on
 every collection cycle:
 
 - Channel override (if your Sysmon logs to a renamed/extra channel):
-  `SENTINEL_SYSMON_CHANNELS=Microsoft-Windows-Sysmon/Operational` (comma-separated list).
+  `BARAQ_SYSMON_CHANNELS=Microsoft-Windows-Sysmon/Operational` (comma-separated list).
 - The collector requires `pywin32` on the host. Without it the collector
   stays disabled and the pipeline logs `pywin32 unavailable; skipping Sysmon read`.
 - Event 1/3 records flow straight into the process/network rules; E10/E11/
@@ -114,9 +114,9 @@ every collection cycle:
    `Read N raw records from Microsoft-Windows-Sysmon/Operational` confirms reads.
 3. Generate a test signal, e.g. a Run-key write:
    ```powershell
-   New-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name SentinelTest -Value "calc.exe"
+   New-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name BARAQTest -Value "calc.exe"
    # then remove:
-   Remove-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name SentinelTest
+   Remove-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name BARAQTest
    ```
    Expect a `Registry Run Key Persistence` alert (T1547.001).
 4. LSASS access test (credential-access rule, requires admin):

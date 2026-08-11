@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 def client():
     from backend.main import app
 
-    with TestClient(app, headers={"X-API-Key": "sentinel-dev-admin"}) as test_client:
+    with TestClient(app, headers={"X-API-Key": "baraq-dev-admin"}) as test_client:
         yield test_client
 
 
@@ -26,7 +26,7 @@ def _ensure_bootstrap_admin():
         if not db.query(User).filter(User.username == "admin").first():
             db.add(User(
                 username="admin",
-                password_hash=hash_password("sentineladmin"),
+                password_hash=hash_password("baraqadmin"),
                 role="admin",
                 is_active=True,
             ))
@@ -52,7 +52,7 @@ def test_logout_is_public(client):
 
 
 def test_login_success_returns_token(client):
-    resp = _login(client, "admin", "sentineladmin")
+    resp = _login(client, "admin", "baraqadmin")
     assert resp.status_code == 200
     data = resp.json()
     assert data["token"] and "." in data["token"]
@@ -74,7 +74,7 @@ def test_login_records_audit_entry(client):
     from backend.database.connection import SessionLocal
     from backend.database.models import AuditLog
 
-    _login(client, "admin", "sentineladmin")
+    _login(client, "admin", "baraqadmin")
     db = SessionLocal()
     try:
         actions = [e.action for e in db.query(AuditLog).all()]
@@ -84,7 +84,7 @@ def test_login_records_audit_entry(client):
 
 
 def test_me_returns_authenticated_user(client):
-    token = _login(client, "admin", "sentineladmin").json()["token"]
+    token = _login(client, "admin", "baraqadmin").json()["token"]
     resp = client.get("/api/auth/me", headers=_bearer_headers(token))
     assert resp.status_code == 200
     assert resp.json()["user"]["username"] == "admin"
@@ -96,14 +96,14 @@ def test_me_rejects_invalid_token(client):
 
 
 def test_token_grants_admin_access(client):
-    token = _login(client, "admin", "sentineladmin").json()["token"]
+    token = _login(client, "admin", "baraqadmin").json()["token"]
     users = client.get("/api/auth/users", headers=_bearer_headers(token))
     assert users.status_code == 200
     assert any(u["username"] == "admin" for u in users.json()["items"])
 
 
 def test_admin_creates_analyst_user(client):
-    token = _login(client, "admin", "sentineladmin").json()["token"]
+    token = _login(client, "admin", "baraqadmin").json()["token"]
     created = client.post(
         "/api/auth/users",
         headers=_bearer_headers(token),
@@ -118,7 +118,7 @@ def test_admin_creates_analyst_user(client):
 
 
 def test_analyst_cannot_touch_users(client):
-    token = _login(client, "admin", "sentineladmin").json()["token"]
+    token = _login(client, "admin", "baraqadmin").json()["token"]
     client.post(
         "/api/auth/users",
         headers=_bearer_headers(token),
@@ -130,7 +130,7 @@ def test_analyst_cannot_touch_users(client):
 
 
 def test_disable_account_rejects_login(client):
-    admin = _login(client, "admin", "sentineladmin").json()["token"]
+    admin = _login(client, "admin", "baraqadmin").json()["token"]
     user = client.post(
         "/api/auth/users",
         headers=_bearer_headers(admin),
@@ -145,8 +145,8 @@ def test_disable_account_rejects_login(client):
 
 
 def test_audit_endpoint_lists_login_events(client):
-    _login(client, "admin", "sentineladmin")
-    token = _login(client, "admin", "sentineladmin").json()["token"]
+    _login(client, "admin", "baraqadmin")
+    token = _login(client, "admin", "baraqadmin").json()["token"]
     audit = client.get("/api/auth/audit", headers=_bearer_headers(token))
     assert audit.status_code == 200
     actions = [e["action"] for e in audit.json()["items"]]

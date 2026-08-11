@@ -3,40 +3,45 @@
 Set the database URL BEFORE importing any backend module so tests never
 touch the production database.
 
-Isolation uses the dedicated ``sentinel_test`` database on the local
-PostgreSQL cluster (service ``SentinelSOC-PostgreSQL``). Every table is
+Isolation uses the dedicated ``baraq_test`` database on the local
+PostgreSQL cluster (service ``BARAQ-PostgreSQL``). Every table is
 truncated (with identity restart) before each test, so primary keys stay
-deterministic and the suite is fully isolated from ``sentinel``.
+deterministic and the suite is fully isolated from ``baraq``.
 """
 from __future__ import annotations
 
 import os
 import tempfile
 
-os.environ["SENTINEL_DATABASE_URL"] = os.environ.get(
-    "SENTINEL_TEST_DATABASE_URL",
-    "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel_test",
+os.environ["BARAQ_DATABASE_URL"] = os.environ.get(
+    "BARAQ_TEST_DATABASE_URL",
+    "postgresql+psycopg://postgres@127.0.0.1:55432/baraq_test",
 )
-print(f"[conftest] test DB URL -> {os.environ['SENTINEL_DATABASE_URL']}")
-os.environ["SENTINEL_INTERVAL"] = "60"
+print(f"[conftest] test DB URL -> {os.environ['BARAQ_DATABASE_URL']}")
+os.environ["BARAQ_INTERVAL"] = "60"
 # Isolate ML model persistence from the production database folder.
-_test_tmp = os.path.join(tempfile.gettempdir(), "sentinel_test_meta")
+_test_tmp = os.path.join(tempfile.gettempdir(), "baraq_test_meta")
 os.makedirs(_test_tmp, exist_ok=True)
-os.environ["SENTINEL_ML_META_FILE"] = os.path.join(_test_tmp, "model_meta.json")
+os.environ["BARAQ_ML_META_FILE"] = os.path.join(_test_tmp, "model_meta.json")
 # Never let first-run secret generation write to / modify the real project .env.
-os.environ["SENTINEL_SKIP_SECRET_GEN"] = "1"
+os.environ["BARAQ_SKIP_SECRET_GEN"] = "1"
 # Override the project .env credentials so tests always run with the dev keys
 # (the config loader is non-overriding, so these take precedence over .env).
-os.environ["SENTINEL_API_KEYS"] = '{"sentinel-dev-admin": "admin", "sentinel-dev-analyst": "analyst"}'
-os.environ["SENTINEL_ADMIN_PASSWORD"] = "sentinel-test-admin"
-os.environ["SENTINEL_TOKEN_SECRET"] = "sentinel-test-token-secret"
+os.environ["BARAQ_API_KEYS"] = '{"baraq-dev-admin": "admin", "baraq-dev-analyst": "analyst"}'
+os.environ["BARAQ_ADMIN_PASSWORD"] = "baraq-test-admin"
+os.environ["BARAQ_TOKEN_SECRET"] = "baraq-test-token-secret"
+# Pin agent keys too: _secret() falls back to the real DPAPI vault, which
+# still holds the pre-rename agent keys - tests must never depend on them.
+os.environ["BARAQ_AGENT_KEYS"] = (
+    '{"baraq-agent-dev": "agent-dev", "baraq-agent-laptop2": "laptop2"}'
+)
 # Deterministic test runs: never spawn the background scheduler thread and use
 # the fully-local assistant engine (no dependence on a live AI endpoint).
-os.environ["SENTINEL_NO_SCHEDULER"] = "1"
-os.environ["SENTINEL_AI_API_URL"] = ""
-os.environ["SENTINEL_SCHEDULER_ENABLED"] = "0"  # no background collector in tests
+os.environ["BARAQ_NO_SCHEDULER"] = "1"
+os.environ["BARAQ_AI_API_URL"] = ""
+os.environ["BARAQ_SCHEDULER_ENABLED"] = "0"  # no background collector in tests
 # Never spam Windows toasts / webhooks / email from synthetic test alerts.
-os.environ["SENTINEL_TOAST_ENABLED"] = "0"
+os.environ["BARAQ_TOAST_ENABLED"] = "0"
 
 import pytest  # noqa: E402
 

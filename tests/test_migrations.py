@@ -14,7 +14,7 @@ ADMIN_URL = "postgresql+psycopg://postgres@127.0.0.1:55432/postgres"
 
 
 def _fresh_db_name() -> str:
-    return f"sentinel_test_migrate_{uuid.uuid4().hex[:8]}"
+    return f"baraq_test_migrate_{uuid.uuid4().hex[:8]}"
 
 
 @pytest.fixture()
@@ -37,8 +37,8 @@ def test_migrations_baseline_bootstraps_fresh_postgres(scratch_db):
     url, _name = scratch_db
     env = dict(os.environ)  # keep SystemRoot etc. or winsock breaks (WinError 10106)
     env.update({
-        "SENTINEL_DATABASE_URL": url,
-        "SENTINEL_SKIP_SECRET_GEN": "1",
+        "BARAQ_DATABASE_URL": url,
+        "BARAQ_SKIP_SECRET_GEN": "1",
     })
     run = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "migrate_db.py")],

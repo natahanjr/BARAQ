@@ -24,7 +24,7 @@ from backend.config import (
     TEST_MODE,
 )
 
-logger = logging.getLogger("sentinel.detection.alerting")
+logger = logging.getLogger("baraq.detection.alerting")
 
 SEVERITY_SCORES = {"critical": 10, "high": 7, "medium": 4, "low": 1}
 

@@ -1,6 +1,6 @@
-# SentinelSOC
+# BARAQ
 
-**SentinelSOC: An Intelligent Lightweight Security Operations Center Framework for Real-Time Windows Endpoint Threat Detection and Incident Analysis**
+**BARAQ: An Intelligent Lightweight Security Operations Center Framework for Real-Time Windows Endpoint Threat Detection and Incident Analysis**
 
 A lightweight, production-oriented SOC framework for Windows endpoints — no cloud, no heavy infrastructure. It collects real Windows telemetry, normalizes events, detects attacks with a **hybrid rule-based + machine-learning engine**, maps findings to MITRE ATT&CK, computes **hybrid risk scores**, displays everything in a professional SOC dashboard, generates executive/technical reports, and includes an **evaluation framework** that measures detection accuracy.
 
@@ -36,7 +36,7 @@ A lightweight, production-oriented SOC framework for Windows endpoints — no cl
 ## Project Structure
 
 ```
-SentinelSOC/
+BARAQ/
 ├── backend/
 │   ├── ai/            # AI security assistant (local engine + RAG)
 │   ├── analyzers/     # Normalizer (numeric risk) + dashboard analytics
@@ -136,9 +136,9 @@ Open **http://localhost:5173** — the dashboard auto-connects to the backend vi
 On first start the platform **generates random credentials** and stores them in
 the DPAPI-protected vault (`secrets.dat`):
 
-- Admin dashboard password (`SENTINEL_ADMIN_PASSWORD`)
-- Admin + analyst API keys (`SENTINEL_API_KEYS` — fully **replaces** the public dev defaults once set)
-- Session-token signing secret (`SENTINEL_TOKEN_SECRET`)
+- Admin dashboard password (`BARAQ_ADMIN_PASSWORD`)
+- Admin + analyst API keys (`BARAQ_API_KEYS` — fully **replaces** the public dev defaults once set)
+- Session-token signing secret (`BARAQ_TOKEN_SECRET`)
 
 These are printed to the console exactly once. The dashboard shows a **setup checklist banner** until the credentials are configured and the ML model is trained.
 
@@ -154,7 +154,7 @@ Two ways to hand the product to other people **without giving them the project f
 
 ### Option 0 — HTTPS deployment (STANDARD for fleet/shared use)
 
-HTTPS is the documented way to run SentinelSOC for anything beyond a local
+HTTPS is the documented way to run BARAQ for anything beyond a local
 development session: it is the only transport that protects credentials and
 telemetry in transit, and it is required for remote agents in a fleet.
 Plain `http://` (plain `start.bat`) is for local development only.
@@ -166,8 +166,8 @@ start.bat secure lan      # standard: HTTPS exposed to the network on 8443
 
 `scripts\gen_cert.ps1` generates a self-signed certificate covering
 `localhost` + all LAN IPv4 addresses (regenerated/rotated on demand by
-deleting `certs\sentinel.thumbprint`). When TLS is enabled the session cookie
-is forced to `Secure`. To silence browser warnings, import `certs\sentinel.crt`
+deleting `certs\baraq.thumbprint`). When TLS is enabled the session cookie
+is forced to `Secure`. To silence browser warnings, import `certs\baraq.crt`
 into the *Trusted Root Certification Authorities* store of each client
 (`certmgr.msc`). The login endpoint is rate-limited (5 failures per IP per
 5 minutes) as brute-force protection.
@@ -176,11 +176,11 @@ into the *Trusted Root Certification Authorities* store of each client
 pin the central certificate with `--tls-ca`:
 
 ```powershell
-# on every fleet host - copy certs\sentinel.crt from the central server
-python scripts/agent.py --server https://<soc-host>:8443 --key <agent-key> --tls-ca certs\sentinel.crt --interval 15
+# on every fleet host - copy certs\baraq.crt from the central server
+python scripts/agent.py --server https://<soc-host>:8443 --key <agent-key> --tls-ca certs\baraq.crt --interval 15
 ```
 
-`scripts\provision_agent.py add <host> https://<soc-host>:8443 --tls-cert certs\sentinel.crt`
+`scripts\provision_agent.py add <host> https://<soc-host>:8443 --tls-cert certs\baraq.crt`
 writes that pin into the host config automatically. `--no-verify` exists for
 isolated labs only and logs a warning on the agent.
 
@@ -202,13 +202,13 @@ they can copy to any Windows 10/11 PC — **no Python or Node needed, no source 
 
 ```powershell
 scripts\build_exe.bat
-# output: dist\SentinelSOC\SentinelSOC.exe (+ _internal\)
+# output: dist\BARAQ\BARAQ.exe (+ _internal\)
 ```
 
-Recipients copy the `dist\SentinelSOC` folder and double-click:
+Recipients copy the `dist\BARAQ` folder and double-click:
 ```
-SentinelSOC.exe        # local only
-SentinelSOC.exe --lan  # accessible from the network
+BARAQ.exe        # local only
+BARAQ.exe --lan  # accessible from the network
 ```
 The runtime folder (database, logs, reports, `.env`) is created next to the
 executable on first run.
@@ -264,7 +264,7 @@ The same workflow is available in the dashboard under **Evaluation**.
 ### Deploy a central multi-university console (deployment kit)
 
 For a fleet spread across several universities (or any set of tenants), run
-one central SentinelSOC over HTTPS and provision hosts per campus:
+one central BARAQ over HTTPS and provision hosts per campus:
 
 1. **Install the central server**: `start.bat secure lan` (HTTPS :8443).
    Full step-by-step: [`documentation/deployment_guide.md`](documentation/deployment_guide.md).
@@ -274,7 +274,7 @@ one central SentinelSOC over HTTPS and provision hosts per campus:
 
 ```powershell
 venv\Scripts\python scripts\provision_university.py setup univ-a https://soc.example.com:8443 ^
-    --org-name "University A" --hosts ws-lib-01,ws-lib-02,ws-chem-04 --tls-cert certs\sentinel.crt
+    --org-name "University A" --hosts ws-lib-01,ws-lib-02,ws-chem-04 --tls-cert certs\baraq.crt
 venv\Scripts\python scripts\provision_university.py list
 venv\Scripts\python scripts\provision_university.py revoke-org univ-a
 ```
@@ -283,8 +283,8 @@ venv\Scripts\python scripts\provision_university.py revoke-org univ-a
    console after provisioning so keys load):
 
 ```powershell
-copy \\soc-host\share\sentinel.crt .\sentinel.crt
-python scripts\agent.py --server https://soc.example.com:8443 --key "<host-key>" --tls-ca .\sentinel.crt --interval 15
+copy \\soc-host\share\baraq.crt .\baraq.crt
+python scripts\agent.py --server https://soc.example.com:8443 --key "<host-key>" --tls-ca .\baraq.crt --interval 15
 ```
 
 4. **Isolation is automatic**: the campus org tags every event, alert and
@@ -294,7 +294,7 @@ python scripts\agent.py --server https://soc.example.com:8443 --key "<host-key>"
 
 ```powershell
 # Fleet status API
-curl.exe https://<soc-host>:8443/api/endpoints -H "X-API-Key: sentinel-dev-admin" -k
+curl.exe https://<soc-host>:8443/api/endpoints -H "X-API-Key: baraq-dev-admin" -k
 ```
 
 ### Real-time alerting
@@ -326,12 +326,12 @@ All tunable parameters live in `backend/config.py`:
 | `PORT_SCAN_DISTINCT_PORTS` | 20 | Distinct probed ports → alert |
 | `DETECTION_WINDOW_MINUTES` | 10 | Detection correlation window |
 | `ML_CONTAMINATION` | 0.05 | Isolation Forest contamination |
-| `ML_RETRAIN_AFTER_MINUTES` | 1 | Model age (minutes) after which the scheduler auto-retrains (`SENTINEL_ML_RETRAIN_AFTER_MINUTES`) |
+| `ML_RETRAIN_AFTER_MINUTES` | 1 | Model age (minutes) after which the scheduler auto-retrains (`BARAQ_ML_RETRAIN_AFTER_MINUTES`) |
 | `EVENT_RETENTION_DAYS` | 30 | Telemetry/alerts older than this are auto-purged hourly |
 | `ALERT_ESCALATE_AFTER` | 5 | Repeat triggers before severity escalates one level |
 | `SECURITY_SCORE_PENALTY` | critical 14 / high 8 / medium 4 / low 1 | Score deduction per open alert |
 
-Environment overrides: `SENTINEL_INTERVAL`, `SENTINEL_DATABASE_URL`, `SENTINEL_AI_API_URL`, `SENTINEL_AI_API_KEY`, `SENTINEL_AI_MODEL`, `SENTINEL_AUTH_ENABLED`, `SENTINEL_API_KEYS`, `SENTINEL_WEBHOOK_URL`, `SENTINEL_SMTP_HOST`, `SENTINEL_SMTP_USERNAME`, `SENTINEL_SMTP_PASSWORD`, `SENTINEL_SMTP_TO`, `SENTINEL_TLS`, `SENTINEL_TLS_CERT`, `SENTINEL_TLS_KEY`, `SENTINEL_ALLOW_DEV_KEYS`.
+Environment overrides: `BARAQ_INTERVAL`, `BARAQ_DATABASE_URL`, `BARAQ_AI_API_URL`, `BARAQ_AI_API_KEY`, `BARAQ_AI_MODEL`, `BARAQ_AUTH_ENABLED`, `BARAQ_API_KEYS`, `BARAQ_WEBHOOK_URL`, `BARAQ_SMTP_HOST`, `BARAQ_SMTP_USERNAME`, `BARAQ_SMTP_PASSWORD`, `BARAQ_SMTP_TO`, `BARAQ_TLS`, `BARAQ_TLS_CERT`, `BARAQ_TLS_KEY`, `BARAQ_ALLOW_DEV_KEYS`.
 
 ### Authentication & RBAC
 
@@ -342,18 +342,18 @@ retraining, evaluation):
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `SENTINEL_AUTH_ENABLED` | `1` | Set `0` to disable auth (dev only) |
-| `SENTINEL_API_KEYS` | JSON map | e.g. `{"my-key":"admin"}` — fully replaces the dev defaults when set |
+| `BARAQ_AUTH_ENABLED` | `1` | Set `0` to disable auth (dev only) |
+| `BARAQ_API_KEYS` | JSON map | e.g. `{"my-key":"admin"}` — fully replaces the dev defaults when set |
 
-Dev default keys: `sentinel-dev-admin` (admin) and `sentinel-dev-analyst`
+Dev default keys: `baraq-dev-admin` (admin) and `baraq-dev-analyst`
 (analyst). The dashboard sends the admin key by default; override with the
 `VITE_API_KEY` env var:
 `powershell $env:VITE_API_KEY="your-key"; npm run dev`
 
-The public dev keys are rejected in production by setting `SENTINEL_ALLOW_DEV_KEYS=0`
-(or by configuring `SENTINEL_API_KEYS`, which fully replaces them). Sensitive
-secrets (`SENTINEL_ADMIN_PASSWORD`, `SENTINEL_API_KEYS`, `SENTINEL_TOKEN_SECRET`,
-`SENTINEL_AGENT_KEYS`, `SENTINEL_AI_API_KEY`) are stored in a DPAPI-encrypted
+The public dev keys are rejected in production by setting `BARAQ_ALLOW_DEV_KEYS=0`
+(or by configuring `BARAQ_API_KEYS`, which fully replaces them). Sensitive
+secrets (`BARAQ_ADMIN_PASSWORD`, `BARAQ_API_KEYS`, `BARAQ_TOKEN_SECRET`,
+`BARAQ_AGENT_KEYS`, `BARAQ_AI_API_KEY`) are stored in a DPAPI-encrypted
 `secrets.dat` vault on Windows, not in plaintext `.env`.
 
 Inputs are validated: alert `status`/`action` and report `report_type`/`format`
@@ -364,24 +364,24 @@ are enums, pagination/limits/hours are bounded (422 on out-of-range values).
 Local passwords are tried first; when they fail and an SSO provider is
 configured, authentication falls through to the directory. Directory users are
 auto-provisioned on first login (role from group membership, unusable local
-password hash). `SENTINEL_LDAP_ADMIN_GROUPS` controls admin role mapping for
+password hash). `BARAQ_LDAP_ADMIN_GROUPS` controls admin role mapping for
 both providers.
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `SENTINEL_LDAP_ENABLED` | `0` | Enable LDAP/AD SSO |
-| `SENTINEL_LDAP_URL` | — | e.g. `ldap://dc.corp.local:389` (or `ldaps://`) |
-| `SENTINEL_LDAP_BIND_DN` | — | Optional service account (anonymous when empty) |
-| `SENTINEL_LDAP_BIND_PASSWORD` | — | Service account password (vault-stored) |
-| `SENTINEL_LDAP_BASE_DN` | — | Search base, e.g. `DC=corp,DC=local` |
-| `SENTINEL_LDAP_USER_FILTER` | `(sAMAccountName={username})` | Filter; `{username}` is substituted |
-| `SENTINEL_LDAP_ADMIN_GROUPS` | `Domain Admins,Sentinel Admins` | Groups that map to the admin role |
-| `SENTINEL_OIDC_ENABLED` | `0` | Enable OIDC SSO (e.g. Entra ID, Keycloak) |
-| `SENTINEL_OIDC_ISSUER` | — | Issuer discovery URL (`/.well-known/openid-configuration`) |
-| `SENTINEL_OIDC_CLIENT_ID` | — | OIDC client ID (vault-stored) |
-| `SENTINEL_OIDC_CLIENT_SECRET` | — | OIDC client secret (vault-stored) |
-| `SENTINEL_OIDC_SCOPES` | `openid profile email` | Scopes requested at the authorization endpoint |
-| `SENTINEL_OIDC_CLOCK_SKEW` | `30` | Max tolerated seconds between provider and host clocks |
+| `BARAQ_LDAP_ENABLED` | `0` | Enable LDAP/AD SSO |
+| `BARAQ_LDAP_URL` | — | e.g. `ldap://dc.corp.local:389` (or `ldaps://`) |
+| `BARAQ_LDAP_BIND_DN` | — | Optional service account (anonymous when empty) |
+| `BARAQ_LDAP_BIND_PASSWORD` | — | Service account password (vault-stored) |
+| `BARAQ_LDAP_BASE_DN` | — | Search base, e.g. `DC=corp,DC=local` |
+| `BARAQ_LDAP_USER_FILTER` | `(sAMAccountName={username})` | Filter; `{username}` is substituted |
+| `BARAQ_LDAP_ADMIN_GROUPS` | `Domain Admins,BARAQ Admins` | Groups that map to the admin role |
+| `BARAQ_OIDC_ENABLED` | `0` | Enable OIDC SSO (e.g. Entra ID, Keycloak) |
+| `BARAQ_OIDC_ISSUER` | — | Issuer discovery URL (`/.well-known/openid-configuration`) |
+| `BARAQ_OIDC_CLIENT_ID` | — | OIDC client ID (vault-stored) |
+| `BARAQ_OIDC_CLIENT_SECRET` | — | OIDC client secret (vault-stored) |
+| `BARAQ_OIDC_SCOPES` | `openid profile email` | Scopes requested at the authorization endpoint |
+| `BARAQ_OIDC_CLOCK_SKEW` | `30` | Max tolerated seconds between provider and host clocks |
 
 OIDC uses PKCE (S256) with a nonce and signed one-time flow cookie; id_token
 signatures (RS256/ES256) are verified against the provider JWKS. When OIDC is
@@ -421,7 +421,7 @@ Python dependencies):
   key sent either as the `X-API-Key` header or as `Authorization: Bearer
   <key>` (the latter is what Prometheus uses, since v3 removed custom
   request headers).
-- `GET /metrics` — same payload, but only when `SENTINEL_METRICS_PUBLIC=1`
+- `GET /metrics` — same payload, but only when `BARAQ_METRICS_PUBLIC=1`
   is set (for scrapers that cannot authenticate).
 
 Metrics include event ingestion (by source), process/network/DNS/USB/
@@ -442,7 +442,7 @@ docker compose up -d
 - Prometheus: http://localhost:9090
 
 The stack is provisioned automatically: the Prometheus datasource and the
-`sentinel-overview` dashboard (security score, ingestion rates, alert
+`baraq-overview` dashboard (security score, ingestion rates, alert
 volumes, collector/ML/DB state).
 
 Scrape authentication: Prometheus reads the API key from
@@ -458,7 +458,7 @@ bound non-loopback (`uvicorn backend.main:app --host 0.0.0.0 --port 8001`).
 
 ```yaml
 scrape_configs:
-  - job_name: sentinel
+  - job_name: baraq
     metrics_path: /api/system/metrics
     static_configs: [{ targets: ["127.0.0.1:8001"] }]
     authorization:
@@ -479,7 +479,7 @@ See `documentation/` for:
 - `security_evaluation_report.md` — detection metrics (accuracy/precision/recall/F1/FPR/detection time)
 - `red_team_validation.md` — realistic live-attack validation incl. documented false negatives
 - `performance_benchmarks.md` — throughput/latency/memory on the target laptop
-- `SentinelSOC_Combined_Guide.md` — single consolidated operator/maintenance walkthrough
+- `BARAQ_Combined_Guide.md` — single consolidated operator/maintenance walkthrough
 
 Security: see `SECURITY.md` for the coordinated-disclosure policy and
 `SECURITY_AUDIT.md` for the hardening controls inventory and pen-test

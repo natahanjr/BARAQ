@@ -1,109 +1,91 @@
-# SentinelSOC - Backup & Restore Runbook
+# BARAQ — Backup & Restore (PostgreSQL)
 
-Owner: SentinelSOC operator. Applies to PostgreSQL fleet deployments (default
-for deployments) and the SQLite development profile.
+Authoritative database backup/restore for the central console. One script,
+`scripts/db_backup.py`, handles both directions; archives are verified
+cryptographically before any restore is allowed.
 
-## Tooling
+---
 
-One script covers everything:
+## 1. What gets backed up
 
-    venv\Scripts\python scripts\db_backup.py backup  [--dir backups] [--keep 10] [--encrypt]
-    venv\Scripts\python scripts\db_backup.py list    [--dir backups]
-    venv\Scripts\python scripts\db_backup.py verify  <archive> [--dir backups]
-    venv\Scripts\python scripts\db_backup.py restore <archive> [--yes] [--target URL]
+| Item | How | Where |
+|------|-----|-------|
+| PostgreSQL database (`events`, `alerts`, `users`, `verdicts`, graph, ...) | `pg_dump -Fc -Z 9 --no-owner` | `backups\baraq_postgres_<TS>.dump` |
+| Integrity manifest | SHA-256 of the archive | `<archive>.sha256` sidecar |
+| Secrets vault (`secrets.dat`) | Windows DPAPI file; **copy separately** | see §5 |
 
-* Target database: `SENTINEL_DATABASE_URL` (from `.env`/environment); override
-  per-invocation with `--target`.
-* PostgreSQL binaries must be reachable (`SENTINEL_PG_BIN`, PATH, or the
-  embedded cluster bin dir). The script aborts with a clear message if
-  `pg_dump`/`pg_restore` are missing.
-* Archives land in `./backups/` (override with `--dir`). Format: a SHA-256
-  manifest sidecar (`<archive>.sha256`) is written for every archive; `list`
-  flags any archive whose digest does not match as `MISMATCH`.
+Plain `dump` archives are written unencrypted; add `--encrypt` to wrap each
+archive with AES-256-GCM under the DPAPI vault master key (`backend.crypto`).
 
-## Creating a backup
-
-```bash
-venv\Scripts\python scripts\db_backup.py backup --keep 14
-venv\Scripts\python scripts\db_backup.py backup --keep 14 --encrypt   # at-rest confidentiality
-```
-
-Notes:
-- PostgreSQL: `pg_dump -Fc` (consistent snapshot; safe while the app runs;
-  the application never needs to be stopped for *backups*).
-- SQLite: the file is checkpointed before copying; keep the app stopped for a
-  fully consistent copy.
-- `--encrypt` wraps the archive with AES-256-GCM under the DPAPI vault master
-  key. Decryption therefore only works on a machine whose vault holds the same
-  key stream and under the same Windows user - plan your restore host
-  accordingly.
-- Retention: only the newest `--keep` archives (plus manifests) are retained;
-  older ones are pruned and reported.
-
-## Scheduling a daily backup (Windows)
+## 2. One-off backup
 
 ```powershell
-schtasks /Create /TN "SentinelSOC DB Backup" /SC DAILY /ST 03:00 `
-  /TR "F:\My Project\SentinelSOC\venv\Scripts\python.exe F:\My Project\SentinelSOC\scripts\db_backup.py backup --keep 14 --encrypt"
+venv\Scripts\python scripts\db_backup.py backup --encrypt --keep 14
 ```
 
-For Linux, use a cron entry running the same command.
+- `--keep N` prunes everything older than the newest N archives.
+- `--dir DIR` overrides the default `backups\` folder.
 
-## Verifying a backup
+Verify the archive was written and passes its manifest:
 
-```bash
-venv\Scripts\python scripts\db_backup.py verify <archive>
-venv\Scripts\python scripts\db_backup.py list         # verifies all archives
+```powershell
+venv\Scripts\python scripts\db_backup.py list     # verified / MISMATCH column
+venv\Scripts\python scripts\db_backup.py verify <archive>.dump
 ```
 
-A `verified` status proves archive bytes match the manifest digest. **Verify
-backups regularly (weekly) and before any restore.**
+## 3. Automated daily backups (recommended)
 
-## Restoring
+Install a daily Windows scheduled task (elevated shell):
 
-1. **Stop the SentinelSOC service** (scheduler writes constantly; a running
-   app will both overwrite restored rows and fight `pg_restore`):
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install_backup_task.ps1 -Time 03:00
+```
 
+- Default runs `backup --encrypt --keep 14` every day at 03:00.
+- Confirm it fires: `Get-ScheduledTaskInfo -TaskName BARAQ-DB-Backup`
+- Remove later: `... install_backup_task.ps1 -Remove`
+
+## 4. Restore drill (tested procedure)
+
+Run this on a **test copy** of the cluster before you ever need it in anger.
+
+1. Stop the console so no writer holds the database:
    ```powershell
-   Get-NetTCPConnection -LocalPort 8001 -State Listen | ForEach-Object {
-     Stop-Process -Id $_.OwningProcess -Force
-   }
+   Stop-Service BARAQ-Server   # or kill the uvicorn process
    ```
-
-2. Pick the archive (prefer the newest verified one):
-
-   ```bash
-   venv\Scripts\python scripts\db_backup.py verify <archive>
+2. Restore (destructive — refuses without `--yes`):
+   ```powershell
+   venv\Scripts\python scripts\db_backup.py restore baraq_postgres_<TS>.dump --yes
    ```
-
-3. Restore (destructive - replaces target DB contents):
-
-   ```bash
-   venv\Scripts\python scripts\db_backup.py restore <archive> --yes
+   `pg_restore --clean --if-exists` rebuilds the target; the manifest is
+   checked first, so a tampered or missing-archive restore aborts before any
+   data is touched.
+3. Verify the restore:
+   ```powershell
+   venv\Scripts\python scripts\db_backup.py list   # archive still verified
+   # app-level check:
+   venv\Scripts\python -m pytest tests/test_audit_chain.py -q
    ```
+4. Restart the console and confirm dashboards + `/api/health` return 200.
 
-   For a scratch-database rehearsal (recommended before any destructive
-   restore):
+**Expected outcome:** `/api/events` totals match the pre-backup numbers and
+the audit chain verifies (`/api/auth/audit/verify` returns `valid: true`).
 
-   ```bash
-   createdb -h 127.0.0.1 -p 55432 -U postgres sentinel_scratch
-   venv\Scripts\python scripts\db_backup.py restore <archive> --yes `
-     --target postgresql+psycopg://postgres@127.0.0.1:55432/sentinel_scratch
-   ```
+## 5. Secrets vault (separate from the database)
 
-4. Start the service again; validate counts and audit chain
-   (`/api/audit/verify` should report chain valid).
+`secrets.dat` (DPAPI-encrypted agent keys, API keys, session secret) is
+**machine-bound** — it cannot be decrypted on another machine. Back it up
+together with the database:
 
-Notes:
-- The script refuses to run without `--yes` and refuses archives whose
-  manifest does not match or is missing (tamper / partial-copy guard).
-- Encrypted archives: decryption failure (wrong host, different vault key)
-  aborts before any database is touched.
+```powershell
+Copy-Item certs\..\secrets.dat backups\secrets.dat.bak   # after console stop
+```
 
-## RPO / RTO expectations
+On a rebuild: copy `secrets.dat` back to the project root **before** first
+startup, or re-key everything with `scripts\provision_*` / the user tooling.
 
-- Footprint: ~150 MB per archive at ~40 days of simulated events (your fleet
-  size will differ). Compressed custom format (`-Fc -Z9`).
-- Restore of the reference environment took under a minute on localhost I/O
-  for ~12k events, ~2k entity nodes and 2 users. Plan the runbook test once
-  per quarter on the production-sized database.
+## 6. Retention & capacity
+
+- `--keep 14` at one archive/day ≈ 14 archives; size ~ DB size after comp.
+- Monitor `backups\` free space; PostgreSQL itself stays on its own volume.
+- Schedule a quarterly restore-to-test-copy drill and log its outcome.

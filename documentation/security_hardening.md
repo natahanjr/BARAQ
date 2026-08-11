@@ -1,6 +1,6 @@
-# SentinelSOC - Security Hardening Checklist
+# BARAQ - Security Hardening Checklist
 
-Operational checklist for taking a SentinelSOC deployment from "dev box"
+Operational checklist for taking a BARAQ deployment from "dev box"
 to "server worth depending on". Every item links to the tooling/runbook
 that implements it. Run `scripts\security_audit.py` to auto-verify most of
 the static items; the list below is the full operational picture.
@@ -9,11 +9,11 @@ the static items; the list below is the full operational picture.
 
 - [ ] Use HTTPS everywhere: `start.bat secure` (self-signed LAN) or a
       reverse proxy with a real cert (`deployment\Caddyfile`,
-      `deployment\nginx-sentinel.conf`). See `documentation\tls_https.md`.
-- [ ] Import `certs\sentinel.crt` into client trusted roots when using the
+      `deployment\nginx-baraq.conf`). See `documentation\tls_https.md`.
+- [ ] Import `certs\baraq.crt` into client trusted roots when using the
       self-signed option.
 - [ ] Agents must point at the HTTPS URL (`--server https://...`), not HTTP.
-- [ ] Never set `SENTINEL_COOKIE_SECURE=0` under TLS (the app forces Secure
+- [ ] Never set `BARAQ_COOKIE_SECURE=0` under TLS (the app forces Secure
       cookies anyway when TLS is on).
 
 ## 2. Authentication & access
@@ -50,12 +50,12 @@ the static items; the list below is the full operational picture.
 ## 5. Monitoring & alerting
 
 - [ ] Configure at least one out-of-band alert channel in `backend\config.py`:
-      `SENTINEL_WEBHOOK_URL` (Slack/Teams aware), `SENTINEL_SMTP_*`, and/or
-      `SENTINEL_TELEGRAM_BOT_TOKEN` + `SENTINEL_TELEGRAM_CHAT_ID`.
+      `BARAQ_WEBHOOK_URL` (Slack/Teams aware), `BARAQ_SMTP_*`, and/or
+      `BARAQ_TELEGRAM_BOT_TOKEN` + `BARAQ_TELEGRAM_CHAT_ID`.
       `NOTIFY_MIN_SEVERITY` defaults to high.
 - [ ] Verify the channel with a real high/critical alert (or the test
       harness in `tests\test_notify.py`).
-- [ ] SMTP uses STARTTLS by default - keep `SENTINEL_SMTP_STARTTLS=1`.
+- [ ] SMTP uses STARTTLS by default - keep `BARAQ_SMTP_STARTTLS=1`.
 
 ## 6. Supply chain
 

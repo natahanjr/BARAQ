@@ -1,7 +1,7 @@
 # ===========================================================================
-#  SentinelSOC - TLS certificate generator (self-signed, SAN localhost+LAN IP)
+#  BARAQ - TLS certificate generator (self-signed, SAN localhost+LAN IP)
 #  Usage: powershell -ExecutionPolicy Bypass -File scripts\gen_cert.ps1
-#  Output: certs\sentinel.crt (PEM cert), certs\sentinel.key (PEM key)
+#  Output: certs\baraq.crt (PEM cert), certs\baraq.key (PEM key)
 #  The certificate is kept in the CurrentUser personal store so clients can
 #  import it as a trusted root (see instructions printed at the end).
 # ===========================================================================
@@ -11,10 +11,10 @@ $root = Split-Path -Parent $PSScriptRoot
 $certDir = Join-Path $root "certs"
 New-Item -ItemType Directory -Path $certDir -Force | Out-Null
 
-$certFile = Join-Path $certDir "sentinel.crt"
-$keyFile = Join-Path $certDir "sentinel.key"
-$pfxFile = Join-Path $certDir "sentinel.pfx"
-$thumbFile = Join-Path $certDir "sentinel.thumbprint"
+$certFile = Join-Path $certDir "baraq.crt"
+$keyFile = Join-Path $certDir "baraq.key"
+$pfxFile = Join-Path $certDir "baraq.pfx"
+$thumbFile = Join-Path $certDir "baraq.thumbprint"
 
 # Gather SAN names: localhost + all IPv4 addresses on this machine
 $sans = @("localhost", "127.0.0.1", "::1")
@@ -85,5 +85,5 @@ Write-Host "  SANs        : $($sans -join ', ')"
 Write-Host "  Expires     : $($cert.NotAfter.ToString('yyyy-MM-dd'))"
 Write-Host "  Thumbprint  : $thumbprint"
 Write-Host ""
-Write-Host "Import sentinel.crt into 'Trusted Root Certification Authorities'"
+Write-Host "Import baraq.crt into 'Trusted Root Certification Authorities'"
 Write-Host "of each client browser to remove the security warning (certmgr.msc)."

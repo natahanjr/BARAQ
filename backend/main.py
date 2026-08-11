@@ -1,4 +1,4 @@
-"""SentinelSOC FastAPI application."""
+"""BARAQ FastAPI application."""
 from __future__ import annotations
 
 import asyncio
@@ -40,14 +40,14 @@ from backend.config import (
     IS_PRODUCTION,
     METRICS_PUBLIC,
     REPORT_DIR,
-    SENTINEL_ENV,
+    BARAQ_ENV,
     SINGLE_INSTANCE,
 )
 from backend.database.connection import SessionLocal, get_db, init_db
 from backend.logging_config import setup_logging
 
 setup_logging()
-logger = logging.getLogger("sentinel")
+logger = logging.getLogger("baraq")
 
 def _seed_admin_user() -> None:
     """Create the bootstrap admin account if the users table is empty."""
@@ -64,7 +64,7 @@ def _seed_admin_user() -> None:
             username=ADMIN_USERNAME,
             password_hash=hash_password(ADMIN_PASSWORD),
             role="admin",
-            full_name="SentinelSOC Administrator",
+            full_name="BARAQ Administrator",
             is_active=True,
         )
         db.add(admin)
@@ -158,7 +158,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     from backend.locks import acquire_instance_lock, release_instance_lock
 
     global _scheduler_thread
-    no_scheduler = os.environ.get("SENTINEL_NO_SCHEDULER", "0").lower() in (
+    no_scheduler = os.environ.get("BARAQ_NO_SCHEDULER", "0").lower() in (
         "1", "true", "yes", "on",
     )
     scheduler_owner = True
@@ -168,9 +168,9 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
         scheduler_owner = acquire_instance_lock(app_engine)
         if not scheduler_owner:
             logger.critical(
-                "Another SentinelSOC instance holds the instance lock; "
+                "Another BARAQ instance holds the instance lock; "
                 "scheduler is DISABLED here (API reads still served). Start "
-                "only one server or set SENTINEL_SINGLE_INSTANCE=0."
+                "only one server or set BARAQ_SINGLE_INSTANCE=0."
             )
     if scheduler_owner and not no_scheduler and (
         not _scheduler_thread or not _scheduler_thread.is_alive()
@@ -185,8 +185,8 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 
     start_streaming()
     logger.info(
-        "SentinelSOC API is ready (profile=%s%s, scheduler=%s)",
-        SENTINEL_ENV,
+        "BARAQ API is ready (profile=%s%s, scheduler=%s)",
+        BARAQ_ENV,
         ", production gate active" if IS_PRODUCTION else "",
         "on" if scheduler_owner and not no_scheduler else "off",
     )
@@ -195,11 +195,11 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     if _scheduler_thread:
         _scheduler_thread.join(timeout=5)
     release_instance_lock()
-    logger.info("SentinelSOC API shut down")
+    logger.info("BARAQ API shut down")
 
 
 app = FastAPI(
-    title="SentinelSOC API",
+    title="BARAQ API",
     description=(
         "Intelligent Lightweight Security Operations Center Platform for "
         "Real-Time Windows Threat Detection and Incident Analysis"
@@ -247,12 +247,12 @@ _CSRF_HEADER = "X-CSRF-Token"
 
 def _csrf_token_matches(request: Request) -> bool:
     """Double-submit CSRF check: the X-CSRF-Token header must equal the
-    sentinel_csrf cookie value (constant-time compare). Only meaningful for
+    baraq_csrf cookie value (constant-time compare). Only meaningful for
     cookie-authenticated browser sessions."""
     from backend.config import CSRF_ENABLED
     if not CSRF_ENABLED:
         return True
-    cookie = request.cookies.get("sentinel_csrf", "")
+    cookie = request.cookies.get("baraq_csrf", "")
     header = request.headers.get(_CSRF_HEADER, "")
     if not cookie or not header:
         return False
@@ -269,7 +269,7 @@ async def api_key_auth(request: Request, call_next):
         authorization = request.headers.get("Authorization", "")
         from_cookie = False
         if not authorization.lower().startswith("bearer "):
-            session = request.cookies.get("sentinel_session", "")
+            session = request.cookies.get("baraq_session", "")
             if session:
                 authorization = f"Bearer {session}"
                 from_cookie = True
@@ -393,7 +393,7 @@ def health():
 
 @app.get("/metrics")
 def prometheus_metrics(db: Session = Depends(get_db)):
-    """Public Prometheus scrape target. Requires SENTINEL_METRICS_PUBLIC=1
+    """Public Prometheus scrape target. Requires BARAQ_METRICS_PUBLIC=1
     (otherwise a scraper must use the authenticated /api/system/metrics route)."""
     from fastapi.responses import Response
 

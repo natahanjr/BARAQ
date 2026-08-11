@@ -4,7 +4,7 @@ Converts a heterogeneous raw record:
 
     {source: "eventlog", event_id: 4625, message: "...", raw: {...}}
 
-into the canonical SentinelSOC event:
+into the canonical BARAQ event:
 
     Event ID: 4625 | Category: Authentication | User: Admin | Risk: Medium | Timestamp: ...
 
@@ -18,7 +18,7 @@ import re
 from datetime import datetime
 from typing import Any
 
-logger = logging.getLogger("sentinel.analyzers.normalizer")
+logger = logging.getLogger("baraq.analyzers.normalizer")
 
 # Numeric risk scale (0-100) per risk band; enables risk-based prioritization.
 RISK_BAND_SCORES = {"Low": 15, "Medium": 45, "High": 75}

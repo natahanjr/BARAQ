@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 
-logger = logging.getLogger("sentinel.graph")
+logger = logging.getLogger("baraq.graph")
 
 _store: "GraphStore | None" = None
 
@@ -24,9 +24,9 @@ _store: "GraphStore | None" = None
 def get_graph_store() -> "GraphStore":
     """Return the configured graph store (singleton, lazily initialised).
 
-    Provider resolution: ``SENTINEL_GRAPH_PROVIDER`` in
+    Provider resolution: ``BARAQ_GRAPH_PROVIDER`` in
     ``{"postgres" | "neo4j" | "auto"}``. ``auto`` picks Neo4j only when
-    ``SENTINEL_NEO4J_URI`` is set; any Neo4j initialisation failure or
+    ``BARAQ_NEO4J_URI`` is set; any Neo4j initialisation failure or
     misconfiguration degrades to the Postgres backend so the platform keeps
     working with no external services.
     """
@@ -46,10 +46,10 @@ def get_graph_store() -> "GraphStore":
 
         try:
             _store = Neo4jStore()
-            logging.getLogger("sentinel.graph").info("Entity graph provider: neo4j")
+            logging.getLogger("baraq.graph").info("Entity graph provider: neo4j")
             return _store
         except GraphProviderUnavailable as exc:
-            logging.getLogger("sentinel.graph").warning(
+            logging.getLogger("baraq.graph").warning(
                 "Neo4j unavailable (%s); falling back to postgres", exc
             )
 
@@ -57,7 +57,7 @@ def get_graph_store() -> "GraphStore":
 
     if _store is None:
         _store = PostgresStore()
-    logging.getLogger("sentinel.graph").info("Entity graph provider: postgres")
+    logging.getLogger("baraq.graph").info("Entity graph provider: postgres")
     return _store
 
 

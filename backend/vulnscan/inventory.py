@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import platform
 
-logger = logging.getLogger("sentinel.vulnscan.inventory")
+logger = logging.getLogger("baraq.vulnscan.inventory")
 
 _UNINSTALL_KEYS = (
     r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",

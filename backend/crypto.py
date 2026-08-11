@@ -9,7 +9,7 @@ Windows user.
 
 Envelope format (text columns)::
 
-    sentinel-v1:<base64url(nonce)>:<base64url(ciphertext+tag)>
+    baraq-v1:<base64url(nonce)>:<base64url(ciphertext+tag)>
 
 The ``@EncryptedColumn`` SQLAlchemy ``TypeDecorator`` below encrypts on write
 and decrypts on read, so no business code needs to change. Unencrypted legacy
@@ -19,8 +19,8 @@ Security notes:
 - AES-GCM is authenticated; tampered ciphertext raises and returns ``None``
   rather than silently corrupting data.
 - The key never touches disk except inside the DPAPI-protected vault blob.
-- Encryption is off unless explicitly enabled (``SENTINEL_ENCRYPT_AT_REST=1``
-  or running the packaged ``SentinelSOC.exe`` where it defaults on).
+- Encryption is off unless explicitly enabled (``BARAQ_ENCRYPT_AT_REST=1``
+  or running the packaged ``BARAQ.exe`` where it defaults on).
 """
 from __future__ import annotations
 
@@ -31,7 +31,9 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from backend.config import APP_DIR, ENCRYPT_AT_REST, ENCRYPTION_KEY_NAME
 
-_ENVELOPE_PREFIX = "sentinel-v1:"
+_ENVELOPE_PREFIX = "baraq-v1:"
+#: On-disk envelopes written before the BARAQ rename are still decryptable.
+_LEGACY_ENVELOPE_PREFIX = "sentinel-v1:"
 _NONCE_SIZE = 12
 
 _cached_key: bytes | None = None
@@ -41,7 +43,7 @@ def _encryption_enabled() -> bool:
     """True when at-rest encryption is on (frozen build, or env flag)."""
     if ENCRYPT_AT_REST:
         return True
-    return os.environ.get("SENTINEL_ENCRYPT_AT_REST", "").lower() in (
+    return os.environ.get("BARAQ_ENCRYPT_AT_REST", "").lower() in (
         "1", "true", "yes", "on",
     )
 
@@ -60,6 +62,8 @@ def _load_key() -> bytes:
         return _cached_key
     vault = _open_vault()
     stored = vault.get(ENCRYPTION_KEY_NAME)
+    if not stored:
+        stored = vault.get("SENTINEL_ENCRYPTION_KEY")  # pre-rename vault
     if stored:
         try:
             _cached_key = base64.urlsafe_b64decode(stored.encode("ascii"))
@@ -96,7 +100,9 @@ def decrypt_text(value: str | None) -> str | None:
     """Decrypt an envelope; passes plaintext/legacy values through."""
     if not value:
         return value
-    if not value.startswith(_ENVELOPE_PREFIX):
+    if not (
+        value.startswith(_ENVELOPE_PREFIX) or value.startswith(_LEGACY_ENVELOPE_PREFIX)
+    ):
         return value  # legacy plaintext (pre-hardening row) or encryption off
     try:
         _, nonce_b64, cipher_b64 = value.split(":", 2)
@@ -124,15 +130,16 @@ def decrypt_maybe(value) -> str | None:
 
 # ---------------------------------------------------------------------------
 # File-level encryption (backups, exports). Same master key, binary envelope:
-#     sentinel-file-v1:<base64url(nonce)>:<base64url(ciphertext+tag)>
+#     baraq-file-v1:<base64url(nonce)>:<base64url(ciphertext+tag)>
 # ---------------------------------------------------------------------------
-_FILE_PREFIX = "sentinel-file-v1:"
+_FILE_PREFIX = "baraq-file-v1:"
+_LEGACY_FILE_PREFIX = "sentinel-file-v1:"
 
 
 def encrypt_file_bytes(plaintext: bytes) -> bytes:
     """Encrypt arbitrary bytes with AES-256-GCM under the vault master key.
 
-    The result is self-describing (``sentinel-file-v1:`` header) and can be
+    The result is self-describing (``baraq-file-v1:`` header) and can be
     decrypted on any machine whose vault holds the same master key.
     """
     nonce = os.urandom(_NONCE_SIZE)
@@ -146,8 +153,11 @@ def encrypt_file_bytes(plaintext: bytes) -> bytes:
 
 
 def decrypt_file_bytes(value: bytes) -> bytes | None:
-    """Decrypt a ``sentinel-file-v1:`` blob. Returns None on tamper/error."""
-    if not value.startswith(_FILE_PREFIX.encode("ascii")):
+    """Decrypt a ``baraq-file-v1:`` blob. Returns None on tamper/error."""
+    if not (
+        value.startswith(_FILE_PREFIX.encode("ascii"))
+        or value.startswith(_LEGACY_FILE_PREFIX.encode("ascii"))
+    ):
         return None
     try:
         _, nonce_b64, cipher_b64 = value.decode("ascii").split(":", 2)

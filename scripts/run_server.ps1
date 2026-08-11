@@ -1,4 +1,4 @@
-# SentinelSOC server wrapper - canonical entry point for the Windows service /
+# BARAQ server wrapper - canonical entry point for the Windows service /
 # scheduled task / manual background start.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run_server.ps1 [-Lan]
@@ -15,10 +15,10 @@ $Logs   = Join-Path $Root "logs"
 New-Item -ItemType Directory -Path $Logs -Force | Out-Null
 
 # --- environment defaults (do not override explicit values) ---
-if (-not $env:SENTINEL_ENV)  { $env:SENTINEL_ENV = "production" }
-$env:SENTINEL_SKIP_SECRET_GEN = "1"
-$tls = $env:SENTINEL_TLS -in @("1", "true", "yes", "on")
-if (-not $env:SENTINEL_PORT) { $env:SENTINEL_PORT = if ($tls) { "8443" } else { "8001" } }
+if (-not $env:BARAQ_ENV)  { $env:BARAQ_ENV = "production" }
+$env:BARAQ_SKIP_SECRET_GEN = "1"
+$tls = $env:BARAQ_TLS -in @("1", "true", "yes", "on")
+if (-not $env:BARAQ_PORT) { $env:BARAQ_PORT = if ($tls) { "8443" } else { "8001" } }
 $hostArg = if ($Lan) { "0.0.0.0" } else { "127.0.0.1" }
 
 $python = Join-Path $Root "venv\Scripts\python.exe"
@@ -28,12 +28,12 @@ Set-Content -Path (Join-Path $Logs "server.pid") -Value $PID
 
 $tlsArgs = @()
 if ($tls) {
-    $cert = Join-Path $Root "certs\sentinel.crt"
-    $key  = Join-Path $Root "certs\sentinel.key"
+    $cert = Join-Path $Root "certs\baraq.crt"
+    $key  = Join-Path $Root "certs\baraq.key"
     if (-not (Test-Path $cert) -or -not (Test-Path $key)) {
-        throw "TLS enabled (SENTINEL_TLS) but $cert / $key missing - run scripts\gen_cert.ps1"
+        throw "TLS enabled (BARAQ_TLS) but $cert / $key missing - run scripts\gen_cert.ps1"
     }
     $tlsArgs = @("--ssl-certfile", $cert, "--ssl-keyfile", $key)
 }
 
-& $python -m uvicorn backend.main:app --host $hostArg --port $env:SENTINEL_PORT @tlsArgs
+& $python -m uvicorn backend.main:app --host $hostArg --port $env:BARAQ_PORT @tlsArgs

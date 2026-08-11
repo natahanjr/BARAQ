@@ -1,7 +1,7 @@
 """MITRE ATT&CK framework data and lookups used across the platform.
 
 Contains a curated subset of Enterprise techniques relevant to the
-SentinelSOC detection rules. Each technique carries its MITRE ID,
+BARAQ detection rules. Each technique carries its MITRE ID,
 tactic, description, data sources and detection/remediation advice.
 """
 from __future__ import annotations
@@ -10,7 +10,7 @@ import json
 import logging
 from pathlib import Path
 
-logger = logging.getLogger("sentinel.mitre")
+logger = logging.getLogger("baraq.mitre")
 
 TECHNIQUES_JSON = Path(__file__).parent / "techniques.json"
 

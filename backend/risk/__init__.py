@@ -1,1 +1,1 @@
-"""SentinelSOC hybrid risk scoring package."""
+"""BARAQ hybrid risk scoring package."""

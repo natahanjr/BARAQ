@@ -7,7 +7,7 @@ from pathlib import Path
 
 from backend.vulnscan.version import version_lt
 
-logger = logging.getLogger("sentinel.vulnscan")
+logger = logging.getLogger("baraq.vulnscan")
 
 CVE_DB_PATH = Path(__file__).resolve().parent / "cves.json"
 

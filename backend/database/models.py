@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models for the SentinelSOC local database (PostgreSQL)."""
+"""SQLAlchemy ORM models for the BARAQ local database (PostgreSQL)."""
 from __future__ import annotations
 
 import json

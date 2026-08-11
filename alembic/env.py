@@ -1,7 +1,7 @@
-"""Alembic environment for SentinelSOC.
+"""Alembic environment for BARAQ.
 
 The target URL follows the same resolution order as the application itself:
-``SENTINEL_DATABASE_URL`` (env / .env) with the SQLAlchemy driver suffix
+``BARAQ_DATABASE_URL`` (env / .env) with the SQLAlchemy driver suffix
 normalised, so ``alembic upgrade head`` always migrates the *configured*
 database (no duplicate connection settings to keep in sync).
 """
@@ -37,7 +37,7 @@ def _resolved_url() -> str:
     """Configured URL, with the SQLAlchemy driver suffix normalised.
 
     The ``alembic.ini`` value is a placeholder; the real connection string
-    always comes from the application's ``SENTINEL_DATABASE_URL``.
+    always comes from the application's ``BARAQ_DATABASE_URL``.
     """
     ini_url = (config.get_main_option("sqlalchemy.url") or "").strip()
     if ini_url and not ini_url.startswith(_PLACEHOLDER_URL):

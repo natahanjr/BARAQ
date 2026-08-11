@@ -131,7 +131,7 @@ def client():
 
     from backend.main import app
 
-    with TestClient(app, headers={"X-API-Key": "sentinel-dev-admin"}) as test_client:
+    with TestClient(app, headers={"X-API-Key": "baraq-dev-admin"}) as test_client:
         yield test_client
 
 

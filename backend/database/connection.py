@@ -1,7 +1,7 @@
 """Database engine / session management (PostgreSQL).
 
 The backend runs on PostgreSQL via SQLAlchemy 2.0 ORM:
-``SENTINEL_DATABASE_URL=postgresql://user:pass@host:5432/db`` with the
+``BARAQ_DATABASE_URL=postgresql://user:pass@host:5432/db`` with the
 psycopg3 driver (``pip install "psycopg[binary]"``).
 """
 from __future__ import annotations
@@ -14,7 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from backend.config import DATABASE_URL, ECHO_SQL
 from backend.database.models import Base
 
-logger = logging.getLogger("sentinel.db")
+logger = logging.getLogger("baraq.db")
 
 
 def normalize_database_url(url: str) -> str:

@@ -13,7 +13,7 @@ from backend.database.models import Alert
 from backend.security import actor_name, require_auth
 from backend.threatintel.service import enrich_alert, lookup_indicator
 
-logger = logging.getLogger("sentinel.api.threatintel")
+logger = logging.getLogger("baraq.api.threatintel")
 
 router = APIRouter(
     prefix="/api/intel",

@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 
 from backend.database.models import AuditLog, canonical_timestamp
 
-logger = logging.getLogger("sentinel.audit")
+logger = logging.getLogger("baraq.audit")
 
 _GENESIS_HASH = "0" * 64
 

@@ -1,4 +1,4 @@
-"""Render SentinelSOC_Combined_Guide.md -> a polished HTML page, then print to
+"""Render BARAQ_Combined_Guide.md -> a polished HTML page, then print to
 A4 PDF using headless Edge (modern CSS, TOC, syntax-styled blocks, tables).
 """
 from __future__ import annotations
@@ -12,9 +12,9 @@ from pathlib import Path
 import markdown
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "documentation" / "SentinelSOC_Combined_Guide.md"
-HTML_OUT = ROOT / "documentation" / "SentinelSOC_Combined_Guide.html"
-PDF_OUT = ROOT / "documentation" / "SentinelSOC_Combined_Guide.pdf"
+SRC = ROOT / "documentation" / "BARAQ_Combined_Guide.md"
+HTML_OUT = ROOT / "documentation" / "BARAQ_Combined_Guide.html"
+PDF_OUT = ROOT / "documentation" / "BARAQ_Combined_Guide.pdf"
 EDGE = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 
 CSS = r"""
@@ -229,14 +229,14 @@ def build_html(md_text: str) -> str:
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>SentinelSOC Combined Guide</title>
+<title>BARAQ Combined Guide</title>
 <style>{CSS}</style>
 </head>
 <body>
 <div class="cover">
   <div class="inner">
     <div class="kicker">End Product · Platform Documentation</div>
-    <h1>SentinelSOC</h1>
+    <h1>BARAQ</h1>
     <div class="sub">Intelligent Lightweight SOC Platform for Real-Time
     Windows Endpoint Threat Detection &amp; Incident Analysis</div>
     <table class="meta">{cover_rows}</table>
@@ -247,7 +247,7 @@ def build_html(md_text: str) -> str:
   {toc_html}
 </div>
 {html_body}
-<footer>SentinelSOC · Combined Platform Guide v1.0.0</footer>
+<footer>BARAQ · Combined Platform Guide v1.0.0</footer>
 </body>
 </html>"""
     return html

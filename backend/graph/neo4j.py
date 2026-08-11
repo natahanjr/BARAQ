@@ -1,6 +1,6 @@
 """Neo4j entity graph adapter (optional; not used unless explicitly enabled).
 
-Selected via ``SENTINEL_GRAPH_PROVIDER=neo4j`` (+ ``SENTINEL_NEO4J_URI`` /
+Selected via ``BARAQ_GRAPH_PROVIDER=neo4j`` (+ ``BARAQ_NEO4J_URI`` /
 user / password / database). Implements the same :class:`GraphStore`
 interface as the Postgres backend so the API, extractor and UI are
 provider-agnostic. Falls back to Postgres when the driver is missing or the
@@ -13,7 +13,7 @@ import logging
 from backend.config import GRAPH_MAX_NODES, NEO4J_DATABASE, NEO4J_PASSWORD, NEO4J_URI, NEO4J_USER
 from backend.graph.base import GraphProviderUnavailable, GraphStore
 
-logger = logging.getLogger("sentinel.graph")
+logger = logging.getLogger("baraq.graph")
 
 
 class Neo4jStore(GraphStore):
@@ -28,7 +28,7 @@ class Neo4jStore(GraphStore):
                 "Neo4j driver not installed (pip install neo4j)"
             ) from exc
         if not NEO4J_URI:
-            raise GraphProviderUnavailable("SENTINEL_NEO4J_URI is not set")
+            raise GraphProviderUnavailable("BARAQ_NEO4J_URI is not set")
         self._driver = GraphDatabase.driver(
             NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD), database=NEO4J_DATABASE
         )

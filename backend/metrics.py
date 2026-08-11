@@ -8,7 +8,7 @@ database and the collector registry - no background counters to maintain.
 
 Endpoints:
     GET /api/system/metrics    (authenticated)
-    GET /metrics               (only when SENTINEL_METRICS_PUBLIC=1)
+    GET /metrics               (only when BARAQ_METRICS_PUBLIC=1)
 """
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def collect_metrics(session=None) -> str:
 
     try:
         # Normalized events, bucketed by channel source within each org + host.
-        _emit("sentinel_events_total", "counter",
+        _emit("baraq_events_total", "counter",
               "Normalized events persisted, per org, host and channel source.")
         rows = session.execute(
             select(
@@ -94,16 +94,16 @@ def collect_metrics(session=None) -> str:
         ).all()
         if rows:
             for org, host, source, n in rows:
-                _emit("sentinel_events_total", "counter",
+                _emit("baraq_events_total", "counter",
                       "Normalized events persisted, per org, host and channel source.",
                       {"org": org or "system", "host": host or "-", "source": source or "unknown"}, n)
         else:
-            _emit("sentinel_events_total", "counter",
+            _emit("baraq_events_total", "counter",
                   "Normalized events persisted, per org, host and channel source.",
                   {"org": "system", "host": "-", "source": "none"}, 0)
 
         # Active reporting hosts per org (org owns the fleet of agent hosts).
-        _emit("sentinel_hosts_total", "gauge",
+        _emit("baraq_hosts_total", "gauge",
               "Distinct hosts that have persisted events, per org.")
         host_rows = session.execute(
             select(NormalizedEvent.org, func.count(func.distinct(NormalizedEvent.host)))
@@ -112,26 +112,26 @@ def collect_metrics(session=None) -> str:
         ).all()
         if host_rows:
             for org, n in host_rows:
-                _emit("sentinel_hosts_total", "gauge",
+                _emit("baraq_hosts_total", "gauge",
                       "Distinct hosts that have persisted events, per org.",
                       {"org": org or "system"}, n)
         else:
-            _emit("sentinel_hosts_total", "gauge",
+            _emit("baraq_hosts_total", "gauge",
                   "Distinct hosts that have persisted events, per org.",
                   {"org": "system"}, 0)
 
         for name, help_, model in (
-            ("sentinel_processes_total", "Process records persisted.", ProcessRecord),
-            ("sentinel_network_connections_total", "Network connection records persisted.", NetworkConnection),
-            ("sentinel_dns_queries_total", "DNS query records persisted.", DnsQuery),
-            ("sentinel_http_requests_total", "HTTP request records persisted.", HttpRequest),
-            ("sentinel_emails_total", "Email message records persisted.", EmailMessage),
-            ("sentinel_usb_devices_total", "USB device records persisted.", UsbDevice),
-            ("sentinel_files_scanned_total", "File scan records persisted.", FileScan),
+            ("baraq_processes_total", "Process records persisted.", ProcessRecord),
+            ("baraq_network_connections_total", "Network connection records persisted.", NetworkConnection),
+            ("baraq_dns_queries_total", "DNS query records persisted.", DnsQuery),
+            ("baraq_http_requests_total", "HTTP request records persisted.", HttpRequest),
+            ("baraq_emails_total", "Email message records persisted.", EmailMessage),
+            ("baraq_usb_devices_total", "USB device records persisted.", UsbDevice),
+            ("baraq_files_scanned_total", "File scan records persisted.", FileScan),
         ):
             _emit(name, "counter", help_, None, _count(model))
 
-        _emit("sentinel_alerts_total", "counter",
+        _emit("baraq_alerts_total", "counter",
               "Alerts created, labelled by org, severity and status.")
         alert_rows = session.execute(
             select(Alert.org, Alert.severity, Alert.status, func.count(Alert.id)).group_by(
@@ -140,11 +140,11 @@ def collect_metrics(session=None) -> str:
         ).all()
         if alert_rows:
             for org, severity, status, n in alert_rows:
-                _emit("sentinel_alerts_total", "counter",
+                _emit("baraq_alerts_total", "counter",
                       "Alerts created, labelled by org, severity and status.",
                       {"org": org or "system", "severity": severity, "status": status}, n)
         else:
-            _emit("sentinel_alerts_total", "counter",
+            _emit("baraq_alerts_total", "counter",
                   "Alerts created, labelled by org, severity and status.",
                   {"org": "system", "severity": "none", "status": "none"}, 0)
 
@@ -155,45 +155,45 @@ def collect_metrics(session=None) -> str:
         ).all()
         if open_alerts_by_org:
             for org, n in open_alerts_by_org:
-                _emit("sentinel_open_alerts", "gauge",
+                _emit("baraq_open_alerts", "gauge",
                       "Current number of open alerts, per org.",
                       {"org": org or "system"}, n)
         else:
-            _emit("sentinel_open_alerts", "gauge",
+            _emit("baraq_open_alerts", "gauge",
                   "Current number of open alerts, per org.",
                   {"org": "system"}, 0)
         open_alerts = int(
             session.scalar(select(func.count(Alert.id)).where(Alert.status == "open")) or 0
         )
-        _emit("sentinel_open_alerts_total", "gauge", "Current number of open alerts (all orgs).",
+        _emit("baraq_open_alerts_total", "gauge", "Current number of open alerts (all orgs).",
               None, open_alerts)
-        _emit("sentinel_incidents_total", "gauge", "Incidents created.", None, _count(Incident))
+        _emit("baraq_incidents_total", "gauge", "Incidents created.", None, _count(Incident))
 
         try:
             score = dashboard_mod.compute_security_score(session)
         except Exception:  # noqa: BLE001
             score = 0.0
-        _emit("sentinel_security_score", "gauge", "Current host security score (0..100).", None, score)
+        _emit("baraq_security_score", "gauge", "Current host security score (0..100).", None, score)
 
         rules = [r for r in build_rules(session) if r.rule_id]
-        _emit("sentinel_rules_total", "gauge", "Number of detection rules registered.", None,
+        _emit("baraq_rules_total", "gauge", "Number of detection rules registered.", None,
               len(rules))
 
         detector = get_detector()
         ready = [b for b in ("login", "process", "network") if b in (detector.models or {})]
-        _emit("sentinel_ml_streams_ready", "gauge",
+        _emit("baraq_ml_streams_ready", "gauge",
               "ML behavior streams with a trained model.", None, len(ready))
 
-        _emit("sentinel_collectors_enabled", "gauge", "Collection sources active (0/1 each).")
+        _emit("baraq_collectors_enabled", "gauge", "Collection sources active (0/1 each).")
         manager = CollectorManager()
         for collector in manager.collectors:
-            _emit("sentinel_collectors_enabled", "gauge",
+            _emit("baraq_collectors_enabled", "gauge",
                   "Collection sources active (0/1 each).",
                   {"collector": collector.name}, 1.0 if collector.enabled() else 0.0)
 
-        _emit("sentinel_uptime_seconds", "gauge", "Wall-clock seconds since process start.", None,
+        _emit("baraq_uptime_seconds", "gauge", "Wall-clock seconds since process start.", None,
               max(0.0, time.time() - _START))
-        _emit("sentinel_db_size_bytes", "gauge",
+        _emit("baraq_db_size_bytes", "gauge",
               "Size of the PostgreSQL database in bytes.", None,
               _db_size_bytes(session))
     finally:

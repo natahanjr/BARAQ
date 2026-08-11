@@ -2,7 +2,7 @@
 
 Stores entities in the existing database via the ``entity_nodes`` /
 ``entity_edges`` tables. The graph API stays behind :class:`GraphStore` so a
-Neo4j provider can be swapped in later via ``SENTINEL_GRAPH_PROVIDER`` without
+Neo4j provider can be swapped in later via ``BARAQ_GRAPH_PROVIDER`` without
 touching callers.
 
 Upsert semantics (mirrors the Neo4j adapter): on conflict, counters
@@ -20,7 +20,7 @@ from backend.config import GRAPH_MAX_EDGES, GRAPH_MAX_NODES
 from backend.database.models import EntityEdge, EntityNode
 from backend.graph.base import GraphStore
 
-logger = logging.getLogger("sentinel.graph")
+logger = logging.getLogger("baraq.graph")
 
 _node_columns = {
     "kind", "name", "display_name", "label", "risk_level", "risk_score",

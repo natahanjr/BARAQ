@@ -12,12 +12,12 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("SentinelSOC render error:", error, errorInfo?.componentStack);
+    console.error("BARAQ render error:", error, errorInfo?.componentStack);
     const stack = errorInfo?.componentStack || "";
     if (stack) this.setState({ stack });
     try {
       window.dispatchEvent(
-        new CustomEvent("sentinel:render-error", {
+        new CustomEvent("baraq:render-error", {
           detail: String(error) + "\n" + stack,
         })
       );
@@ -43,7 +43,7 @@ class ErrorBoundary extends React.Component {
         >
           <div style={{ maxWidth: "760px", width: "100%" }}>
             <div style={{ fontSize: "22px", fontWeight: 700, color: "#22d3ee", marginBottom: "8px" }}>
-              SentinelSOC hit a rendering error
+              BARAQ hit a rendering error
             </div>
             <pre
               style={{

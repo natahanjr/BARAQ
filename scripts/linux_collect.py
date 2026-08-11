@@ -1,4 +1,4 @@
-"""Minimal Linux telemetry collector for the SentinelSOC agent.
+"""Minimal Linux telemetry collector for the BARAQ agent.
 
 Used only when the agent runs on a non-Windows host where the Windows
 collector stack is unavailable. Emits records in the same schema as the
@@ -20,10 +20,10 @@ import subprocess
 import time
 from datetime import datetime, timezone
 
-logger = logging.getLogger("sentinel.agent.linux")
+logger = logging.getLogger("baraq.agent.linux")
 
 STATE_DIR = os.path.join(
-    os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), ".sentinel-agent"
+    os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), ".baraq-agent"
 )
 os.makedirs(STATE_DIR, exist_ok=True)
 
@@ -102,7 +102,7 @@ def _tail_authlog(path: str, window: int = 600) -> list[str]:
 
 def collect_auth() -> list[dict]:
     records = []
-    path = os.environ.get("SENTINEL_AUTH_LOG", "/var/log/auth.log")
+    path = os.environ.get("BARAQ_AUTH_LOG", "/var/log/auth.log")
     for line in _tail_authlog(path):
         m = _FAILED_SSH.search(line)
         if m:

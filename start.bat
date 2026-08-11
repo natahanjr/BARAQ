@@ -1,6 +1,6 @@
 @echo off
 rem ===========================================================================
-rem  SentinelSOC - one-click launcher (Windows)
+rem  BARAQ - one-click launcher (Windows)
 rem  Usage:
 rem    start.bat secure       -> STANDARD: HTTPS (TLS) with self-signed cert
 rem    start.bat secure lan   -> standard + exposed to the local network
@@ -26,7 +26,7 @@ if /i "%LAN_MODE%"=="lan" ( set "SECURE_MODE=%~2" ) else (
 
 echo.
 echo  ============================================
-echo   SentinelSOC - Live Threat Detection
+echo   BARAQ - Live Threat Detection
 if /i "%LAN_MODE%"=="lan" echo   MODE: LAN (accessible from your network)
 if /i "%SECURE_MODE%"=="secure" echo   MODE: HTTPS (TLS encrypted)
 echo  ============================================
@@ -87,7 +87,7 @@ if not exist "frontend\dist\index.html" (
 if /i "%SECURE_MODE%"=="secure" (
     echo  [SETUP] Generating TLS certificate (if needed)...
     powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\gen_cert.ps1" >nul 2>&1
-    if not exist "certs\sentinel.crt" (
+    if not exist "certs\baraq.crt" (
         echo  [ERROR] Certificate generation failed. Run this from the project
         echo          folder and ensure PowerShell is available.
         pause
@@ -105,7 +105,7 @@ if /i "%LAN_MODE%"=="lan" (
         set "FW_PROTO=http"
     )
     echo  [SETUP] Opening port %FW_PORT% in Windows Firewall (needs admin)...
-    netsh advfirewall firewall add rule name="SentinelSOC" dir=in action=allow protocol=TCP localport=%FW_PORT% >nul 2>&1
+    netsh advfirewall firewall add rule name="BARAQ" dir=in action=allow protocol=TCP localport=%FW_PORT% >nul 2>&1
     if errorlevel 1 (
         echo  [WARN] Firewall rule not added - run this as Administrator if
         echo         other devices cannot connect.
@@ -120,27 +120,36 @@ echo.
     echo.
     if /i "%SECURE_MODE%"=="secure" (
         echo  Remote agents should pin the TLS certificate when connecting:
-        echo  python scripts\agent.py --server https://%MY_IP%:%FW_PORT% --key ^<key^> --tls-ca certs\sentinel.crt
+        echo  python scripts\agent.py --server https://%MY_IP%:%FW_PORT% --key ^<key^> --tls-ca certs\baraq.crt
         echo.
     )
 )
 
+echo  [DB]    Ensuring local PostgreSQL cluster (first run initialises it)...
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\pg_setup.ps1" -Action ensure
+if errorlevel 1 (
+    echo  [ERROR] PostgreSQL could not be started. Run scripts\download_postgres.ps1
+    echo          to bundle PostgreSQL, or install PG 16+ and set BARAQ_PG_BIN.
+    pause
+    exit /b 1
+)
+
 if /i "%SECURE_MODE%"=="secure" (
-    echo  [START] Launching SentinelSOC (HTTPS) - open https://127.0.0.1:8443
+    echo  [START] Launching BARAQ (HTTPS) - open https://127.0.0.1:8443
     echo  [NOTE]  Your browser will warn about the self-signed certificate.
-    echo          Trust it once, or import certs\sentinel.crt as a root CA.
-    echo  [STOP]  Close this window (Ctrl+C) to shut SentinelSOC down.
+    echo          Trust it once, or import certs\baraq.crt as a root CA.
+    echo  [STOP]  Close this window (Ctrl+C) to shut BARAQ down.
     echo.
     start "" powershell -NoProfile -Command "Start-Sleep -Seconds 4; Start-Process 'https://127.0.0.1:8443'"
 
     if /i "%LAN_MODE%"=="lan" (
-        venv\Scripts\python -m uvicorn backend.main:app --host 0.0.0.0 --port 8443 --ssl-certfile certs\sentinel.crt --ssl-keyfile certs\sentinel.key
+        venv\Scripts\python -m uvicorn backend.main:app --host 0.0.0.0 --port 8443 --ssl-certfile certs\baraq.crt --ssl-keyfile certs\baraq.key
     ) else (
-        venv\Scripts\python -m uvicorn backend.main:app --host 127.0.0.1 --port 8443 --ssl-certfile certs\sentinel.crt --ssl-keyfile certs\sentinel.key
+        venv\Scripts\python -m uvicorn backend.main:app --host 127.0.0.1 --port 8443 --ssl-certfile certs\baraq.crt --ssl-keyfile certs\baraq.key
     )
 ) else (
-    echo  [START] Launching SentinelSOC - open http://127.0.0.1:8001 in your browser
-    echo  [STOP]  Close this window (Ctrl+C) to shut SentinelSOC down.
+    echo  [START] Launching BARAQ - open http://127.0.0.1:8001 in your browser
+    echo  [STOP]  Close this window (Ctrl+C) to shut BARAQ down.
     echo.
     start "" powershell -NoProfile -Command "Start-Sleep -Seconds 4; Start-Process 'http://127.0.0.1:8001'"
 

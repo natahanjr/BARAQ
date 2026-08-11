@@ -50,10 +50,10 @@ def test_code_changes_over_time():
 
 
 def test_provisioning_uri_shape():
-    uri = provisioning_uri("alice", "JBSWY3DPEHPK3PXP", issuer="SentinelSOC")
+    uri = provisioning_uri("alice", "JBSWY3DPEHPK3PXP", issuer="BARAQ")
     assert uri.startswith("otpauth://totp/")
     assert "secret=JBSWY3DPEHPK3PXP" in uri
-    assert "issuer=SentinelSOC" in uri
+    assert "issuer=BARAQ" in uri
     assert "alice" in uri
 
 
@@ -81,7 +81,7 @@ def _bootstrap_admin():
         if not db.query(User).filter(User.username == "admin").first():
             db.add(User(
                 username="admin",
-                password_hash=hash_password("sentineladmin"),
+                password_hash=hash_password("baraqadmin"),
                 role="admin",
                 is_active=True,
             ))
@@ -90,14 +90,14 @@ def _bootstrap_admin():
         db.close()
 
 
-def _admin_login(client, password="sentineladmin"):
+def _admin_login(client, password="baraqadmin"):
     return client.post(
         "/api/auth/login",
         json={"username": "admin", "password": password},
     )
 
 
-def _auth_headers(client, password="sentineladmin"):
+def _auth_headers(client, password="baraqadmin"):
     """Log in (completing the MFA step if needed) and return Bearer headers."""
     resp = _admin_login(client, password)
     if resp.status_code != 200:
@@ -188,7 +188,7 @@ def test_2fa_verify_works_on_fresh_session_without_api_key(client):
     with TestClient(app) as fresh:
         _enable_2fa(fresh)  # login + setup + confirm round-trip in the fresh jar
         fresh.cookies.clear()  # simulate a brand-new browser: no session cookie
-        login = fresh.post("/api/auth/login", json={"username": "admin", "password": "sentineladmin"})
+        login = fresh.post("/api/auth/login", json={"username": "admin", "password": "baraqadmin"})
         data = login.json()
         assert data["mfa_required"] is True and data["challenge"]
         # This request carries no session cookie and no API key — the

@@ -22,7 +22,7 @@ from backend.threatintel import (
     classify_indicator,
 )
 
-logger = logging.getLogger("sentinel.threatintel")
+logger = logging.getLogger("baraq.threatintel")
 
 _IP_RE = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
 _URL_DOMAIN_RE = re.compile(r"\b(?:https?://)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9]?\.)+[a-z]{2,})(?=[/?#\s'\"\]\),;:>\|]|$)", re.IGNORECASE)
@@ -83,7 +83,7 @@ def lookup_indicator(db: Session, indicator: str, refresh: bool = False,
     }
 
     if not THREAT_INTEL_ENABLED:
-        result["label"] = "Threat intel disabled (SENTINEL_THREAT_INTEL_ENABLED=0)"
+        result["label"] = "Threat intel disabled (BARAQ_THREAT_INTEL_ENABLED=0)"
         return result
 
     # 1) Cache

@@ -131,7 +131,7 @@ const PORT_PURPOSE = {
   3389: "RDP (Windows remote desktop)",
   5353: "mDNS / local device discovery",
   5432: "PostgreSQL database",
-  8001: "SentinelSOC API",
+  8001: "BARAQ API",
 };
 
 function portDetail(ip, port) {
@@ -183,7 +183,7 @@ function connectionNote(connection) {
       },
       {
         title: "When to worry",
-        text: "Listening is normal for software you installed (SentinelSOC API on 8001, web servers, etc.). A program you never installed that keeps an unusual port open can be a sign of malware accepting remote commands.",
+        text: "Listening is normal for software you installed (BARAQ API on 8001, web servers, etc.). A program you never installed that keeps an unusual port open can be a sign of malware accepting remote commands.",
       },
     ];
   }

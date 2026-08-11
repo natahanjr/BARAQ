@@ -17,7 +17,7 @@ import os
 import subprocess
 from pathlib import Path
 
-logger = logging.getLogger("sentinel.realtime.policy")
+logger = logging.getLogger("baraq.realtime.policy")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATE_FILE = PROJECT_ROOT / "database" / "realtime_policy_state.json"

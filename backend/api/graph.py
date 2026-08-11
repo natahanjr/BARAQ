@@ -126,7 +126,7 @@ def entity_detail(
     except Exception:  # noqa: BLE001 - profile must degrade gracefully
         import logging
 
-        logging.getLogger("sentinel.graph").exception("Alert lookup failed")
+        logging.getLogger("baraq.graph").exception("Alert lookup failed")
 
     return {
         "entity": entity,
@@ -144,5 +144,5 @@ def entity_sync(db: Session = Depends(get_db)):
     except Exception as exc:  # noqa: BLE001
         import logging
 
-        logging.getLogger("sentinel.graph").exception("Graph sync failed")
+        logging.getLogger("baraq.graph").exception("Graph sync failed")
         raise HTTPException(500, f"graph sync failed: {exc}") from exc

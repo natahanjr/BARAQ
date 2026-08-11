@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from backend.collectors.base import BaseCollector
 
-logger = logging.getLogger("sentinel.collectors.network")
+logger = logging.getLogger("baraq.collectors.network")
 
 try:
     import psutil

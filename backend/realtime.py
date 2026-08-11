@@ -21,7 +21,7 @@ import logging
 import time
 from typing import Any
 
-logger = logging.getLogger("sentinel.realtime")
+logger = logging.getLogger("baraq.realtime")
 
 
 class BroadcastHub:

@@ -8,7 +8,7 @@ extractor:
 * ``backend.graph.postgres.PostgresStore`` - default; reuses the existing
   database (``entity_nodes`` / ``entity_edges`` tables), no extra services.
 * ``backend.graph.neo4j.Neo4jStore`` - optional adapter for a running Neo4j
-  instance, selected via ``SENTINEL_GRAPH_PROVIDER``.
+  instance, selected via ``BARAQ_GRAPH_PROVIDER``.
 
 All methods take the SQLAlchemy session first so the Postgres backend can use
 it; Neo4j implementations ignore it. Records are plain dicts (see the module
@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 
-logger = logging.getLogger("sentinel.graph")
+logger = logging.getLogger("baraq.graph")
 
 
 class GraphProviderUnavailable(Exception):

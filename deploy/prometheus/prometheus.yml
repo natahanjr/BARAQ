@@ -1,16 +1,17 @@
-# Prometheus scrape configuration for SentinelSOC.
+# Prometheus scrape configuration for BARAQ.
 #
 # Authentication: Prometheus v3 removed custom HTTP headers, so the shared
 # API key is sent as `Authorization: Bearer <key>` and mounted from
 # .scrape-key (see compose.yml - the backend accepts the shared key there).
-# Replace the file content with a real admin key in production.
+# Write a real admin key (from BARAQ_API_KEYS) into .scrape-key; the
+# secure compose profile refuses the development default key.
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
 scrape_configs:
-  # SentinelSOC backend (runs on the host; Windows-native platform).
-  - job_name: sentinel
+  # BARAQ backend (runs on the host; Windows-native platform).
+  - job_name: baraq
     metrics_path: /api/system/metrics
     scheme: http
     # The backend listens on 127.0.0.1:8001 by default; bind it to a LAN
@@ -18,11 +19,11 @@ scrape_configs:
     static_configs:
       - targets: ["host.docker.internal:8001"]
         labels:
-          instance: "sentinel-host"
+          instance: "baraq-host"
     authorization:
       type: Bearer
       credentials_file: /etc/prometheus/.scrape-key
-    # Sentinel is a single-node SOC; scrape rarely to keep the SQLite reads cheap.
+    # BARAQ is a single-node SOC; scrape rarely to keep the queries cheap.
     scrape_interval: 30s
     honor_labels: true
 

@@ -87,7 +87,7 @@ function useBackendStatus() {
       setOnline(true);
     } else if (msg.type === "alert") {
       setOnline(true);
-      window.dispatchEvent(new CustomEvent("sentinel:realtime-alert", { detail: msg.payload }));
+      window.dispatchEvent(new CustomEvent("baraq:realtime-alert", { detail: msg.payload }));
     }
   });
 
@@ -105,7 +105,7 @@ function useTheme() {
     const root = document.documentElement;
     root.classList.toggle("light", theme === "light");
     try {
-      localStorage.setItem("sentinel-theme", theme);
+      localStorage.setItem("baraq-theme", theme);
     } catch {
       /* private mode etc. */
     }
@@ -130,7 +130,7 @@ function AdminGate({ user, children }) {
 function SetupBanner({ setup, user, setNavOpen }) {
   const [dismissed, setDismissed] = useState(() => {
     try {
-      return localStorage.getItem("sentinel-setup-dismissed") === "1";
+      return localStorage.getItem("baraq-setup-dismissed") === "1";
     } catch {
       return false;
     }
@@ -180,7 +180,7 @@ function SetupBanner({ setup, user, setNavOpen }) {
           type="button"
           onClick={() => {
             try {
-              localStorage.setItem("sentinel-setup-dismissed", "1");
+              localStorage.setItem("baraq-setup-dismissed", "1");
             } catch {
               /* ignore */
             }
@@ -195,7 +195,7 @@ function SetupBanner({ setup, user, setNavOpen }) {
   );
 }
 
-function SentinelLogo() {
+function BARAQLogo() {
   return (
     <svg className="h-10 w-10" viewBox="0 0 64 64">
       <defs>
@@ -252,9 +252,9 @@ function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user,
       >
         {/* Brand */}
         <div className="flex items-center gap-3 px-5 pb-5 pt-6">
-          <SentinelLogo />
+          <BARAQLogo />
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold tracking-wide text-white">SentinelSOC</p>
+            <p className="truncate text-sm font-semibold tracking-wide text-white">BARAQ</p>
             <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
               Threat Detection
             </p>
@@ -381,7 +381,7 @@ function Topbar({ onMenuClick, online, summary, theme, onToggleTheme }) {
   const location = useLocation();
   const page = NAV.find(
     (n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to))
-  )?.label ?? "SentinelSOC";
+  )?.label ?? "BARAQ";
 
   const score = summary?.security_score ?? 0;
   const scoreClass =
@@ -504,8 +504,8 @@ export default function App() {
 
   useEffect(() => {
     const onLogout = () => setUser(null);
-    window.addEventListener("sentinel:logout", onLogout);
-    return () => window.removeEventListener("sentinel:logout", onLogout);
+    window.addEventListener("baraq:logout", onLogout);
+    return () => window.removeEventListener("baraq:logout", onLogout);
   }, []);
 
   const logout = async () => {
@@ -589,7 +589,7 @@ export default function App() {
         <footer className="border-t border-white/5 px-6 py-5 text-center text-xs text-slate-600">
           <span className="inline-flex items-center gap-1.5">
             <ShieldIcon className="h-3.5 w-3.5" />
-            SentinelSOC · Real-Time Endpoint Security Operations
+            BARAQ · Real-Time Endpoint Security Operations
           </span>
         </footer>
       </div>

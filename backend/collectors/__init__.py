@@ -15,7 +15,7 @@ from backend.collectors.sysmon import SysmonCollector
 from backend.collectors.usb import UsbCollector
 from backend.collectors.vulnscan import VulnScanCollector
 
-logger = logging.getLogger("sentinel.collectors")
+logger = logging.getLogger("baraq.collectors")
 
 
 class CollectorManager:

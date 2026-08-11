@@ -1,4 +1,4 @@
-"""Database backup / restore for SentinelSOC (PostgreSQL).
+"""Database backup / restore for BARAQ (PostgreSQL).
 
 Usage::
 
@@ -8,7 +8,7 @@ Usage::
     venv\\Scripts\\python scripts\\db_backup.py restore <archive> [--yes] [--target DBURL]
 
 Behaviour:
-  * ``backup`` dumps the database configured in ``SENTINEL_DATABASE_URL``
+  * ``backup`` dumps the database configured in ``BARAQ_DATABASE_URL``
     with ``pg_dump`` (custom format, consistent snapshot). Every archive
     gets a SHA-256 manifest sidecar and the newest ``--keep`` archives are
     retained.
@@ -31,9 +31,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-#: Directories probed for embedded/portable PostgreSQL binaries.
+#: Directories probed for embedded/portable PostgreSQL binaries (besides
+#: ``BARAQ_PG_BIN`` and PATH). ``<project>/pg/bin`` is the portable bundle
+#: produced by ``scripts/download_postgres.ps1``; ``%LOCALAPPDATA%`` is the
+#: default home used by ``scripts/pg_setup.ps1``.
 _PG_BIN_HINTS = [
-    Path.home() / "AppData" / "Local" / "Temp" / "opencode" / "pg" / "pgsql" / "bin",
+    Path(__file__).resolve().parent.parent / "pg" / "bin",
+    Path.home() / "AppData" / "Local" / "BARAQ" / "postgres" / "bin",
 ]
 
 DEFAULT_DIR = Path(__file__).resolve().parent.parent / "backups"
@@ -47,7 +51,7 @@ def find_pg_binary(tool: str) -> str:
     """Locate a PostgreSQL client binary: env hint, PATH, then known dirs."""
     import os
 
-    hint = os.environ.get("SENTINEL_PG_BIN", "").strip()
+    hint = os.environ.get("BARAQ_PG_BIN", "").strip()
     candidates: list[Path] = []
     if hint:
         hint_dir = Path(hint)
@@ -62,14 +66,14 @@ def find_pg_binary(tool: str) -> str:
     if which:
         return which
     raise RuntimeError(
-        f"Could not locate {tool}.exe - set SENTINEL_PG_BIN to the PostgreSQL "
+        f"Could not locate {tool}.exe - set BARAQ_PG_BIN to the PostgreSQL "
         "bin directory or add it to PATH."
     )
 
 
 def archive_base(dialect: str) -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return f"sentinel_{dialect}_{ts}"
+    return f"baraq_{dialect}_{ts}"
 
 
 def sha256_file(path: Path) -> str:
@@ -105,7 +109,7 @@ def verify_archive(archive: Path) -> bool:
 
 def iter_archives(backup_dir: Path):
     return sorted(
-        (p for p in backup_dir.glob("sentinel_*") if p.suffix != ".sha256"),
+        (p for p in backup_dir.glob("baraq_*") if p.suffix != ".sha256"),
         key=lambda p: (p.stat().st_mtime, p.name),
         reverse=True,
     )
@@ -173,7 +177,7 @@ def restore_db(url: str, archive: Path, *, yes: bool = False) -> None:
         )
     if not yes:
         raise SystemExit(
-            "Refusing to restore without --yes. Stop the SentinelSOC service and "
+            "Refusing to restore without --yes. Stop the BARAQ service and "
             "run again with --yes to replace the target database contents."
         )
 
@@ -218,7 +222,7 @@ def list_backups(backup_dir: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="SentinelSOC database backup/restore")
+    parser = argparse.ArgumentParser(description="BARAQ database backup/restore")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_bk = sub.add_parser("backup", help="Create a consistent database archive")
@@ -236,7 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     p_rs = sub.add_parser("restore", help="Restore an archive into the database")
     p_rs.add_argument("archive")
     p_rs.add_argument("--yes", action="store_true", help="confirm destructive restore")
-    p_rs.add_argument("--target", default=None, help="override SENTINEL_DATABASE_URL")
+    p_rs.add_argument("--target", default=None, help="override BARAQ_DATABASE_URL")
     p_rs.add_argument("--dir", default=None)
 
     args = parser.parse_args(argv)

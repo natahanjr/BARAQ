@@ -40,7 +40,7 @@ from backend.detection.rules.bits_jobs import BitsJobRule
 from backend.detection.rules.shortcut_modification import ShortcutModificationRule
 from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
 
-logger = logging.getLogger("sentinel.detection")
+logger = logging.getLogger("baraq.detection")
 
 
 def build_rules(session: Session, overrides: dict | None = None) -> list[BaseRule]:

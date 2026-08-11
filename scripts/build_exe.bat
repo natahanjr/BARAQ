@@ -1,9 +1,9 @@
 @echo off
 rem ===========================================================================
-rem  SentinelSOC - build the standalone Windows executable (PyInstaller)
+rem  BARAQ - build the standalone Windows executable (PyInstaller)
 rem  Prerequisites: venv created and requirements.txt installed (start.bat
 rem  does this), frontend built (frontend\dist\index.html must exist).
-rem  Output: dist\SentinelSOC\SentinelSOC.exe  (copy that folder anywhere)
+rem  Output: dist\BARAQ\BARAQ.exe  (copy that folder anywhere)
 rem ===========================================================================
 setlocal
 cd /d "%~dp0.."
@@ -28,8 +28,8 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo  [BUILD] Packaging SentinelSOC (this takes several minutes)...
-venv\Scripts\pyinstaller --noconfirm --clean sentinel.spec
+echo  [BUILD] Packaging BARAQ (this takes several minutes)...
+venv\Scripts\pyinstaller --noconfirm --clean baraq.spec
 if errorlevel 1 (
     echo  [ERROR] Build failed.
     pause
@@ -37,9 +37,9 @@ if errorlevel 1 (
 )
 
 echo.
-echo  [DONE]  Executable ready: dist\SentinelSOC\SentinelSOC.exe
-echo         Copy the whole "dist\SentinelSOC" folder to any Windows 10/11 PC
-echo         and run SentinelSOC.exe (no Python or Node needed).
-echo         Usage:  SentinelSOC.exe       - local only
-echo                 SentinelSOC.exe --lan - accessible from your network
+echo  [DONE]  Executable ready: dist\BARAQ\BARAQ.exe
+echo         Copy the whole "dist\BARAQ" folder to any Windows 10/11 PC
+echo         and run BARAQ.exe (no Python or Node needed).
+echo         Usage:  BARAQ.exe       - local only
+echo                 BARAQ.exe --lan - accessible from your network
 pause

@@ -5,16 +5,16 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 
-logger = logging.getLogger("sentinel.collectors")
+logger = logging.getLogger("baraq.collectors")
 
 
 class BaseCollector(ABC):
-    """Common interface for all SentinelSOC data collectors."""
+    """Common interface for all BARAQ data collectors."""
 
     name: str = "base"
 
     def __init__(self):
-        self.logger = logging.getLogger(f"sentinel.collectors.{self.name}")
+        self.logger = logging.getLogger(f"baraq.collectors.{self.name}")
 
     @abstractmethod
     def collect(self) -> list[dict]:

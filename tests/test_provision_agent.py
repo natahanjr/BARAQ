@@ -17,7 +17,7 @@ def _provision_module():
 def test_generate_key_shape():
     prov = _provision_module()
     key = prov.generate_key()
-    assert key.startswith("sentinel-agent-")
+    assert key.startswith("baraq-agent-")
     assert len(key) > 32
 
 
@@ -25,14 +25,14 @@ def test_key_map_roundtrip(tmp_path):
     prov = _provision_module()
     vault = prov.SecretVault(tmp_path / "secrets.dat")
     assert prov.load_key_map(vault) == {}
-    keymap = {"sentinel-agent-abc": "edge-host-1"}
+    keymap = {"baraq-agent-abc": "edge-host-1"}
     prov.save_key_map(vault, keymap)
     assert prov.load_key_map(vault) == keymap
-    keymap["sentinel-agent-xyz"] = "edge-host-2"
+    keymap["baraq-agent-xyz"] = "edge-host-2"
     prov.save_key_map(vault, keymap)
     assert prov.load_key_map(vault) == keymap
     assert prov.SecretVault(tmp_path / "secrets.dat").get(
-        "SENTINEL_AGENT_KEYS"
+        "BARAQ_AGENT_KEYS"
     ) == prov.json.dumps(keymap, sort_keys=True)
 
 

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 def client():
     from backend.main import app
 
-    with TestClient(app, headers={"X-API-Key": "sentinel-dev-admin"}) as test_client:
+    with TestClient(app, headers={"X-API-Key": "baraq-dev-admin"}) as test_client:
         yield test_client
 
 
@@ -23,7 +23,7 @@ def test_ingest_requires_agent_key(client):
 def test_ingest_rejects_unknown_agent_key(client):
     resp = client.post(
         "/api/ingest",
-        headers={"X-Agent-Key": "sentinel-nope"},
+        headers={"X-Agent-Key": "baraq-nope"},
         json={"records": [{"event_id": 1}]},
     )
     assert resp.status_code == 401
@@ -34,7 +34,7 @@ def test_ingest_attributes_host_and_creates_endpoint(client):
 
     resp = client.post(
         "/api/ingest",
-        headers={"X-Agent-Key": "sentinel-agent-dev"},
+        headers={"X-Agent-Key": "baraq-agent-dev"},
         json={"records": brute_force(attempts=6)},
     )
     assert resp.status_code == 200
@@ -56,7 +56,7 @@ def test_ingest_attributes_host_and_creates_endpoint(client):
 def test_ingest_host_override_tags_alerts(client):
     resp = client.post(
         "/api/ingest",
-        headers={"X-Agent-Key": "sentinel-agent-dev"},
+        headers={"X-Agent-Key": "baraq-agent-dev"},
         json={
             "records": [
                 {
@@ -86,7 +86,7 @@ def test_agent_pipeline_events_carry_host(client):
 
     client.post(
         "/api/ingest",
-        headers={"X-Agent-Key": "sentinel-agent-dev"},
+        headers={"X-Agent-Key": "baraq-agent-dev"},
         json={
             "records": [
                 {

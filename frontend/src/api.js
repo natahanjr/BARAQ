@@ -1,5 +1,5 @@
 const BASE = import.meta.env.DEV ? "" : "";
-const API_KEY = import.meta.env.VITE_API_KEY || "sentinel-dev-admin";
+const API_KEY = import.meta.env.VITE_API_KEY || "baraq-dev-admin";
 
 // The session token is kept in memory only; persistence happens server-side
 // via an httpOnly cookie so XSS can never read it (CWE-312 mitigation).
@@ -7,7 +7,7 @@ let sessionToken = null;
 
 // Admin org filter ("" = all organizations). Analysts are always locked to
 // their own org by the backend, so this is only ever attached for admins.
-const ORG_KEY = "sentinel-org-filter";
+const ORG_KEY = "baraq-org-filter";
 
 export const authStore = {
   get token() {
@@ -46,20 +46,20 @@ async function request(path, options = {}) {
   if (isAdmin() && authStore.org) headers["X-Org"] = authStore.org;
 
   // Double-submit CSRF token: the backend requires X-CSRF-Token to match the
-  // sentinel_csrf cookie on state-changing requests authenticated via the
+  // baraq_csrf cookie on state-changing requests authenticated via the
   // session cookie (browser flow). Not needed for Bearer/API-key callers but
   // harmless, and keeps the cookie-authenticated path working after reloads.
   const method = (options.method || "GET").toUpperCase();
   if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
     const csrf = document.cookie
       .split("; ")
-      .find((c) => c.startsWith("sentinel_csrf="));
+      .find((c) => c.startsWith("baraq_csrf="));
     if (csrf) headers["X-CSRF-Token"] = decodeURIComponent(csrf.split("=")[1]);
   }
 
   const res = await fetch(`${BASE}${path}`, { ...options, headers, credentials: "include" });
   if (res.status === 401) {
-    window.dispatchEvent(new CustomEvent("sentinel:logout"));
+    window.dispatchEvent(new CustomEvent("baraq:logout"));
   }
   if (!res.ok) {
     let detail = res.statusText;

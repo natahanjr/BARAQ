@@ -429,7 +429,7 @@ def test_hidden_artifacts_uvicorn_module_syntax_not_flagged(db):
         [
             _proc(
                 "python.exe",
-                "F:\\My Project\\SentinelSOC\\venv\\Scripts\\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000",
+                "F:\\My Project\\BARAQ\\venv\\Scripts\\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000",
                 25956,
             ),
             _proc("gunicorn.exe", "gunicorn myapp.wsgi:application -w 2", 25957),

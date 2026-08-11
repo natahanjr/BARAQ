@@ -1,4 +1,4 @@
-# SentinelSOC — Machine Learning Strategy & Methodology
+# BARAQ — Machine Learning Strategy & Methodology
 
 **Document:** ML Training, Validation, and Comparative Analysis
 **Version:** 2.0

@@ -12,11 +12,11 @@ import sys
 from backend.database.connection import SessionLocal, init_db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(message)s")
-logger = logging.getLogger("sentinel.pipeline")
+logger = logging.getLogger("baraq.pipeline")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="SentinelSOC pipeline runner")
+    parser = argparse.ArgumentParser(description="BARAQ pipeline runner")
     parser.parse_args()
 
     init_db()

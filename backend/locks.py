@@ -1,4 +1,4 @@
-"""Single-instance guard: only one SentinelSOC process may run the scheduler.
+"""Single-instance guard: only one BARAQ process may run the scheduler.
 
 Two uvicorn processes pointed at the same database would both collect,
 detect, retrain and retain - duplicating alerts and racing the graph
@@ -16,9 +16,9 @@ import os
 
 from sqlalchemy.engine import Engine
 
-logger = logging.getLogger("sentinel.locks")
+logger = logging.getLogger("baraq.locks")
 
-LOCK_NAME = "sentinel-soc-scheduler"
+LOCK_NAME = "baraq-soc-scheduler"
 
 
 class InstanceLock:

@@ -4,9 +4,9 @@ A config-gated outbound path that publishes the SOC's event and alert stream
 to one or more of: **Kafka**, **Redis Streams**, **Elasticsearch** (or
 OpenSearch). Enabling a sink is a configuration-only action:
 
-* ``SENTINEL_STREAM_ENABLED=1`` switches the pipeline on.
-* Each sink has its own env key (``SENTINEL_KAFKA_BOOTSTRAP``,
-  ``SENTINEL_REDIS_URL``, ``SENTINEL_ELASTICSEARCH_URL``). Empty sinks stay
+* ``BARAQ_STREAM_ENABLED=1`` switches the pipeline on.
+* Each sink has its own env key (``BARAQ_KAFKA_BOOTSTRAP``,
+  ``BARAQ_REDIS_URL``, ``BARAQ_ELASTICSEARCH_URL``). Empty sinks stay
   dormant.
 * Driver packages (``kafka-python``, ``redis``, ``elasticsearch``) are
   imported lazily; a missing package degrades that sink to "unavailable"
@@ -21,7 +21,7 @@ Design considerations:
 * Each sink retries transient failures up to ``STREAM_MAX_RETRIES`` before a
   record is dropped (a SIEM forwarder must never grow unbounded).
 * Alert records are forwarded with the same schema as events + alert fields
-  so a downstream SIEM can pivot between them on ``sentinel.type``.
+  so a downstream SIEM can pivot between them on ``baraq.type``.
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ from backend.config import (
     STREAM_MAX_RETRIES,
 )
 
-logger = logging.getLogger("sentinel.streaming")
+logger = logging.getLogger("baraq.streaming")
 
 _record_queue: queue.Queue[dict] = queue.Queue(maxsize=2000)
 _stop = threading.Event()
@@ -75,7 +75,7 @@ def _now_iso() -> str:
 def _stamp(record: dict) -> dict:
     stamped = dict(record)
     stamped.setdefault("@timestamp", _now_iso())
-    stamped.setdefault("sentinel.type", "event")
+    stamped.setdefault("baraq.type", "event")
     return stamped
 
 
@@ -84,7 +84,7 @@ def record_event(event: dict) -> None:
     if not STREAM_ENABLED:
         return
     try:
-        _record_queue.put_nowait(_stamp({"sentinel.type": "event", **event}))
+        _record_queue.put_nowait(_stamp({"baraq.type": "event", **event}))
     except queue.Full:  # pragma: no cover - bounded buffer safety valve
         logger.warning("Stream buffer full; dropping event record")
 
@@ -94,7 +94,7 @@ def record_alert(alert: dict) -> None:
     if not STREAM_ENABLED:
         return
     try:
-        _record_queue.put_nowait(_stamp({"sentinel.type": "alert", **alert}))
+        _record_queue.put_nowait(_stamp({"baraq.type": "alert", **alert}))
     except queue.Full:  # pragma: no cover
         logger.warning("Stream buffer full; dropping alert record")
 
@@ -106,7 +106,7 @@ def start() -> None:
         return
     _started = True
     _stop.clear()
-    _worker = threading.Thread(target=_flush_loop, daemon=True, name="sentinel-stream")
+    _worker = threading.Thread(target=_flush_loop, daemon=True, name="baraq-stream")
     _worker.start()
     logger.info("Streaming pipeline enabled: %s", _describe_config())
 
@@ -153,7 +153,7 @@ def _run_bounded(fn, timeout: float):
         except Exception as exc:  # noqa: BLE001
             result["error"] = exc
 
-    thread = threading.Thread(target=_target, daemon=True, name="sentinel-sink")
+    thread = threading.Thread(target=_target, daemon=True, name="baraq-sink")
     thread.start()
     thread.join(timeout)
     if thread.is_alive():

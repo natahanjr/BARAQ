@@ -198,7 +198,7 @@ export default function Assistant() {
                 <AssistantIcon className="h-8 w-8 text-violet-400" />
               </div>
               <p className="mt-4 text-sm font-medium text-slate-300">
-                Welcome to the SentinelSOC AI Assistant
+                Welcome to the BARAQ AI Assistant
               </p>
               <p className="mt-1 max-w-sm text-xs text-slate-500">
                 Ask about threats, get analysis, and receive remediation recommendations

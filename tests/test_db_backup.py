@@ -17,7 +17,7 @@ def test_pg_url_driver_stripped():
 
 
 def test_manifest_roundtrip(tmp_path):
-    archive = tmp_path / "sentinel_postgres_x.dump"
+    archive = tmp_path / "baraq_postgres_x.dump"
     archive.write_bytes(b"payload-bytes")
     bk.write_manifest(archive)
     assert bk.verify_archive(archive) is True
@@ -27,13 +27,13 @@ def test_manifest_roundtrip(tmp_path):
 
 
 def test_missing_manifest_not_verified(tmp_path):
-    archive = tmp_path / "sentinel_postgres_x.dump"
+    archive = tmp_path / "baraq_postgres_x.dump"
     archive.write_bytes(b"payload")
     assert bk.verify_archive(archive) is False
 
 
 def test_manifest_matches_sha256(tmp_path):
-    archive = tmp_path / "sentinel_postgres_x.dump"
+    archive = tmp_path / "baraq_postgres_x.dump"
     archive.write_bytes(b"payload-bytes")
     expected = hashlib.sha256(b"payload-bytes").hexdigest()
     bk.write_manifest(archive)
@@ -43,7 +43,7 @@ def test_manifest_matches_sha256(tmp_path):
 
 def test_retention_keeps_newest(tmp_path):
     for hour in range(5):
-        a = tmp_path / f"sentinel_postgres_20260808T{100000 + hour:06d}Z.dump"
+        a = tmp_path / f"baraq_postgres_20260808T{100000 + hour:06d}Z.dump"
         a.write_bytes(b"x")
         bk.write_manifest(a)
     removed = bk.prune_old(tmp_path, keep=2)
@@ -60,6 +60,6 @@ def test_sha256_file(tmp_path):
 
 
 def test_iter_archives_ignores_manifests(tmp_path):
-    tmp_path.joinpath("sentinel_postgres_a.dump").write_bytes(b"1")
-    tmp_path.joinpath("sentinel_postgres_a.dump.sha256").write_text("x\n")
-    assert [p.name for p in bk.iter_archives(tmp_path)] == ["sentinel_postgres_a.dump"]
+    tmp_path.joinpath("baraq_postgres_a.dump").write_bytes(b"1")
+    tmp_path.joinpath("baraq_postgres_a.dump.sha256").write_text("x\n")
+    assert [p.name for p in bk.iter_archives(tmp_path)] == ["baraq_postgres_a.dump"]
