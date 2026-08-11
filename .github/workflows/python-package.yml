@@ -16,9 +16,7 @@ jobs:
         choco install postgresql16 -y --no-progress --params '/Password:postgres'
         $pgBin = "C:\Program Files\PostgreSQL\16\bin"
         $data = "C:\Program Files\PostgreSQL\16\data"
-        $hba = Join-Path $data "pg_hba.conf"
-        Add-Content $hba "host all all 127.0.0.1/32 trust"
-        Add-Content $hba "host all all ::1/128 trust"
+        Set-Content (Join-Path $data "pg_hba.conf") -Value @("local all all trust", "host all all 127.0.0.1/32 trust", "host all all ::1/128 trust")
         $svc = Get-Service | Where-Object { $_.Name -like "postgresql*" } | Select-Object -First 1
         if ($svc) { "found service: $($svc.Name) status=$($svc.Status)"; Restart-Service -Name $svc.Name -ErrorAction SilentlyContinue; Start-Sleep 5 } else { "no postgresql service found" }
         $psql = Join-Path $pgBin "psql.exe"
