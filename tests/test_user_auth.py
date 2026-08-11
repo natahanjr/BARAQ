@@ -203,3 +203,37 @@ def test_delete_records_audit_entry(client):
     client.delete(f"/api/auth/users/{user['id']}", headers=_bearer_headers(token))
     audit = client.get("/api/auth/audit", headers=_bearer_headers(token)).json()["items"]
     assert any(e["action"] == "user.delete" for e in audit)
+
+
+def test_clear_audit_empties_trail_and_logs_itself(client):
+    token = _login(client, "admin", "baraqadmin").json()["token"]
+    before = client.get("/api/auth/audit", headers=_bearer_headers(token)).json()["items"]
+    assert before
+    cleared = client.post("/api/auth/audit/clear", headers=_bearer_headers(token))
+    assert cleared.status_code == 200
+    body = cleared.json()
+    assert body["cleared"] >= len(before)
+    assert body["report"]  # forced report was generated before erasing
+    remaining = client.get("/api/auth/audit", headers=_bearer_headers(token)).json()["items"]
+    assert len(remaining) == 1
+    assert remaining[0]["action"] == "audit.clear"
+
+
+def test_clear_audit_requires_admin(client):
+    token = _login(client, "admin", "baraqadmin").json()["token"]
+    client.post(
+        "/api/auth/users",
+        headers=_bearer_headers(token),
+        json={"username": "soc_clear", "password": "hunter2hunter2", "role": "analyst"},
+    )
+    analyst = _login(client, "soc_clear", "hunter2hunter2").json()["token"]
+    assert client.post(
+        "/api/auth/audit/clear", headers=_bearer_headers(analyst)
+    ).status_code == 403
+
+
+def test_clear_audit_writes_report_file(client):
+    token = _login(client, "admin", "baraqadmin").json()["token"]
+    body = client.post("/api/auth/audit/clear", headers=_bearer_headers(token)).json()
+    assert body["cleared"] > 0
+    assert body["report"]["file_path"].lower().endswith(".pdf")

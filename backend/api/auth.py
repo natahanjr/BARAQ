@@ -603,3 +603,30 @@ def verify_audit_chain(db: Session = Depends(get_db)):
         return verify_chain(db)
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "checked": 0, "broken_at": None, "error": str(exc)}
+
+
+@router.post("/audit/clear", dependencies=[Depends(require_admin)])
+def clear_audit(request: Request, db: Session = Depends(get_db)):
+    """Delete the entire audit trail, force-generating an executive report first.
+
+    The report is generated while the records still exist, so it captures the
+    full activity before the trail is erased. The forced report remains the
+    permanent record; the hash chain restarts from the new clear entry.
+    """
+    from backend.reports.generator import generate_report
+
+    count = len(db.scalars(select(AuditLog)).all())
+    if not count:
+        return {"cleared": 0, "message": "Audit trail is already empty.", "report": None}
+
+    report = generate_report(db, "executive", "pdf")
+    db.query(AuditLog).delete()
+    db.commit()
+    log_action(db, _actor(request), "audit.clear", "audit", "-",
+               f"deleted {count} record(s); report={report['file_path']}", client_ip(request))
+    logger.info("Cleared %d audit record(s); forced report generated: %s", count, report["file_path"])
+    return {
+        "cleared": count,
+        "message": f"Cleared {count} audit record(s). Report generated before clearing.",
+        "report": report,
+    }

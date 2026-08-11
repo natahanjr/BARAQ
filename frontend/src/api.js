@@ -99,6 +99,7 @@ export const api = {
     });
     return request(`/api/auth/audit?${qs.toString()}`);
   },
+  clearAudit: () => request("/api/auth/audit/clear", { method: "POST" }),
 
   summary: () => request("/api/dashboard/summary"),
   timeline: (hours = 24) => request(`/api/dashboard/timeline?hours=${hours}`),

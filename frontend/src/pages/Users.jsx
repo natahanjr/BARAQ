@@ -82,6 +82,25 @@ export default function Users() {
     api.audit({ limit: 200 }).then((r) => setAudit(r.items || [])).catch(() => {});
   }, []);
 
+  const clearAudit = async () => {
+    const next = window.confirm(
+      "Clear the entire audit trail? A report will be generated first as the permanent record of all activity.",
+    );
+    if (!next) return;
+    setError("");
+    setMessage("");
+    setBusy("clearAudit");
+    try {
+      const res = await api.clearAudit();
+      setMessage(`${res.message} Report: ${res.report?.file_path?.split(/[\\/]/).pop() ?? "none"}`);
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy("");
+    }
+  };
+
   useEffect(() => {
     refresh();
     const t = setInterval(refresh, 15000);
@@ -397,9 +416,18 @@ export default function Users() {
         <Card className="lg:col-span-3">
           <div className="mb-4 flex items-center justify-between gap-2">
             <h3 className="text-base font-semibold text-white">Audit Trail</h3>
-            <span className="text-[11px] text-slate-500">
-              {audit.length === 0 ? "No activity recorded yet" : `latest ${audit.length}`}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-slate-500">
+                {audit.length === 0 ? "No activity recorded yet" : `latest ${audit.length}`}
+              </span>
+              <button
+                onClick={clearAudit}
+                disabled={busy === "clearAudit" || audit.length === 0}
+                className="rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-1 text-[11px] font-semibold text-red-400 transition-colors hover:bg-red-900/40 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {busy === "clearAudit" ? "Clearing…" : "Clear History"}
+              </button>
+            </div>
           </div>
           {audit.length === 0 ? (
             <p className="rounded-lg border border-dashed border-slate-700/60 bg-slate-900/40 px-4 py-6 text-center text-xs text-slate-500">
