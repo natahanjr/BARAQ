@@ -5,23 +5,23 @@ on: [push]
 jobs:
   build:
     runs-on: windows-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: baraq_test
-          POSTGRES_HOST_AUTH_METHOD: trust
-        ports:
-          - 55432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    env:
+      BARAQ_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/baraq_test
     steps:
     - uses: actions/checkout@v4
+    - name: Start PostgreSQL
+      shell: pwsh
+      run: |
+        choco install postgresql16 -y --no-progress --params '/Password:postgres'
+        $env:PGPASSWORD = "postgres"
+        $psql = "C:\Program Files\PostgreSQL\16\bin\psql.exe"
+        $ok = $false
+        for ($i = 0; $i -lt 30; $i++) {
+          try { & $psql -U postgres -h 127.0.0.1 -p 5432 -c "SELECT 1;" *> $null; if ($LASTEXITCODE -eq 0) { $ok = $true; break } } catch { }
+          Start-Sleep -Seconds 5
+        }
+        if (-not $ok) { throw "PostgreSQL did not come up" }
+        & $psql -U postgres -h 127.0.0.1 -p 5432 -c "CREATE DATABASE baraq_test;"
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
