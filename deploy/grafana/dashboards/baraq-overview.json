@@ -1,0 +1,366 @@
+{
+  "uid": "baraq-overview",
+  "title": "BARAQ - Platform Overview",
+  "tags": ["baraq", "soc"],
+  "editable": true,
+  "refresh": "15s",
+  "timezone": "browser",
+  "time": { "from": "now-24h", "to": "now" },
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "description": "Live state of the BARAQ backend: security score, event ingestion, alert pipeline, collectors, ML, database health and per-org fleet breakdown.",
+  "templating": {
+    "list": [
+      {
+        "name": "org",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+        "query": "label_values(baraq_events_total, org)",
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 1,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Security Score",
+      "gridPos": { "h": 8, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        { "expr": "baraq_security_score", "legendFormat": "score", "refId": "A" }
+      ],
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "green", "value": 80 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Open Alerts",
+      "gridPos": { "h": 8, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        { "expr": "baraq_open_alerts_total", "refId": "A" }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 15 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Active Collectors",
+      "gridPos": { "h": 8, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        { "expr": "sum(baraq_collectors_enabled)", "refId": "A" }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 4 },
+              { "color": "green", "value": 6 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Event ingestion rate (by source)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        {
+          "expr": "sum(rate(baraq_events_total[5m])) by (source)",
+          "legendFormat": "{{source}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": { "mode": "list", "displayMode": "list", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": { "defaults": { "unit": "events/s" } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Alert throughput by severity",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        {
+          "expr": "sum(rate(baraq_alerts_total[5m])) by (severity)",
+          "legendFormat": "{{severity}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": { "mode": "list", "displayMode": "list", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": { "defaults": { "unit": "alerts/s" } }
+    },
+    {
+      "id": 6,
+      "type": "barchart",
+      "title": "Alerts by severity (total)",
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        {
+          "expr": "sum(baraq_alerts_total) by (severity)",
+          "legendFormat": "{{severity}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "showValue": "auto",
+        "legend": { "showLegend": false, "displayMode": "list" }
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Database Size",
+      "gridPos": { "h": 8, "w": 4, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        { "expr": "baraq_db_size_bytes", "refId": "A" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto" },
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Uptime",
+      "gridPos": { "h": 8, "w": 4, "x": 4, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        { "expr": "baraq_uptime_seconds", "refId": "A" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto" },
+      "fieldConfig": { "defaults": { "unit": "dtdurations" } }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Detection Rules",
+      "gridPos": { "h": 8, "w": 4, "x": 8, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        { "expr": "baraq_rules_total", "refId": "A" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto" }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "ML streams ready",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        { "expr": "baraq_ml_streams_ready", "refId": "A" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto" },
+      "fieldConfig": {
+        "defaults": {
+          "max": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "green", "value": 3 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Incidents",
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        { "expr": "baraq_incidents_total", "refId": "A" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto" }
+    },
+    {
+      "id": 12,
+      "type": "row",
+      "title": "Fleet per Org (filter: $org)",
+      "collapse": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 40 },
+      "panels": []
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Event ingestion rate by org",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        {
+          "expr": "sum(rate(baraq_events_total{org=~\"$org\"}[5m])) by (org)",
+          "legendFormat": "{{org}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": { "mode": "list", "displayMode": "list", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": { "defaults": { "unit": "events/s" } }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Top hosts by event ingestion",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        {
+          "expr": "topk(8, sum(rate(baraq_events_total{org=~\"$org\"}[5m])) by (host))",
+          "legendFormat": "{{host}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": { "mode": "list", "displayMode": "list", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": { "defaults": { "unit": "events/s" } }
+    },
+    {
+      "id": 15,
+      "type": "barchart",
+      "title": "Alerts by org and severity",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 49 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        {
+          "expr": "sum(baraq_alerts_total{org=~\"$org\"}) by (org, severity)",
+          "legendFormat": "{{org}} - {{severity}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "showValue": "auto",
+        "legend": { "showLegend": true, "displayMode": "list" }
+      }
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Reporting hosts per org",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 49 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        {
+          "expr": "sum(baraq_hosts_total{org=~\"$org\"}) by (org)",
+          "legendFormat": "{{org}}",
+          "refId": "A"
+        }
+      ],
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "green", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Open alerts per org",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 49 },
+      "datasource": { "type": "prometheus", "uid": "baraq-prom" },
+      "targets": [
+        {
+          "expr": "sum(baraq_open_alerts{org=~\"$org\"}) by (org)",
+          "legendFormat": "{{org}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": { "mode": "list", "displayMode": "list", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 15 }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

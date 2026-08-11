@@ -339,6 +339,9 @@ BRUTE_FORCE_ACCOUNTS = 1             # distinct accounts to consider
 PORT_SCAN_DISTINCT_PORTS = 20        # distinct ports probed by one source
 PORT_SCAN_WINDOW_SECONDS = 120
 HONEYPOT_ACCOUNT_PREFIXES = ("administrator", "admin", "sa", "root")
+#: Directory of Sigma (SigmaHQ) rule YAML files. Empty/missing disables the
+#: Sigma engine. Populate with scripts/sigma_pull.py (3000+ community rules).
+SIGMA_RULES_DIR = Path(os.environ.get("SIGMA_RULES_DIR", str(APP_DIR / "sigma_rules")))
 
 # --------------------------------------------------------------------------
 # Alert aggregation / escalation

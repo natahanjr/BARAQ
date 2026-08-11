@@ -13,6 +13,7 @@ const ROLE_STYLES = {
 export default function Users() {
   const [users, setUsers] = useState([]);
   const [audit, setAudit] = useState([]);
+  const [me, setMe] = useState(null);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -79,6 +80,7 @@ export default function Users() {
 
   const refresh = useCallback(() => {
     api.users().then((r) => setUsers(r.items || [])).catch(() => {});
+    api.me().then(setMe).catch(() => {});
     api.audit({ limit: 200 }).then((r) => setAudit(r.items || [])).catch(() => {});
   }, []);
 
@@ -338,24 +340,40 @@ export default function Users() {
                 (RFC&nbsp;6238, compatible with Google Authenticator, Authy, 1Password
                 and other standard apps).
               </p>
-              <div className="flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={startMfa}
-                  disabled={mfaBusy}
-                  className="w-full rounded-lg bg-gradient-to-r from-cyan-600 to-cyan-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-50"
-                >
-                  {mfaBusy ? "Working…" : "Set Up 2FA"}
-                </button>
-                <button
-                  type="button"
-                  onClick={disableMfa}
-                  disabled={mfaBusy}
-                  className="w-full rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
-                >
-                  Disable 2FA
-                </button>
-              </div>
+              {me?.totp_enabled ? (
+                <div className="flex flex-col gap-2">
+                  <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-center text-xs font-semibold text-emerald-300">
+                    Two-factor authentication is ON for this account
+                  </p>
+                  <button
+                    type="button"
+                    onClick={disableMfa}
+                    disabled={mfaBusy}
+                    className="w-full rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+                  >
+                    Disable 2FA
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={startMfa}
+                    disabled={mfaBusy}
+                    className="w-full rounded-lg bg-gradient-to-r from-cyan-600 to-cyan-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-50"
+                  >
+                    {mfaBusy ? "Working…" : "Set Up 2FA"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={disableMfa}
+                    disabled={mfaBusy}
+                    className="w-full rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+                  >
+                    Disable 2FA
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </Card>

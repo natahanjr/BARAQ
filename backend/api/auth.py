@@ -400,6 +400,11 @@ def mfa_setup(request: Request, db: Session = Depends(get_db)):
     user = resolve_user(request, db)
     if not user:
         raise HTTPException(401, "Invalid or expired session")
+    if user.totp_enabled:
+        # Guard: a stray "Set Up 2FA" click must never silently disable an
+        # active enrollment (previously the reset below turned MFA off).
+        raise HTTPException(409, "Two-factor authentication is already enabled "
+                                 "for this account - disable it first to re-enroll")
     secret = generate_secret()
     user.totp_secret = secret
     user.totp_enabled = False

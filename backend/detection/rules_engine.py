@@ -64,6 +64,7 @@ from backend.detection.rules.exfil_c2 import (
     DnsTunnelingRule,
     WebhookC2Rule,
 )
+from backend.detection.sigma.engine import SigmaRuleEngine
 from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
 
 logger = logging.getLogger("baraq.detection")
@@ -130,6 +131,7 @@ def build_rules(session: Session, overrides: dict | None = None) -> list[BaseRul
         CloudSyncExfilRule(session),
         WebhookC2Rule(session),
         DnsTunnelingRule(session),
+        SigmaRuleEngine(session),
     ]
 
 
@@ -146,8 +148,10 @@ class RulesEngine:
                 rule.org = self.org
                 rule_findings = rule.evaluate(window_minutes)
                 for f in rule_findings:
-                    f.mitre_id = getattr(rule, "mitre_id", "T0000")
-                    f.recommendation = getattr(rule, "recommendation", "") or get_recommendation(f.mitre_id)
+                    if not f.mitre_id or f.mitre_id == "T0000":
+                        f.mitre_id = getattr(rule, "mitre_id", "T0000")
+                    if not f.recommendation:
+                        f.recommendation = getattr(rule, "recommendation", "") or get_recommendation(f.mitre_id)
                 findings.extend(rule_findings)
                 logger.info(
                     "Rule %s: %d finding(s)", rule.rule_id, len(rule_findings)

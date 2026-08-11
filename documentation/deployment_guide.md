@@ -43,11 +43,16 @@ Steps (option A) - one click:
    into `Program Files\BARAQ\.env`, registers the autostart task and
    launches the backend. If the "launch now" checkbox appears at the end
    (only when autostart was deselected) it starts the console directly.
+3. (Recommended) copy `verify_install.cmd` from `dist\` next to the
+   installer and run it once after setup: it checks the installed files,
+   the PostgreSQL cluster on 55432, the backend on 8001, the health
+   endpoint, the seeded admin login and the autostart task, and prints a
+   pass/fail summary.
 
 First boot with an empty database seeds the application role, a TOTP-less
-`baraqadmin` super-user and a bootstrap API key, all printed to the
-console log — capture and store them (the API key also lives in
-`data\secrets.dat`, the app vault). After provisioning, follow the
+`admin` super-user and a bootstrap API key, all printed to the console log
+— capture and store them (the API key also lives in `data\secrets.dat`,
+the app vault). After provisioning, follow the
 first-run checklist in section 3 (change the admin password, enroll MFA,
 create analysts per campus). TLS enforcement is identical to source runs:
 use `BARAQ_ENV=production` + the `start_pg_server.cmd` HTTPS launcher,

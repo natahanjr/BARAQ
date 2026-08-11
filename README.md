@@ -85,9 +85,10 @@ method breakdown, top targets, and open alerts — refreshed in real time.
    PowerShell, Sysmon) over HTTPS with agent-key auth and TLS CA pinning.
 2. **Normalize** — each event is normalized to a common schema and assigned a
    numeric risk score (0-100).
-3. **Detect** — a rule engine (29 MITRE ATT&CK-mapped rules) plus per-behavior
-   ML anomaly detection (Isolation Forest / Random Forest / XGBoost) evaluate
-   the normalized stream.
+3. **Detect** — a rule engine (29 built-in MITRE ATT&CK-mapped rules plus the
+   full **SigmaHQ community rule set**, ~3000+ rules, when pulled) and
+   per-behavior ML anomaly detection (Isolation Forest / Random Forest /
+   XGBoost) evaluate the normalized stream.
 4. **Score** — hybrid risk scoring blends rule and ML signals
    (60% rule / 40% ML) into a 0-100 score with LOW · MEDIUM · HIGH · CRITICAL.
 5. **Enrich** — MITRE ATT&CK technique mapping, threat-intel IOC lookup
@@ -329,6 +330,22 @@ curl.exe http://127.0.0.1:8000/api/evaluation/latest
 # with real host telemetry as the negative baseline (true negatives):
 curl.exe -X POST "http://127.0.0.1:8000/api/evaluation/holdout?use_real_baseline=true"
 ```
+
+### Enable Sigma community rules
+
+The rule engine includes a SigmaHQ-compatible matcher (selections, modifiers,
+boolean conditions, aggregations). Pull the community rule set (default: the
+Windows rules, ~2000 files) into `sigma_rules\`, then restart BARAQ:
+
+```powershell
+python scripts\sigma_pull.py                    # windows rules (default)
+python scripts\sigma_pull.py --subdirs all      # every platform (~5000)
+python scripts\sigma_pull.py --dry-run          # show what would be pulled
+```
+
+Every `*.yml` under `sigma_rules\` is parsed on startup and evaluated against
+the event window; `eventid`-pinned rules are prefiltered per event, and
+`count() by <field>` aggregations become window-wide detections.
 
 The same workflow is available in the dashboard under **Evaluation**.
 

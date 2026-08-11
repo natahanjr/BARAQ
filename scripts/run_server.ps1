@@ -21,7 +21,14 @@ $tls = $env:BARAQ_TLS -in @("1", "true", "yes", "on")
 if (-not $env:BARAQ_PORT) { $env:BARAQ_PORT = if ($tls) { "8443" } else { "8001" } }
 $hostArg = if ($Lan) { "0.0.0.0" } else { "127.0.0.1" }
 
-$python = Join-Path $Root "venv\Scripts\python.exe"
+$packaged = Join-Path $Root "BARAQ.exe"
+$python   = Join-Path $Root "venv\Scripts\python.exe"
+if (Test-Path $packaged) {
+    # Installed (PyInstaller) layout: run the frozen server executable.
+    Set-Content -Path (Join-Path $Logs "server.pid") -Value $PID
+    & $packaged
+    exit $LASTEXITCODE
+}
 if (-not (Test-Path $python)) { throw "venv not found at $python - run start.bat first" }
 
 Set-Content -Path (Join-Path $Logs "server.pid") -Value $PID
