@@ -19,19 +19,16 @@ jobs:
         $hba = Join-Path $data "pg_hba.conf"
         Add-Content $hba "host all all 127.0.0.1/32 trust"
         Add-Content $hba "host all all ::1/128 trust"
-        $reloaded = $false
-        try { & (Join-Path $pgBin "pg_ctl.exe") reload -D $data *> $null; $reloaded = ($LASTEXITCODE -eq 0) } catch { }
-        if (-not $reloaded) {
-          $svc = Get-Service | Where-Object { $_.Name -like "postgresql*" -and $_.Status -eq "Running" } | Select-Object -First 1
-          if ($svc) { Restart-Service $svc.Name } else { throw "no running postgresql service found" }
-        }
+        $svc = Get-Service | Where-Object { $_.Name -like "postgresql*" } | Select-Object -First 1
+        if ($svc) { "found service: $($svc.Name) status=$($svc.Status)"; Restart-Service -Name $svc.Name -ErrorAction SilentlyContinue; Start-Sleep 5 } else { "no postgresql service found" }
         $psql = Join-Path $pgBin "psql.exe"
-        $ok = $false
+        $err = ""; $ok = $false
         for ($i = 0; $i -lt 30; $i++) {
-          try { & $psql -U postgres -h 127.0.0.1 -p 5432 -c "SELECT 1;" *> $null; if ($LASTEXITCODE -eq 0) { $ok = $true; break } } catch { }
+          $out = (& $psql -U postgres -h 127.0.0.1 -p 5432 -c "SELECT 1;" 2>&1 | Out-String)
+          if ($LASTEXITCODE -eq 0) { $ok = $true; break } else { $err = $out }
           Start-Sleep -Seconds 5
         }
-        if (-not $ok) { throw "PostgreSQL did not come up" }
+        if (-not $ok) { "last psql output: $err"; netstat -ano | Select-String ":5432"; throw "PostgreSQL did not come up" }
         & $psql -U postgres -h 127.0.0.1 -p 5432 -c "CREATE DATABASE baraq_test;"
     - name: Set up Python
       uses: actions/setup-python@v5
