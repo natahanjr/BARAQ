@@ -6,15 +6,18 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      BARAQ_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/baraq_test
-      BARAQ_TEST_ADMIN_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres
+      BARAQ_TEST_DATABASE_URL: postgresql+psycopg://postgres@127.0.0.1:5432/baraq_test
+      BARAQ_TEST_ADMIN_URL: postgresql+psycopg://postgres@127.0.0.1:5432/postgres
     steps:
     - uses: actions/checkout@v4
     - name: Start PostgreSQL
       shell: pwsh
       run: |
         choco install postgresql16 -y --no-progress --params '/Password:postgres'
-        $env:PGPASSWORD = "postgres"
+        $hba = "C:\Program Files\PostgreSQL\16\data\pg_hba.conf"
+        Add-Content $hba "host all all 127.0.0.1/32 trust"
+        Add-Content $hba "host all all ::1/128 trust"
+        Restart-Service "postgresql-x64-16"
         $psql = "C:\Program Files\PostgreSQL\16\bin\psql.exe"
         $ok = $false
         for ($i = 0; $i -lt 30; $i++) {
