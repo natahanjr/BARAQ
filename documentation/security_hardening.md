@@ -11,7 +11,8 @@ the static items; the list below is the full operational picture.
       reverse proxy with a real cert (`deployment\Caddyfile`,
       `deployment\nginx-baraq.conf`). See `documentation\tls_https.md`.
 - [ ] Import `certs\baraq.crt` into client trusted roots when using the
-      self-signed option.
+      self-signed option (`scripts\import_cert.ps1` per client, or
+      `-Machine` with admin for all users).
 - [ ] Agents must point at the HTTPS URL (`--server https://...`), not HTTP.
 - [ ] Never set `BARAQ_COOKIE_SECURE=0` under TLS (the app forces Secure
       cookies anyway when TLS is on).

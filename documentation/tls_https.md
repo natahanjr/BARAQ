@@ -19,7 +19,9 @@ start.bat secure lan        :: HTTPS on 0.0.0.0:8443 + firewall rule
   forced to `Secure` automatically (`COOKIE_SECURE`), so auth cookies never
   travel over plain HTTP.
 - Every analyst host should import `certs\baraq.crt` into "Trusted Root
-  Certification Authorities" (certmgr.msc) to silence the browser warning.
+  Certification Authorities" to silence the browser warning — run
+  `scripts\import_cert.ps1` on the client (CurrentUser store, no admin;
+  `-Machine` for all users).
 - Agents must use `https://<server>:8443` as their `--server` URL.
 
 The packaged executable honours the same config: `BARAQ_TLS=1` +

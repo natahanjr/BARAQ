@@ -233,8 +233,14 @@ start.bat secure lan      # standard: HTTPS exposed to the network on 8443
 `localhost` + all LAN IPv4 addresses (regenerated/rotated on demand by
 deleting `certs\baraq.thumbprint`). When TLS is enabled the session cookie
 is forced to `Secure`. To silence browser warnings, import `certs\baraq.crt`
-into the *Trusted Root Certification Authorities* store of each client
-(`certmgr.msc`). The login endpoint is rate-limited (5 failures per IP per
+into the *Trusted Root Certification Authorities* store of each client:
+
+```powershell
+scripts\import_cert.ps1           # current user (no admin) - most common
+scripts\import_cert.ps1 -Machine  # all users (run as Administrator)
+```
+
+The login endpoint is rate-limited (5 failures per IP per
 5 minutes) as brute-force protection.
 
 **Agent transport security:** remote agents must use `https://` and should

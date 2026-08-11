@@ -225,6 +225,6 @@ focuses the view on one campus.
 | Analyst sees wrong (or no) data | the user's `org` must equal the campus org id |
 | Agent never connects | open TCP 8443; agent must use `https://` and `--tls-ca <server cert>` |
 | New key returns 401 | restart the service — keys are loaded at startup |
-| Browser cert warning | import `certs\baraq.crt` into Trusted Root on the client |
+| Browser cert warning | `scripts\import_cert.ps1` on the client (or `-Machine` as admin) |
 | Prometheus scrape 401 | use the bearer key from `deploy\prometheus\.my-scrape-key` |
 | Agent ships nothing | check `--interval`, host collectors, agent log lines |
