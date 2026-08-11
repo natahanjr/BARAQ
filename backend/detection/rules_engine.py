@@ -38,6 +38,32 @@ from backend.detection.rules.impact import InhibitRecoveryRule, RansomwareImpact
 from backend.detection.rules.credential_store import CredentialStoreTheftRule
 from backend.detection.rules.bits_jobs import BitsJobRule
 from backend.detection.rules.shortcut_modification import ShortcutModificationRule
+from backend.detection.rules.kerberos import (
+    AsRepRoastingRule,
+    DCSyncRule,
+    GoldenTicketRule,
+    KerberoastingRule,
+    PassTheHashRule,
+    PassTheTicketRule,
+    SilverTicketRule,
+)
+from backend.detection.rules.ad_abuse import BloodHoundReconRule, GpoAbuseRule
+from backend.detection.rules.process_abuse import (
+    DllSideloadingRule,
+    PrintNightmareRule,
+    ProcessInjectionRule,
+    TokenManipulationRule,
+)
+from backend.detection.rules.defense_evasion import (
+    AmsiBypassRule,
+    CertificateSpoofingRule,
+    SafeBootTamperingRule,
+)
+from backend.detection.rules.exfil_c2 import (
+    CloudSyncExfilRule,
+    DnsTunnelingRule,
+    WebhookC2Rule,
+)
 from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
 
 logger = logging.getLogger("baraq.detection")
@@ -85,6 +111,25 @@ def build_rules(session: Session, overrides: dict | None = None) -> list[BaseRul
         CredentialStoreTheftRule(session),
         BitsJobRule(session),
         ShortcutModificationRule(session),
+        KerberoastingRule(session),
+        AsRepRoastingRule(session),
+        DCSyncRule(session),
+        GoldenTicketRule(session),
+        SilverTicketRule(session),
+        PassTheHashRule(session),
+        PassTheTicketRule(session),
+        BloodHoundReconRule(session),
+        GpoAbuseRule(session),
+        DllSideloadingRule(session),
+        ProcessInjectionRule(session),
+        TokenManipulationRule(session),
+        PrintNightmareRule(session),
+        SafeBootTamperingRule(session),
+        AmsiBypassRule(session),
+        CertificateSpoofingRule(session),
+        CloudSyncExfilRule(session),
+        WebhookC2Rule(session),
+        DnsTunnelingRule(session),
     ]
 
 

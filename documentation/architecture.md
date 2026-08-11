@@ -124,6 +124,11 @@ Risk mapping: event ID → risk level; severity derived per category (Authentica
 | `lolbin_execution.py` | rundll32/mshta/regsvr32/certutil/bitsadmin abuse | T1218 |
 | `exfiltration_volume.py` | Per-process HTTP volume > 5 MB / 250 req | T1041 |
 | `log_clearing.py` | Event 1102/104 clears + .evtx deletion | T1070.001 |
+| `kerberos.py` | Kerberoasting (4769 RC4 / Rubeus), AS-REP roasting (4768 no-preauth), DCSync (4662 replication / secretsdump), Golden & Silver tickets (krbtgt 4768 / admin RC4 4769), Pass-the-Hash (NTLM type-3 logons / sekurlsa::pth), Pass-the-Ticket (Kerberos type-9/10 / kerberos::ptt) | T1558.003 / T1558.004 / T1003.006 / T1558.001 / T1558.002 / T1550.002 / T1550.003 |
+| `ad_abuse.py` | BloodHound/SharpHound collection, GPO modification (5136 CN=Policies / SharpGPOAbuse) | T1087 / T1484.001 |
+| `process_abuse.py` | DLL side-loading (Sysmon 7 module outside System32), process injection (Sysmon 8 CreateRemoteThread), token manipulation (token::elevate), PrintNightmare (printui.dll /ia, Add-PrinterDriver) | T1574.002 / T1055 / T1134 / T1068 |
+| `defense_evasion.py` | Safe Mode boot tampering (bcdedit safeboot), AMSI/Defender bypass strings (4104), rogue root-cert install (certutil -addstore, New-SelfSignedCertificate) | T1562.001 / T1562.001 / T1553.004 |
+| `exfil_c2.py` | Cloud-storage uploads (rclone/aws s3/azcopy), webhook dead-drop C2 (Slack/Teams/Discord/Telegram), DNS tunneling (long labels, per-process query volume, TXT-sized responses) | T1567.002 / T1102.001 / T1071.004 |
 
 - **Alerting Service** (`alerting.py`) deduplicates findings into `Alert` records, linking evidence events (many-to-many), attaching MITRE metadata + recommendations, and computing the **hybrid risk score** for every alert.
 - **ML** (`ml/anomaly.py`): three-layer lightweight anomaly detection:

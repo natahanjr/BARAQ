@@ -272,6 +272,159 @@
       "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688); file system monitoring",
       "detection": "Alert on command lines that create or modify .lnk files under the Startup folders or that inject remote/executable targets into shortcuts (WScript.Shell CreateShortcut, .TargetPath).",
       "recommendation": "Remove the shortcut, delete the target payload, scan the startup folder, and harden it against write by non-privileged users."
+    },
+    {
+      "id": "T1558.003",
+      "name": "Steal or Forge Kerberos Tickets: Kerberoasting",
+      "tactic": "Credential Access",
+      "description": "An adversary requests service tickets (TGS) for Kerberos service accounts and cracks the offline hash of the ticket - the service-account password is often weak and never rotates.",
+      "data_sources": "Windows Security Event Log 4769 (Ticket Encryption Type 0x17 RC4), process creation telemetry (Rubeus, GetUserSPNs, Invoke-Kerberoast)",
+      "detection": "Flag 4769 events with RC4 ticket encryption (0x17) for SPN targets requested by non-computer accounts, and command lines invoking Rubeus kerberoast, GetUserSPNs or Invoke-Kerberoast.",
+      "recommendation": "Rotate the affected service-account password, require AES-256 Kerberos encryption (disable RC4), prefer group-managed service accounts (gMSA) with long auto-rotated passwords, and audit who requested the tickets."
+    },
+    {
+      "id": "T1558.004",
+      "name": "Steal or Forge Kerberos Tickets: AS-REP Roasting",
+      "tactic": "Credential Access",
+      "description": "Accounts with 'Do not require Kerberos pre-authentication' allow attackers to request their TGT and crack the response offline - no interaction with the account holder needed.",
+      "data_sources": "Windows Security Event Log 4768 (Ticket Options 0x40810000/0x40800000), process creation telemetry (Rubeus asreproast, GetNPUsers)",
+      "detection": "Flag 4768 AS-REQ events where pre-authentication is not required (Ticket Options containing 0x40810000 or 0x40800000) and command lines invoking Rubeus asreproast or GetNPUsers.",
+      "recommendation": "Disable the 'Do not require pre-authentication' setting on the affected account, rotate its password, and enforce pre-authentication for all user accounts."
+    },
+    {
+      "id": "T1003.006",
+      "name": "OS Credential Dumping: DCSync",
+      "tactic": "Credential Access",
+      "description": "An attacker impersonates a domain controller and uses directory replication (DRSUAPI) to sync password hashes for all domain accounts - total domain compromise.",
+      "data_sources": "Windows Security Event Log 4662 (DS-Replication-Get-Changes 0x100 / -All 0x200 access masks), process creation telemetry (secretsdump, mimikatz lsadump::dcsync)",
+      "detection": "Flag 4662 directory-service access events requesting replication rights (access mask 0x100/0x200/0x300) from non-DC accounts, and command lines invoking secretsdump or lsadump::dcsync.",
+      "recommendation": "Treat as critical domain compromise: reset all privileged and computer account credentials, rotate the krbtgt secret twice, rebuild affected hosts, and restrict replication rights to authorized DC accounts."
+    },
+    {
+      "id": "T1558.001",
+      "name": "Steal or Forge Kerberos Tickets: Golden Ticket",
+      "tactic": "Credential Access",
+      "description": "With the krbtgt hash, an attacker forges TGTs valid for any account for up to the ticket lifetime - stealthy, persistent domain-wide access that normal password resets do not revoke.",
+      "data_sources": "Windows Security Event Log 4768 (TGT requests for krbtgt, forged-account TGTs), process creation telemetry (Rubeus golden, mimikatz kerberos::golden)",
+      "detection": "Flag 4768 events requesting a TGT for the krbtgt account (never legitimate) and command lines invoking Rubeus golden or kerberos::golden.",
+      "recommendation": "Reset the krbtgt account password twice (with replication wait between resets), invalidate all tickets, and treat the domain as compromised - hunt for persistence and re-audit credentials."
+    },
+    {
+      "id": "T1550.002",
+      "name": "Use Alternate Authentication Material: Pass the Hash",
+      "tactic": "Lateral Movement",
+      "description": "An adversary reuses a captured NT hash to authenticate over NTLM without knowing the plaintext password (mimikatz sekurlsa::pth, psexec -hashes, evil-winrm).",
+      "data_sources": "Windows Security Event Log 4624 (Logon Type 3 with NTLM package), process creation telemetry (sekurlsa::pth, psexec -hashes)",
+      "detection": "Flag NTLM network logons (4624, type 3, NTLM authentication package) with privileged accounts from remote hosts, and command lines invoking sekurlsa::pth or -hashes tooling.",
+      "recommendation": "Enable Credential Guard, enforce Kerberos instead of NTLM where possible, restrict local admin use, rotate affected credentials, and segment the network."
+    },
+    {
+      "id": "T1550.003",
+      "name": "Use Alternate Authentication Material: Pass the Ticket",
+      "tactic": "Lateral Movement",
+      "description": "An attacker injects a stolen Kerberos ticket into a new logon session (mimikatz kerberos::ptt, Rubeus ptt) to move laterally as the impersonated user.",
+      "data_sources": "Windows Security Event Log 4624 (Logon Types 9/10 with Kerberos package), process creation telemetry (kerberos::ptt, Rubeus ptt/asktgt /ptt)",
+      "detection": "Flag 4624 logons of type 9 (NewCredentials) or 10 (RemoteInteractive) using the Kerberos package from a single user, and command lines invoking kerberos::ptt or Rubeus ptt.",
+      "recommendation": "Rotate the impersonated account's credentials, enforce AES Kerberos encryption, enable Credential Guard, and review the originating session for ticket-theft tools."
+    },
+    {
+      "id": "T1087",
+      "name": "Account Discovery",
+      "tactic": "Discovery",
+      "description": "Adversaries enumerate users, groups, and domain structure to map targets - BloodHound/SharpHound collection is the most common automated variant.",
+      "data_sources": "Process creation telemetry (SharpHound, bloodhound-python, Invoke-BloodHound), Windows Security Event Log 4720/4798/4799 bulk enumeration",
+      "detection": "Flag execution of SharpHound/BloodHound collection tooling and command-line flags such as --collectionmethod, and correlate with bulk LDAP enumeration against domain controllers.",
+      "recommendation": "Investigate the origin host and account, review LDAP query volume on domain controllers, and restrict access to Active Directory enumeration tools."
+    },
+    {
+      "id": "T1484.001",
+      "name": "Domain or Tenant Policy Modification: Group Policy Modification",
+      "tactic": "Privilege Escalation",
+      "description": "An attacker with GPO edit rights modifies Group Policy Objects to deploy scripts, add local admins, or schedule malicious tasks domain-wide (SharpGPOAbuse, Set-GPLink).",
+      "data_sources": "Windows Security Event Log 5136 (DS object modified on CN=Policies), process creation telemetry (SharpGPOAbuse, Set-GPLink, Invoke-GPOUpdate)",
+      "detection": "Flag 5136 modifications to GPO containers (CN=Policies) and command lines invoking SharpGPOAbuse, New/Set-GPLink or Invoke-GPOUpdate.",
+      "recommendation": "Audit who holds GPO-edit rights, restore the modified GPO from backup, check linked scripts/scheduled tasks, and review the privileged group membership that allowed the change."
+    },
+    {
+      "id": "T1574.002",
+      "name": "Hijack Execution Flow: DLL Side-Loading",
+      "tactic": "Defense Evasion",
+      "description": "A legitimate trusted process loads a malicious DLL placed in its search path (user-writable folders), bypassing application allow-lists while running under a trusted signature.",
+      "data_sources": "Sysmon Event 7 (Image Loaded: module not in System32), process creation telemetry",
+      "detection": "Flag Sysmon image-load events where a System32 process loads a module from a user-writable path (Temp, AppData, Public, Downloads).",
+      "recommendation": "Remove the malicious DLL, apply application whitelisting/SRU, enforce DLL load-order hardening and signature verification, and hunt for the payload that dropped the DLL."
+    },
+    {
+      "id": "T1055",
+      "name": "Process Injection",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries inject malicious code into a running process to hide execution and evade detection - CreateRemoteThread (Sysmon 8) and lsass process-access are the classic signals.",
+      "data_sources": "Sysmon Event 8 (CreateRemoteThread), Event 10 (ProcessAccess with injection permission masks)",
+      "detection": "Flag CreateRemoteThread events (Sysmon 8), especially into lsass or other privileged processes, and ProcessAccess events with PROCESS_VM_WRITE/PROCESS_VM_OPERATION permissions.",
+      "recommendation": "Identify the injecting parent process and payload, isolate the host, enable Credential Guard and Protected Process Light for LSASS, and review the origin of the injected thread."
+    },
+    {
+      "id": "T1134",
+      "name": "Access Token Manipulation",
+      "tactic": "Privilege Escalation",
+      "description": "An adversary impersonates or steals another user's access token (mimikatz token::elevate, TokenManipulation) to escalate privileges without a new logon.",
+      "data_sources": "Process creation telemetry (token::elevate, Invoke-TokenManipulation, SeDebugPrivilege enable), Windows Security Event Log 4702 if audit enabled",
+      "detection": "Flag command lines invoking mimikatz token:: commands or PowerShell token-manipulation modules, and SeDebugPrivilege token adjustments by non-system processes.",
+      "recommendation": "Kill the token-stealing process, revoke SeDebugPrivilege for unnecessary accounts, enable Credential Guard, and review the token's original owner for compromise."
+    },
+    {
+      "id": "T1558.002",
+      "name": "Steal or Forge Kerberos Tickets: Silver Ticket",
+      "tactic": "Credential Access",
+      "description": "With the hash of a single service account, an attacker forges service tickets (TGS) valid for that service - persistent access that survives user password resets.",
+      "data_sources": "Windows Security Event Log 4769 (RC4 TGS 0x17 requested by privileged accounts), process creation telemetry (Rubeus silver)",
+      "detection": "Flag 4769 events with RC4 ticket encryption requested by administrative accounts for SPN services, and command lines invoking Rubeus silver.",
+      "recommendation": "Rotate the forged service account's password twice (as a KRBTGT-style reset), audit 4769 RC4 usage, and enable AES-only Kerberos encryption."
+    },
+    {
+      "id": "T1562.001",
+      "name": "Impair Defenses: Disable or Modify Tools",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries disable or tamper with security tooling: AMSI bypasses, Defender real-time protection toggles, and Safe Mode boot configuration to launch tools in a degraded-security state.",
+      "data_sources": "Process creation telemetry (bcdedit safeboot, Set-MpPreference, AMSI patch strings), Windows Event 7040 (service startup type changes)",
+      "detection": "Flag bcdedit/bootcfg Safe Mode configuration changes, Set-MpPreference disable switches, AMSI-bypass strings in PowerShell script blocks (4103/4104), and service configuration changes for security agents.",
+      "recommendation": "Reverse the boot or policy change, re-enable security agents, apply tamper protection, and treat the change as an active defense-evasion campaign requiring a full hunt."
+    },
+    {
+      "id": "T1567.002",
+      "name": "Exfiltration Over Web Service: Exfiltration to Cloud Storage",
+      "tactic": "Exfiltration",
+      "description": "An attacker uploads collected data to cloud storage (OneDrive, Google Drive, S3) using sync tools (rclone, aws s3, azcopy, gsutil) or the provider's own sync client.",
+      "data_sources": "Process creation telemetry (rclone copy/move/sync, aws s3 cp, azcopy copy, gsutil cp), network connections to cloud storage endpoints",
+      "detection": "Flag command lines invoking cloud sync/upload tooling targeting storage remotes, especially when combined with staging of sensitive files.",
+      "recommendation": "Block the cloud endpoint, review exfiltrated data scope, rotate credentials, and restrict cloud storage access from endpoint accounts via policy."
+    },
+    {
+      "id": "T1102.001",
+      "name": "Web Service: Dead Drop Resolver (Webhooks)",
+      "tactic": "Command and Control",
+      "description": "Adversaries abuse legitimate webhook endpoints (Slack, Teams, Discord, Telegram) as dead-drop C2: commands parked in one place, retrieved by the implant - traffic blends with legitimate SaaS use.",
+      "data_sources": "DNS queries to webhook provider domains (hooks.slack.com, webhook.office.com, discord.com), process creation telemetry with webhook URLs",
+      "detection": "Flag DNS queries or command lines referencing webhook endpoints (hooks.slack.com/services, webhookb2, /api/webhooks, api.telegram.org/bot.../sendMessage) from non-browser processes.",
+      "recommendation": "Investigate the process contacting the webhook, block the endpoint at the egress proxy, and review the SaaS workspace audit logs for the channel/thread used."
+    },
+    {
+      "id": "T1071.004",
+      "name": "Application Layer Protocol: DNS Tunneling",
+      "tactic": "Command and Control",
+      "description": "Adversaries encode data in DNS queries (long random subdomains) and responses (TXT payloads) to tunnel C2 or exfiltration through a protocol that is usually allowed outbound.",
+      "data_sources": "Sysmon Event 22 (DNS query) / DNS monitor: query length, label structure, per-process query volume to a single base domain",
+      "detection": "Flag DNS queries with very long labels (>30 chars), high per-process query volume (>=20 unique queries to one base domain in a window), or oversized DNS responses (>=400 B) suggesting TXT payloads.",
+      "recommendation": "Block the tunneling domain at the resolver, hunt for the client process, and review the DNS logs for the full tunnel window to bound the data exfiltrated."
+    },
+    {
+      "id": "T1553.004",
+      "name": "Subvert Trust Controls: Install Root Certificate",
+      "tactic": "Defense Evasion",
+      "description": "An adversary installs a rogue root CA certificate to make malicious code and TLS traffic appear trusted - browser and code-signing trust both collapse.",
+      "data_sources": "Process creation telemetry (certutil -addstore, Import-Certificate, New-SelfSignedCertificate), Sysmon Event 11 if registry/file tracked",
+      "detection": "Flag command lines adding certificates to the Root store (certutil -addstore/-importpfx, Import-Certificate to Root, certmgr /add) and creation of new self-signed certificates.",
+      "recommendation": "Remove the rogue certificate from the Root store, revoke trust, audit what was signed or intercepted since installation, and review the installing user's session."
     }
   ]
 }

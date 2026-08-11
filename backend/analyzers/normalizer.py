@@ -66,6 +66,12 @@ EVENT_META: dict[int, dict[str, str]] = {
     104: {"category": "Log Clearing", "risk": "High", "severity": "high"},
     1102: {"category": "Log Clearing", "risk": "High", "severity": "high"},
     4738: {"category": "Account Management", "risk": "High", "severity": "high"},
+    4662: {"category": "Directory Service", "risk": "Medium", "severity": "medium"},
+    4768: {"category": "Authentication", "risk": "Medium", "severity": "medium"},
+    4769: {"category": "Authentication", "risk": "Low", "severity": "low"},
+    5136: {"category": "Directory Service", "risk": "High", "severity": "high"},
+    7: {"category": "Process", "risk": "Medium", "severity": "medium"},
+    8: {"category": "Process", "risk": "High", "severity": "high"},
 }
 
 MESSAGE_PATTERNS = {
@@ -79,7 +85,7 @@ MESSAGE_PATTERNS = {
     "service_file": re.compile(r"Service File Name:\s+(\S+)", re.IGNORECASE),
     "task_name": re.compile(r"Task Name:\s+(\S+)", re.IGNORECASE),
     "group_name": re.compile(r"Group:\s+([\w\s-]+?)\.\s+Subject", re.IGNORECASE),
-    "target_image": re.compile(r"TargetImage:\s+(\S+)", re.IGNORECASE),
+    "target_image": re.compile(r"Target\s*Image:\s+(\S+)", re.IGNORECASE),
     "granted_access": re.compile(r"GrantedAccess:\s+(\S+)", re.IGNORECASE),
     "target_object": re.compile(r"TargetObject:\s+(\S+)", re.IGNORECASE),
     "event_type": re.compile(r"EventType:\s+(\S+)", re.IGNORECASE),
@@ -87,6 +93,18 @@ MESSAGE_PATTERNS = {
     "target_account_name": re.compile(r"Target Account Name:\s+(\S+)", re.IGNORECASE),
     "deleted_account": re.compile(r"Deleted Account Name:\s+(\S+)", re.IGNORECASE),
     "file_path": re.compile(r"File (?:created|deleted):\s+(\S+)", re.IGNORECASE),
+    "ticket_encryption_type": re.compile(r"Ticket Encryption Type:\s+(0x[0-9A-Fa-f]+)", re.IGNORECASE),
+    "ticket_options": re.compile(r"Ticket Options:\s+(0x[0-9A-Fa-f]+)", re.IGNORECASE),
+    "logon_process": re.compile(r"Logon Process:\s+(\S+)", re.IGNORECASE),
+    "authentication_package": re.compile(r"Authentication Package:\s+(\S+)", re.IGNORECASE),
+    "workstation_name": re.compile(r"Workstation Name:\s+(\S+)", re.IGNORECASE),
+    "access_mask": re.compile(r"Access Mask:\s+(0x[0-9A-Fa-f]+)", re.IGNORECASE),
+    "service_sid": re.compile(r"Service SID:\s+(\S+)", re.IGNORECASE),
+    "directory_service": re.compile(r"Directory Service:\s+(\S+)", re.IGNORECASE),
+    "object_dn": re.compile(r"Object:\s+(\S+)", re.IGNORECASE),
+    "source_image": re.compile(r"Source Image:\s+(\S+)", re.IGNORECASE),
+    "image": re.compile(r"Image:\s+(\S+)", re.IGNORECASE),
+    "image_loaded": re.compile(r"ImageLoaded:\s+(\S+)", re.IGNORECASE),
 }
 
 
