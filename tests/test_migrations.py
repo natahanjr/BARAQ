@@ -10,7 +10,10 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 
 ROOT = Path(__file__).resolve().parent.parent
-ADMIN_URL = "postgresql+psycopg://postgres@127.0.0.1:55432/postgres"
+ADMIN_URL = os.environ.get(
+    "BARAQ_TEST_ADMIN_URL",
+    "postgresql+psycopg://postgres@127.0.0.1:55432/postgres",
+)
 
 
 def _fresh_db_name() -> str:

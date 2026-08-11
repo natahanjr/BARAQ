@@ -7,6 +7,7 @@ jobs:
     runs-on: windows-latest
     env:
       BARAQ_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/baraq_test
+      BARAQ_TEST_ADMIN_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres
     steps:
     - uses: actions/checkout@v4
     - name: Start PostgreSQL
