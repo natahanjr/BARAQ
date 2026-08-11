@@ -531,6 +531,35 @@ def update_user(
     return _public_user(user)
 
 
+@router.delete("/users/{user_id}", dependencies=[Depends(require_admin)])
+def delete_user(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Delete an operator account. Safety guards: you cannot delete your own
+    account, and the last admin account can never be removed (lockout guard).
+    """
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.username == _actor(request):
+        raise HTTPException(400, "You cannot delete your own account")
+    if user.role == "admin":
+        admin_count = len(
+            [1 for u in db.scalars(select(User).where(User.role == "admin")).all()]
+        )
+        if admin_count <= 1:
+            raise HTTPException(400, "Cannot delete the last admin account")
+    username = user.username
+    role = user.role
+    db.delete(user)
+    db.commit()
+    log_action(db, _actor(request), "user.delete", "user", str(user_id),
+               f"username={username} role={role}", client_ip(request))
+    return {"deleted": user_id, "username": username}
+
+
 def _actor(request: Request | None) -> str:
     if request is None:
         return "unknown"

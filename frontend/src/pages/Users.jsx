@@ -134,6 +134,21 @@ export default function Users() {
     }
   };
 
+  const remove = async (u) => {
+    if (!window.confirm(`Delete account "${u.username}"? This cannot be undone.`)) return;
+    setBusy(`del:${u.id}`);
+    setError("");
+    try {
+      await api.deleteUser(u.id);
+      setMessage(`Account "${u.username}" deleted`);
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy("");
+    }
+  };
+
   return (
     <div className="space-y-6 pb-12">
       <PageHeader
@@ -230,6 +245,15 @@ export default function Users() {
                       }`}
                     >
                       {u.is_active ? "Disable" : "Enable"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove(u)}
+                      disabled={busy === `del:${u.id}`}
+                      className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-40"
+                      title="Delete account permanently"
+                    >
+                      {busy === `del:${u.id}` ? "Deleting…" : "Delete"}
                     </button>
                   </div>
                 </div>

@@ -151,3 +151,55 @@ def test_audit_endpoint_lists_login_events(client):
     assert audit.status_code == 200
     actions = [e["action"] for e in audit.json()["items"]]
     assert "login" in actions
+
+
+def test_admin_deletes_user(client):
+    token = _login(client, "admin", "baraqadmin").json()["token"]
+    user = client.post(
+        "/api/auth/users",
+        headers=_bearer_headers(token),
+        json={"username": "soc_delete", "password": "hunter2hunter2", "role": "analyst"},
+    ).json()
+    deleted = client.delete(
+        f"/api/auth/users/{user['id']}", headers=_bearer_headers(token)
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["username"] == "soc_delete"
+    gone = client.get("/api/auth/users", headers=_bearer_headers(token)).json()["items"]
+    assert all(u["username"] != "soc_delete" for u in gone)
+    assert _login(client, "soc_delete", "hunter2hunter2").status_code == 401
+
+
+def test_delete_user_requires_admin(client):
+    token = _login(client, "admin", "baraqadmin").json()["token"]
+    user = client.post(
+        "/api/auth/users",
+        headers=_bearer_headers(token),
+        json={"username": "soc_ast", "password": "hunter2hunter2", "role": "analyst"},
+    ).json()
+    analyst = _login(client, "soc_ast", "hunter2hunter2").json()["token"]
+    assert client.delete(
+        f"/api/auth/users/{user['id']}", headers=_bearer_headers(analyst)
+    ).status_code == 403
+    still_there = client.get("/api/auth/users", headers=_bearer_headers(token)).json()["items"]
+    assert any(u["username"] == "soc_ast" for u in still_there)
+
+
+def test_cannot_delete_own_account(client):
+    token = _login(client, "admin", "baraqadmin").json()["token"]
+    me = client.get("/api/auth/me", headers=_bearer_headers(token)).json()["user"]
+    assert client.delete(
+        f"/api/auth/users/{me['id']}", headers=_bearer_headers(token)
+    ).status_code == 400
+
+
+def test_delete_records_audit_entry(client):
+    token = _login(client, "admin", "baraqadmin").json()["token"]
+    user = client.post(
+        "/api/auth/users",
+        headers=_bearer_headers(token),
+        json={"username": "soc_audit", "password": "hunter2hunter2", "role": "analyst"},
+    ).json()
+    client.delete(f"/api/auth/users/{user['id']}", headers=_bearer_headers(token))
+    audit = client.get("/api/auth/audit", headers=_bearer_headers(token)).json()["items"]
+    assert any(e["action"] == "user.delete" for e in audit)

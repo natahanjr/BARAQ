@@ -91,6 +91,7 @@ export const api = {
   users: () => request("/api/auth/users"),
   createUser: (body) => request("/api/auth/users", { method: "POST", body: JSON.stringify(body) }),
   updateUser: (id, body) => request(`/api/auth/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteUser: (id) => request(`/api/auth/users/${id}`, { method: "DELETE" }),
   audit: (params = {}) => {
     const qs = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => {
