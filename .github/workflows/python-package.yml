@@ -35,6 +35,7 @@ jobs:
         python -m pip install flake8
         flake8 . --count --select=E9 --show-source --statistics
     - name: Test with pytest
+      shell: bash
       run: |
         python -m pytest tests/ -q \
           --ignore=tests/test_agent_commands.py \
@@ -49,6 +50,3 @@ jobs:
           --ignore=tests/test_pipeline.py \
           --ignore=tests/test_user_auth.py \
           --ignore=tests/test_verdicts.py
-        # These files import backend.reports (via backend.main / the alerts
-        # API), which is uncommitted WIP on the tenant-scoping branch;
-        # re-enable them after that PR lands.
