@@ -494,3 +494,19 @@ HTTPS is now the standard deployment path (`start.bat secure`, agent
 rotation/CA integration, secure secret management, multi-node/ha deployment,
 SOC2/ISO 27001-aligned audit trails, immutable evidence storage, and a
 managed-versioning/update channel. See the phased deployment plan for details.
+
+---
+
+## Contributors
+
+<!-- ALL-CONTRIBUTORS-LIST:START -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+- [@natahanjr](https://github.com/natahanjr) — design, architecture, security model, and maintenance
+- [Claude](https://claude.ai) — AI-assisted engineering: majority of the codebase was generated and reviewed through iterative Claude collaboration
+<!-- markdownlint-enable -->
+<!-- prettier-ignore-end -->
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
+Contributions are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the
+workflow, commit conventions, and the AI-assisted contributions policy.
