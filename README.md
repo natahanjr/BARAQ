@@ -575,6 +575,22 @@ readiness checklist.
 
 ---
 
+## Verifying the Installation
+
+After installing the packaged build, run the bundled checker to confirm every
+component is healthy:
+
+```cmd
+verify_install.cmd
+```
+
+It performs a 6-point audit: service/task registration, PostgreSQL cluster
+reachability, API health, admin login, secrets vault integrity, and — on MFA-
+enabled setups — that the login challenge flow returns `mfa_required` as
+expected. It exits non-zero with a message on the first failing check.
+
+---
+
 ## Roadmap
 
 HTTPS is now the standard deployment path (`start.bat secure`, agent
