@@ -58,7 +58,10 @@ def _write_rules(tmp_path, rules):
 
 
 def _event(db, event_id=4688, command_line="", message="", minutes_ago=1,
-           category="Process Creation"):
+           category="Process Creation", integrity=None):
+    raw_json = {"channel": "Security", "facts": {"CommandLine": command_line}}
+    if integrity is not None:
+        raw_json["data_integrity"] = integrity
     ev = NormalizedEvent(
         event_id=event_id,
         category=category,
@@ -69,7 +72,7 @@ def _event(db, event_id=4688, command_line="", message="", minutes_ago=1,
         severity="info",
         message=message,
         timestamp=datetime.now(timezone.utc) - timedelta(minutes=minutes_ago),
-        raw_json={"channel": "Security", "facts": {"CommandLine": command_line}},
+        raw_json=raw_json,
     )
     db.add(ev)
     db.commit()
@@ -122,3 +125,77 @@ def test_sigma_aggregation_below_threshold(db, tmp_path):
     for _ in range(2):
         _event(db, command_line="cmd.exe /c whoami")
     assert engine.evaluate(10) == []
+
+
+IMAGE_RULE = """
+title: Suspicious Image Only
+id: 9f4c5d6e-7f8a-4b9c-0d1e-2f3a4b5c6d7e
+status: test
+level: high
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection:
+    EventID: 4688
+    Image|endswith: mimikatz.exe
+  condition: selection
+tags:
+  - attack.credential_access
+"""
+
+
+def test_sigma_exception_for_incomplete_process_data(db, tmp_path):
+    """Rules that depend on process fields must not fire on events whose
+    process data was never captured (data-integrity exception)."""
+    rules_dir = _write_rules(tmp_path, [IMAGE_RULE])
+    engine = SigmaRuleEngine(db, rules_dir=rules_dir)
+    _event(db, command_line="", integrity={
+        "complete": False,
+        "truncated_fields": ["process_data"],
+        "reasons": ["no process image or command line captured for a process event"],
+    })
+    assert engine.evaluate(10) == []
+
+
+def test_sigma_exception_allows_non_process_rules(db, tmp_path):
+    """The incomplete-data exception only suppresses rules that reference
+    process fields; EventID-only rules still evaluate."""
+    rules_dir = _write_rules(tmp_path, [AGGREGATION_RULE])
+    engine = SigmaRuleEngine(db, rules_dir=rules_dir)
+    for _ in range(3):
+        _event(db, command_line="", integrity={
+            "complete": False,
+            "truncated_fields": ["process_data"],
+            "reasons": ["no process image or command line captured for a process event"],
+        })
+    results = engine.evaluate(10)
+    assert len(results) == 1
+    assert "3 matching event(s)" in results[0].evidence
+
+
+def test_sigma_demotes_severity_when_process_truncated(db, tmp_path):
+    """A rule that matches on truncated process data still fires, but the
+    severity is demoted because the evidence is unreliable."""
+    rules_dir = _write_rules(tmp_path, [MIMIKATZ_RULE])
+    engine = SigmaRuleEngine(db, rules_dir=rules_dir)
+    _event(db, command_line="mimikatz.exe sekurlsa::logonpasswords...", integrity={
+        "complete": False,
+        "truncated_fields": ["CommandLine"],
+        "reasons": ["structured field CommandLine ends mid-value (truncation marker or partial path)"],
+    })
+    results = engine.evaluate(10)
+    assert len(results) == 1
+    assert results[0].severity == "medium"  # demoted from high
+    assert "severity reduced" in results[0].evidence
+
+
+def test_sigma_complete_data_keeps_severity(db, tmp_path):
+    rules_dir = _write_rules(tmp_path, [MIMIKATZ_RULE])
+    engine = SigmaRuleEngine(db, rules_dir=rules_dir)
+    _event(db, command_line=r"c:\tools\mimikatz.exe sekurlsa::logonpasswords", integrity={
+        "complete": True, "truncated_fields": [], "reasons": [],
+    })
+    results = engine.evaluate(10)
+    assert len(results) == 1
+    assert results[0].severity == "high"

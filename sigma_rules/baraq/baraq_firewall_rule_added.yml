@@ -1,0 +1,23 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Firewall Rule Added"
+id: baraq-4947-firewall-add
+status: experimental
+level: medium
+description: "A Windows Firewall rule was added or modified - check for inbound allow rules."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        RuleName:contains: \
+    condition: selection_sel
+fields:
+    - RuleName
+    - Direction
+    - Profile
+falsepositives:
+    - Network team applying rules
+tags:
+    - attack.defense_evasion
+    - attack.t1562.004

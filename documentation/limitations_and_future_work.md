@@ -138,7 +138,7 @@ now trains and an F1-tuned per-stream threshold (network 0.488) replaces the
 CFAR fallback. Verified hold-out numbers: rule layer recall 0.939 (precision
 1.0, FPR 0.0), ML layer recall 0.786 (F1 0.88), hybrid recall 0.951 (F1 0.975),
 zero false positives on the real-telemetry baseline, all 11 hold-out scenarios
-covered. Full suite: 217 tests passing; the hold-out test passes
+covered. Full suite: 623 tests passing; the hold-out test passes
 deterministically across repeated runs.
 
 **Real-World Performance Unknown:**
@@ -638,8 +638,10 @@ The hybrid rule+ML approach shows promise; the optimal balance (60% rule, 40% ML
 - [x] ML generalisation on unseen attacks (v2.1 hold-out, recall 0.786) + scenario randomization / FN root-cause report (2026-08)
 
 ### Phase 4: Standardization (18+ months)
-- [ ] STIX/TAXII integration for threat intelligence
-- [ ] OpenTelemetry / Prometheus metrics
-- [ ] Kubernetes deployment templates
+- [x] STIX/TAXII integration for threat intelligence (2026-08: `backend/intel/feeds.py` - TAXII 2.1, STIX 2.1 bundles, MISP restSearch, plain/CSV lists; scheduler + Celery `baraq.intel_refresh`; see `documentation/threat_intel_feeds.md`)
+- [x] OpenTelemetry / Prometheus metrics (2026-08: `backend/observability.py` - SLO gauges `baraq_slo_health`/`baraq_slo_target`, OTLP/HTTP exporter, Grafana dashboard `deploy/grafana/dashboards/baraq-slos.json`)
+- [x] Kubernetes deployment templates (2026-08: `deploy/k8s/blue-green/baraq-blue-green.yaml` + `scripts/blue_green_switch.ps1`)
 - [ ] Community rule contribution framework
-
+- [x] Scheduled reports + email delivery (2026-08: `backend/reports/schedule.py` + report-schedules API in `backend/api/reports.py` + Celery `baraq.scheduled_report`)
+- [x] Ticketing integrations (2026-08: `backend/integrations/client.py` - Jira REST v2 + ServiceNow table API with health tracking; `backend/integrations/sdk.py` - official Python SDK; see `documentation/integrations.md`)
+- [x] Data-quality auto-fix (2026-08: `backend/collectors/validation.py` discards corrupted rendering-debris events before detection; `backend/collectors/quality.py` + `data_quality_snapshots` tracking; `backend/collectors/repair.py` auto-repair sequence; `backend/monitor/data_quality.py` background monitor; `/api/system/data-quality*` endpoints; see `documentation/data_quality.md`)

@@ -139,6 +139,36 @@ export default function Users() {
     }
   };
 
+  const approve = async (u) => {
+    setBusy(`approve:${u.id}`);
+    setError("");
+    setMessage("");
+    try {
+      const updated = await api.approveUser(u.id);
+      setMessage(`Account "${updated.username}" verified and activated.`);
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const reject = async (u) => {
+    if (!window.confirm(`Reject the registration of "${u.username}"?`)) return;
+    setBusy(`reject:${u.id}`);
+    setError("");
+    try {
+      const updated = await api.rejectUser(u.id);
+      setMessage(`Registration of "${updated.username}" rejected.`);
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy("");
+    }
+  };
+
   const resetPassword = async (u) => {
     const next = window.prompt(`New password for "${u.username}" (min 8 chars):`);
     if (!next) return;
@@ -224,7 +254,17 @@ export default function Users() {
                           2FA
                         </span>
                       )}
-                      {!u.is_active && (
+                      {u.registration_status === "pending" && (
+                        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400" title="Awaiting administrator verification">
+                          PENDING VERIFICATION
+                        </span>
+                      )}
+                      {u.registration_status === "rejected" && (
+                        <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400" title="Registration was rejected">
+                          REJECTED
+                        </span>
+                      )}
+                      {!u.is_active && u.registration_status !== "pending" && u.registration_status !== "rejected" && (
                         <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400">
                           DISABLED
                         </span>
@@ -246,27 +286,52 @@ export default function Users() {
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => resetPassword(u)}
-                      disabled={busy === `pwd:${u.id}`}
-                      className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-medium text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-40"
-                      title="Reset password"
-                    >
-                      Pwd
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleActive(u)}
-                      disabled={busy === `active:${u.id}`}
-                      className={`rounded-md border px-2 py-1 text-[10px] font-medium transition-colors disabled:opacity-40 ${
-                        u.is_active
-                          ? "border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                          : "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                      }`}
-                    >
-                      {u.is_active ? "Disable" : "Enable"}
-                    </button>
+                    {u.registration_status === "pending" ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => approve(u)}
+                          disabled={busy === `approve:${u.id}`}
+                          className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/20 disabled:opacity-40"
+                          title="Verify this account and activate it"
+                        >
+                          {busy === `approve:${u.id}` ? "Verifying…" : "Approve"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => reject(u)}
+                          disabled={busy === `reject:${u.id}`}
+                          className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-40"
+                          title="Reject this registration"
+                        >
+                          {busy === `reject:${u.id}` ? "Rejecting…" : "Reject"}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => resetPassword(u)}
+                          disabled={busy === `pwd:${u.id}`}
+                          className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-medium text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-40"
+                          title="Reset password"
+                        >
+                          Pwd
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleActive(u)}
+                          disabled={busy === `active:${u.id}`}
+                          className={`rounded-md border px-2 py-1 text-[10px] font-medium transition-colors disabled:opacity-40 ${
+                            u.is_active
+                              ? "border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                          }`}
+                        >
+                          {u.is_active ? "Disable" : "Enable"}
+                        </button>
+                      </>
+                    )}
                     <button
                       type="button"
                       onClick={() => remove(u)}

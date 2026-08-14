@@ -1,0 +1,22 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Defender Service toggled"
+id: baraq-5010-tamper
+status: experimental
+level: high
+description: Defender services or spyware protection were toggled off.
+logsource:
+    product: windows
+    service: windefend
+detection:
+    selection_sel:
+        New Value:contains: [disabled, DisableAntiSpyware]
+    condition: selection_sel
+fields:
+    - New Value
+    - Computer
+falsepositives:
+    - Uninstall maintenance windows
+tags:
+    - attack.defense_evasion
+    - attack.t1562.001

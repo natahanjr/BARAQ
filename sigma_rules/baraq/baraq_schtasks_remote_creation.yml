@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Schtasks Remote Creation"
+id: baraq-4688-schtasks-remote
+status: experimental
+level: high
+description: "Schtasks used to create a task on a remote machine - the standard Task Scheduler remote technique."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: \schtasks.exe
+        CommandLine:contains: [/create, \\, "/sc ", "/tn "]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - Server management runbooks
+tags:
+    - attack.lateral_movement
+    - attack.t1053.005

@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Service Installed From Temp Path"
+id: baraq-7045-temp-path
+status: experimental
+level: high
+description: A new service binary was installed from a temporary or shared location.
+logsource:
+    product: windows
+    service: system
+detection:
+    selection_sel:
+        ImagePath:contains: [\Users\Public, \Temp\, \Tmp\, \Windows\Temp, "%TEMP%", \\]
+    selection_filter:
+        ServiceName: [Windows Defender Antivirus Service, Windows Update]
+    condition: selection_sel and not selection_filter
+fields:
+    - ServiceName
+    - ImagePath
+    - AccountName
+falsepositives:
+    - WSUS/SCCM staging services
+tags:
+    - attack.execution
+    - attack.t1569.002

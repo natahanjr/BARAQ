@@ -1,0 +1,33 @@
+title: BARAQ - PowerShell Encoded Command
+id: baraq-4688-powershell-encoded
+status: experimental
+level: high
+logsource:
+    product: windows
+    category: process_creation
+detection:
+    selection:
+        EventID: 4688
+        CommandLine|contains:
+            - -EncodedCommand
+            - -enc
+            - -e
+            - -windowstyle hidden
+            - -w hidden
+            - -exec bypass
+    filter_noise:
+        CommandLine|contains:
+            - 'C:\Program Files'
+    condition: selection and not filter_noise
+falsepositives:
+    - Deployment scripts using encoded commands
+fields:
+    - EventID
+    - Image
+    - CommandLine
+    - ParentImage
+tags:
+    - attack.execution
+    - attack.t1059.001
+    - attack.defense_evasion
+    - attack.t1027

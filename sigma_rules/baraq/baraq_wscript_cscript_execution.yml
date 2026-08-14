@@ -1,0 +1,26 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - WScript/CScript Execution"
+id: baraq-4688-wscript
+status: experimental
+level: medium
+description: "Windows Script Host executed script content from non-standard locations."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: [\wscript.exe, \cscript.exe]
+        CommandLine:contains: [http, .jse, .vbs, .hta]
+    selection_filter:
+        CommandLine:contains: [\system32\, \SysWOW64\]
+    condition: selection_sel and not selection_filter
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - Legacy logon scripts
+tags:
+    - attack.execution
+    - attack.t1059.007

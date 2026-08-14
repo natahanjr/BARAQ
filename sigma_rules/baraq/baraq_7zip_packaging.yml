@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Archive Tool Called on Bulk Files"
+id: baraq-4688-7z-staging
+status: experimental
+level: medium
+description: "An archiver was used to bundle documents - consistent with exfiltration staging."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: [\7z.exe, \7za.exe, \rar.exe, \winrar.exe]
+        CommandLine:contains: [" a ", " -r ", "*.doc", "*.xls", "*.pdf"]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - Document retention jobs
+tags:
+    - attack.collection
+    - attack.t1560.001

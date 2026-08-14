@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Privileged Operation on Security Object"
+id: baraq-4674-sec-op
+status: experimental
+level: medium
+description: A privileged operation was attempted on a security object or file.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectServer:contains: Security
+        ObjectType: Privileged Operation
+    condition: selection_sel
+fields:
+    - SubjectUserName
+    - ObjectName
+    - ProcessName
+falsepositives:
+    - Security software updating itself
+tags:
+    - attack.defense_evasion
+    - attack.t1562.001

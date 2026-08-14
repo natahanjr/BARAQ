@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Audit Policy Changed"
+id: baraq-4719-audit-policy
+status: experimental
+level: high
+description: "Audit policy was modified or removed - disabling logging hides attacker activity."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        AuditPolicyChanges:contains: [Removed, removed]
+    selection_sel_subs:
+        Subcategory:contains: [Detailed Tracking, File System, Logon, Object Access]
+    condition: selection_sel or selection_sel_subs
+fields:
+    - AuditPolicyChanges
+    - Subcategory
+    - SubjectUserName
+falsepositives:
+    - Security baseline enforcement
+tags:
+    - attack.defense_evasion
+    - attack.t1562.002

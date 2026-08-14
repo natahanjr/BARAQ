@@ -1,21 +1,142 @@
-MIT License
+# BARAQ Commercial Software License Agreement
 
-Copyright (c) 2026 BARAQ contributors
+Copyright (c) 2026 [Your Full Legal Name / Company Name]
+All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This is a **proprietary commercial license**. You may not redistribute,
+modify, or sublicense BARAQ under any open-source license without written
+permission from the Licensor. THIS IS A LEGAL DOCUMENT — review it with a
+lawyer before distributing the software commercially. Text in [brackets]
+must be completed by the Licensor.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+---
+
+## 1. Definitions
+
+- **"Software"** means the BARAQ server console, the BARAQAgent endpoint
+  agent, the bundled PostgreSQL runtime, the web console, associated
+  configuration files, and the accompanying documentation, version 1.0.x,
+  as distributed by the Licensor.
+- **"Licensor"** means [Your Full Legal Name / Company Name], [country,
+  registration details if any].
+- **"Licensee"** means the person or entity that installs or uses the
+  Software under this Agreement.
+- **"License Key"** means the cryptographically signed key issued by the
+  Licensor that activates the Software for a specified edition, seat count
+  and term.
+- **"Seat"** means one licensed endpoint (agent) or console, as specified
+  in the License Key.
+- **"Trial Period"** means the initial 30 days (or the period set by the
+  Licensor) during which the Software runs in trial mode without a License
+  Key.
+
+## 2. Grant of License
+
+Subject to payment of the applicable fees and compliance with this
+Agreement, the Licensor grants the Licensee a **non-exclusive,
+non-transferable, revocable** right to install and use the Software for its
+internal business or academic purposes:
+
+1. on the number of Seats specified in the License Key;
+2. for the term specified in the License Key, renewable by payment of the
+   then-current fees;
+3. on systems owned or lawfully operated by the Licensee.
+
+The Licensee may make one archival copy for backup purposes.
+
+## 3. Restrictions
+
+The Licensee may NOT:
+
+1. copy, modify, decompile, disassemble, reverse-engineer, or create
+   derivative works of the Software, except as expressly permitted by law;
+2. remove or alter any copyright, trademark, or proprietary notices;
+3. rent, lease, loan, sublicense, sell, or otherwise transfer the Software
+   or any License Key to a third party;
+4. use the Software to provide managed security services to third parties
+   ("MSSP") without a separate written agreement;
+5. attempt to bypass, disable, or circumvent the licensing mechanism,
+   trial limits, seat limits, or any security control of the Software;
+6. use the Software in any way that violates applicable law, including but
+   not limited to laws on interception, surveillance, and export control.
+
+## 4. Trial and Evaluation
+
+During the Trial Period the Software operates without a License Key for
+evaluation purposes. Trial operation is provided AS-IS, without warranty,
+and may be disabled or limited by the Licensor at any time. No fees are
+due for trial use.
+
+## 5. Updates and Support
+
+- **Updates:** the Licensor may provide updates through the Software's
+  update channel. Support levels, response times, and fees are described
+  in the applicable support agreement (see `documentation/SUPPORT_SLA.md`).
+- The Licensor is not obligated to provide any maintenance, updates, or
+  support unless separately agreed.
+
+## 6. Warranty Disclaimer
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. THE SOFTWARE IS A
+DETECTION AND ALERTING TOOL ONLY: IT DOES NOT, AND IS NOT DESIGNED TO,
+GUARANTEE PREVENTION OF ANY SECURITY INCIDENT. THE LICENSOR DOES NOT
+WARRANT THAT THE SOFTWARE WILL DETECT ALL ATTACKS, THAT ALERTS ARE
+ERROR-FREE, OR THAT THE SOFTWARE WILL OPERATE WITHOUT INTERRUPTION.
+
+## 7. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSOR'S TOTAL
+LIABILITY ARISING OUT OF OR RELATED TO THIS AGREEMENT OR THE SOFTWARE
+SHALL NOT EXCEED THE FEES PAID BY THE LICENSEE FOR THE SOFTWARE IN THE
+TWELVE (12) MONTHS PRECEDING THE CLAIM. IN NO EVENT SHALL THE LICENSOR BE
+LIABLE FOR ANY INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, OR PUNITIVE
+DAMAGES, OR FOR LOSS OF PROFITS, DATA, OR BUSINESS OPPORTUNITIES, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. THIS SECTION APPLIES TO ALL
+CAUSES OF ACTION, WHETHER IN CONTRACT, TORT, OR STATUTE.
+
+## 8. Export and Sanctions Compliance
+
+The Software may be subject to export-control laws and regulations,
+including but not limited to the [Wassenaar Arrangement] and the laws of
+[your jurisdiction]. The Licensee agrees to comply with all applicable
+export-control and sanctions laws and shall not use, export, or re-export
+the Software to any country, person, or entity subject to applicable
+sanctions.
+
+## 9. Data Protection
+
+Where the Software processes personal data (including host telemetry that
+may identify individuals), the Licensee is the data controller and shall
+comply with applicable data-protection laws, including the GDPR where
+applicable. See `documentation/GDPR_PROCESSING.md` for processing
+characteristics. The Licensor processes personal data only as a processor
+in the context of support and licensing, and only to the extent necessary.
+
+## 10. Term and Termination
+
+This Agreement is effective until terminated. The Licensor may terminate
+this Agreement immediately if the Licensee breaches any provision, or upon
+expiry of the License Key without renewal. Upon termination, the Licensee
+must stop using the Software and delete all copies. Sections 6–9 and 11
+survive termination.
+
+## 11. Governing Law and Jurisdiction
+
+This Agreement is governed by the laws of [your jurisdiction], without
+regard to conflict-of-law rules. Any dispute shall be subject to the
+exclusive jurisdiction of the courts of [city, country].
+
+## 12. General
+
+- This Agreement is the entire agreement between the parties regarding the
+  Software.
+- Failure to enforce any provision is not a waiver.
+- If any provision is unenforceable, the remainder remains in effect.
+- The Licensee may not assign this Agreement without written consent.
+
+---
+
+*Licensor: [Name] · Contact: [email] · Address: [address] · Version 1.0
+(2026-08-13)*

@@ -23,6 +23,22 @@ logger = logging.getLogger("baraq.analyzers.normalizer")
 # Numeric risk scale (0-100) per risk band; enables risk-based prioritization.
 RISK_BAND_SCORES = {"Low": 15, "Medium": 45, "High": 75}
 
+#: Cap applied to the formatted message (collector and DB). A message longer
+#: than this is evidence that data was cut somewhere in the pipeline.
+MAX_MESSAGE_LEN = 8192
+
+#: Explicit markers left behind when Windows truncates a long value.
+_TRUNCATION_MARKERS = ("...", "\t")
+
+#: A complete Windows process path ends with one of these executable suffixes.
+_EXEC_SUFFIXES = (".exe", ".com", ".bat", ".cmd", ".ps1", ".dll", ".scr", ".vbs", ".js", ".msi", ".jar")
+
+#: Structured fields whose completeness the normalizer can reason about.
+_STRUCTURED_PROCESS_KEYS = ("NewProcessName", "ParentProcessName", "Image", "CommandLine", "ScriptBlockText")
+
+#: Event IDs whose process facts drive detection and must arrive intact.
+_PROCESS_EVENT_IDS = (4688, 1, 4104, 4103)
+
 # ---------------------------------------------------------------------------
 # Event metadata tables
 # ---------------------------------------------------------------------------
@@ -114,6 +130,81 @@ class Normalizer:
     def __init__(self, hostname: str | None = None):
         import socket
         self.hostname = hostname or socket.gethostname()
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _looks_truncated(value: str, kind: str = "path") -> bool:
+        """Heuristic: did the collector / message formatter cut this value short?
+
+        ``kind="path"`` enforces the Windows process-path shape (a full path
+        ends in an executable suffix; a bare drive letter or path fragment is
+        a truncated copy), ``kind="text"`` only matches explicit truncation
+        markers so real text that legitimately ends with a backslash is not
+        misread.
+        """
+        v = str(value or "")
+        if not v:
+            return False
+        if v.endswith(_TRUNCATION_MARKERS) or (kind == "path" and v.endswith("\\")):
+            return True
+        v = v.strip()
+        if not v:
+            return True
+        if kind == "path":
+            lowered = v.lower()
+            if not lowered.endswith(_EXEC_SUFFIXES) and ("\\" in v or re.fullmatch(r"[A-Za-z]:?", v)):
+                return True
+        return False
+
+    @classmethod
+    def detect_truncation(cls, record: dict, facts: dict) -> tuple[list[str], list[str]]:
+        """Return ``(truncated_fields, reasons)`` describing data-integrity loss.
+
+        Detects three failure modes:
+
+        * the formatted message hit the length cap (collector or DB),
+        * a structured process field ends mid-value (explicit truncation
+          marker, path fragment with no executable suffix, bare drive letter),
+        * a process event carries no structured fields (structured fetch
+          failed / message only) so the command line may be lost entirely.
+        """
+        raw = record.get("raw") or {}
+        event_id = int(record.get("event_id") or 0)
+        message = str(record.get("message") or "")
+        truncated: list[str] = []
+        reasons: list[str] = []
+
+        message_cut = len(message) > MAX_MESSAGE_LEN or bool(raw.get("message_truncated"))
+        if message_cut:
+            truncated.append("message")
+            reasons.append(f"formatted message longer than {MAX_MESSAGE_LEN} chars")
+
+        structured = {k: str(facts[k]) for k in _STRUCTURED_PROCESS_KEYS if facts.get(k)}
+        if structured:
+            for key, value in structured.items():
+                kind = "text" if key in ("CommandLine", "ScriptBlockText") else "path"
+                if cls._looks_truncated(value, kind):
+                    truncated.append(key)
+                    reasons.append(f"structured field {key} ends mid-value (truncation marker or partial path)")
+        elif event_id in _PROCESS_EVENT_IDS:
+            parsed = {
+                k: str(v)
+                for k, v in facts.items()
+                if k in ("new_process", "image", "command_line", "script_block") and v
+            }
+            if not parsed:
+                truncated.append("process_data")
+                reasons.append("no process image or command line captured for a process event")
+            else:
+                for key, value in parsed.items():
+                    kind = "text" if key in ("command_line", "script_block") else "path"
+                    if cls._looks_truncated(value, kind):
+                        truncated.append(key)
+                        reasons.append(f"{key} parsed from the message and looks cut short")
+                if message_cut or raw.get("structured_fetch_failed"):
+                    truncated.append("process_data")
+                    reasons.append("message copy only (structured process fields unavailable) - command line may be lost")
+        return truncated, reasons
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -241,6 +332,21 @@ class Normalizer:
         # Compose a readable one-line message.
         message = record.get("message") or self._compose_message(event_id, facts, meta)
 
+        # Data integrity: flag events whose source data was truncated, and
+        # surface a clear error so operators can act on the lossy source.
+        truncated_fields, truncation_reasons = self.detect_truncation(record, facts)
+        if truncated_fields:
+            logger.error(
+                "Data integrity: event %s (%s) from source '%s' is incomplete - "
+                "truncated field(s): %s. Reasons: %s",
+                event_id,
+                meta["category"],
+                record.get("source", "unknown"),
+                ", ".join(truncated_fields),
+                "; ".join(truncation_reasons),
+            )
+        data_integrity = "truncated" if truncated_fields else "complete"
+
         risk_score = RISK_BAND_SCORES.get(meta["risk"], 15)
         risk_score = min(100, risk_score + self._risk_modifiers(event_id, facts))
 
@@ -255,10 +361,16 @@ class Normalizer:
             "host": record.get("host") or record.get("raw", {}).get("computer") or self.hostname,
             "message": str(message)[:8192],
             "timestamp": timestamp,
+            "data_integrity": data_integrity,
             "raw_json": {
                 "facts": {k: v for k, v in facts.items() if isinstance(v, (str, int, float, bool))},
                 "channel": record.get("channel", ""),
                 "record_number": record.get("raw", {}).get("record_number"),
+                "data_integrity": {
+                    "complete": not truncated_fields,
+                    "truncated_fields": truncated_fields,
+                    "reasons": truncation_reasons,
+                },
             },
         }
 

@@ -1,0 +1,25 @@
+title: BARAQ - Failed Logon Against Admin Account
+id: baraq-4625-admin-account
+status: experimental
+level: medium
+logsource:
+    product: windows
+    service: security
+detection:
+    selection:
+        EventID: 4625
+    filter_mine:
+        account_name|endswith:
+            - admin
+            - administrator
+            - root
+    condition: selection and filter_mine
+falsepositives:
+    - Local administrator account used interactively with a typo
+fields:
+    - EventID
+    - account_name
+tags:
+    - attack.credential_access
+    - attack.t1110
+    - attack.t1078

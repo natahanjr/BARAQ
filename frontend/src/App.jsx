@@ -1,31 +1,28 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Routes, Route, NavLink, Link, useLocation, Navigate } from "react-router";
 import { api, authStore } from "./api.js";
 import { useRealtime } from "./realtime.js";
 import Login from "./pages/Login.jsx";
 
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
-const CommandCenter = lazy(() => import("./pages/CommandCenter.jsx"));
 const Alerts = lazy(() => import("./pages/Alerts.jsx"));
 const AlertDetail = lazy(() => import("./pages/AlertDetail.jsx"));
 const Investigation = lazy(() => import("./pages/Investigation.jsx"));
 const EntityGraph = lazy(() => import("./pages/EntityGraph.jsx"));
-const Events = lazy(() => import("./pages/Events.jsx"));
 const Telemetry = lazy(() => import("./pages/Telemetry.jsx"));
 const Assistant = lazy(() => import("./pages/Assistant.jsx"));
 const Reports = lazy(() => import("./pages/Reports.jsx"));
 const Evaluation = lazy(() => import("./pages/Evaluation.jsx"));
 const Incidents = lazy(() => import("./pages/Incidents.jsx"));
-const System = lazy(() => import("./pages/System.jsx"));
+const Endpoints = lazy(() => import("./pages/Endpoints.jsx"));
+const AgentSetup = lazy(() => import("./pages/AgentSetup.jsx"));
 const Users = lazy(() => import("./pages/Users.jsx"));
+const Settings = lazy(() => import("./pages/Settings.jsx"));
 
 import {
   DashboardIcon,
-  CommandIcon,
   AlertsIcon,
-  InvestigationIcon,
   NetworkIcon,
-  EventsIcon,
   TelemetryIcon,
   AssistantIcon,
   ReportsIcon,
@@ -38,21 +35,24 @@ import {
   ShieldIcon,
   SunIcon,
   MoonIcon,
+  EndpointIcon,
+  AgentIcon,
 } from "./components/icons.jsx";
 
 const NAV = [
-  { to: "/command-center", label: "Command Center", icon: CommandIcon, adminOnly: true },
+  { section: "Operations" },
   { to: "/", label: "Dashboard", icon: DashboardIcon, end: true },
   { to: "/alerts", label: "Alerts", icon: AlertsIcon },
-  { to: "/investigation", label: "Investigation", icon: InvestigationIcon },
   { to: "/entities", label: "Entity Graph", icon: NetworkIcon },
-  { to: "/events", label: "Events", icon: EventsIcon },
-  { to: "/telemetry", label: "Processes & Network", icon: TelemetryIcon },
+  { to: "/telemetry", label: "Telemetry", icon: TelemetryIcon },
   { to: "/assistant", label: "AI Assistant", icon: AssistantIcon },
   { to: "/reports", label: "Reports", icon: ReportsIcon },
   { to: "/incidents", label: "Incidents", icon: IncidentsIcon },
   { to: "/evaluation", label: "Evaluation", icon: EvaluationIcon, adminOnly: true },
-  { to: "/system", label: "System", icon: SystemIcon, adminOnly: true },
+  { to: "/endpoints", label: "Endpoints", icon: EndpointIcon, adminOnly: true },
+  { to: "/agent-setup", label: "Agent Setup", icon: AgentIcon },
+  { section: "System" },
+  { to: "/settings", label: "Settings", icon: SystemIcon },
   { to: "/users", label: "Users & Audit", icon: UsersIcon, adminOnly: true },
 ];
 
@@ -101,6 +101,13 @@ function useTheme() {
       : "dark"
   );
 
+  // Keep the latest theme visible to the event listener below (Settings page
+  // can toggle the theme too and must stay in sync with this component).
+  const themeRef = useRef(theme);
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
+
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("light", theme === "light");
@@ -110,6 +117,15 @@ function useTheme() {
       /* private mode etc. */
     }
   }, [theme]);
+
+  useEffect(() => {
+    const onThemeChange = (e) => {
+      const next = e.detail;
+      if (next && next !== themeRef.current) setTheme(next);
+    };
+    window.addEventListener("baraq:theme-change", onThemeChange);
+    return () => window.removeEventListener("baraq:theme-change", onThemeChange);
+  }, []);
 
   return [theme, setTheme];
 }
@@ -151,7 +167,7 @@ function SetupBanner({ setup, user, setNavOpen }) {
     items.push({
       key: "ml",
       text: "The ML detection model has not been trained yet",
-      link: "/system",
+      link: "/settings",
       label: "Train model",
     });
   }
@@ -263,7 +279,19 @@ function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user,
 
         {/* Navigation */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-          {NAV.filter((item) => (item.adminOnly ? user?.role === "admin" : true)).map((item) => {
+          {NAV.filter(
+            (item) => !item.to || (item.adminOnly ? user?.role === "admin" : true),
+          ).map((item) => {
+            if (!item.to) {
+              return (
+                <p
+                  key={item.section}
+                  className="pb-1 pl-3.5 pt-4 text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-600 first:pt-0"
+                >
+                  {item.section}
+                </p>
+              );
+            }
             const isActive =
               item.end
                 ? location.pathname === item.to
@@ -437,6 +465,150 @@ function Topbar({ onMenuClick, online, summary, theme, onToggleTheme }) {
   );
 }
 
+function ForcePasswordChange({ user, onDone, onLogout }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    if (next !== confirm) {
+      setError("New passwords do not match");
+      return;
+    }
+    if (next.length < 8) {
+      setError("New password must be at least 8 characters");
+      return;
+    }
+    if (next === current) {
+      setError("New password must be different from the current one");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.changePassword(current, next);
+      setNotice("Password updated - welcome to BARAQ.");
+      setTimeout(onDone, 1200);
+    } catch (err) {
+      setError(err.message.replace(/^\d+: /, ""));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const inputCls =
+    "w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-500";
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 px-4">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <BARAQLogo />
+          <div className="text-center">
+            <h1 className="text-2xl font-bold tracking-wide text-white">BARAQ</h1>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-amber-400">
+              Security · Password change required
+            </p>
+          </div>
+        </div>
+
+        <form
+          onSubmit={submit}
+          className="space-y-4 rounded-2xl border border-amber-500/25 bg-slate-900/60 p-6 shadow-2xl backdrop-blur"
+        >
+          <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-300">
+            You are signed in with the default bootstrap password for{" "}
+            <span className="font-mono text-amber-200">{user.username}</span>.
+            Choose a strong new password to continue — you cannot use the
+            console until this is done.
+          </p>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="pwd-current">
+              Current password
+            </label>
+            <input
+              id="pwd-current"
+              type="password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+              autoComplete="current-password"
+              required
+              autoFocus
+              className={inputCls}
+              placeholder="Default bootstrap password"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="pwd-new">
+              New password <span className="text-slate-600">(min 8 characters)</span>
+            </label>
+            <input
+              id="pwd-new"
+              type="password"
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+              autoComplete="new-password"
+              required
+              minLength={8}
+              className={inputCls}
+              placeholder="••••••••"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="pwd-confirm">
+              Confirm new password
+            </label>
+            <input
+              id="pwd-confirm"
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              autoComplete="new-password"
+              required
+              minLength={8}
+              className={inputCls}
+              placeholder="••••••••"
+            />
+          </div>
+
+          {error && (
+            <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+              {error}
+            </p>
+          )}
+          {notice && (
+            <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">
+              {notice}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full rounded-lg bg-gradient-to-r from-cyan-600 to-cyan-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-50"
+          >
+            {busy ? "Updating password…" : "Change Password & Continue"}
+          </button>
+
+          <button
+            type="button"
+            onClick={onLogout}
+            className="w-full rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-200"
+          >
+            Sign out
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [navOpen, setNavOpen] = useState(false);
   const { status, online, realtimeConnected } = useBackendStatus();
@@ -515,6 +687,16 @@ export default function App() {
     return <Login onAuthenticated={setUser} />;
   }
 
+  if (user.must_change_password) {
+    return (
+      <ForcePasswordChange
+        user={user}
+        onDone={() => setUser({ ...user, must_change_password: false })}
+        onLogout={logout}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[var(--app-bg)] text-slate-200">
         <Sidebar
@@ -551,19 +733,19 @@ export default function App() {
           >
             <Routes key={`${user.role}:${org}`}>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/command-center" element={<AdminGate user={user}><CommandCenter /></AdminGate>} />
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/alerts/:id" element={<AlertDetail />} />
               <Route path="/investigation" element={<Investigation />} />
               <Route path="/entities" element={<EntityGraph />} />
-              <Route path="/events" element={<Events />} />
               <Route path="/telemetry" element={<Telemetry />} />
               <Route path="/assistant" element={<Assistant />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/incidents" element={<Incidents />} />
               <Route path="/evaluation" element={<AdminGate user={user}><Evaluation /></AdminGate>} />
-              <Route path="/system" element={<AdminGate user={user}><System /></AdminGate>} />
+              <Route path="/endpoints" element={<AdminGate user={user}><Endpoints /></AdminGate>} />
+              <Route path="/agent-setup" element={<AgentSetup />} />
               <Route path="/users" element={<AdminGate user={user}><Users /></AdminGate>} />
+              <Route path="/settings" element={<Settings user={user} onUserChange={setUser} />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>

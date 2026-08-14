@@ -40,6 +40,10 @@ jobs:
       run: |
         python -m pip install flake8
         flake8 . --count --select=E9 --show-source --statistics
+    - name: Dependency scan (roadmap 5.3)
+      run: |
+        python -m pip install pip-audit
+        python -m pip_audit -l --skip-editable
     - name: Test with pytest
       shell: bash
       run: |
@@ -56,3 +60,34 @@ jobs:
           --ignore=tests/test_pipeline.py \
           --ignore=tests/test_user_auth.py \
           --ignore=tests/test_verdicts.py
+
+  # Roadmap 5.1 - CI/CD: build + publish the Linux API image on version tags.
+  # Uses the GHCR packages the blue-green manifests / compose api profile
+  # pull. Only runs when a tag is pushed AND the repo has the GHCR secrets.
+  docker-image:
+    name: Build & push Docker image (GHCR)
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

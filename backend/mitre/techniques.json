@@ -425,6 +425,411 @@
       "data_sources": "Process creation telemetry (certutil -addstore, Import-Certificate, New-SelfSignedCertificate), Sysmon Event 11 if registry/file tracked",
       "detection": "Flag command lines adding certificates to the Root store (certutil -addstore/-importpfx, Import-Certificate to Root, certmgr /add) and creation of new self-signed certificates.",
       "recommendation": "Remove the rogue certificate from the Root store, revoke trust, audit what was signed or intercepted since installation, and review the installing user's session."
+    },
+    {
+      "id": "T1566.001",
+      "name": "Phishing: Spearphishing Attachment",
+      "tactic": "Initial Access",
+      "description": "An email delivered an executable or macro-enabled document attachment as the initial infection vector.",
+      "data_sources": "Email gateway logs, attachment metadata",
+      "detection": "Flag messages carrying executable/script/macro attachment types and reputate the sender domain.",
+      "recommendation": "Quarantine the message, block the sender, disable macros for external content, and inspect recipients for follow-on execution."
+    },
+    {
+      "id": "T1566.002",
+      "name": "Phishing: Spearphishing Link",
+      "tactic": "Initial Access",
+      "description": "An email contained a URL shortener or raw-IP link to a phishing or credential-harvesting page.",
+      "data_sources": "Email gateway logs, URL reputation feeds",
+      "detection": "Detect shortener domains and raw-IP URLs inside message bodies and subjects.",
+      "recommendation": "Expand and reputate the link, block the destination, and warn recipients before clicking."
+    },
+    {
+      "id": "T1189",
+      "name": "Drive-by Compromise",
+      "tactic": "Initial Access",
+      "description": "A browser visited a malicious or compromised web page that delivered an exploit or payload.",
+      "data_sources": "HTTP proxy logs, browser process monitoring",
+      "detection": "Monitor browser requests to raw-IP URLs and suspicious TLDs.",
+      "recommendation": "Block the destination, review the referring page, and scan the host for injected processes or downloads."
+    },
+    {
+      "id": "T1059.003",
+      "name": "Command and Scripting Interpreter: Windows Command Shell",
+      "tactic": "Execution",
+      "description": "cmd.exe was used to execute scripts or encoded commands, often to hide activity from process auditing.",
+      "data_sources": "Process command lines, Sysmon Event 1",
+      "detection": "Monitor for cmd.exe invocations with encoded or nested script arguments.",
+      "recommendation": "Review the decoded command line, inspect the parent process, and enable CommandLine auditing."
+    },
+    {
+      "id": "T1047",
+      "name": "Windows Management Instrumentation",
+      "tactic": "Execution",
+      "description": "WMI was abused to execute processes locally or on remote hosts, often for lateral movement.",
+      "data_sources": "WMI activity logs, Sysmon Events 1/10",
+      "detection": "Monitor wmic process call create, Invoke-WmiMethod and Get-WmiObject -ComputerName usage.",
+      "recommendation": "Enable WMI audit events, verify remote targets, and restrict WMI access where possible."
+    },
+    {
+      "id": "T1053.002",
+      "name": "Scheduled Task/Job: At (Windows)",
+      "tactic": "Execution",
+      "description": "The legacy AT scheduler was used to queue jobs for later execution.",
+      "data_sources": "Security Event Log 4698, process command lines",
+      "detection": "Monitor at.exe usage creating jobs on older workstations.",
+      "recommendation": "Migrate AT jobs to Scheduled Tasks with restricted accounts and audit creation."
+    },
+    {
+      "id": "T1569.002",
+      "name": "System Services: Service Execution",
+      "tactic": "Execution",
+      "description": "Windows services were created or configured to execute arbitrary binaries.",
+      "data_sources": "Security Event Log 7045, process command lines",
+      "detection": "Monitor sc.exe create/config and Event 7045 service installations.",
+      "recommendation": "Review the service binary path, remove unauthorized services, and restrict creation."
+    },
+    {
+      "id": "T1127.001",
+      "name": "Trusted Developer Utilities Proxy Execution: MSBuild",
+      "tactic": "Execution",
+      "description": "MSBuild was used to execute inline C# payloads and bypass application allow-lists.",
+      "data_sources": "Process command lines, Sysmon Event 1",
+      "detection": "Monitor msbuild.exe invocations outside build pipelines.",
+      "recommendation": "Verify the project file, restrict MSBuild to CI pipelines, and review the parent chain."
+    },
+    {
+      "id": "T1059.006",
+      "name": "Command and Scripting Interpreter: Python",
+      "tactic": "Execution",
+      "description": "A Python interpreter was launched from a user-writable directory to run a dropped payload.",
+      "data_sources": "Process command lines, file monitoring",
+      "detection": "Detect python.exe from temp/public/appdata paths.",
+      "recommendation": "Inspect the script and interpreter, review the parent process, and scan the directory."
+    },
+    {
+      "id": "T1543.003",
+      "name": "Create or Modify System Process: Windows Service",
+      "tactic": "Persistence",
+      "description": "A service ImagePath or ServiceDll registry value was changed to re-launch attacker code at boot.",
+      "data_sources": "Registry monitoring (Sysmon 13), Security 7045",
+      "detection": "Monitor writes to Service ImagePath/ServiceDll values.",
+      "recommendation": "Restore the original value, remove the malicious service, and review the writing process."
+    },
+    {
+      "id": "T1546.010",
+      "name": "Event Triggered Execution: AppInit DLLs",
+      "tactic": "Persistence",
+      "description": "AppInit_DLLs registry values were modified to load malicious DLLs into every user-mode process.",
+      "data_sources": "Registry monitoring (Sysmon 13)",
+      "detection": "Monitor AppInit_DLLs value modifications.",
+      "recommendation": "Remove the DLL entry, delete the DLL, and enforce application whitelisting."
+    },
+    {
+      "id": "T1546.008",
+      "name": "Event Triggered Execution: Accessibility Features",
+      "tactic": "Persistence",
+      "description": "Accessibility binaries (sethc, utilman, ...) were replaced or hijacked for SYSTEM shells at the lock screen.",
+      "data_sources": "Registry monitoring, file integrity monitoring",
+      "detection": "Monitor file creates replacing accessibility binaries and IFEO Debugger values for them.",
+      "recommendation": "Restore the original binary, disable sticky-keys logon access, and review provenance."
+    },
+    {
+      "id": "T1546.012",
+      "name": "Event Triggered Execution: Image File Execution Options",
+      "tactic": "Persistence",
+      "description": "IFEO Debugger values redirect the execution of a target binary to an attacker-controlled one.",
+      "data_sources": "Registry monitoring (Sysmon 13)",
+      "detection": "Monitor writes to Image File Execution Options\\<binary>\\Debugger.",
+      "recommendation": "Remove the Debugger value and review the writing process chain."
+    },
+    {
+      "id": "T1546.007",
+      "name": "Event Triggered Execution: Netsh Helper DLL",
+      "tactic": "Persistence",
+      "description": "netsh was used to register a helper DLL that runs whenever netsh executes.",
+      "data_sources": "Process command lines, registry monitoring",
+      "detection": "Monitor netsh add helper commands.",
+      "recommendation": "Remove the helper registration, delete the DLL, and audit netsh helpers."
+    },
+    {
+      "id": "T1037.001",
+      "name": "Boot or Logon Initialization Scripts: Logon Script (Windows)",
+      "tactic": "Persistence",
+      "description": "Registry values controlling logon scripts (Userinit, Shell, Run policies) were modified.",
+      "data_sources": "Registry monitoring (Sysmon 13)",
+      "detection": "Monitor writes to Userinit, Winlogon Shell and logon-script keys.",
+      "recommendation": "Restore original values, remove the script, and audit logon script keys."
+    },
+    {
+      "id": "T1548.002",
+      "name": "Abuse Elevation Control Mechanism: Bypass User Account Control",
+      "tactic": "Privilege Escalation",
+      "description": "Auto-elevating binaries such as fodhelper or computerdefaults were abused to bypass UAC.",
+      "data_sources": "Process command lines, registry monitoring",
+      "detection": "Monitor invocation of auto-elevating binaries with bypass arguments.",
+      "recommendation": "Terminate the process, harden UAC to Always Notify, and review written registry keys."
+    },
+    {
+      "id": "T1134.001",
+      "name": "Access Token Manipulation: Token Impersonation/Theft",
+      "tactic": "Privilege Escalation",
+      "description": "SeDebugPrivilege or token-impersonation primitives were enabled to assume another user's identity.",
+      "data_sources": "Process command lines, Sysmon Events 1/10",
+      "detection": "Monitor SeDebugPrivilege enablement and privileged token access.",
+      "recommendation": "Restrict SeDebugPrivilege, review subsequent LSASS access, and rotate exposed credentials."
+    },
+    {
+      "id": "T1134.005",
+      "name": "Access Token Manipulation: Named Pipe Impersonation",
+      "tactic": "Privilege Escalation",
+      "description": "Processes impersonated privileged named pipes to steal tokens, a technique used by toolkits such as Impacket.",
+      "data_sources": "Process command lines, Sysmon Events 1/18",
+      "detection": "Monitor creation of/access to named pipes mirroring privileged services.",
+      "recommendation": "Identify the pipe-holding process, terminate it, and monitor for privileged actions."
+    },
+    {
+      "id": "T1574.009",
+      "name": "Hijack Execution Flow: Unquoted Service Paths",
+      "tactic": "Privilege Escalation",
+      "description": "A service was installed with an unquoted image path containing spaces, allowing DLL/EXE planting.",
+      "data_sources": "Security Event Log 7045",
+      "detection": "Flag service installations with unquoted paths containing spaces.",
+      "recommendation": "Quote the ImagePath, remove write permissions on intermediate directories, and scan them."
+    },
+    {
+      "id": "T1574.005",
+      "name": "Hijack Execution Flow: Executable Installer File Permissions Weakness",
+      "tactic": "Privilege Escalation",
+      "description": "AlwaysInstallElevated registry values allow MSI packages to run with SYSTEM privileges.",
+      "data_sources": "Registry monitoring (Sysmon 13)",
+      "detection": "Monitor AlwaysInstallElevated values in both HKLM and HKCU.",
+      "recommendation": "Remove the values, audit MSI installations, and harden installer policy."
+    },
+    {
+      "id": "T1562.004",
+      "name": "Impair Defenses: Disable or Modify System Firewall",
+      "tactic": "Defense Evasion",
+      "description": "The Windows Firewall was disabled for all profiles or its service was stopped.",
+      "data_sources": "Process command lines, service monitoring",
+      "detection": "Monitor netsh advfirewall set allprofiles state off and firewall service stops.",
+      "recommendation": "Re-enable the firewall, restart MpsSvc, and review recent rule changes."
+    },
+    {
+      "id": "T1562.002",
+      "name": "Impair Defenses: Disable Windows Event Logging",
+      "tactic": "Defense Evasion",
+      "description": "Audit policies were disabled or logs cleared to erase forensic evidence.",
+      "data_sources": "Process command lines, audit policy snapshots",
+      "detection": "Monitor auditpol /clear or disable and log clearing commands.",
+      "recommendation": "Re-enable audit policies, restore logs from collectors, and treat as active compromise."
+    },
+    {
+      "id": "T1564.001",
+      "name": "Hide Artifacts: Hidden Files and Directories",
+      "tactic": "Defense Evasion",
+      "description": "Files were marked hidden or system to conceal malware on disk.",
+      "data_sources": "Process command lines, file monitoring",
+      "detection": "Monitor attrib +h/+s and PowerShell attribute changes.",
+      "recommendation": "List hidden files, scan them, and review the initiating process."
+    },
+    {
+      "id": "T1003.003",
+      "name": "OS Credential Dumping: NTDS",
+      "tactic": "Credential Access",
+      "description": "The Active Directory database (NTDS.dit) was accessed to extract domain credentials.",
+      "data_sources": "Process command lines, Security 4663",
+      "detection": "Monitor ntdsutil, esentutl and shadow-copy access to ntds.dit.",
+      "recommendation": "Assume full domain compromise: reset KRBTGT twice, rotate admin/service passwords."
+    },
+    {
+      "id": "T1003.005",
+      "name": "OS Credential Dumping: Cached Domain Credentials",
+      "tactic": "Credential Access",
+      "description": "Cached logon credentials were enumerated or their cache limits modified.",
+      "data_sources": "Process command lines, registry monitoring",
+      "detection": "Monitor cached-credential queries and cache configuration changes.",
+      "recommendation": "Review cache settings, rotate affected passwords, and monitor for hash cracking."
+    },
+    {
+      "id": "T1005",
+      "name": "Data from Local System",
+      "tactic": "Collection",
+      "description": "Sensitive files on the local system were collected for exfiltration.",
+      "data_sources": "Process command lines, file monitoring",
+      "detection": "Monitor copying/reading of credential and document files.",
+      "recommendation": "Identify collected files, rotate exposed credentials, and watch for exfiltration."
+    },
+    {
+      "id": "T1021.001",
+      "name": "Remote Services: Remote Desktop Protocol",
+      "tactic": "Lateral Movement",
+      "description": "Remote interactive (RDP) sessions were established to other hosts.",
+      "data_sources": "Security Event Log 4624 (logon type 10)",
+      "detection": "Monitor logon type 10 events and RDP connections.",
+      "recommendation": "Validate sessions, restrict RDP to authorized users/hosts, and enable NLA."
+    },
+    {
+      "id": "T1021.002",
+      "name": "Remote Services: SMB/Windows Admin Shares",
+      "tactic": "Lateral Movement",
+      "description": "Administrative shares (C$, ADMIN$, IPC$) were mounted or copied to/from for lateral movement.",
+      "data_sources": "Process command lines, network connections",
+      "detection": "Monitor admin share access and SMB connections to port 445.",
+      "recommendation": "Disable admin shares where possible, review copied files, and isolate hosts."
+    },
+    {
+      "id": "T1021.004",
+      "name": "Remote Services: SSH",
+      "tactic": "Lateral Movement",
+      "description": "SSH was used to execute commands or open shells on remote hosts.",
+      "data_sources": "Process command lines, SSH audit logs",
+      "detection": "Monitor ssh/plink remote execution patterns.",
+      "recommendation": "Validate sessions, require key auth, and review target host logs."
+    },
+    {
+      "id": "T1021.006",
+      "name": "Remote Services: Windows Remote Management",
+      "tactic": "Lateral Movement",
+      "description": "WinRM or PowerShell Remoting was used to execute code on remote hosts.",
+      "data_sources": "Process command lines, network connections",
+      "detection": "Monitor winrs, Invoke-Command/Enter-PSSession and 5985/5986 connections.",
+      "recommendation": "Restrict WinRM listeners, enable transcripts, and validate sessions."
+    },
+    {
+      "id": "T1040",
+      "name": "Network Sniffing",
+      "tactic": "Credential Access",
+      "description": "Packet-capture tools were started to sniff cleartext credentials on the wire.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor Wireshark, tcpdump, pktmon and netsh trace usage.",
+      "recommendation": "Stop the capture, review sessions for cleartext credentials, and restrict tooling."
+    },
+    {
+      "id": "T1056.001",
+      "name": "Input Capture: Keylogging",
+      "tactic": "Credential Access",
+      "description": "Windows hooking APIs or keylogger utilities were used to capture keystrokes.",
+      "data_sources": "Process command lines, API monitoring",
+      "detection": "Monitor GetAsyncKeyState/SetWindowsHookEx usage and keylogger tool names.",
+      "recommendation": "Terminate the process, rotate credentials typed on the host, and review the parent chain."
+    },
+    {
+      "id": "T1082",
+      "name": "System Information Discovery",
+      "tactic": "Discovery",
+      "description": "System configuration was collected (systeminfo, hostname, ipconfig /all).",
+      "data_sources": "Process command lines",
+      "detection": "Monitor systeminfo and related enumeration commands.",
+      "recommendation": "Review the parent process chain; repeated breadth suggests reconnaissance."
+    },
+    {
+      "id": "T1083",
+      "name": "File and Directory Discovery",
+      "tactic": "Discovery",
+      "description": "Recursive directory listings were performed to locate sensitive files.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor recursive listing commands across user and system directories.",
+      "recommendation": "Review searched paths and initiating process; combined with staging this indicates collection."
+    },
+    {
+      "id": "T1090",
+      "name": "Proxy",
+      "tactic": "Command and Control",
+      "description": "Proxy or tunnelling tools created covert C2 or pivoting channels.",
+      "data_sources": "Process command lines, network connections",
+      "detection": "Monitor proxychains, chisel, frp, netsh portproxy and ssh -D usage.",
+      "recommendation": "Kill the tunnel, block the destination, and audit for additional pivots."
+    },
+    {
+      "id": "T1113",
+      "name": "Screen Capture",
+      "tactic": "Collection",
+      "description": "GDI screen-capture APIs or screenshot tools captured on-screen information.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor CopyFromScreen/PrintWindow and screenshot tooling.",
+      "recommendation": "Review captured images, restrict screen-capture tooling, and monitor for exfiltration."
+    },
+    {
+      "id": "T1115",
+      "name": "Clipboard Data",
+      "tactic": "Collection",
+      "description": "Clipboard contents were read or written to harvest copied credentials or data.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor Get-Clipboard/Set-Clipboard and clipboard access.",
+      "recommendation": "Clear clipboard history, review the capturing process, and rotate copied credentials."
+    },
+    {
+      "id": "T1135",
+      "name": "Network Share Discovery",
+      "tactic": "Discovery",
+      "description": "Network shares were enumerated to map file shares for lateral movement.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor net view/share and SMB share queries.",
+      "recommendation": "Audit share permissions, disable unnecessary admin shares, and monitor access."
+    },
+    {
+      "id": "T1482",
+      "name": "Domain Trust Discovery",
+      "tactic": "Discovery",
+      "description": "AD domain controllers, forests and trust relationships were enumerated.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor nltest, dsquery and Get-ADDomain usage.",
+      "recommendation": "Review the enumerating account, restrict nltest/dsquery, and watch for credential attacks."
+    },
+    {
+      "id": "T1518.001",
+      "name": "Software Discovery: Security Software Discovery",
+      "tactic": "Discovery",
+      "description": "Installed security products were enumerated to plan defense bypasses.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor AV/firewall product queries (wmic AntivirusProduct, Get-MpComputerStatus).",
+      "recommendation": "Review the querying process and watch for attempts to disable discovered products."
+    },
+    {
+      "id": "T1560.001",
+      "name": "Archive Collected Data: Archive via Utility",
+      "tactic": "Collection",
+      "description": "Archives were created over sensitive user data for collection and exfiltration.",
+      "data_sources": "Process command lines, file monitoring",
+      "detection": "Monitor 7z/rar/zip archives over user data directories.",
+      "recommendation": "Inspect archive contents, check for matching exfiltration traffic, and review the process."
+    },
+    {
+      "id": "T1571",
+      "name": "Non-Standard Port",
+      "tactic": "Command and Control",
+      "description": "A non-browser process connected to an external host on a non-standard port - possible C2 or exfiltration.",
+      "data_sources": "Network connections",
+      "detection": "Monitor outbound connections to uncommon ports from non-browser processes.",
+      "recommendation": "Identify the initiating process, block the external host, and hunt for related infrastructure."
+    },
+    {
+      "id": "T1573",
+      "name": "Encrypted Channel",
+      "tactic": "Command and Control",
+      "description": "Encrypted covert channels (openssl s_client, ncat -e) tunnelled command traffic.",
+      "data_sources": "Process command lines, network connections",
+      "detection": "Monitor encrypted reverse-shell tooling invocations.",
+      "recommendation": "Terminate the channel, block the peer, and review the initiating processes."
+    },
+    {
+      "id": "T1048.003",
+      "name": "Exfiltration Over Alternative Protocol: Exfiltration Over Unencrypted Non-C2 Protocol",
+      "tactic": "Exfiltration",
+      "description": "Data was transferred out via FTP/SFTP/SCP, bypassing HTTP(S) egress inspection.",
+      "data_sources": "Process command lines, network connections",
+      "detection": "Monitor FTP/SFTP/SCP uploads of staged data.",
+      "recommendation": "Block the destination, review transferred volume, and hunt for matching data."
+    },
+    {
+      "id": "T1567",
+      "name": "Exfiltration Over Web Service",
+      "tactic": "Exfiltration",
+      "description": "Data was posted to public file-sharing or webhook services.",
+      "data_sources": "Process command lines, HTTP logs",
+      "detection": "Monitor curl/PowerShell posts to pastebin, transfer.sh, webhook.site and similar.",
+      "recommendation": "Block the destination, recover data where possible, and review the exfiltrating process."
     }
   ]
 }

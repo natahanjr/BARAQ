@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "min_version": "1.0.0",
+  "url": "https://example.com/downloads/BARAQ-Setup-1.0.1.exe",
+  "sha256": "REPLACE_WITH_SHA256_OF_THE_UPLOADED_INSTALLER",
+  "notes": "Example update manifest. Place this file next to BARAQ.exe as updates.json (or host it at a URL configured via BARAQ_UPDATE_MANIFEST). The server compares 'version' against the running build and verifies the download hash before reporting an update."
+}

@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.auth import (
@@ -35,11 +35,17 @@ from backend.auth import (
     verify_token,
 )
 from backend.audit import client_ip, log_action
-from backend.config import AUTH_TOKEN_SECRET, COOKIE_SECURE
+from backend.config import AUTH_TOKEN_SECRET, COOKIE_SECURE, DEFAULT_ADMIN_PASSWORD
 from backend.database.connection import get_db
 from backend.database.models import AuditLog, User
 from backend import ldap as ldap_sso
-from backend.security import require_admin, require_auth, require_auth_enroll_mfa, resolve_user
+from backend.security import (
+    require_admin,
+    require_auth,
+    require_auth_enroll_mfa,
+    require_auth_pending_change,
+    resolve_user,
+)
 from backend.totp import generate_secret, provisioning_uri, verify_code
 
 logger = logging.getLogger("baraq.api.auth")
@@ -88,6 +94,34 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
 
+class RegisterRequest(BaseModel):
+    """Self-service account creation; the account stays inactive (pending)
+    until an administrator verifies it."""
+
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9_.-]+$")
+    password: str = Field(min_length=8, max_length=256)
+    full_name: str = Field("", max_length=128)
+    org: str = Field("", max_length=64)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
+class RenameRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_username: str = Field(min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9_.-]+$")
+
+
+def _username_taken(db: Session, username: str, exclude_id: int | None = None) -> bool:
+    """Case-insensitive duplicate check (prevents 'nat' vs 'Nat' collisions)."""
+    stmt = select(User).where(func.lower(User.username) == username.lower())
+    if exclude_id is not None:
+        stmt = stmt.where(User.id != exclude_id)
+    return db.scalar(stmt) is not None
+
+
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9_.-]+$")
     password: str = Field(min_length=8, max_length=256)
@@ -127,9 +161,16 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(401, "Invalid username or password")
     if not user.is_active:
         _record_login_failure(request)
+        status_hint = user.registration_status or ""
+        if status_hint == "pending":
+            detail = "Your account is pending verification by an administrator"
+        elif status_hint == "rejected":
+            detail = "Your account registration was rejected by an administrator"
+        else:
+            detail = "Account disabled"
         log_action(db, user.username, "login.rejected", "user", str(user.id),
-                   "account disabled", client_ip(request))
-        raise HTTPException(403, "Account disabled")
+                   f"account not active ({status_hint or 'disabled'})", client_ip(request))
+        raise HTTPException(403, detail)
     _clear_login_rate_limit(request)
     if user.totp_enabled:
         challenge = create_mfa_challenge(user.id, user.username)
@@ -139,18 +180,47 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
             "mfa_required": True,
             "challenge": challenge,
             "user": _public_user(user),
+            "must_change_password": bool(user.must_change_password),
         })
     return _complete_login(request, db, user, source)
 
 
+@router.post("/register")
+def register(body: RegisterRequest, request: Request, db: Session = Depends(get_db)):
+    """Self-service account creation.
+
+    New accounts are created as inactive ``analyst`` accounts marked
+    ``pending``; they cannot sign in until an administrator verifies them
+    (``POST /api/auth/users/{id}/approve``). This keeps account creation
+    open on the login screen without handing out access.
+    """
+    username = body.username.strip()
+    if _username_taken(db, username):
+        raise HTTPException(409, "Username already exists")
+    user = User(
+        username=username,
+        password_hash=hash_password(body.password),
+        role="analyst",
+        full_name=body.full_name.strip(),
+        org=body.org.strip(),
+        is_active=False,
+        registration_status="pending",
+    )
+    db.add(user)
+    db.commit()
+    log_action(db, username, "user.registered", "user", str(user.id),
+               "self-service registration awaiting verification", client_ip(request))
+    logger.info("New registration '%s' awaiting admin verification", username)
+    return {
+        "ok": True,
+        "pending": True,
+        "message": "Account created - it will be activated once an administrator "
+                   "verifies it.",
+    }
+
+
 def _ldap_login_fallback(db: Session, username: str, password: str,
                          request: Request) -> User | None:
-    """Try the directory when local credentials fail.
-
-    On success the operator is auto-provisioned (or profile-synced) as a
-    local account with an unusable local password hash, so the directory
-    remains the only way in for that account. Returns the User or None.
-    """
     if not ldap_sso.ldap_enabled():
         return None
     try:
@@ -347,7 +417,11 @@ def mfa_verify(body: MfaVerifyRequest, request: Request, db: Session = Depends(g
     token = create_token(user.id, user.username, user.role, user.org)
     log_action(db, user.username, "login", "user", str(user.id),
                f"role={user.role} via-mfa", client_ip(request))
-    resp = JSONResponse({"token": token, "user": _public_user(user)})
+    resp = JSONResponse({
+        "token": token,
+        "user": _public_user(user),
+        "must_change_password": bool(user.must_change_password),
+    })
     _set_session_cookie(resp, token)
     return resp
 
@@ -359,7 +433,11 @@ def _complete_login(request: Request, db: Session, user: User, source: str = "lo
     log_action(db, user.username, "login", "user", str(user.id),
                f"role={user.role}" + (f" via-{source}" if source != "local" else ""),
                client_ip(request))
-    resp = JSONResponse({"token": token, "user": _public_user(user)})
+    resp = JSONResponse({
+        "token": token,
+        "user": _public_user(user),
+        "must_change_password": bool(user.must_change_password),
+    })
     _set_session_cookie(resp, token)
     return resp
 
@@ -507,6 +585,85 @@ def create_user(body: UserCreate, request: Request, db: Session = Depends(get_db
     db.commit()
     log_action(db, _actor(request), "user.create", "user", str(user.id),
                f"username={user.username} role={user.role}", client_ip(request))
+    return _public_user(user)
+
+
+@router.post("/users/{user_id}/approve", dependencies=[Depends(require_admin)])
+def approve_user(user_id: int, request: Request, db: Session = Depends(get_db)):
+    """Verify a self-registered account: activate it and clear the pending flag."""
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.registration_status != "pending" and user.is_active:
+        raise HTTPException(409, "Account is already active")
+    user.is_active = True
+    user.registration_status = ""
+    db.commit()
+    log_action(db, _actor(request), "user.approved", "user", str(user.id),
+               f"username={user.username} verified by administrator", client_ip(request))
+    return _public_user(user)
+
+
+@router.post("/users/{user_id}/reject", dependencies=[Depends(require_admin)])
+def reject_user(user_id: int, request: Request, db: Session = Depends(get_db)):
+    """Reject a self-registered account: stays inactive, marked 'rejected'."""
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.registration_status == "rejected" and not user.is_active:
+        raise HTTPException(409, "Account is already rejected")
+    user.is_active = False
+    user.registration_status = "rejected"
+    db.commit()
+    log_action(db, _actor(request), "user.rejected", "user", str(user.id),
+               f"username={user.username} registration rejected", client_ip(request))
+    return _public_user(user)
+
+
+@router.post("/settings/change-password",
+             dependencies=[Depends(require_auth_pending_change)])
+def change_password(body: PasswordChangeRequest, request: Request,
+                    db: Session = Depends(get_db)):
+    """Self-service password change (requires the current password).
+
+    Also clears the ``must_change_password`` flag that gates the console for
+    accounts still on the default bootstrap password.
+    """
+    user = resolve_user(request, db)
+    if not user:
+        raise HTTPException(401, "Invalid or expired session")
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(403, "Current password is incorrect")
+    if user.must_change_password and body.new_password == DEFAULT_ADMIN_PASSWORD:
+        raise HTTPException(400, "Choose a different password - the default "
+                                 "bootstrap password cannot be kept")
+    user.password_hash = hash_password(body.new_password)
+    user.must_change_password = False
+    db.commit()
+    log_action(db, user.username, "user.password_changed", "user", str(user.id),
+               "password changed via settings", client_ip(request))
+    return {"ok": True, "must_change_password": False}
+
+
+@router.post("/settings/rename", dependencies=[Depends(require_auth)])
+def rename_account(body: RenameRequest, request: Request,
+                   db: Session = Depends(get_db)):
+    """Self-service username change (requires the current password)."""
+    user = resolve_user(request, db)
+    if not user:
+        raise HTTPException(401, "Invalid or expired session")
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(403, "Current password is incorrect")
+    new_username = body.new_username.strip()
+    if new_username.lower() == user.username.lower():
+        raise HTTPException(409, "That is already your username")
+    if _username_taken(db, new_username, exclude_id=user.id):
+        raise HTTPException(409, "Username already exists")
+    old_username = user.username
+    user.username = new_username
+    db.commit()
+    log_action(db, old_username, "user.renamed", "user", str(user.id),
+               f"username={old_username} -> {new_username}", client_ip(request))
     return _public_user(user)
 
 

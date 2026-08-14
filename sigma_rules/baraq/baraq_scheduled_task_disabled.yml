@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Scheduled Task Enabled/Disabled"
+id: baraq-4701-task-disabled
+status: experimental
+level: low
+description: "A scheduled task was enabled or disabled - disabling security tasks can precede impact."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        SubjectUserName:contains: \
+    selection_filter:
+        TaskName:contains: [Microsoft, \aumid, \OneDrive, \Adobe]
+    condition: selection_sel and not selection_filter
+fields:
+    - TaskName
+    - SubjectUserName
+falsepositives:
+    - Task optimization
+tags:
+    - attack.defense_evasion
+    - attack.t1053.005

@@ -1,13 +1,14 @@
 """AI Assistant API endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.ai.assistant import SecurityAssistant
+from backend.audit import client_ip, log_action
 from backend.database.connection import get_db
-from backend.security import require_auth
+from backend.security import actor_name, require_auth
 
 router = APIRouter(
     prefix="/api/assistant",
@@ -41,6 +42,18 @@ def chat(body: ChatRequest, db: Session = Depends(get_db)):
 def history(limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
     assistant = SecurityAssistant(db)
     return {"items": assistant.history(limit)}
+
+
+@router.delete("/history")
+def clear_history(request: Request, db: Session = Depends(get_db)):
+    assistant = SecurityAssistant(db)
+    count = assistant.clear_history()
+    log_action(
+        db, actor_name(request), "assistant.clear_history",
+        "assistant_messages", str(count),
+        f"deleted {count} conversation message(s)", client_ip(request),
+    )
+    return {"cleared": count, "message": "Conversation history cleared."}
 
 
 @router.post("/explain")

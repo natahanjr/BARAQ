@@ -2,14 +2,23 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.analyzers import dashboard
 from backend.collectors import CollectorManager
+from backend.config import (
+    APP_VERSION,
+    POWERSHELL_CHANNELS,
+    SECURITY_LOG_CHANNELS,
+    SYSMON_CHANNELS,
+)
 from backend.database.connection import get_db, init_db
 from backend.ml.anomaly import get_detector
 from backend.security import require_admin, require_auth
@@ -22,11 +31,76 @@ router = APIRouter(
 )
 
 
-def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
+def run_detection(db: Session, org: str = "", window_minutes: int = 10) -> tuple[list, list]:
+    """One incremental detection pass for a single tenant.
+
+    Evaluates only events that arrived after the detection cursor, persists
+    alerts scoped to ``org``, then advances the cursor. Serialised with the
+    scheduler by ``CURSOR_LOCK`` so every event is matched exactly once.
+    Returns ``(findings, created_alerts)``.
+    """
+    from backend.detection.cursor import (
+        CURSOR_LOCK,
+        get_cursor,
+        max_event_id,
+        set_cursor,
+    )
+    from backend.detection.alerting import AlertingService
+    from backend.detection.rules_engine import RulesEngine
+
+    with CURSOR_LOCK:
+        cursor = get_cursor(db)
+        engine = RulesEngine(db, org=org)
+        findings = engine.run(window_minutes=window_minutes, since_id=cursor)
+        alerting = AlertingService(db)
+        created = alerting.handle_findings(findings, org=org)
+        set_cursor(db, max_event_id(db))
+        db.commit()
+    return findings, created
+
+
+def run_detection_for_orgs(db: Session, orgs: list[str], window_minutes: int = 10) -> tuple[list, list]:
+    """Incremental detection across several tenants in one cursor scope.
+
+    The cursor is read once, every tenant evaluates its slice of the same
+    delta, and the cursor advances once at the end - so an agent ingest that
+    arrives between two tenants' passes is still evaluated exactly once.
+    Returns ``(findings, created_alerts)``.
+    """
+    from backend.detection.cursor import (
+        CURSOR_LOCK,
+        get_cursor,
+        max_event_id,
+        set_cursor,
+    )
+    from backend.detection.alerting import AlertingService
+    from backend.detection.rules_engine import RulesEngine
+
+    findings: list = []
+    created: list = []
+    with CURSOR_LOCK:
+        cursor = get_cursor(db)
+        for org in orgs:
+            engine = RulesEngine(db, org=org)
+            org_findings = engine.run(window_minutes=window_minutes, since_id=cursor)
+            findings.extend(org_findings)
+            alerting = AlertingService(db)
+            created.extend(alerting.handle_findings(org_findings, org=org))
+        set_cursor(db, max_event_id(db))
+        db.commit()
+    return findings, created
+
+
+def run_pipeline(db: Session, records: list[dict], org: str = "", detect: bool = True) -> dict:
     """Full pipeline: normalize -> persist -> detect -> alert.
 
     ``org`` is the tenant every record in this batch belongs to (agent
     ingest passes the agent's organization; local collection keeps "").
+
+    ``detect=False`` (async ingestion mode) persists only and returns
+    immediately; the background scheduler picks up detection on its next
+    cycle using the incremental cursor, so ingest throughput is decoupled
+    from rules-engine cost.
     """
     from backend.analyzers.normalizer import Normalizer
     from backend.analyzers.normalizer import Normalizer
@@ -46,6 +120,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
 
     normalizer = Normalizer()
     saved_events = 0
+    corrupted_events = 0
     saved_processes = 0
     saved_connections = 0
     saved_dns = 0
@@ -55,7 +130,25 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
     saved_files = 0
     saved_vulns = 0
 
+    from backend.collectors.quality import record_outcome
+    from backend.collectors.validation import (
+        normalized_is_corrupted,
+        structured_record_is_corrupted,
+        validate_raw_record,
+    )
+
     for record in records:
+        channel = record.get("channel", record.get("source", "unknown"))
+        if not validate_raw_record(record)[0]:
+            record_outcome(channel, False, "raw record failed structural validation")
+            corrupted_events += 1
+            continue
+        if record.get("source") != "eventlog":
+            corrupted, reason = structured_record_is_corrupted(record)
+            if corrupted:
+                record_outcome(channel, False, reason)
+                corrupted_events += 1
+                continue
         source = record.get("source")
         if source == "process":
             db.add(ProcessRecord(
@@ -145,16 +238,27 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
             saved_vulns += 1
         else:
             normalized = normalizer.normalize(record)
+            corrupted, reason = normalized_is_corrupted(normalized)
+            if corrupted:
+                # Corrupted rendering debris is discarded BEFORE persistence
+                # and detection so it can never generate a false-positive
+                # alert; the discard is counted for data-quality tracking.
+                record_outcome(channel, False, reason)
+                corrupted_events += 1
+                continue
+            record_outcome(channel, True)
             db.add(NormalizedEvent(**normalized, org=org))
             saved_events += 1
 
     db.commit()
 
-    engine = RulesEngine(db, org=org)
-    findings = engine.run(window_minutes=10)
-    alerting = AlertingService(db)
-    created = alerting.handle_findings(findings, org=org)
-    db.commit()
+    findings: list = []
+    created: list = []
+    if detect:
+        # Incremental detection: evaluate only events that arrived after the
+        # last run (cursor), then advance the cursor. The lock serialises
+        # ingest handlers + the scheduler so each event is matched once.
+        findings, created = run_detection(db, org=org)
 
     # Outbound streaming: forward the freshly-persisted records to configured
     # Kafka / Redis / Elasticsearch sinks. Never blocks the pipeline - records
@@ -190,6 +294,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "") -> dict:
     return {
         "collected": len(records),
         "saved_events": saved_events,
+        "corrupted_events": corrupted_events,
         "saved_processes": saved_processes,
         "saved_connections": saved_connections,
         "saved_dns": saved_dns,
@@ -212,6 +317,48 @@ def collect_once(db: Session = Depends(get_db)):
         return {"message": "No new live records; install pywin32 for full event log access.", "pipeline": None}
     result = run_pipeline(db, records)
     return {"message": "Collection completed", "pipeline": result}
+
+
+@router.get("/collectors/health")
+def collector_health(db: Session = Depends(get_db)):
+    """Collector + per-channel health, collection statistics and live
+    permission probes with actionable fix hints."""
+    from backend.collectors.health import (
+        PRIVILEGE_NOT_HELD,
+        check_channel_access,
+        registry,
+    )
+
+    manager = CollectorManager()
+    channels = [
+        *SECURITY_LOG_CHANNELS,
+        *POWERSHELL_CHANNELS,
+        *SYSMON_CHANNELS,
+    ]
+    probes = [
+        {
+            "channel": channel,
+            "readable": readable,
+            "permission_issue": winerror == PRIVILEGE_NOT_HELD,
+            "detail": detail,
+        }
+        for channel in channels
+        for readable, winerror, detail in [check_channel_access(channel)]
+    ]
+    return {
+        "collectors": manager.health()["collectors"],
+        "channels": registry.snapshot(),
+        "permission_probes": probes,
+        "unhealthy": registry.unhealthy(),
+    }
+
+
+@router.get("/notifications/health")
+def notification_health():
+    """Notification channel health: success/failure counters + last errors."""
+    from backend.notify import channel_health
+
+    return channel_health()
 
 
 @router.post("/ml/train", dependencies=[Depends(require_admin)])
@@ -248,7 +395,33 @@ def ml_analyze(hours: int = Query(1, ge=1, le=168), db: Session = Depends(get_db
 def ml_status():
     from backend.ml.tasks import training_active
 
-    return {**get_detector().status(), "training": training_active()}
+    return {
+        **get_detector().status(),
+        "training": training_active(),
+        "version": get_detector().version_info(),
+    }
+
+
+@router.get("/ml/versions", dependencies=[Depends(require_auth)])
+def ml_versions():
+    """Roadmap 4.1 - model version history for A/B comparisons."""
+    info = get_detector().version_info()
+    return {
+        "serving_version": info["version"],
+        "trained_at": info["trained_at"],
+        "train_kind": info["train_kind"],
+        "history": info["history"],
+        "prev_bundle_available": get_detector()._prev_bundle_path().exists(),
+        "note": "previous bundle is archived for A/B at model.bundle.prev.joblib",
+    }
+
+
+@router.get("/ml/drift", dependencies=[Depends(require_auth)])
+def ml_drift(hours: int = Query(12, ge=1, le=168), db: Session = Depends(get_db)):
+    """Roadmap 4.1 - PSI drift monitor over recent features."""
+    from backend.ml.drift import check_drift
+
+    return check_drift(db, hours=hours)
 
 
 @router.get("/ml/explain/alert/{alert_id}")
@@ -287,10 +460,37 @@ def ml_explain_event(event_id: int, db: Session = Depends(get_db)):
 
 @router.get("/stream/status")
 def stream_status():
-    """Streaming pipeline config + per-sink health."""
+    """Streaming pipeline config + per-sink health + schema + DLQ."""
     from backend.streaming import status
 
     return status()
+
+
+@router.get("/stream/schema")
+def stream_schema():
+    """Streaming record schema (roadmap 3.2 schema registry)."""
+    from backend.streaming import SCHEMA_HISTORY, SCHEMA_VERSION
+
+    return {"current": SCHEMA_VERSION, "history": SCHEMA_HISTORY}
+
+
+@router.post("/stream/replay", dependencies=[Depends(require_admin)])
+def stream_replay(
+    hours: int = Query(24, ge=0, le=168),
+    org: str = Query("", max_length=64),
+):
+    """Re-publish recent normalized events through the stream sinks."""
+    from backend.streaming import replay
+
+    return replay(hours=hours, org=org)
+
+
+@router.post("/stream/dlq/replay", dependencies=[Depends(require_admin)])
+def stream_dlq_replay():
+    """Re-queue dead-lettered records for another delivery attempt."""
+    from backend.streaming import replay_dlq
+
+    return replay_dlq()
 
 
 @router.get("/metrics")
@@ -313,7 +513,7 @@ def system_status(request: Request, db: Session = Depends(get_db)):
 
     return {
         "application": "BARAQ",
-        "version": "1.0.0",
+        "version": APP_VERSION,
         "collecting": True,
         "database": dialect,
         "summary": dashboard.dashboard_summary(db, org=tenant_scope(request)),
@@ -328,3 +528,159 @@ def system_status(request: Request, db: Session = Depends(get_db)):
 
 
 _START_TIME = time.time()
+
+
+# ---------------------------------------------------------------------------
+# Commercial licensing
+# ---------------------------------------------------------------------------
+@router.get("/license")
+def license_status(db: Session = Depends(get_db)):
+    """Current license state (active / trial / expired / invalid)."""
+    from backend.licensing import get_license_state
+
+    return get_license_state(db).__dict__
+
+
+class LicenseActivateRequest(BaseModel):
+    key: str = Field(..., min_length=16, max_length=4096)
+
+
+@router.post("/license/activate")
+def license_activate(
+    body: LicenseActivateRequest,
+    _admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Verify and persist a signed license key (admin only)."""
+    from backend.licensing import activate_license
+
+    try:
+        return activate_license(db, body.key.strip()).__dict__
+    except ValueError as exc:
+        raise HTTPException(400, f"Invalid license key: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# Update channel
+# ---------------------------------------------------------------------------
+@router.get("/update/check")
+def update_check(db: Session = Depends(get_db)):
+    """Compare the running build against the shipped update manifest.
+
+    Reads ``updates.json`` next to the executable (or the path/URL given by
+    BARAQ_UPDATE_MANIFEST). Returns the update decision and download info.
+    """
+    import hashlib
+    import json
+    from urllib.request import urlopen
+
+    from backend.config import APP_DIR, APP_VERSION
+
+    source = os.environ.get("BARAQ_UPDATE_MANIFEST", str(APP_DIR / "updates.json"))
+    manifest: dict | None = None
+    try:
+        if source.startswith(("http://", "https://")):
+            with urlopen(source, timeout=10) as resp:  # noqa: S310 - admin-configured URL
+                raw = resp.read()
+        else:
+            raw = Path(source).read_bytes()
+        manifest = json.loads(raw)
+    except Exception as exc:  # noqa: BLE001 - update checks must never break the API
+        return {
+            "update_available": False,
+            "current": APP_VERSION,
+            "error": f"manifest unavailable: {exc}",
+        }
+
+    latest = str(manifest.get("version", ""))
+    url = str(manifest.get("url", ""))
+    sha256 = str(manifest.get("sha256", ""))
+    if url and sha256:
+        try:
+            with urlopen(url, timeout=30) as resp:  # noqa: S310 - admin-configured URL
+                actual = hashlib.sha256(resp.read()).hexdigest()
+            if actual.lower() != sha256.lower():
+                return {
+                    "update_available": False,
+                    "current": APP_VERSION,
+                    "latest": latest,
+                    "error": "manifest hash mismatch - download corrupted",
+                }
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "update_available": False,
+                "current": APP_VERSION,
+                "latest": latest,
+                "error": f"download verification failed: {exc}",
+            }
+    return {
+        "update_available": latest != APP_VERSION,
+        "current": APP_VERSION,
+        "latest": latest,
+        "url": url,
+        "sha256": sha256,
+        "notes": manifest.get("notes", ""),
+        "min_version": manifest.get("min_version", ""),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Data quality / auto-fix corrupted data
+# ---------------------------------------------------------------------------
+@router.get("/data-quality")
+def data_quality(db: Session = Depends(get_db)):
+    """Live data-quality metrics: corruption rate, status, per-channel split.
+
+    Corrupted events (rendering debris) are discarded before detection; this
+    endpoint reports how much of the window was discarded and why.
+    """
+    from backend.collectors.quality import quality, snapshot_history
+
+    return {
+        "current": quality.summary(),
+        "history": snapshot_history(db, limit=12),
+    }
+
+
+@router.get("/data-quality/history")
+def data_quality_history(limit: int = Query(50, ge=1, le=500), db: Session = Depends(get_db)):
+    """Persisted quality snapshots (oldest first) for trend review."""
+    from backend.collectors.quality import snapshot_history
+
+    return {"items": snapshot_history(db, limit=limit)}
+
+
+class DataQualityRepairRequest(BaseModel):
+    reason: str = Field("", max_length=200)
+    clear_logs: bool = True
+    restart_service: bool = True
+    retrain: bool = True
+
+
+@router.post("/data-quality/repair", dependencies=[Depends(require_admin)])
+def data_quality_repair(
+    body: DataQualityRepairRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Run the repair sequence: clear logs, restart EventLog service, retrain.
+
+    Auto-triggered when the corruption rate crosses the CRITICAL threshold;
+    this endpoint allows a manual run (admin only). Every step is isolated
+    so privilege failures never abort the remaining steps.
+    """
+    from backend.audit import client_ip, log_action
+    from backend.collectors.repair import run_repair
+    from backend.security import actor_name
+
+    result = run_repair(
+        db,
+        reason=body.reason or "manual",
+        clear_logs=body.clear_logs,
+        restart_service=body.restart_service,
+        retrain=body.retrain,
+    )
+    log_action(db, actor_name(request), "data_quality.repair", "system", "data-quality",
+               f"{body.reason or 'manual'} | triggered={result.get('triggered')}",
+               client_ip(request))
+    return result

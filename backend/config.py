@@ -61,6 +61,12 @@ IS_PRODUCTION = BARAQ_ENV == "production"
 #: The project .env file (next to this file's parent, i.e. project root).
 ENV_PATH = APP_DIR / ".env"
 
+#: Well-known first-run password. Fresh installs seed the admin with this and
+#: mark the account (must_change_password) so the console forces the operator
+#: to replace it before use. Defined up here because _ensure_secure_secrets
+#: runs during module init and must not depend on later constants.
+DEFAULT_ADMIN_PASSWORD = "baraqadmin"
+
 #: These are *names* of environment variables, kept in one place so the
 #: marker check below and the persisted .env block always stay in sync.
 _first_run_vars = (
@@ -213,7 +219,7 @@ def _ensure_secure_secrets(env_path: Path = ENV_PATH) -> None:
     if all(name + "=" in existing for name in _first_run_vars):
         return
 
-    admin_password = _secrets.token_urlsafe(12)
+    admin_password = DEFAULT_ADMIN_PASSWORD
     admin_key = "baraq-admin-" + _secrets.token_urlsafe(10)
     analyst_key = "baraq-analyst-" + _secrets.token_urlsafe(10)
     api_keys_json = json.dumps({admin_key: "admin", analyst_key: "analyst"})
@@ -320,6 +326,78 @@ POWERSHELL_CHANNELS = [
 ]
 MAX_RAW_EVENT_SIZE = 64 * 1024
 
+# --------------------------------------------------------------------------
+# Feature toggles (roadmap "Recommended Lightweight Configuration").
+# Everything defaults to ON so a standard install keeps current behaviour;
+# set a flag to 0 to trade capability for lower resource usage.
+# --------------------------------------------------------------------------
+#: Async notification delivery (worker queue + retries + file fallback).
+#: When 0, notifications dispatch on a plain per-alert thread (best-effort,
+#: no retries, no fallback).
+ASYNC_NOTIFY = os.environ.get("BARAQ_ASYNC_NOTIFY", "1").lower() not in (
+    "0", "false", "no", "off",
+)
+#: Incremental event-log collection (resume from the last record). When 0,
+#: every cycle reads only the newest batch and earlier records are skipped.
+INCREMENTAL_COLLECTION = os.environ.get("BARAQ_INCREMENTAL_COLLECTION", "1").lower() not in (
+    "0", "false", "no", "off",
+)
+#: Collector health registry + startup permission probe. When 0, the
+#: /api/system/collectors/health endpoint reports empty statistics.
+COLLECTOR_HEALTH = os.environ.get("BARAQ_COLLECTOR_HEALTH", "1").lower() not in (
+    "0", "false", "no", "off",
+)
+#: Cap on the number of native rules loaded by the rules engine (0 or
+#: unset = all rules). Use to trim detection breadth on constrained hosts.
+RULES_COUNT = max(0, int(os.environ.get("BARAQ_RULES_COUNT", "0")))
+#: Multi-stage kill-chain correlation rule. When 0, the correlation rule is
+#: excluded from the engine.
+KILL_CHAIN = os.environ.get("BARAQ_KILL_CHAIN", "1").lower() not in (
+    "0", "false", "no", "off",
+)
+#: Per-rule overrides: JSON mapping ``rule_id`` -> ``{"enabled": bool,
+#: "severity": "low|medium|high|critical", "confidence": float}``.
+#: Only the keys you set are applied; unknown rule ids are ignored.
+#: Example:
+#:   BARAQ_RULE_OVERRIDES='{"brute_force": {"severity": "critical"}, "usb_device": {"enabled": false}}'
+RULE_OVERRIDES: dict = {}
+try:
+    _overrides_raw = os.environ.get("BARAQ_RULE_OVERRIDES", "").strip()
+    if _overrides_raw:
+        parsed = json.loads(_overrides_raw)
+        if isinstance(parsed, dict):
+            RULE_OVERRIDES = parsed
+except (ValueError, TypeError) as _exc:  # noqa: PERF203 - parse errors are config errors
+    raise RuntimeError(f"BARAQ_RULE_OVERRIDES is not valid JSON: {_exc}") from _exc
+
+# --------------------------------------------------------------------------
+# Multi-node / deployment topology (roadmap 3.1)
+# --------------------------------------------------------------------------
+#: Process role: "all" (API + scheduler, single instance), "api" (API only,
+#: scheduler disabled - run the scheduler as its own service elsewhere) or
+#: "scheduler" (standalone scheduler service via backend/scheduler_service.py).
+APP_ROLE = os.environ.get("BARAQ_ROLE", "all").lower().strip() or "all"
+#: Redis URL for the distributed scheduler lock (e.g. redis://redis:6379/0).
+#: When empty, the PostgreSQL advisory lock is used (single-writer for the
+#: whole database). Set this to let several API replicas share one scheduler.
+REDIS_URL = os.environ.get("BARAQ_REDIS_URL", "").strip()
+#: Optional read-only PostgreSQL replica for query-heavy endpoints
+#: (dashboards, event listing). When empty, all reads use the primary.
+READONLY_DATABASE_URL = os.environ.get("BARAQ_READONLY_DATABASE_URL", "").strip()
+#: Scheduler lock TTL in seconds (Redis path): the lock is re-armed
+#: (heartbeat) while the scheduler cycle runs.
+SCHEDULER_LOCK_TTL_SECONDS = max(
+    10, int(os.environ.get("BARAQ_SCHEDULER_LOCK_TTL", "30"))
+)
+#: Audit trail retention in days (roadmap 3.3 compliance): audit entries are
+#: hashed-chained, so they age out via a separate purge that runs alongside
+#: telemetry retention. Default 365 days (regulatory-grade trail).
+AUDIT_RETENTION_DAYS = max(30, int(os.environ.get("BARAQ_AUDIT_RETENTION_DAYS", "365")))
+#: Agent fleet (roadmap 3.4): seconds without an ingest heartbeat before an
+#: agent is marked stale / offline in the fleet overview.
+AGENT_STALE_SECONDS = max(30, int(os.environ.get("BARAQ_AGENT_STALE_SECONDS", "300")))
+AGENT_OFFLINE_SECONDS = max(60, int(os.environ.get("BARAQ_AGENT_OFFLINE_SECONDS", "3600")))
+
 # New collector channels / sources (live only).
 USB_EVENT_IDS = {6416, 6420}
 SYSMON_CHANNELS = ["Microsoft-Windows-Sysmon/Operational"]
@@ -341,7 +419,18 @@ PORT_SCAN_WINDOW_SECONDS = 120
 HONEYPOT_ACCOUNT_PREFIXES = ("administrator", "admin", "sa", "root")
 #: Directory of Sigma (SigmaHQ) rule YAML files. Empty/missing disables the
 #: Sigma engine. Populate with scripts/sigma_pull.py (3000+ community rules).
-SIGMA_RULES_DIR = Path(os.environ.get("SIGMA_RULES_DIR", str(APP_DIR / "sigma_rules")))
+#: Frozen builds ship the rules as a bundle resource (BUNDLE_DIR); fall back
+#: to the writable app dir for source/dev and legacy exe layouts.
+SIGMA_RULES_DIR = Path(
+    os.environ.get(
+        "SIGMA_RULES_DIR",
+        str(
+            (BUNDLE_DIR / "sigma_rules")
+            if FROZEN and (BUNDLE_DIR / "sigma_rules").exists()
+            else APP_DIR / "sigma_rules"
+        ),
+    )
+)
 
 # --------------------------------------------------------------------------
 # Alert aggregation / escalation
@@ -393,6 +482,18 @@ ML_DRIFT_RATE = float(os.environ.get("BARAQ_ML_DRIFT_RATE", "0.35"))
 #: Minimum number of recently scored events required before a drift verdict
 #: can be produced (avoids deciding on noise).
 ML_DRIFT_MIN_SAMPLES = int(os.environ.get("BARAQ_ML_DRIFT_MIN_SAMPLES", "40"))
+#: Roadmap 4.1 - PSI drift monitor: per-stream PSI above this is "watch"
+#: (worth an incremental retrain), above ML_DRIFT_RATE is "drift".
+ML_PSI_WATCH = float(os.environ.get("BARAQ_ML_PSI_WATCH", "0.10"))
+#: Online learning: incremental retrain window in hours + minimum new analyst
+#: verdicts before a scheduled incremental update runs.
+ML_INCREMENTAL_HOURS = max(1, int(os.environ.get("BARAQ_ML_INCREMENTAL_HOURS", "6")))
+ML_INCREMENTAL_MIN_VERDICTS = max(
+    1, int(os.environ.get("BARAQ_ML_INCREMENTAL_MIN_VERDICTS", "5"))
+)
+#: Model versioning (4.1): how many training runs are kept in the version
+#: history (meta file); the previous model bundle is always kept for A/B.
+ML_VERSION_HISTORY = max(2, int(os.environ.get("BARAQ_ML_VERSION_HISTORY", "10")))
 
 # --------------------------------------------------------------------------
 # ML tuning
@@ -449,6 +550,21 @@ COOKIE_SECURE = TLS_ENABLED or os.environ.get("BARAQ_COOKIE_SECURE", "0").lower(
     "1", "true", "yes", "on",
 )
 
+# --------------------------------------------------------------------------
+# Commercial licensing
+# --------------------------------------------------------------------------
+#: Ed25519 public key (base64url) used to verify BARAQ license keys. The
+#: matching private key stays with the vendor (licensing/private_key.pem,
+#: gitignored) and is never shipped. Override for a new product key chain.
+LICENSE_PUBLIC_KEY = os.environ.get(
+    "BARAQ_LICENSE_PUBLIC_KEY",
+    "qNQ73P3pTJhmEljVug4_DwRhf-WhxNs6VmQt3rnopXo",
+)
+#: Free-trial length in days before a valid license key is required.
+TRIAL_DAYS = int(os.environ.get("BARAQ_TRIAL_DAYS", "30"))
+#: Product version reported by /api/system/update/check and the API.
+APP_VERSION = os.environ.get("BARAQ_VERSION", "1.0.0")
+
 #: Maximum accepted request body, in bytes. Requests with a Content-Length
 #: above this (or that grow beyond it while streaming) are rejected with 413
 #: before any handler runs. Keeps oversized JSON/upload payloads from being
@@ -462,6 +578,34 @@ MAX_REQUEST_BYTES = int(os.environ.get("BARAQ_MAX_REQUEST_BYTES", str(16 * 1024 
 CSRF_ENABLED = os.environ.get("BARAQ_CSRF_ENABLED", "1").lower() in (
     "1", "true", "yes", "on",
 )
+
+# --------------------------------------------------------------------------
+# API hardening (roadmap 5.3)
+# --------------------------------------------------------------------------
+#: Emit standard security headers on every HTTP response
+#: (X-Content-Type-Options / X-Frame-Options / Referrer-Policy /
+#: Permissions-Policy / Content-Security-Policy). Disable only for
+#: reverse-proxy setups that add their own headers.
+SECURITY_HEADERS = os.environ.get("BARAQ_SECURITY_HEADERS", "1").lower() in (
+    "1", "true", "yes", "on",
+)
+#: HSTS max-age (seconds). Only meaningful with TLS; the header is emitted
+#: unconditionally but browsers ignore it on plain HTTP.
+HSTS_MAX_AGE = int(os.environ.get("BARAQ_HSTS_MAX_AGE", str(60 * 60 * 24 * 180)))
+#: API rate limiting: max requests per client (API key, else IP) per minute,
+#: with a burst allowance before the fixed window kicks in. 0 disables.
+API_RATE_LIMIT = int(os.environ.get("BARAQ_API_RATE_LIMIT", "600"))
+API_RATE_BURST = int(os.environ.get("BARAQ_API_RATE_BURST", "900"))
+#: Optional network ACLs: comma-separated CIDRs. An empty whitelist means
+#: "allow everyone" (normal operation); when set, only those networks may
+#: reach the API (agents must be inside them). The blocklist is applied
+#: first and wins over the whitelist.
+API_IP_WHITELIST = [
+    p.strip() for p in os.environ.get("BARAQ_API_IP_WHITELIST", "").split(",") if p.strip()
+]
+API_IP_BLOCKLIST = [
+    p.strip() for p in os.environ.get("BARAQ_API_IP_BLOCKLIST", "").split(",") if p.strip()
+]
 
 # --------------------------------------------------------------------------
 # Encryption at rest
@@ -509,6 +653,27 @@ def _secret(name: str, default: str = "") -> str:
             return value
     return default
 
+# --------------------------------------------------------------------------
+# Ticketing integrations (roadmap 6.3): Jira + ServiceNow
+# --------------------------------------------------------------------------
+#: Dispatch alerts to external ticketing only when severity >= this rank
+#: (critical > high > medium > low > info).
+SEVERITY_ORDER = ["info", "low", "medium", "high", "critical"]
+INTEGRATIONS_MIN_SEVERITY = os.environ.get("BARAQ_INTEGRATIONS_MIN_SEVERITY", "high")
+#: Jira (REST v2). ``JIRA_API_TOKEN`` is a PAT or the password for the
+#: ``JIRA_EMAIL`` basic-auth account.
+JIRA_URL = os.environ.get("BARAQ_JIRA_URL", "")
+JIRA_EMAIL = os.environ.get("BARAQ_JIRA_EMAIL", "")
+JIRA_API_TOKEN = _secret("BARAQ_JIRA_API_TOKEN", "")
+JIRA_PROJECT_KEY = os.environ.get("BARAQ_JIRA_PROJECT_KEY", "")
+JIRA_ISSUE_TYPE = os.environ.get("BARAQ_JIRA_ISSUE_TYPE", "Task")
+#: ServiceNow (REST table API). ``SERVICENOW_INSTANCE`` is the subdomain,
+#: e.g. ``acme`` for https://acme.service-now.com.
+SERVICENOW_INSTANCE = os.environ.get("BARAQ_SERVICENOW_INSTANCE", "")
+SERVICENOW_USERNAME = os.environ.get("BARAQ_SERVICENOW_USERNAME", "")
+SERVICENOW_PASSWORD = _secret("BARAQ_SERVICENOW_PASSWORD", "")
+SERVICENOW_TABLE = os.environ.get("BARAQ_SERVICENOW_TABLE", "incident")
+
 try:
     _env_keys = json.loads(_secret("BARAQ_API_KEYS", "{}") or "{}")
 except (ValueError, TypeError):
@@ -542,7 +707,7 @@ SECRETS_CONFIGURED = bool(
 )
 #: Bootstrap admin that is seeded into the users table on first startup.
 ADMIN_USERNAME = os.environ.get("BARAQ_ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = _secret("BARAQ_ADMIN_PASSWORD", "baraqadmin")
+ADMIN_PASSWORD = _secret("BARAQ_ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
 
 #: Require every admin account to have TOTP enrolled before admin API
 #: operations are allowed (default on in production). Analyst logins and the
@@ -665,6 +830,27 @@ LOG_FORMAT = os.environ.get("BARAQ_LOG_FORMAT", "text")
 SYSLOG_HOST = os.environ.get("BARAQ_SYSLOG_HOST", "")
 SYSLOG_PORT = int(os.environ.get("BARAQ_SYSLOG_PORT", "514"))
 SYSLOG_PROTO = os.environ.get("BARAQ_SYSLOG_PROTO", "udp").lower()
+
+# --------------------------------------------------------------------------
+# Observability (roadmap 5.2): SLOs + optional OpenTelemetry export
+# --------------------------------------------------------------------------
+#: Prometheus-visible service-level objectives; the metrics endpoint renders
+#: these next to the live SLO health gauges so Grafana alerts can burn.
+#: Format: "name=window=target" pairs, e.g. "availability=30d=0.99,
+#: freshness=24h=0.95, throughput=7d=0.9".
+SLO_DEFINITIONS = [
+    part.strip()
+    for part in os.environ.get(
+        "BARAQ_SLO_DEFINITIONS",
+        "availability=30d=0.99,freshness=24h=0.95,alert_volume=7d=0.9",
+    ).split(",")
+    if part.strip()
+]
+#: OpenTelemetry OTLP/HTTP exporter endpoint (e.g. http://collector:4318).
+#: When set AND the ``opentelemetry-*`` packages are installed, BARAQ exports
+#: traces + metrics to the collector; otherwise the module is a no-op and the
+#: platform runs untouched (same lazy pattern as Celery / Neo4j).
+OTEL_ENDPOINT = os.environ.get("BARAQ_OTEL_ENDPOINT", "")
 #: Include audit-trail entries in the syslog stream (recommended ON for SIEM).
 SYSLOG_AUDIT = os.environ.get("BARAQ_SYSLOG_AUDIT", "1").lower() in (
     "1", "true", "yes", "on",
@@ -704,11 +890,42 @@ TELEGRAM_CHAT_ID = os.environ.get("BARAQ_TELEGRAM_CHAT_ID", "")
 TOAST_ENABLED = os.environ.get("BARAQ_TOAST_ENABLED", "1").lower() not in (
     "0", "false", "no", "off",
 )
+# Notification delivery: retries per channel (exponential backoff) and the
+# directory where alerts that could not be delivered by any remote channel
+# are written as JSON (file fallback). Retry only helps transient failures;
+# misconfiguration is surfaced via /api/system/notifications/health.
+NOTIFY_RETRIES = max(0, int(os.environ.get("BARAQ_NOTIFY_RETRIES", "2")))
+NOTIFY_FALLBACK_DIR = os.environ.get(
+    "BARAQ_NOTIFY_FALLBACK_DIR",
+    str(Path(os.environ.get("BARAQ_LOGS_DIR", "logs")).resolve() / "undelivered"),
+)
 # Prometheus scrape without auth: only when explicitly enabled; the
 # authenticated /api/system/metrics endpoint is always available.
 METRICS_PUBLIC = os.environ.get("BARAQ_METRICS_PUBLIC", "0").lower() in (
     "1", "true", "yes", "on",
 )
+
+# --------------------------------------------------------------------------
+# Data quality / auto-fix corrupted event data
+# --------------------------------------------------------------------------
+# Corruption detection + repair: events whose process/command-line fields
+# are rendering debris (truncated to a bare letter, symbol or <3-char stub)
+# are discarded before detection, so corrupted log data cannot generate
+# false-positive alerts. Rates are computed over a sliding window.
+DATA_QUALITY_WINDOW_MINUTES = max(1, int(os.environ.get("BARAQ_DATA_QUALITY_WINDOW_MINUTES", "10")))
+#: Corruption rate (0..1) above which the status turns WARNING (monitor),
+#: DEGRADED (repair recommended) and CRITICAL (auto-repair).
+DATA_QUALITY_WARN_RATE = float(os.environ.get("BARAQ_DATA_QUALITY_WARN_RATE", "0.10"))
+DATA_QUALITY_DEGRADED_RATE = float(os.environ.get("BARAQ_DATA_QUALITY_DEGRADED_RATE", "0.30"))
+DATA_QUALITY_CRITICAL_RATE = float(os.environ.get("BARAQ_DATA_QUALITY_CRITICAL_RATE", "0.50"))
+#: Auto-run the repair sequence (clear logs, restart EventLog service,
+#: retrain ML) when the window corruption rate crosses CRITICAL.
+DATA_QUALITY_AUTO_REPAIR = os.environ.get("BARAQ_DATA_QUALITY_AUTO_REPAIR", "1").lower() in (
+    "1", "true", "yes", "on",
+)
+#: Background monitor cadence and the minimum gap between repairs.
+DATA_QUALITY_MONITOR_SECONDS = max(5, int(os.environ.get("BARAQ_DATA_QUALITY_MONITOR_SECONDS", "60")))
+DATA_QUALITY_REPAIR_COOLDOWN_MINUTES = max(1, int(os.environ.get("BARAQ_DATA_QUALITY_REPAIR_COOLDOWN_MINUTES", "15")))
 
 # --------------------------------------------------------------------------
 # Single-instance guard
@@ -750,6 +967,18 @@ def agent_org(agent_id: str) -> str:
     return AGENT_ORGS.get(agent_id, "")
 
 # --------------------------------------------------------------------------
+# Incremental / asynchronous detection
+# --------------------------------------------------------------------------
+# When ON, POST /api/ingest persists records and returns immediately; the
+# 15 s scheduler runs the rules engine over new events (incremental cursor).
+# This decouples ingest throughput from rules-engine cost and is the
+# recommended mode for fleets above ~50 endpoints. When OFF (default), each
+# ingest batch is detected synchronously before the response returns.
+INGEST_ASYNC_DETECT = os.environ.get("BARAQ_INGEST_ASYNC_DETECT", "0").lower() in (
+    "1", "true", "yes", "on",
+)
+
+# --------------------------------------------------------------------------
 # AI assistant
 # --------------------------------------------------------------------------
 # When set, the assistant delegates to an OpenAI-compatible endpoint.
@@ -770,6 +999,23 @@ THREAT_INTEL_OTX_KEY = _secret("BARAQ_OTX_KEY", "")
 THREAT_INTEL_VT_KEY = _secret("BARAQ_VT_KEY", "")
 THREAT_INTEL_CACHE_HOURS = int(os.environ.get("BARAQ_THREAT_INTEL_CACHE_HOURS", "24"))
 THREAT_INTEL_TIMEOUT = float(os.environ.get("BARAQ_THREAT_INTEL_TIMEOUT", "8"))
+# Threat-intel feed subscriptions (roadmap 4.3): a JSON list of feed sources
+# ingested by ``backend.intel.feeds.refresh_feeds`` (scheduler + Celery
+# ``baraq.intel_refresh``). Each entry:
+#   {"name": "misp-prod", "type": "misp", "url": "https://misp.local",
+#    "api_key": "...", "collection_id": ""}   # MISP attribute export
+#   {"name": "taxii", "type": "taxii", "url": "https://taxii.local/",
+#    "api_key": "...", "collection_id": "guid"}   # TAXII 2.1 collection
+#   {"name": "stix-bundle", "type": "stix", "url": "https://host/bundle.json"}
+#   {"name": "plainlist", "type": "csv", "url": "https://host/iocs.txt"}
+# IOC matching uses the DB-cached records with confidence >=
+# THREAT_INTEL_FEED_MIN_CONFIDENCE; each feed is capped at
+# THREAT_INTEL_FEED_MAX_IOCS per refresh.
+THREAT_INTEL_FEEDS = json.loads(os.environ.get("BARAQ_THREAT_INTEL_FEEDS", "[]"))
+THREAT_INTEL_FEED_MAX_IOCS = int(os.environ.get("BARAQ_THREAT_INTEL_FEED_MAX_IOCS", "5000"))
+THREAT_INTEL_FEED_MIN_CONFIDENCE = float(
+    os.environ.get("BARAQ_THREAT_INTEL_FEED_MIN_CONFIDENCE", "0.6")
+)
 
 # --------------------------------------------------------------------------
 # Streaming pipeline (Kafka / Redis / Elasticsearch forwarding)

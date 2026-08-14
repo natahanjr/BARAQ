@@ -1,0 +1,26 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Token Adjusted with Dangerous Privileges"
+id: baraq-4703-adj-priv
+status: experimental
+level: high
+description: "An interactive process enabled an impersonation or driver-loading privilege on its token."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        EnabledPrivilegeList:contains: [SeTcbPrivilege, SeLoadDriverPrivilege, SeImpersonatePrivilege]
+        ProcessName:endswith: [\cmd.exe, \powershell.exe, \services.exe]
+    selection_filter:
+        SubjectUserName: [SYSTEM, NETWORK SERVICE, LOCAL SERVICE]
+    condition: selection_sel and not selection_filter
+fields:
+    - EnabledPrivilegeList
+    - ProcessName
+    - SubjectUserName
+falsepositives:
+    - Print spooler service internals
+tags:
+    - attack.privilege_escalation
+    - attack.t1134

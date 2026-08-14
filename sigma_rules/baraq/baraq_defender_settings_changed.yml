@@ -1,0 +1,23 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Defender Settings Changed"
+id: baraq-5007-settings
+status: experimental
+level: medium
+description: "Defender configuration was changed - check the modified setting and the responsible software."
+logsource:
+    product: windows
+    service: windefend
+detection:
+    selection_sel:
+        New Value:contains: [DisableRealtimeMonitoring, DisableAntiSpyware, Exclusions, DisableBehaviorMonitoring, EnableControlledFolderAccess]
+    condition: selection_sel
+fields:
+    - New Value
+    - Old Value
+    - Computer
+falsepositives:
+    - EDR/AV configuration tooling
+tags:
+    - attack.defense_evasion
+    - attack.t1562.001

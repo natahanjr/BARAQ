@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - HKLM Run Key Modified"
+id: baraq-4657-hklm-run
+status: experimental
+level: high
+description: "A machine-wide Run key was created or modified - strong persistence indicator."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectName:contains: \REGISTRY\MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\
+        OperationType:startswith: "%%1904"
+    condition: selection_sel
+fields:
+    - ObjectName
+    - ProcessName
+    - SubjectUserName
+falsepositives:
+    - Installers adding global autostart entries
+tags:
+    - attack.persistence
+    - attack.t1547.001

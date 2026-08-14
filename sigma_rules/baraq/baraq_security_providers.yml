@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Security Support Provider Modified"
+id: baraq-4657-security-provider
+status: experimental
+level: high
+description: "A new Security Support Provider was registered - a documented credential-harvesting persistence method."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectName:contains: \Control\SecurityProviders
+        ObjectValueName: SecurityProviders
+    condition: selection_sel
+fields:
+    - ObjectName
+    - ObjectValueName
+    - ProcessName
+falsepositives:
+    - Password managers registering SSPs
+tags:
+    - attack.persistence
+    - attack.t1547.005

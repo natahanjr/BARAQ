@@ -3,12 +3,14 @@ import { api } from "../api.js";
 import Card from "../components/Card.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import { Loading } from "../components/Feedback.jsx";
-import { AssistantIcon, NetworkIcon, RefreshIcon } from "../components/icons.jsx";
+import { AssistantIcon, NetworkIcon, RefreshIcon, TrashIcon } from "../components/icons.jsx";
 
 const SUGGESTIONS = [
   "Explain the latest alert",
   "Summarize current incidents",
-  "What's the threat distribution?",
+  "Show open high severity alerts",
+  "Show recent events",
+  "Is my fleet healthy?",
   "Recommend remediation actions",
 ];
 
@@ -180,6 +182,21 @@ export default function Assistant() {
     }
   };
 
+  const clearConversation = async () => {
+    if (busy || messages.length === 0) return;
+    if (!window.confirm("Clear the assistant conversation history?")) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.assistantClearHistory();
+      setMessages([]);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 pb-12">
       <PageHeader
@@ -190,6 +207,23 @@ export default function Assistant() {
       <EntityAnalyst />
 
       <Card className="flex h-[540px] flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-700/50 px-1 pb-3">
+          <p className="text-sm font-medium text-slate-300">
+            Conversation{" "}
+            <span className="text-slate-500">({messages.length} messages)</span>
+          </p>
+          <button
+            type="button"
+            onClick={clearConversation}
+            disabled={busy || messages.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-40"
+          >
+            <TrashIcon className="h-3.5 w-3.5" />
+            Clear history
+          </button>
+        </div>
+
         {/* Messages */}
         <div className="flex-1 space-y-4 overflow-y-auto pr-1">
           {messages.length === 0 ? (

@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - PsExec-Style Service Installed"
+id: baraq-7045-psexec
+status: experimental
+level: high
+description: "A service typical of PsExec-class remote administration was installed."
+logsource:
+    product: windows
+    service: system
+detection:
+    selection_sel:
+        ServiceName:contains: [PSEXESVC, psexec, PAExec, remcom, csexec]
+        ServiceType: user mode service
+    condition: selection_sel
+fields:
+    - ServiceName
+    - ImagePath
+    - AccountName
+falsepositives:
+    - Enterprise remote administration tools
+tags:
+    - attack.lateral_movement
+    - attack.t1569.002

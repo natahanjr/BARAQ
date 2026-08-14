@@ -155,6 +155,7 @@ class AlertingService:
         """
         created: list[Alert] = []
         linked: set[tuple[int, int]] = set()  # (alert_id, event_id) already queued
+        notified: set[int] = set()  # alert ids that already fired out-of-band
 
         def link_events(alert_id: int, event_ids: list[int]):
             for event_id in event_ids[:50]:
@@ -262,7 +263,8 @@ class AlertingService:
                     risk_descriptor(risk_level_value),
                 )
 
-            if alert in created:
+            if alert in created and alert.id not in notified:
+                notified.add(alert.id)
                 try:
                     from backend.notify import notify_alert
 

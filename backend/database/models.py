@@ -109,8 +109,14 @@ class User(Base):
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
     full_name: Mapped[str] = mapped_column(String(128), default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: Self-service registration state: "" (normal), "pending" (awaiting admin
+    #: verification), "rejected". Pending accounts are inactive until approved.
+    registration_status: Mapped[str] = mapped_column(String(16), default="", index=True)
     totp_secret: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # User
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: True while the account still signs in with the default bootstrap
+    #: password; the console forces a change before the account is usable.
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -122,7 +128,9 @@ class User(Base):
             "org": self.org,
             "full_name": self.full_name,
             "is_active": self.is_active,
+            "registration_status": self.registration_status,
             "totp_enabled": self.totp_enabled,
+            "must_change_password": bool(self.must_change_password),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_login_at": self.last_login_at.isoformat() if self.last_login_at else None,
         }
@@ -206,6 +214,9 @@ class NormalizedEvent(Base):
     severity: Mapped[str] = mapped_column(String(16), index=True, default="info")
     message: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # NormalizedEvent
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    #: Data-integrity status: "complete" or "truncated" when the collector or
+    #: message formatter lost part of the event (detail in raw_json["data_integrity"]).
+    data_integrity: Mapped[str] = mapped_column(String(16), default="complete", index=True)
     raw_json: Mapped[dict | None] = mapped_column(JSONColumnType, nullable=True)
     is_anomaly: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     ml_score: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -229,6 +240,7 @@ class NormalizedEvent(Base):
             "severity": self.severity,
             "message": self.message,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "data_integrity": self.data_integrity,
             "raw": self.raw_json,
             "is_anomaly": self.is_anomaly,
             "ml_score": self.ml_score,
@@ -261,6 +273,9 @@ class Alert(Base):
     detection_method: Mapped[str] = mapped_column(String(16), index=True, default="rule")
     risk_score: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     risk_level: Mapped[str] = mapped_column(String(16), index=True, default="MEDIUM")
+    #: Ticket links from ticketing integrations (roadmap 6.3), e.g.
+    #: [{"system": "jira", "key": "SOC-42", "url": "..."}].
+    ticket_links: Mapped[list] = mapped_column(JSONColumnType, default=list)
     events: Mapped[list["AlertEventLink"]] = relationship(
         "AlertEventLink", back_populates="alert", cascade="all, delete-orphan"
     )
@@ -306,6 +321,7 @@ class Alert(Base):
                 {"id": n.id, "note": n.note, "created_at": n.created_at.isoformat()}
                 for n in sorted(self.notes, key=lambda n: n.created_at)
             ]
+        data["ticket_links"] = self.ticket_links or []
         return data
 
 
@@ -336,12 +352,23 @@ class Endpoint(Base):
     #: Tenant scoping: the organization owning this agent ("" = system fleet).
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
     last_seen: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+        DateTime(timezone=True), default=utcnow
     )
     records_total: Mapped[int] = mapped_column(Integer, default=0)
     events_total: Mapped[int] = mapped_column(Integer, default=0)
     alerts_total: Mapped[int] = mapped_column(Integer, default=0)
     output_format_version: Mapped[str] = mapped_column(String(16), default="1.0")
+    #: Agent fleet (roadmap 3.4): software version and OS banner reported on
+    #: ingest so the fleet view can spot stale agents for auto-update.
+    agent_version: Mapped[str] = mapped_column(String(32), default="")
+    os_info: Mapped[str] = mapped_column(String(128), default="")
+    #: Comma-separated tags for grouping the fleet (e.g. "dmz,web,prod").
+    tags: Mapped[str] = mapped_column(String(256), default="")
+    #: Computed-on-read health: ok | stale | offline | unknown.
+    health_status: Mapped[str] = mapped_column(String(16), default="unknown")
+    #: Auto-update state: none | pending | current (see update_agent command).
+    update_status: Mapped[str] = mapped_column(String(16), default="none")
+    errors_total: Mapped[int] = mapped_column(Integer, default=0)
 
     def to_dict(self) -> dict:
         return {
@@ -352,6 +379,12 @@ class Endpoint(Base):
             "records_total": self.records_total,
             "events_total": self.events_total,
             "alerts_total": self.alerts_total,
+            "agent_version": self.agent_version,
+            "os_info": self.os_info,
+            "tags": self.tags,
+            "health_status": self.health_status,
+            "update_status": self.update_status,
+            "errors_total": self.errors_total,
         }
 
 
@@ -672,6 +705,51 @@ class ReportRecord(Base):
             "format": self.format,
             "title": self.title,
             "file_path": self.file_path,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class ReportSchedule(Base):
+    """Scheduled report generation (roadmap 6.2).
+
+    ``every_hours`` > 0 runs every N hours; ``hour_of_day`` >= 0 runs once
+    per day at that local hour (hour_of_day wins when both are set).
+    ``email_to`` non-empty attaches the report to an SMTP message after
+    generation (reuses the BARAQ_SMTP_* settings).
+    """
+
+    __tablename__ = "report_schedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), default="scheduled")
+    report_type: Mapped[str] = mapped_column(String(32), default="executive")
+    fmt: Mapped[str] = mapped_column(String(16), default="pdf")
+    every_hours: Mapped[int] = mapped_column(Integer, default=24)
+    hour_of_day: Mapped[int] = mapped_column(Integer, default=-1)
+    email_to: Mapped[str] = mapped_column(String(512), default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_run_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str] = mapped_column(Text, default="")
+    runs_total: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "report_type": self.report_type,
+            "format": self.fmt,
+            "every_hours": self.every_hours,
+            "hour_of_day": self.hour_of_day,
+            "email_to": self.email_to,
+            "enabled": self.enabled,
+            "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
+            "last_error": self.last_error,
+            "runs_total": self.runs_total,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -1011,6 +1089,74 @@ class ThreatIntelRecord(Base):
         }
 
 
+class ThreatIntelFeedState(Base):
+    """Last-run state for a configured threat-intel feed subscription."""
+
+    __tablename__ = "threat_intel_feed_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    feed_type: Mapped[str] = mapped_column(String(16), default="")
+    url: Mapped[str] = mapped_column(String(512), default="")
+    last_success_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str] = mapped_column(Text, default="")
+    ioc_count: Mapped[int] = mapped_column(Integer, default=0)
+    total_fetched: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "feed_type": self.feed_type,
+            "url": self.url,
+            "last_success_at": self.last_success_at.isoformat() if self.last_success_at else None,
+            "last_error": self.last_error,
+            "ioc_count": self.ioc_count,
+            "total_fetched": self.total_fetched,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class DataQualitySnapshot(Base):
+    """Periodic snapshot of data-quality telemetry (auto-fix corrupted data).
+
+    The collector-side tracker holds the live sliding window; every
+    ``DATA_QUALITY_MONITOR_SECONDS`` the background monitor persists one of
+    these rows so operators can review corruption history and repair events
+    (/api/system/data-quality/history).
+    """
+
+    __tablename__ = "data_quality_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sampled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), index=True, default=utcnow
+    )
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    valid: Mapped[int] = mapped_column(Integer, default=0)
+    corrupted: Mapped[int] = mapped_column(Integer, default=0)
+    corruption_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(16), default="healthy")
+    #: Reason buckets -> counts, e.g. {"new_process is rendering debris": 12}.
+    reasons: Mapped[dict] = mapped_column(JSONColumnType, default=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "sampled_at": self.sampled_at.isoformat() if self.sampled_at else None,
+            "total": self.total,
+            "valid": self.valid,
+            "corrupted": self.corrupted,
+            "corruption_rate": round(self.corruption_rate, 4),
+            "status": self.status,
+            "reasons": self.reasons or {},
+        }
+
+
 class EntityNode(Base):
     """An entity in the intelligence graph (user / device / process / IP /
     domain / file hash / technique / threat actor).
@@ -1091,3 +1237,55 @@ class EntityEdge(Base):
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
             "properties": self.properties or {},
         }
+
+
+class LicenseRecord(Base):
+    """Activated commercial license / persisted trial marker.
+
+    Holds the signed license key string plus cached payload fields so
+    status checks need not re-verify on every query. The signature itself
+    is re-verified by backend.licensing on every state evaluation.
+    """
+
+    __tablename__ = "licenses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    license_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    customer: Mapped[str] = mapped_column(String(256), default="")
+    edition: Mapped[str] = mapped_column(String(24), default="trial")  # trial | standard | professional
+    seats: Mapped[int] = mapped_column(Integer, default=1)
+    license_key: Mapped[str] = mapped_column(Text, default="")
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    expires_at: Mapped[str] = mapped_column(String(64), default="")
+    activated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.now(timezone.utc)
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "license_id": self.license_id,
+            "customer": self.customer,
+            "edition": self.edition,
+            "seats": self.seats,
+            "expires_at": self.expires_at,
+            "activated_at": self.activated_at.isoformat() if self.activated_at else None,
+        }
+
+
+class SystemState(Base):
+    """Small key/value store for platform-level runtime state.
+
+    Used by the incremental detection pipeline to persist the last-evaluated
+    event cursor (``detection_cursor``) so a detection run only processes
+    events that arrived since the previous run, instead of re-scanning the
+    full window on every ingest.
+    """
+
+    __tablename__ = "system_state"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )

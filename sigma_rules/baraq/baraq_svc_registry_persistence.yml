@@ -1,0 +1,27 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Service Registry ImagePath Modified"
+id: baraq-4657-svc-imgepath
+status: experimental
+level: medium
+description: "A service ImagePath was changed outside the service control manager - potential binary replacement."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectName:contains: \CurrentControlSet\Services\
+        ObjectValueName: ImagePath
+        ObjectName:not_contains: \Microsoft
+    selection_filter:
+        ProcessName:endswith: [\services.exe, \msiexec.exe]
+    condition: selection_sel and not selection_filter
+fields:
+    - ObjectName
+    - ObjectValueName
+    - ProcessName
+falsepositives:
+    - Driver updates rewriting ImagePath
+tags:
+    - attack.persistence
+    - attack.t1543.003

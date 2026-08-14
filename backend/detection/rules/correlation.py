@@ -32,6 +32,7 @@ from backend.detection.rules.base import BaseRule, DetectionResult
 
 # Stages ordered by typical kill-chain progression.
 KILL_CHAIN_STAGES = {
+    # Native rule families
     "email_phishing": "Initial Access",
     "malware_file": "Initial Access / Tool Transfer",
     "brute_force": "Credential Access",
@@ -43,6 +44,68 @@ KILL_CHAIN_STAGES = {
     "lateral_movement": "Lateral Movement",
     "network_recon": "Discovery",
     "usb_device": "Lateral Movement",
+    # Initial access (2.1a)
+    "spearphishing_attachment": "Initial Access",
+    "spearphishing_link": "Initial Access",
+    "drive_by_compromise": "Initial Access",
+    "external_service_exploit": "Initial Access",
+    # Execution (2.1b)
+    "cmd_script_execution": "Execution",
+    "wmi_execution": "Execution",
+    "at_job": "Execution",
+    "service_execution": "Execution",
+    "msbuild_execution": "Execution",
+    "python_execution": "Execution",
+    # Persistence (2.1c)
+    "startup_folder": "Persistence",
+    "service_image_path_persistence": "Persistence",
+    "appinit_dlls": "Persistence",
+    "accessibility_feature": "Persistence",
+    "ifeo_debugger": "Persistence",
+    "netsh_helper": "Persistence",
+    "logon_script": "Persistence",
+    # Privilege escalation (2.1d)
+    "uac_bypass": "Privilege Escalation",
+    "se_debug_privilege": "Privilege Escalation",
+    "named_pipe_impersonation": "Privilege Escalation",
+    "unquoted_service_path": "Privilege Escalation",
+    "always_install_elevated": "Privilege Escalation",
+    # Defense evasion (2.1e)
+    "disable_defender": "Defense Evasion",
+    "disable_firewall": "Defense Evasion",
+    "disable_audit": "Defense Evasion",
+    "hidden_file_attribute": "Defense Evasion",
+    "disable_system_restore": "Defense Evasion",
+    # Credential access (2.1f)
+    "lsass_dump": "Credential Access",
+    "ntds_dump": "Credential Access",
+    "password_store_theft": "Credential Access",
+    "keylogging": "Credential Access",
+    "network_sniffing": "Credential Access",
+    "cached_credentials": "Credential Access",
+    # Discovery (2.1g)
+    "account_discovery": "Discovery",
+    "share_discovery": "Discovery",
+    "system_info_discovery": "Discovery",
+    "domain_discovery": "Discovery",
+    "security_software_discovery": "Discovery",
+    "filesystem_discovery": "Discovery",
+    # Lateral movement (2.1h)
+    "smb_admin_share": "Lateral Movement",
+    "rdp_lateral": "Lateral Movement",
+    "winrm_lateral": "Lateral Movement",
+    "ssh_lateral": "Lateral Movement",
+    # Collection (2.1i)
+    "clipboard_capture": "Collection",
+    "screen_capture": "Collection",
+    "archive_collection": "Collection",
+    "local_data_collection": "Collection",
+    # C2 / exfiltration (2.1j)
+    "proxy_tool": "Exfiltration / C2",
+    "unusual_port": "Exfiltration / C2",
+    "encrypted_channel": "Exfiltration / C2",
+    "exfil_alternative_protocol": "Exfiltration / C2",
+    "exfil_web_service": "Exfiltration / C2",
 }
 
 #: Stag(es) whose presence makes the chain a *completed* campaign even when

@@ -4,6 +4,7 @@
 Build with:  venv\Scripts\pyinstaller --noconfirm --clean baraq.spec
 Output:      dist\BARAQ\BARAQ.exe  (onedir layout)
 """
+import sys
 from pathlib import Path
 
 ROOT = Path(SPECPATH)
@@ -14,7 +15,29 @@ datas = [
     (str(ROOT / "backend" / "detection" / "signatures.json"), "detection"),
     (str(ROOT / "frontend" / "dist"), "frontend/dist"),
     (str(ROOT / "dist" / ".env"), "seed"),
+    (str(ROOT / "sigma_rules"), "sigma_rules"),
 ]
+
+# Conda-built CPython on Windows: python313.dll imports zlib.dll and
+# _ctypes.pyd imports ffi.dll (libffi) at runtime, but PyInstaller does not
+# collect those conda library DLLs, so a frozen app dies with "DLL load
+# failed while importing _ctypes". Bundle them next to the other DLLs.
+_binaries = []
+_base = Path(getattr(sys, "_base_executable", sys.executable)).resolve().parent
+for _candidate in (
+    _base / "Library" / "bin" / "zlib.dll",
+    _base / "zlib.dll",
+):
+    if _candidate.exists():
+        _binaries.append((str(_candidate), "."))
+        break
+for _candidate in (
+    _base / "Library" / "bin" / "ffi.dll",
+    _base / "Library" / "bin" / "libffi.dll",
+):
+    if _candidate.exists():
+        _binaries.append((str(_candidate), "."))
+        break
 
 hiddenimports = [
     "pywintypes",
@@ -35,13 +58,13 @@ hiddenimports = [
 a = Analysis(
     [str(ROOT / "scripts" / "run_server.py")],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=_binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tests", "documentation"],
+    excludes=["tests", "documentation", "matplotlib"],
     noarchive=False,
 )
 

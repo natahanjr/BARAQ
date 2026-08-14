@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - ASR Rule Block"
+id: baraq-1123-asr
+status: experimental
+level: medium
+description: An Attack Surface Reduction rule blocked a process action.
+logsource:
+    product: windows
+    service: windefend
+detection:
+    selection_sel:
+        Action ID:contains: [1, 2]
+        Rule Name:contains: "|"
+    condition: selection_sel
+fields:
+    - Rule Name
+    - Action Name
+    - Path
+    - Process Name
+falsepositives:
+    - Build agents blocked by strict policies
+tags:
+    - attack.execution
+    - attack.t1059

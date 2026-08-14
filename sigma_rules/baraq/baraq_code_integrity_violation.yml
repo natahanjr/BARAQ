@@ -1,0 +1,22 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Code Integrity Violation"
+id: baraq-6281-ci
+status: experimental
+level: medium
+description: Code integrity flagged a driver or binary violation.
+logsource:
+    product: windows
+    service: system
+detection:
+    selection_sel:
+        Code Integrity Determination Path:contains: \
+    condition: selection_sel
+fields:
+    - Computer
+    - Code Integrity Determination Path
+falsepositives:
+    - "Signed-but-risky drivers"
+tags:
+    - attack.defense_evasion
+    - attack.t1562.006

@@ -1,7 +1,7 @@
-# Caddy reverse-proxy for SentinelSOC (recommended for external/LAN exposure)
+# Caddy reverse-proxy for BARAQ (recommended for external/LAN exposure)
 #
 # Caddy obtains a real certificate from Let's Encrypt automatically and
-# terminates TLS in front of the plain-HTTP SentinelSOC API (which stays on
+# terminates TLS in front of the plain-HTTP BARAQ API (which stays on
 # localhost). Install Caddy, drop this file at C:\caddy\Caddyfile, then run:
 #   caddy run  (or: caddy start)
 #

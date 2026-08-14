@@ -1,0 +1,23 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Mimikatz-Like Command Activity"
+id: baraq-4688-mimikatz
+status: experimental
+level: high
+description: "Command line contains Mimikatz or well-known module names used for credential theft."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        CommandLine:contains: ["sekurlsa::", "kerberos::", "lsadump::", "privilege::", "token::", mimidrv]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - "Authorized red-team engagements"
+tags:
+    - attack.credential_access
+    - attack.t1003.001

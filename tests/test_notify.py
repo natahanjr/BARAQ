@@ -1,4 +1,7 @@
 """Notification formatting + dispatch (webhook/Slack/Teams/Telegram)."""
+import json
+import queue
+
 import pytest
 
 from backend import notify
@@ -98,3 +101,66 @@ def test_no_channels_noop(monkeypatch):
     monkeypatch.setattr(notify, "TELEGRAM_CHAT_ID", "")
     monkeypatch.setattr(notify, "TOAST_ENABLED", False)
     notify.notify_alert(_alert())  # must return without spawning anything
+
+
+def test_deliver_retries_then_falls_back(monkeypatch, tmp_path):
+    """Failed channels are retried with backoff, then the alert is written to
+    the JSON fallback directory instead of being silently dropped."""
+    calls = {"webhook": 0}
+    notified = {"ok": False}
+    monkeypatch.setattr(notify, "NOTIFY_RETRIES", 2)
+    monkeypatch.setattr(notify, "NOTIFY_FALLBACK_DIR", str(tmp_path))
+    monkeypatch.setattr(notify, "_configured", lambda name: True)
+
+    def flaky(alert):
+        calls["webhook"] += 1
+        raise ConnectionError("network down")
+
+    monkeypatch.setattr(notify, "_send_webhook", flaky)
+    monkeypatch.setattr(notify, "_send_email", lambda alert: None)
+    monkeypatch.setattr(notify, "_send_telegram", lambda alert: None)
+    monkeypatch.setattr(notify, "_send_toast", lambda alert: None)
+
+    def fake_sleep(secs):
+        pass
+
+    monkeypatch.setattr(notify.time, "sleep", fake_sleep)
+
+    notify._deliver(_alert(), attempts=3)
+    assert calls["webhook"] == 3
+    files = list(tmp_path.glob("alert-*.json"))
+    assert len(files) == 1
+    body = json.loads(files[0].read_text(encoding="utf-8"))
+    assert body["delivered"] is False
+    assert body["alert"]["id"] == 42
+    state = notify.channel_health()["channels"]["webhook"]
+    assert state["failures"] == 3
+    assert state["ok"] is False
+    assert "network down" in state["last_error"]
+
+
+def test_deliver_success_marks_channel_healthy(monkeypatch):
+    monkeypatch.setattr(notify, "_configured", lambda name: True)
+    monkeypatch.setattr(notify, "_send_webhook", lambda alert: None)
+    monkeypatch.setattr(notify, "_send_email", lambda alert: None)
+    monkeypatch.setattr(notify, "_send_telegram", lambda alert: None)
+    monkeypatch.setattr(notify, "_send_toast", lambda alert: None)
+    notify._deliver(_alert(), attempts=1)
+    state = notify.channel_health()["channels"]["webhook"]
+    assert state["ok"] is True
+    assert state["successes"] == 1
+    assert state["consecutive_failures"] == 0
+
+
+def test_notify_alert_enqueues(monkeypatch):
+    """notify_alert() must stay non-blocking and land on the worker queue."""
+    seen = {}
+    monkeypatch.setattr(notify, "_wanted", lambda sev: True)
+    monkeypatch.setattr(notify, "_configured", lambda name: name == "webhook")
+    monkeypatch.setattr(notify, "_start_worker", lambda: None)
+    monkeypatch.setattr(notify, "_queue", queue.Queue())
+    notify.notify_alert(_alert())
+    assert not notify._queue.empty()
+    attempts, alert = notify._queue.get_nowait()
+    assert alert["id"] == 42
+    assert attempts == notify.NOTIFY_RETRIES + 1

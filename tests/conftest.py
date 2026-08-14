@@ -42,6 +42,9 @@ os.environ["BARAQ_AI_API_URL"] = ""
 os.environ["BARAQ_SCHEDULER_ENABLED"] = "0"  # no background collector in tests
 # Never spam Windows toasts / webhooks / email from synthetic test alerts.
 os.environ["BARAQ_TOAST_ENABLED"] = "0"
+# Point the Sigma engine at an empty scratch dir: the full community rule set
+# (2,400+ YAML) takes ~25s to parse and would slow every RulesEngine test.
+os.environ["SIGMA_RULES_DIR"] = os.path.join(tempfile.gettempdir(), "baraq_test_sigma_rules_empty")
 
 import pytest  # noqa: E402
 

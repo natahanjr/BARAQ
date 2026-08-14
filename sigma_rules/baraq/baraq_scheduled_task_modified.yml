@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Scheduled Task Modified"
+id: baraq-4699-task-modified
+status: experimental
+level: medium
+description: "An existing scheduled task was modified - verify action and trigger changes."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        SubjectUserName:contains: \
+    selection_filter:
+        TaskName:contains: [Microsoft, \aumid, \OneDrive, \Adobe]
+    condition: selection_sel and not selection_filter
+fields:
+    - TaskName
+    - SubjectUserName
+falsepositives:
+    - Task reconfiguration by management tooling
+tags:
+    - attack.persistence
+    - attack.t1053.005

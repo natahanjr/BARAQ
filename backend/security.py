@@ -120,11 +120,17 @@ def resolve_user(request: Request, db) -> User | None:
     return user
 
 
-def require_role(*roles: str) -> Callable:
+def require_role(*roles: str, allow_pending_password_change: bool = False) -> Callable:
     """Return a FastAPI dependency enforcing one of the given roles.
 
     Accepts a Bearer session token or the legacy X-API-Key header. Returns the
     actor identifier string (username or api key).
+
+    Accounts still on the default bootstrap password (``must_change_password``)
+    are blocked from every gated endpoint with a 403 carrying
+    ``X-Baraq-Code: password_change_required`` until they set a real password
+    via ``/api/auth/settings/change-password`` (which uses
+    ``allow_pending_password_change=True``).
     """
     def _dependency(request: Request, db=Depends(get_db)):
         if not AUTH_ENABLED:
@@ -140,6 +146,15 @@ def require_role(*roles: str) -> Callable:
                 raise HTTPException(
                     status_code=403,
                     detail=f"Requires role(s): {', '.join(roles)}",
+                )
+            if user.must_change_password and not allow_pending_password_change:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "Password change required before continuing - set a "
+                        "new password for this account first."
+                    ),
+                    headers={"X-Baraq-Code": "password_change_required"},
                 )
             if (
                 ENFORCE_ADMIN_MFA
@@ -175,6 +190,11 @@ def require_role(*roles: str) -> Callable:
 require_auth = require_role("analyst", "admin")
 #: Admin-only operations.
 require_admin = require_role("admin")
+#: Authenticated caller allowed to use the password-change endpoint even while
+#: the account is still on the default bootstrap password.
+require_auth_pending_change = require_role(
+    "analyst", "admin", allow_pending_password_change=True
+)
 
 
 def require_auth_enroll_mfa(request: Request, db=Depends(get_db)):

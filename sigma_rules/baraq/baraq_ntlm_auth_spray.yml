@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - NTLM Authentication Failures"
+id: baraq-4776-ntlm-fail
+status: experimental
+level: medium
+description: "Elevated NTLM authentication failures consistent with credential-guessing."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        Status: 0xC000006A
+        PackageName:contains: \
+    condition: selection_sel | count() by PackageName > 10
+fields:
+    - PackageName
+    - WorkstationName
+    - TargetUserName
+falsepositives:
+    - Cached credential refresh storms
+tags:
+    - attack.credential_access
+    - attack.t1110

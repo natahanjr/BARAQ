@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Web Server Spawns Shell"
+id: baraq-4688-w3wp-cmd
+status: experimental
+level: medium
+description: "An IIS worker process spawned a shell - frequently the result of webshell/exploit activity."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: [\cmd.exe, \powershell.exe, \pwsh.exe, \cscript.exe, \wscript.exe]
+        CreatorProcessName:endswith: \w3wp.exe
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - CreatorProcessName
+falsepositives:
+    - "Dev shells on hosts co-located with IIS"
+tags:
+    - attack.persistence
+    - attack.t1505.003

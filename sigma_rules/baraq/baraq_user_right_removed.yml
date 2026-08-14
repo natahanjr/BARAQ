@@ -1,0 +1,23 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - User Right Removed"
+id: baraq-4705-user-right-removed
+status: experimental
+level: low
+description: A sensitive user right was removed from an account.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        Privileges:contains: [SeDebugPrivilege, SeBackupPrivilege]
+    condition: selection_sel
+fields:
+    - Privileges
+    - SubjectUserName
+    - TargetUserName
+falsepositives:
+    - "Central user-rights management"
+tags:
+    - attack.defense_evasion
+    - attack.t1078

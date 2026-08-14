@@ -65,7 +65,34 @@ the static items; the list below is the full operational picture.
 - [ ] `npm audit` clean in `frontend\`.
 - [ ] Verify `pip check` clean after every install.
 
-## 7. Every release
+## 7. API hardening (roadmap 5.3)
+
+Applied automatically by `backend\main.py` middleware; verify with
+`scripts\security_audit.py` and `tests\test_hardening.py`.
+
+- [ ] Security headers on every response: `X-Content-Type-Options: nosniff`,
+      `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+      `Permissions-Policy` (camera/mic/geolocation off), a restrictive
+      `Content-Security-Policy` (`default-src 'none'`, `frame-ancestors 'none'`),
+      and `Strict-Transport-Security` (180 days). Disable with
+      `BARAQ_SECURITY_HEADERS=0` only when a reverse proxy emits its own.
+- [ ] API rate limiting: fixed-window per client (API key, else client IP),
+      `BARAQ_API_RATE_LIMIT=600` / burst `BARAQ_API_RATE_BURST=900` per minute.
+      Exceeding it returns `429` + `Retry-After` before auth ever runs.
+      `/api/health` and `/api/auth/login` are exempt (login has its own
+      throttler in `backend\api\auth.py`).
+- [ ] IP ACLs: `BARAQ_API_IP_WHITELIST=192.168.0.0/16,10.0.0.0/8` restricts
+      API access to those CIDRs (403 otherwise); `BARAQ_API_IP_BLOCKLIST`
+      denies specific networks first. Agent ingest (`/api/ingest`,
+      `/api/commands/`) is subject to the same ACLs - keep agents inside the
+      whitelisted ranges.
+- [ ] Request size cap stays on: `BARAQ_MAX_REQUEST_BYTES` (16 MiB default,
+      413 response).
+- [ ] CI runs `pip_audit` (dependency scan) on every push; the release
+      checklist below plus the `docker-image` job publish images only from
+      version tags.
+
+## 8. Every release
 
 1. `scripts\db_backup.py backup --keep 14`
 2. `scripts\security_audit.py`  (expect exit 0)

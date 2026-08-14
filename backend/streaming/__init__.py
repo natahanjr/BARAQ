@@ -49,6 +49,24 @@ from backend.config import (
 
 logger = logging.getLogger("baraq.streaming")
 
+#: Streaming record schema version (roadmap 3.2 schema registry). Bump when
+#: the wire format of forwarded records changes; consumers can branch on
+#: ``baraq.schema_version``.
+SCHEMA_VERSION = 1
+
+#: Schema changelog served by /api/system/streaming/schema.
+SCHEMA_HISTORY = [
+    {
+        "version": 1,
+        "fields": [
+            "baraq.type", "@timestamp", "baraq.schema_version",
+            "baraq.org", "baraq.source", "event fields (id, event_id, ...)",
+            "alert fields (alert_id, severity, risk_score, evidence, ...)",
+        ],
+        "notes": "Initial versioned format (baraq.* envelope keys).",
+    },
+]
+
 _record_queue: queue.Queue[dict] = queue.Queue(maxsize=2000)
 _stop = threading.Event()
 _worker: threading.Thread | None = None
@@ -76,6 +94,7 @@ def _stamp(record: dict) -> dict:
     stamped = dict(record)
     stamped.setdefault("@timestamp", _now_iso())
     stamped.setdefault("baraq.type", "event")
+    stamped.setdefault("baraq.schema_version", SCHEMA_VERSION)
     return stamped
 
 
@@ -194,11 +213,113 @@ def _dispatch(batch: list[dict]) -> None:
                     name, sink["fails"], exc,
                 )
                 _sinks.pop(name, None)
+                #: Dead-letter the batch so a wedged downstream never loses
+                #: records silently (roadmap 3.2 DLQ).
+                for record in batch:
+                    _dead_letter(name, record, str(exc)[:200])
             else:
                 logger.warning(
                     "Sink %s failed (attempt %d): %s",
                     name, sink["fails"], exc,
                 )
+
+
+# ---------------------------------------------------------------------------
+# Dead-letter queue (roadmap 3.2)
+# ---------------------------------------------------------------------------
+#: JSON lines written when a sink exhausts its retries; re-queued on demand
+#: via replay_dlq(). Directory from BARAQ_STREAM_DLQ_DIR (default: logs/dlq).
+_dlq_counts: dict[str, int] = {}
+_dlq_dir: str | None = None
+
+
+def _get_dlq_dir() -> str:
+    global _dlq_dir
+    if _dlq_dir is None:
+        import os
+        from pathlib import Path
+
+        _dlq_dir = os.environ.get(
+            "BARAQ_STREAM_DLQ_DIR",
+            str(Path(os.environ.get("BARAQ_LOGS_DIR", "logs")).resolve() / "dlq"),
+        )
+        Path(_dlq_dir).mkdir(parents=True, exist_ok=True)
+    return _dlq_dir
+
+
+def _dead_letter(sink: str, record: dict, error: str) -> None:
+    import os
+    from pathlib import Path
+
+    try:
+        _dlq_counts[sink] = _dlq_counts.get(sink, 0) + 1
+        target = Path(_get_dlq_dir()) / f"{sink}.jsonl"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        line = {
+            "sink": sink,
+            "error": error,
+            "failed_at": _now_iso(),
+            "record": record,
+        }
+        with open(target, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(line) + "\n")
+    except Exception:  # noqa: BLE001 - DLQ must never crash the flush worker
+        logger.exception("DLQ write failed for sink %s", sink)
+
+
+def dlq_status() -> dict:
+    """Per-sink dead-letter counts for /api/system/streaming/status."""
+    return dict(_dlq_counts)
+
+
+def replay(hours: int = 24, org: str = "") -> dict:
+    """Re-publish normalized events from the database through the sinks
+    (roadmap 3.2 replay). Pulls from the primary DB, never the replica."""
+    from backend.database.connection import SessionLocal
+    from backend.database.models import NormalizedEvent
+    from sqlalchemy import select
+
+    enqueued = 0
+    with SessionLocal() as db:
+        since_ts = None
+        if hours:
+            from datetime import timedelta
+
+            since_ts = datetime.now(timezone.utc) - timedelta(hours=hours)
+        stmt = select(NormalizedEvent)
+        if org:
+            stmt = stmt.where(NormalizedEvent.org == org)
+        if since_ts is not None:
+            stmt = stmt.where(NormalizedEvent.timestamp >= since_ts)
+        for event in db.scalars(stmt.limit(5000)):
+            record_event(event.to_dict())
+            enqueued += 1
+    return {"enqueued": enqueued, "hours": hours, "org": org}
+
+
+def replay_dlq() -> dict:
+    """Re-queue dead-lettered records for another delivery attempt."""
+    from pathlib import Path
+
+    requeued = 0
+    target = Path(_get_dlq_dir())
+    if not target.exists():
+        return {"requeued": 0}
+    for path in sorted(target.glob("*.jsonl")):
+        kept: list[str] = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+                _record_queue.put_nowait(entry.get("record", {}))
+                requeued += 1
+            except (json.JSONDecodeError, queue.Full):
+                kept.append(line)
+        path.write_text("\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
+        if not kept:
+            path.unlink(missing_ok=True)
+    return {"requeued": requeued}
 
 
 def _sink_driver(package: str) -> object | None:
@@ -326,6 +447,8 @@ def status() -> dict:
     return {
         "enabled": STREAM_ENABLED,
         "pending": _record_queue.qsize(),
+        "schema_version": SCHEMA_VERSION,
+        "schema_history": SCHEMA_HISTORY,
         "configured": {
             "kafka": bool(KAFKA_BOOTSTRAP_SERVERS),
             "redis": bool(REDIS_URL),
@@ -333,4 +456,5 @@ def status() -> dict:
         },
         "active": {name: True for name in _sinks},
         "sent": dict(_sent_counts),
+        "dlq": dlq_status(),
     }

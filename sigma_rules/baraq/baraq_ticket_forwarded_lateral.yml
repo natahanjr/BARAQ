@@ -1,0 +1,27 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Forwarded TGT Used"
+id: baraq-4769-forwarded
+status: experimental
+level: medium
+description: "A forwarded TGT was used to request a service ticket - the core of pass-the-ticket."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        TicketOptions: 0x40810000
+        FailureCode: 0x0
+        AccountName:endswith: "@"
+    selection_filter:
+        TargetUserName: [krbtgt]
+    condition: selection_sel and not selection_filter
+fields:
+    - AccountName
+    - ServiceName
+    - ClientAddress
+falsepositives:
+    - Legacy delegation implementations
+tags:
+    - attack.lateral_movement
+    - attack.t1550.002

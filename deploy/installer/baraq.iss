@@ -39,8 +39,10 @@ Name: "service"; Description: "Register BARAQ to start automatically on logon (l
 Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"; Flags: unchecked
 
 [Files]
-Source: "staging\server\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
-Source: "staging\scripts\*"; DestDir: "{app}\scripts"; Flags: recursesubdirs createallsubdirs
+; users-modify: the console writes logs/.env/secrets.dat/reports next to the
+; exe, so non-elevated operators must be able to write under {app}.
+Source: "staging\server\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs; Permissions: users-modify
+Source: "staging\scripts\*"; DestDir: "{app}\scripts"; Flags: recursesubdirs createallsubdirs; Permissions: users-modify
 
 [Icons]
 Name: "{group}\BARAQ"; Filename: "{app}\{#AppExeName}"

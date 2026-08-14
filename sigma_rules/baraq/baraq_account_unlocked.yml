@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - User Account Unlocked"
+id: baraq-4767-unlocked
+status: experimental
+level: low
+description: A user account was manually unlocked.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        TargetUserName:endswith: "@"
+    selection_filter:
+        TargetUserName:endswith: $
+    condition: selection_sel and not selection_filter
+fields:
+    - TargetUserName
+    - SubjectUserName
+    - TargetSid
+falsepositives:
+    - Helpdesk unlock activity
+tags:
+    - attack.credential_access
+    - attack.t1110

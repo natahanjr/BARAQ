@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - TGT Requested Using RC4"
+id: baraq-4768-tgt-rc4
+status: experimental
+level: high
+description: "An AS-REQ used RC4 - may indicate pass-the-hash key derivation or legacy client behavior."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        EncryptionType: 0x17
+        TargetUserName:endswith: "@"
+    condition: selection_sel
+fields:
+    - TargetUserName
+    - IpAddress
+    - EncryptionType
+falsepositives:
+    - "Domain-joined apps forcing RC4"
+tags:
+    - attack.credential_access
+    - attack.t1558.001

@@ -46,6 +46,21 @@ AGENT_CONFIG_DIR = Path(os.environ.get(
 ))
 AGENT_CONFIG_FILE = AGENT_CONFIG_DIR / "agent.config.json"
 AGENT_TASK_NAME = "BARAQ Agent"
+#: Fleet auto-update (roadmap 3.4): reported on every ingest so the fleet
+#: view can spot stale agents; update_agent commands target this version.
+AGENT_VERSION = "2.0.0"
+
+
+def _os_banner() -> str:
+    """Short OS banner for the fleet view (e.g. 'Windows 10.0.19045')."""
+    try:
+        import platform
+
+        if sys.platform.startswith("win"):
+            return platform.platform(terse=True)
+        return platform.platform()
+    except Exception:  # noqa: BLE001
+        return sys.platform
 
 
 def make_tls_context(tls_ca: str | None = None, no_verify: bool = False) -> ssl.SSLContext | None:
@@ -127,6 +142,17 @@ def execute_command(cmd: dict) -> dict:
     if action == "escalate":
         logger.warning("Operator escalated agent %s - manual review required", cmd.get("agent_id"))
         return {"status": "success", "detail": "Acknowledged by operator"}
+    if action == "update_agent":
+        # Roadmap 3.4 auto-update: try the configured updater, else record the
+        # rollout. The updater (scripts/agent_updater.ps1) swaps the agent files
+        # and restarts the scheduled task; absence of a real updater is a
+        # no-op that still acknowledges the rollout.
+        updater = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_updater.ps1")
+        if os.path.exists(updater):
+            out, code = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                              "-File", updater, "-Version", target])
+            return {"status": "success" if code == 0 else "failed", "detail": out or f"updated to {target}"}
+        return {"status": "success", "detail": f"target version {target} recorded (no updater configured)"}
     return {"status": "failed", "detail": f"Unknown action: {action}"}
 
 
@@ -333,7 +359,12 @@ def main() -> None:
                     server,
                     "/api/ingest",
                     key,
-                    {"records": records, "host": host},
+                    {
+                        "records": records,
+                        "host": host,
+                        "agent_version": AGENT_VERSION,
+                        "os_info": _os_banner(),
+                    },
                     method="POST",
                     tls_ca=tls_ca,
                     no_verify=no_verify,

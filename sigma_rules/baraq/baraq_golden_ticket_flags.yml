@@ -1,0 +1,26 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Golden Ticket Ticket Options"
+id: baraq-4769-golden-ticket
+status: experimental
+level: high
+description: "A service ticket with forwardable, renewable proxy flags was granted - matches forged-ticket behavior."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        TicketOptions: 0x40810000
+        FailureCode: 0x0
+        AccountName:endswith: $
+    condition: selection_sel
+fields:
+    - AccountName
+    - ServiceName
+    - TicketOptions
+    - ClientAddress
+falsepositives:
+    - Forged tickets created in sanctioned tests
+tags:
+    - attack.credential_access
+    - attack.t1558.001

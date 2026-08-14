@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - User Account Created"
+id: baraq-4720-user-created
+status: experimental
+level: medium
+description: A new user account was created. Verify it was an intentional provisioning action.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        TargetUserName:endswith: "@"
+    selection_filter:
+        TargetUserName:endswith: $
+    condition: selection_sel and not selection_filter
+fields:
+    - TargetUserName
+    - SubjectUserName
+    - TargetSid
+falsepositives:
+    - IT provisioning workflows
+tags:
+    - attack.persistence
+    - attack.t1136.001

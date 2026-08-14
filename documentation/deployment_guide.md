@@ -233,3 +233,48 @@ focuses the view on one campus.
 | Browser cert warning | `scripts\import_cert.ps1` on the client (or `-Machine` as admin) |
 | Prometheus scrape 401 | use the bearer key from `deploy\prometheus\.my-scrape-key` |
 | Agent ships nothing | check `--interval`, host collectors, agent log lines |
+## 10. CI-CD & blue-green deployment (roadmap 5.1)
+
+### CI pipeline
+
+The repository ships a GitHub Actions workflow (`.github/workflows/python-package.yml`):
+lint (flake8 syntax errors), the full test suite against a real PostgreSQL 16
+service, and - on version tags only - a `docker-image` job that builds the
+Linux API image (`Dockerfile`) and pushes it to GHCR
+(`ghcr.io/<owner>/SentinelSOC:<tag>`). The image targets the stateless roles:
+
+* `BARAQ_ROLE=api` - uvicorn serving the FastAPI app
+* `BARAQ_ROLE=scheduler` - `python -m backend.scheduler_service`
+
+Collectors stay Windows-native on the endpoints; the Linux image never runs them.
+
+### Running the API image locally (Docker)
+
+```powershell
+docker compose --profile api up -d --build
+curl.exe http://localhost:8000/api/system/status
+```
+
+`BARAQ_DATABASE_URL` inside the container defaults to the host PostgreSQL
+(`host.docker.internal:55432`) - override it in `.env` as usual.
+
+### Blue-green API rollouts (Kubernetes)
+
+`deploy/k8s/blue-green/baraq-blue-green.yaml` defines two identical API
+Deployments (`baraq-api-blue` / `baraq-api-green`) plus a `baraq-api` Service
+that routes to the active release via a `release` label. The scheduler and
+Postgres keep their existing single-leader topology - only the stateless API
+tier flips.
+
+```powershell
+kubectl apply -f deploy/k8s/blue-green/
+.\scripts\blue_green_switch.ps1 -Image ghcr.io/org/SentinelSOC:1.2.3
+```
+
+The switch script (1) deploys into the idle release, (2) waits for rollout
+status + pod availability, (3) flips the Service selector atomically, and
+(4) scales the previous release to zero. Any failure aborts before traffic
+moves; re-running the script flips back (rollback). Zero-downtime rolling
+updates remain available on the classic manifest
+(`deploy/k8s/baraq.yaml`) when you prefer them.
+

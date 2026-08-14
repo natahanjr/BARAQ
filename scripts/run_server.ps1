@@ -14,8 +14,17 @@ $Root   = Split-Path -Parent $PSScriptRoot
 $Logs   = Join-Path $Root "logs"
 New-Item -ItemType Directory -Path $Logs -Force | Out-Null
 
+# --- ensure the local PostgreSQL cluster is up (service/task entry point
+#     must not depend on start.bat having run first) ---
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\pg_setup.ps1") -Action ensure
+if ($LASTEXITCODE -ne 0) {
+    throw "PostgreSQL could not be started - see scripts\pg_setup.ps1"
+}
+
 # --- environment defaults (do not override explicit values) ---
-if (-not $env:BARAQ_ENV)  { $env:BARAQ_ENV = "production" }
+# Mirror backend/config.py: default "development" (plain HTTP on 127.0.0.1,
+# same as start.bat). Set BARAQ_ENV=production explicitly for hardened runs.
+if (-not $env:BARAQ_ENV)  { $env:BARAQ_ENV = "development" }
 $env:BARAQ_SKIP_SECRET_GEN = "1"
 $tls = $env:BARAQ_TLS -in @("1", "true", "yes", "on")
 if (-not $env:BARAQ_PORT) { $env:BARAQ_PORT = if ($tls) { "8443" } else { "8001" } }

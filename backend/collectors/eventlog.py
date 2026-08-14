@@ -12,8 +12,14 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from backend.collectors.base import BaseCollector
+from backend.collectors.health import (
+    PRIVILEGE_NOT_HELD,
+    registry,
+    retry_with_backoff,
+)
 from backend.config import (
     EVENT_LOG_POLL_BATCH,
+    INCREMENTAL_COLLECTION,
     POWERSHELL_CHANNELS,
     SECURITY_LOG_CHANNELS,
 )
@@ -153,9 +159,26 @@ class WindowsEventLogCollector(BaseCollector):
         records: list[dict] = []
         for channel in self.channels:
             try:
-                records.extend(self._collect_channel(channel))
+                channel_records = self._collect_channel(channel)
+                records.extend(channel_records)
+                registry.record_success(channel, len(channel_records))
             except Exception as exc:  # noqa: BLE001
-                self.logger.warning("Channel %s read failed: %s", channel, exc)
+                winerror = getattr(exc, "winerror", None)
+                if isinstance(winerror, tuple):
+                    winerror = winerror[0]
+                if winerror == PRIVILEGE_NOT_HELD:
+                    #: Persistent permission problem - retrying cannot help.
+                    #: Surface the exact fix so the operator can act.
+                    self.logger.error(
+                        "Channel %s read failed: missing privilege (win32 "
+                        "error 1314). Run scripts\\elevate_permissions.ps1 "
+                        "grant (or add the service user to the 'Event Log "
+                        "Readers' group / run elevated), then restart.",
+                        channel,
+                    )
+                else:
+                    self.logger.warning("Channel %s read failed: %s", channel, exc)
+                registry.record_failure(channel, str(exc), permission_issue=winerror == PRIVILEGE_NOT_HELD)
         return records
 
     def _collect_channel(self, channel: str) -> list[dict]:
@@ -166,7 +189,11 @@ class WindowsEventLogCollector(BaseCollector):
             # from the last record number so no event is ever skipped when the
             # channel volume between polls exceeds the batch cap.
             seek = getattr(win32evtlog, "SeekEventLog", None)
-            if seek is not None and channel in self._last_read:
+            if (
+                INCREMENTAL_COLLECTION
+                and seek is not None
+                and channel in self._last_read
+            ):
                 seek(
                     handle, self._last_read[channel] + 1, 0,
                     win32evtlog.EVENTLOG_FORWARDS_READ | win32evtlog.EVENTLOG_SEEK_READ,
@@ -175,16 +202,29 @@ class WindowsEventLogCollector(BaseCollector):
             else:
                 read_flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
 
-            events = win32evtlog.ReadEventLog(handle, read_flags, 0)
+            events = retry_with_backoff(
+                lambda: win32evtlog.ReadEventLog(handle, read_flags, 0),
+                attempts=3,
+            )
             for event in events:
                 rec = self._parse_record(event)
                 if rec:
                     rec["channel"] = channel
-                    rec["message"] = self._safe_message(handle, event, channel)[:8192]
+                    message = self._safe_message(handle, event, channel)
+                    #: Flag lossy truncation for the normalizer's data-integrity
+                    #: pipeline instead of silently cutting the text.
+                    if len(message) > 8192:
+                        rec["raw"]["message_truncated"] = True
+                    rec["message"] = message[:8192]
                     if rec["event_id"] in STRUCTURED_FIELDS_EVENT_IDS:
                         structured = self._structured_fields(channel, event.RecordNumber)
                         if structured:
                             rec["raw"].update(structured)
+                        else:
+                            #: SafeFormatMessage truncates these event IDs'
+                            #: string values; without the structured copy the
+                            #: message-parsed data may be incomplete.
+                            rec["raw"]["structured_fetch_failed"] = True
                     out.append(rec)
                 self._last_read[channel] = event.RecordNumber
                 if len(out) >= EVENT_LOG_POLL_BATCH:

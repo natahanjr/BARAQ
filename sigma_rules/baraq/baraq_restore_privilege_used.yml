@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - SeRestorePrivilege Usage"
+id: baraq-4673-seRestore
+status: experimental
+level: medium
+description: SeRestorePrivilege allows overwriting system files and binaries when abused.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        PrivilegeList:contains: SeRestorePrivilege
+        ProcessName:endswith: [\cmd.exe, \powershell.exe, \sc.exe]
+    condition: selection_sel
+fields:
+    - PrivilegeList
+    - ProcessName
+    - SubjectUserName
+falsepositives:
+    - Restore/testing processes
+tags:
+    - attack.defense_evasion
+    - attack.t1222

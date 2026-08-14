@@ -98,3 +98,66 @@ def test_fixtures_powershell_encoded():
     records = suspicious_powershell()
     assert records[0]["raw"]["has_encoded"] is True
     assert records[0]["raw"]["has_download"] is True
+
+
+def test_health_registry_tracks_channels():
+    """Per-channel success/failure counters drive the /collectors/health API."""
+    from backend.collectors.health import registry
+
+    registry.record_success("Security", 5)
+    registry.record_failure("Security", "boom")
+    snap = {c["channel"]: c for c in registry.snapshot()}
+    assert snap["Security"]["records_total"] == 5
+    assert snap["Security"]["consecutive_failures"] == 1
+    assert snap["Security"]["ok"] is False
+    assert snap["Security"]["last_error"] == "boom"
+
+    registry.record_success("Security", 1)
+    snap = {c["channel"]: c for c in registry.snapshot()}
+    assert snap["Security"]["ok"] is True
+    assert snap["Security"]["consecutive_failures"] == 0
+    assert registry.unhealthy() == []
+
+
+def test_health_permission_error_marked():
+    from backend.collectors.health import PRIVILEGE_NOT_HELD, registry
+
+    registry.record_failure("Security", "1314", permission_issue=True)
+    snap = {c["channel"]: c for c in registry.snapshot()}
+    assert snap["Security"]["permission_issue"] is True
+
+
+def test_retry_with_backoff_transient_then_success(monkeypatch):
+    import backend.collectors.health as health_mod
+
+    monkeypatch.setattr(health_mod.time, "sleep", lambda s: None)
+    calls = {"n": 0}
+
+    def flaky_then_ok():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise OSError("channel busy")
+        return "data"
+
+    assert health_mod.retry_with_backoff(flaky_then_ok, attempts=3) == "data"
+    assert calls["n"] == 3
+
+
+def test_retry_privilege_error_raises_immediately(monkeypatch):
+    import backend.collectors.health as health_mod
+
+    monkeypatch.setattr(health_mod.time, "sleep", lambda s: None)
+    calls = {"n": 0}
+
+    class PrivError(Exception):
+        winerror = 1314
+
+    def always_privilege():
+        calls["n"] += 1
+        raise PrivError("no privilege")
+
+    try:
+        health_mod.retry_with_backoff(always_privilege, attempts=3)
+        assert False, "expected exception"
+    except PrivError:
+        assert calls["n"] == 1, "persistent error must not be retried"

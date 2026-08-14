@@ -98,7 +98,7 @@ def list_alerts(
     if status:
         stmt = stmt.where(Alert.status == status.value)
     if severity:
-        stmt = stmt.where(Alert.severity == severity.value)
+        stmt = stmt.where(Alert.severity == severity)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(
         stmt.order_by(Alert.created_at.desc())
@@ -154,24 +154,60 @@ def add_note(alert_id: int, body: NoteCreate, request: Request, db: Session = De
 # ---------------------------------------------------------------------------
 
 
+_IP_LITERAL = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}")
+_IP_FROM = re.compile(r"from (\d{1,3}(?:\.\d{1,3}){3})", re.IGNORECASE)
+_PROCESS_QUOTED = re.compile(r"process '([^']+)'", re.IGNORECASE)
+_PROCESS_FIELD = re.compile(
+    r"(?:NewProcessName|New Process Name|ProcessName|ImagePath|Image|SourceImage|ParentImage)"
+    r"\s*['\"]?\s*[:=]\s*['\"]?([A-Za-z]:[\\/][^'\"\r\n;,]+?\.exe)",
+    re.IGNORECASE,
+)
+_PROCESSTOKEN = re.compile(r"(?:^|[^\w.\\])([\w.-]+\.exe)", re.IGNORECASE)
+_ACCOUNT_QUOTED = re.compile(r"(?:account|user) '([^']+)'", re.IGNORECASE)
+
+
+def _basename(path_or_name: str) -> str:
+    return path_or_name.replace("\\", "/").rsplit("/", 1)[-1].strip()
+
+
+def _evidence_scope(alert: Alert) -> str:
+    """Evidence text plus linked event payloads, so target extraction works
+    for Sigma rules (evidence only embeds a truncated event message)."""
+    parts = [alert.evidence or ""]
+    for link in list(getattr(alert, "events", []) or [])[:10]:
+        event = getattr(link, "event", None)
+        if event is None:
+            continue
+        if getattr(event, "message", ""):
+            parts.append(event.message)
+        raw = getattr(event, "raw_json", None)
+        if raw:
+            parts.append(repr(raw))
+    return " ".join(parts)
+
+
 def _extract_target(alert: Alert, action: str) -> str:
-    """Best-effort target extraction from alert evidence."""
+    """Best-effort target extraction from alert evidence + linked events."""
+    scope = _evidence_scope(alert)
     if action == "block_ip":
-        m = re.search(r"from (\d{1,3}(?:\.\d{1,3}){3})", alert.evidence)
+        m = _IP_FROM.search(scope)
         if m:
             return m.group(1)
-        m = re.search(r"(\d{1,3}(?:\.\d{1,3}){3})", alert.evidence)
+        m = _IP_LITERAL.search(scope)
         if m:
-            return m.group(1)
+            return m.group(0)
     if action == "kill_process":
-        m = re.search(r"process '([^']+)'", alert.evidence)
+        m = _PROCESS_QUOTED.search(scope)
+        if m:
+            return m.group(1)
+        m = _PROCESS_FIELD.search(scope)
+        if m:
+            return _basename(m.group(1))
+        m = _PROCESSTOKEN.search(scope)
         if m:
             return m.group(1)
     if action == "disable_account":
-        m = re.search(r"account '([^']+)'", alert.evidence)
-        if m:
-            return m.group(1)
-        m = re.search(r"User '([^']+)'", alert.evidence)
+        m = _ACCOUNT_QUOTED.search(scope)
         if m:
             return m.group(1)
     if action == "isolate":
@@ -193,18 +229,24 @@ def _execute_action(action: str, target: str) -> tuple[str, str]:
         return "success", "Alert marked as fixed and closed. Security score restored."
     if action == "escalate":
         return "success", f"Alert escalated for '{target}'."
-    if action == "block_ip" and target:
+    if action == "block_ip":
+        if not target:
+            return "success", "No source IP present in the alert evidence - nothing to block."
         # Safe-by-default stub. Replace with a firewall/EDR API call.
         return "success", f"Blocked source IP {target} (firewall rule applied)."
     if action == "quarantine":
         return "success", f"Quarantined affected target '{target or 'host'}'."
-    if action == "kill_process" and target:
+    if action == "kill_process":
+        if not target:
+            return "failed", "No process identified in the alert evidence to terminate."
         return "success", f"Terminated process '{target}'."
     if action == "isolate":
         return "success", f"Isolated endpoint '{target or 'host'}' (network containment applied)."
     if action == "disable_account":
-        return "success", f"Disabled account '{target or 'unknown'}' and forced MFA re-enrolment."
-    return "failed", "Target could not be resolved from evidence."
+        if not target:
+            return "success", "No account identified in the alert evidence - nothing to disable."
+        return "success", f"Disabled account '{target}' and forced MFA re-enrolment."
+    return "failed", "Unknown action."
 
 
 @router.post("/{alert_id}/actions", dependencies=[Depends(require_admin)])
@@ -234,8 +276,9 @@ def take_action(alert_id: int, body: ActionRequest, request: Request, db: Sessio
         elif action == "fix":
             alert.status = "closed"
     db.commit()
+    shown = target if target else detail
     log_action(db, actor_name(request), "alert.action", "alert", str(alert_id),
-               f"{action} -> {status} ({target})", client_ip(request))
+               f"{action} -> {status} ({shown})", client_ip(request))
     logger.info("Alert #%s action '%s' -> %s: %s", alert_id, action, status, detail)
     return action_row.to_dict()
 

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from backend.audit import client_ip, log_action
 from backend.database.connection import get_db
 from backend.database.models import Alert
-from backend.security import actor_name, require_auth
+from backend.security import actor_name, require_admin, require_auth
 from backend.threatintel.service import enrich_alert, lookup_indicator
 
 logger = logging.getLogger("baraq.api.threatintel")
@@ -24,6 +24,37 @@ router = APIRouter(
 
 class IntelLookup(BaseModel):
     indicator: str = Field(min_length=1, max_length=256)
+
+
+class IntelMatch(BaseModel):
+    text: str = Field(min_length=1, max_length=8192)
+
+
+@router.get("/feeds")
+def list_feeds(db: Session = Depends(get_db)):
+    """List configured threat-intel feed subscriptions + last-run state."""
+    from backend.intel.feeds import feed_states
+
+    return {"feeds": feed_states(db)}
+
+
+@router.post("/feeds/refresh", dependencies=[Depends(require_admin)])
+def refresh_feeds(request: Request, db: Session = Depends(get_db)):
+    """Run the threat-intel feed ingestion once (synchronous)."""
+    from backend.intel.feeds import refresh_feeds as run_refresh
+
+    summary = run_refresh(db)
+    log_action(db, actor_name(request), "intel.refresh", "feeds", "all",
+               f"Threat-intel feed refresh: {len(summary['feeds'])} feed(s)", client_ip(request))
+    return summary
+
+
+@router.post("/match")
+def match_iocs(body: IntelMatch, db: Session = Depends(get_db)):
+    """Match free text against known-bad indicators in the intel cache."""
+    from backend.intel.feeds import match_text
+
+    return {"matches": match_text(db, body.text)}
 
 
 @router.post("/lookup")

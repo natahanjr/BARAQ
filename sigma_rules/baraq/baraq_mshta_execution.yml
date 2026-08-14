@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - MSHTA Execution"
+id: baraq-4688-mshta
+status: experimental
+level: medium
+description: "MSHTA executed with remote or embedded script content - commonly used for in-memory payloads."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: \mshta.exe
+        CommandLine:contains: [http, "javascript:", "vbscript:"]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - ClickOnce apps
+tags:
+    - attack.execution
+    - attack.t1218.005

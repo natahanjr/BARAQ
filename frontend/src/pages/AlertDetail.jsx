@@ -70,6 +70,7 @@ export default function AlertDetail() {
   const [alert, setAlert] = useState(null);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState({});
   const [warned, setWarning] = useState({});
@@ -157,8 +158,10 @@ export default function AlertDetail() {
     if (saving) return;
     setSaving(true);
     setError("");
+    setNotice("");
     try {
-      await api.fixAlert(alert.id);
+      const res = await api.fixAlert(alert.id);
+      setNotice(`Fix → ${res.status}: ${res.detail || "done"}`);
       await load();
     } catch (e) {
       setError(e.message);
@@ -173,8 +176,11 @@ export default function AlertDetail() {
     setWarning((prev) => ({ ...prev, [action]: true }));
     setRunning((prev) => ({ ...prev, [action]: true }));
     setError("");
+    setNotice("");
     try {
-      await api.takeAction(alert.id, action);
+      const res = await api.takeAction(alert.id, action);
+      const label = soarButtons.find((b) => b.key === action)?.label || action;
+      setNotice(`${label} → ${res.status}: ${res.detail || res.target || "done"}`);
       await load();
     } catch (e) {
       setError(e.message);
@@ -225,9 +231,17 @@ export default function AlertDetail() {
   return (
     <div className="space-y-6 pb-12">
       <div>
-        <Link to="/alerts" className="text-sm font-medium text-cyan-400 hover:text-cyan-300">
-          ← All alerts
-        </Link>
+        <div className="flex flex-wrap items-center gap-4">
+          <Link to="/alerts" className="text-sm font-medium text-cyan-400 hover:text-cyan-300">
+            ← All alerts
+          </Link>
+          <Link
+            to={`/investigation?alert=${alert.id}`}
+            className="text-sm font-medium text-slate-400 transition-colors hover:text-cyan-300"
+          >
+            Deep-dive investigation →
+          </Link>
+        </div>
         <div className="mt-3 flex flex-wrap items-center gap-2.5">
           <h2 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
             #{alert.id} {alert.name}
@@ -242,6 +256,20 @@ export default function AlertDetail() {
           {alert.mitre_tactic && <> · {alert.mitre_tactic}</>}
         </p>
       </div>
+
+      {notice && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+          <span className="mt-0.5">✓</span>
+          <span className="flex-1">{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice("")}
+            className="text-emerald-400/70 transition-colors hover:text-emerald-300"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main content */}

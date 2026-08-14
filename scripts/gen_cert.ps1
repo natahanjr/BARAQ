@@ -32,16 +32,42 @@ $cert = Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue |
     Where-Object { $_.Thumbprint -eq $thumbprint } | Select-Object -First 1
 
 if (-not $cert) {
-    $cert = New-SelfSignedCertificate `
-        -DnsName $sans `
-        -CertStoreLocation Cert:\CurrentUser\My `
-        -KeyAlgorithm RSA `
-        -KeyLength 2048 `
-        -KeyExportPolicy Exportable `
-        -NotAfter (Get-Date).AddYears(1) `
-        -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.1,1.3.6.1.5.5.7.3.2")
+    $ipList = @("127.0.0.1", "::1")
+    $ipList += Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPAddress -notlike "169.254.*" -and $_.IPAddress -notlike "127.*" } |
+        ForEach-Object { $_.IPAddress }
+    $ipList = $ipList | Select-Object -Unique
+
+    $dn = New-Object System.Security.Cryptography.X509Certificates.X500DistinguishedName("CN=localhost")
+    $rsa = [System.Security.Cryptography.RSA]::Create(2048)
+    $req = New-Object System.Security.Cryptography.X509Certificates.CertificateRequest(
+        $dn, $rsa,
+        [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+        [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+    $sanBuilder = New-Object System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder
+    $sanBuilder.AddDnsName("localhost")
+    foreach ($ip in $ipList) { $sanBuilder.AddIpAddress([System.Net.IPAddress]::Parse($ip)) }
+    $req.CertificateExtensions.Add($sanBuilder.Build())
+    $ekuOids = New-Object System.Security.Cryptography.OidCollection
+    $ekuOids.Add([System.Security.Cryptography.Oid]::new("1.3.6.1.5.5.7.3.1")) | Out-Null
+    $ekuOids.Add([System.Security.Cryptography.Oid]::new("1.3.6.1.5.5.7.3.2")) | Out-Null
+    $req.CertificateExtensions.Add(
+        (New-Object System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension($ekuOids, $false)))
+    $req.CertificateExtensions.Add(
+        (New-Object System.Security.Cryptography.X509Certificates.X509KeyUsageExtension(
+            ([System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::DigitalSignature -bor
+             [System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::KeyEncipherment), $false)))
+
+    $cert = $req.CreateSelfSigned(
+        [DateTimeOffset]::Now.AddDays(-1),
+        [DateTimeOffset]::Now.AddYears(1))
     $thumbprint = $cert.Thumbprint
     Set-Content -Path $thumbFile -Value $thumbprint
+    $store = New-Object System.Security.Cryptography.X509Certificates.X509Store(
+        "My", [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+    $store.Add($cert)
+    $store.Close()
     Write-Host "  New certificate created (thumbprint $thumbprint)."
 } else {
     Write-Host "  Reusing existing certificate (thumbprint $thumbprint)."
@@ -55,8 +81,8 @@ Set-Content -Path $certFile -Value $certPem -Encoding Ascii
 
 # Export PFX then extract the private key with OpenSSL (falls back to .NET export)
 $pfxPass = [System.Guid]::NewGuid().ToString("N")
-$securePass = ConvertTo-SecureString -String $pfxPass -Force -AsPlainText
-$cert | Export-PfxCertificate -FilePath $pfxFile -Password $securePass -Force | Out-Null
+[System.IO.File]::WriteAllBytes($pfxFile, $cert.Export(
+    [System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, $pfxPass))
 $env:OPENSSL_CONF = ""
 & openssl pkcs12 -in $pfxFile -nodes -passin pass:$pfxPass -nocerts -out $keyFile 2>$null
 if (-not (Test-Path $keyFile) -or (Get-Item $keyFile).Length -eq 0) {

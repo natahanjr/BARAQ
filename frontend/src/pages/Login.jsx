@@ -9,6 +9,16 @@ export default function Login({ onAuthenticated }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [sso, setSso] = useState(null);
+  const [mode, setMode] = useState("login"); // login | register
+  const [notice, setNotice] = useState("");
+
+  const [regForm, setRegForm] = useState({
+    username: "",
+    full_name: "",
+    org: "",
+    password: "",
+    confirm: "",
+  });
 
   useEffect(() => {
     api
@@ -21,11 +31,30 @@ export default function Login({ onAuthenticated }) {
     e.preventDefault();
     setBusy(true);
     setError("");
+    setNotice("");
     try {
       if (challenge) {
         const res = await api.mfaVerify(challenge, code.trim());
         authStore.set(res.token);
         onAuthenticated(res.user);
+        return;
+      }
+      if (mode === "register") {
+        if (regForm.password !== regForm.confirm) {
+          setError("Passwords do not match");
+          return;
+        }
+        const res = await api.register({
+          username: regForm.username.trim(),
+          full_name: regForm.full_name.trim(),
+          org: regForm.org.trim(),
+          password: regForm.password,
+        });
+        setNotice(res.message || "Account created - awaiting administrator verification.");
+        setMode("login");
+        setUsername(regForm.username.trim());
+        setPassword("");
+        setRegForm({ username: "", full_name: "", org: "", password: "", confirm: "" });
         return;
       }
       const res = await api.login(username.trim(), password);
@@ -42,11 +71,22 @@ export default function Login({ onAuthenticated }) {
     }
   };
 
+  const switchMode = (next) => {
+    setMode(next);
+    setError("");
+    setNotice("");
+    setChallenge("");
+    setCode("");
+  };
+
   const cancelMfa = () => {
     setChallenge("");
     setCode("");
     setError("");
   };
+
+  const inputCls =
+    "w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-500";
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 px-4">
@@ -70,7 +110,7 @@ export default function Login({ onAuthenticated }) {
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-wide text-white">BARAQ</h1>
             <p className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-cyan-400">
-              Operator Access
+              {mode === "register" ? "Account Registration" : "Operator Access"}
             </p>
           </div>
         </div>
@@ -101,6 +141,88 @@ export default function Login({ onAuthenticated }) {
                 the code from your authenticator app.
               </p>
             </div>
+          ) : mode === "register" ? (
+            <>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="reg-username">
+                  Username
+                </label>
+                <input
+                  id="reg-username"
+                  value={regForm.username}
+                  onChange={(e) => setRegForm({ ...regForm, username: e.target.value })}
+                  autoComplete="username"
+                  autoFocus
+                  required
+                  minLength={3}
+                  pattern="[a-zA-Z0-9_.-]+"
+                  className={inputCls}
+                  placeholder="e.g. j.doe"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="reg-name">
+                  Full name <span className="text-slate-600">(optional)</span>
+                </label>
+                <input
+                  id="reg-name"
+                  value={regForm.full_name}
+                  onChange={(e) => setRegForm({ ...regForm, full_name: e.target.value })}
+                  autoComplete="name"
+                  className={inputCls}
+                  placeholder="Jane Doe"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="reg-org">
+                  Organization <span className="text-slate-600">(optional)</span>
+                </label>
+                <input
+                  id="reg-org"
+                  value={regForm.org}
+                  onChange={(e) => setRegForm({ ...regForm, org: e.target.value })}
+                  className={inputCls}
+                  placeholder="e.g. fintech-prod"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="reg-password">
+                  Password <span className="text-slate-600">(min 8 characters)</span>
+                </label>
+                <input
+                  id="reg-password"
+                  type="password"
+                  value={regForm.password}
+                  onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  className={inputCls}
+                  placeholder="••••••••"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="reg-confirm">
+                  Confirm password
+                </label>
+                <input
+                  id="reg-confirm"
+                  type="password"
+                  value={regForm.confirm}
+                  onChange={(e) => setRegForm({ ...regForm, confirm: e.target.value })}
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  className={inputCls}
+                  placeholder="••••••••"
+                />
+              </div>
+              <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-300">
+                New accounts are created as analysts and stay locked until an
+                administrator verifies them. You will be able to sign in once your
+                account is approved.
+              </p>
+            </>
           ) : (
             <>
               <div>
@@ -142,12 +264,28 @@ export default function Login({ onAuthenticated }) {
             </p>
           )}
 
+          {notice && (
+            <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">
+              {notice}
+            </p>
+          )}
+
           <button
             type="submit"
             disabled={busy}
             className="w-full rounded-lg bg-gradient-to-r from-cyan-600 to-cyan-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-50"
           >
-            {busy ? "Signing in…" : challenge ? "Verify Code" : "Sign In"}
+            {busy
+              ? challenge
+                ? "Verifying…"
+                : mode === "register"
+                  ? "Creating account…"
+                  : "Signing in…"
+              : challenge
+                ? "Verify Code"
+                : mode === "register"
+                  ? "Create Account"
+                  : "Sign In"}
           </button>
 
           {challenge && (
@@ -161,7 +299,7 @@ export default function Login({ onAuthenticated }) {
             </button>
           )}
 
-          {!challenge && (sso?.oidc || sso?.ldap) && (
+          {!challenge && mode === "login" && (sso?.oidc || sso?.ldap) && (
             <>
               <div className="flex items-center gap-3">
                 <span className="h-px flex-1 bg-slate-800" />
@@ -186,9 +324,30 @@ export default function Login({ onAuthenticated }) {
             </>
           )}
 
-          <p className="text-center text-[11px] text-slate-600">
-            Default account: <span className="font-mono text-slate-500">admin / baraqadmin</span>
-          </p>
+          {!challenge && mode !== "register" && (
+            <button
+              type="button"
+              onClick={() => switchMode("register")}
+              className="w-full rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-400 transition-colors hover:border-cyan-500/50 hover:text-cyan-300"
+            >
+              New here? Create an account
+            </button>
+          )}
+          {!challenge && mode === "register" && (
+            <button
+              type="button"
+              onClick={() => switchMode("login")}
+              className="w-full rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-200"
+            >
+              ← Back to sign in
+            </button>
+          )}
+
+          {mode === "login" && (
+            <p className="text-center text-[11px] text-slate-600">
+              Default account: <span className="font-mono text-slate-500">admin / baraqadmin</span>
+            </p>
+          )}
         </form>
       </div>
     </div>

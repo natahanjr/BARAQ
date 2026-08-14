@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - HKCU Run Key Modified"
+id: baraq-4657-hkcu-run
+status: experimental
+level: medium
+description: "A per-user Run key was modified - a lightweight persistence primitive."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectName:contains: \CurrentVersion\Run\
+        OperationType:startswith: "%%1904"
+    condition: selection_sel
+fields:
+    - ObjectName
+    - ProcessName
+    - SubjectUserName
+falsepositives:
+    - "Application self-registration"
+tags:
+    - attack.persistence
+    - attack.t1547.001

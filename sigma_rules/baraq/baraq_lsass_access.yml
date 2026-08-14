@@ -1,0 +1,26 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - LSASS Process Access Attempt"
+id: baraq-4663-lsass
+status: experimental
+level: high
+description: "A non-LSASS process requested read access to lsass.exe - the signature of credential dumping."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectName:endswith: \lsass.exe
+        ProcessName:not_contains: \lsass.exe
+        AccessMask: 0x1010
+    condition: selection_sel
+fields:
+    - ObjectName
+    - ProcessName
+    - SubjectUserName
+    - AccessMask
+falsepositives:
+    - AV/EDR inspecting lsass memory
+tags:
+    - attack.credential_access
+    - attack.t1003.001

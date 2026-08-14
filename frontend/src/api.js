@@ -82,6 +82,13 @@ export const api = {
     request(path, { method: "PATCH", body: JSON.stringify(body ?? {}) }),
 
   login: (username, password) => request("/api/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  register: (body) => request("/api/auth/register", { method: "POST", body: JSON.stringify(body) }),
+  approveUser: (id) => request(`/api/auth/users/${id}/approve`, { method: "POST" }),
+  rejectUser: (id) => request(`/api/auth/users/${id}/reject`, { method: "POST" }),
+  changePassword: (currentPassword, newPassword) =>
+    request("/api/auth/settings/change-password", { method: "POST", body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }) }),
+  renameAccount: (currentPassword, newUsername) =>
+    request("/api/auth/settings/rename", { method: "POST", body: JSON.stringify({ current_password: currentPassword, new_username: newUsername }) }),
   mfaVerify: (challenge, code) => request("/api/auth/mfa/verify", { method: "POST", body: JSON.stringify({ challenge, code }) }),
   mfaSetup: () => request("/api/auth/mfa/setup", { method: "POST" }),
   mfaConfirm: (code) => request("/api/auth/mfa/confirm", { method: "POST", body: JSON.stringify({ code }) }),
@@ -150,6 +157,7 @@ export const api = {
 
   assistantChat: (message) => request("/api/assistant/chat", { method: "POST", body: JSON.stringify({ message }) }),
   assistantHistory: () => request("/api/assistant/history"),
+  assistantClearHistory: () => request("/api/assistant/history", { method: "DELETE" }),
   assistantExplain: (alertId) =>
     request("/api/assistant/explain", { method: "POST", body: JSON.stringify({ alert_id: alertId }) }),
   assistantSummarize: () => request("/api/assistant/summarize", { method: "POST" }),
@@ -162,6 +170,13 @@ export const api = {
 
   systemStatus: () => request("/api/system/status"),
   collect: () => request("/api/system/collect", { method: "POST" }),
+  dataQuality: () => request("/api/system/data-quality"),
+  dataQualityHistory: () => request("/api/system/data-quality/history"),
+  dataQualityRepair: (body) =>
+    request("/api/system/data-quality/repair", {
+      method: "POST",
+      body: JSON.stringify(body ?? { reason: "manual" }),
+    }),
 
   entities: (params = {}) => {
     const qs = new URLSearchParams();

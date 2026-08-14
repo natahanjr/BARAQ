@@ -64,6 +64,67 @@ def test_normalizer_extracts_account_from_message():
     assert out["raw_json"]["facts"]["source_ip"] == "192.168.99.77"
 
 
+def test_normalizer_flags_truncated_process_name():
+    """A process path cut short (no executable suffix) is flagged, and the
+    missing structured copy marks the process data incomplete."""
+    out = Normalizer().normalize({
+        "source": "eventlog", "channel": "Security", "event_id": 4688,
+        "timestamp": "2026-08-14T10:00:00+00:00", "user": "u",
+        "message": "New Process Name:\tC:\\Windows\\Sys",
+        "raw": {"record_number": 1, "structured_fetch_failed": True},
+    })
+    assert out["data_integrity"] == "truncated"
+    truncated = out["raw_json"]["data_integrity"]["truncated_fields"]
+    assert "new_process" in truncated
+    assert "process_data" in truncated
+
+
+def test_normalizer_flags_bare_drive_letter_process():
+    """'New Process Name:\tC' is the SafeFormatMessage truncation signature."""
+    out = Normalizer().normalize({
+        "source": "eventlog", "channel": "Security", "event_id": 4688,
+        "timestamp": "2026-08-14T10:00:00+00:00", "user": "u",
+        "message": "New Process Name:\tC",
+        "raw": {"record_number": 2},
+    })
+    truncated = out["raw_json"]["data_integrity"]["truncated_fields"]
+    assert "new_process" in truncated
+
+
+def test_normalizer_flags_message_cap():
+    """Messages over the length cap are flagged as lossy."""
+    out = Normalizer().normalize({
+        "source": "agent", "event_id": 4625,
+        "timestamp": "2026-08-14T10:00:00+00:00", "user": "u",
+        "message": "x" * 9000,
+        "raw": {"record_number": 3},
+    })
+    truncated = out["raw_json"]["data_integrity"]["truncated_fields"]
+    assert "message" in truncated
+
+
+def test_normalizer_complete_structured_data_is_not_flagged():
+    """A full structured process record stays 'complete' even when the
+    message copy would be truncated."""
+    out = Normalizer().normalize({
+        "source": "eventlog", "channel": "Security", "event_id": 4688,
+        "timestamp": "2026-08-14T10:00:00+00:00", "user": "u",
+        "message": "New Process Name:\tC:\\Windows\\Sys",
+        "raw": {
+            "record_number": 4,
+            "NewProcessName": r"C:\Windows\System32\cmd.exe",
+            "CommandLine": r"C:\Windows\System32\cmd.exe /c whoami",
+        },
+    })
+    assert out["data_integrity"] == "complete"
+    assert out["raw_json"]["data_integrity"]["complete"] is True
+
+
+def test_normalizer_non_process_event_not_flagged():
+    out = Normalizer().normalize(logon_failure())
+    assert out["data_integrity"] == "complete"
+
+
 def test_normalize_batch_counts():
     records = brute_force() + suspicious_powershell()
     out = Normalizer().normalize_batch(records)
@@ -341,6 +402,37 @@ def test_kill_chain_timing_reversed_sequence(db):
     assert len(findings) == 1
     assert "ordering deviates" in findings[0].evidence
     assert findings[0].confidence < 0.9
+
+
+def test_kill_chain_covers_expanded_rule_families(db):
+    """The kill-chain stage map must classify every native + expanded rule
+    family so correlated alerts from the 52-rule expansion still build
+    coherent chains instead of falling into 'Other'."""
+    from backend.database.models import Alert
+    from backend.detection.rules.correlation import KILL_CHAIN_STAGES, KillChainCorrelationRule
+    from datetime import datetime, timezone
+
+    families = [
+        "spearphishing_attachment", "wmi_execution", "startup_folder",
+        "uac_bypass", "disable_defender", "lsass_dump", "account_discovery",
+        "rdp_lateral", "archive_collection", "encrypted_channel",
+    ]
+    for rule in families:
+        assert rule in KILL_CHAIN_STAGES, f"{rule} missing from stage map"
+        assert KILL_CHAIN_STAGES[rule] != "Other"
+
+    now = datetime.now(timezone.utc)
+    for rule in families:
+        db.add(Alert(
+            name=f"Expanded {rule}", rule=rule, status="open", severity="high",
+            mitre_id="T1071", mitre_name="Expanded", mitre_tactic="Expanded",
+            evidence="Brute force detected for account 'administrator' from 192.168.99.77.",
+            created_at=now,
+        ))
+    db.commit()
+    findings = KillChainCorrelationRule(db, threshold=2).evaluate(10)
+    assert findings, "expanded families must produce a correlated chain"
+    assert all("Other" not in f.evidence for f in findings)
 
 
 def test_credential_access_lsass_dump(db):

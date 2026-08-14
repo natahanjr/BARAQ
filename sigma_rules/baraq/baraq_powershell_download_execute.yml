@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - PowerShell Download and Execute"
+id: baraq-4688-ps-download
+status: experimental
+level: high
+description: "PowerShell performing in-memory download and execution."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: [\powershell.exe, \pwsh.exe]
+        CommandLine:contains: ["-exec bypass", IEX(, "Invoke-Expression", "Start-BitsTransfer", DownloadString, "Invoke-WebRequest", " -w hidden "]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - "Pen-test tooling, sanctioned automation"
+tags:
+    - attack.execution
+    - attack.t1059.001

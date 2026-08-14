@@ -14,13 +14,18 @@ import json
 import logging
 import re
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
 from backend.ai.knowledge import INTENTS
 from backend.config import AI_API_KEY, AI_API_URL, AI_MODEL
-from backend.database.models import Alert, AssistantMessage, NormalizedEvent
+from backend.database.models import (
+    Alert,
+    AssistantMessage,
+    Endpoint,
+    NormalizedEvent,
+)
 
 logger = logging.getLogger("baraq.ai")
 
@@ -321,7 +326,7 @@ class SecurityAssistant:
 
     # ------------------------------------------------------------------
     def _respond(self, intent: str, message: str) -> str:
-        alert = self._find_alert(message)
+        alert = self._resolve_alert(message)
         alerts = self._latest_alerts()
 
         if intent == "greeting":
@@ -411,13 +416,236 @@ class SecurityAssistant:
         if intent == "analyst_note":
             return self._generate_note(alerts)
 
+        if intent == "alert_search":
+            return self._search_alerts(message)
+
+        if intent == "recent_events":
+            return self._recent_events(message)
+
+        if intent == "threat_intel":
+            return self._threat_intel(message)
+
+        if intent == "fleet_status":
+            return self._fleet_status()
+
+        if intent == "ml_anomalies":
+            return self._ml_anomalies()
+
         # general fallback with context
         return (
             f"Here is the current SOC picture: {len(alerts)} open alerts, "
             f"security score {self._compute_score():.1f}/100. "
             "I can explain alerts (e.g. 'explain alert 3'), summarize incidents, "
-            "recommend remediation, or generate analyst notes."
+            "recommend remediation, search alerts, show recent events or endpoints, "
+            "perform threat-intel lookups, and generate analyst notes."
         )
+
+    # ------------------------------------------------------------------
+    # New intents: alert search, events, threat intel, fleet, ML anomalies
+    # ------------------------------------------------------------------
+    _SEVERITY_WORDS = {"critical", "high", "medium", "low"}
+
+    def _search_alerts(self, message: str) -> str:
+        """Alert search with severity / status / keyword filters."""
+        lowered = message.lower()
+        statuses = {"open", "closed"}
+        status = "open"
+        for s in statuses:
+            if s in lowered:
+                status = s
+                break
+        severities = {w for w in self._SEVERITY_WORDS if w in lowered}
+
+        query = select(Alert)
+        if status == "open":
+            query = query.where(Alert.status == "open")
+        else:
+            query = query.where(Alert.status != "open")
+        if severities:
+            query = query.where(Alert.severity.in_(severities))
+        query = query.order_by(Alert.created_at.desc()).limit(20)
+        rows = list(self.session.scalars(query))
+
+        keyword = None
+        if not severities:
+            stripped = re.sub(
+                r"\b(?:alerts?|show|list|what|any|find|open|closed|about|for|host|"
+                r"from|today|me|the|do|we|have|are|there|with|severity|severe)\b",
+                " ", lowered,
+            )
+            stripped = re.sub(r"\s+", " ", stripped).strip()
+            if len(stripped) >= 3:
+                keyword = stripped
+
+        if keyword:
+            kw = keyword.lower()
+            rows = [
+                r for r in rows
+                if kw in (r.name or "").lower()
+                or kw in (r.rule or "").lower()
+                or kw in (r.mitre_id or "").lower()
+                or kw in (r.mitre_tactic or "").lower()
+                or kw in (r.evidence or "").lower()
+            ]
+
+        if not rows:
+            filters = ", ".join(list(severities) + [status]) or "all"
+            return (
+                f"No {'open' if status == 'open' else 'closed'} alerts"
+                f"{' matching "' + keyword + '"' if keyword else ''}"
+                f" ({filters})."
+            )
+        lines = [f"{len(rows)} {'open' if status == 'open' else 'closed'} alert(s):"]
+        for a in rows[:15]:
+            lines.append(
+                f"- #{a.id} {a.name} [{a.severity}] ({a.rule}, {a.mitre_id})"
+            )
+        if len(rows) > 15:
+            lines.append(f"  ... and {len(rows) - 15} more")
+        return "\n".join(lines)
+
+    def _recent_events(self, message: str) -> str:
+        """Latest normalized events, optionally filtered by host or user."""
+        lowered = message.lower()
+        host = user = None
+        m = re.search(r"\bhost\s+([\w.\-]+)", lowered)
+        if m:
+            host = m.group(1)
+        m = re.search(r"\buser\s+([\w.\-]+)", lowered)
+        if m:
+            user = m.group(1)
+
+        query = select(NormalizedEvent)
+        if host:
+            query = query.where(NormalizedEvent.host == host)
+        if user:
+            query = query.where(NormalizedEvent.user == user)
+        query = query.order_by(NormalizedEvent.timestamp.desc()).limit(15)
+        rows = list(self.session.scalars(query))
+
+        if not rows:
+            scope = f" for {host or user}" if (host or user) else ""
+            return f"No events in the database{scope} yet."
+        lines = [f"Latest {len(rows)} events" + (f" - {host or user}" if (host or user) else "") + ":"]
+        for e in rows:
+            flags = []
+            if e.is_anomaly:
+                flags.append("ML-flagged")
+            if e.ml_score and e.ml_score >= 0.8:
+                flags.append(f"score {e.ml_score:.2f}")
+            lines.append(
+                f"- [{e.timestamp:%H:%M:%S}] #{e.event_id} {e.category} "
+                f"{e.user}@{e.host} risk={e.risk_score}"
+                + (f" ({', '.join(flags)})" if flags else "")
+            )
+        return "\n".join(lines)
+
+    _DOMAIN_RE = re.compile(r"\b(?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.)+[a-z]{2,}\b", re.IGNORECASE)
+
+    def _extract_indicator(self, message: str) -> str | None:
+        import ipaddress
+
+        for token in message.split():
+            candidate = token.strip("(),;:[]'\"")
+            try:
+                ipaddress.ip_address(candidate)
+                return candidate
+            except ValueError:
+                pass
+            if re.fullmatch(r"[0-9a-fA-F]{64}|[0-9a-fA-F]{40}|[0-9a-fA-F]{32}", candidate):
+                return candidate
+        m = self._DOMAIN_RE.search(message)
+        if m and "lookup" not in m.group(0):
+            return m.group(0)
+        return None
+
+    def _threat_intel(self, message: str) -> str:
+        from backend.threatintel.service import lookup_indicator
+
+        indicator = self._extract_indicator(message)
+        if not indicator:
+            return (
+                "I didn't find an IP, domain or hash in your question. "
+                "Ask e.g. 'is 203.0.113.9 malicious?' or 'check hash <sha256>'."
+            )
+        try:
+            verdict = lookup_indicator(self.session, indicator) or {}
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("threat intel lookup failed: %s", exc)
+            verdict = {}
+        if not verdict:
+            return (
+                f"No reputation data for '{indicator}'. "
+                "If a provider key is configured the live feed is used; "
+                "otherwise the offline baseline applies."
+            )
+        label = verdict.get("label") or verdict.get("category") or "unknown"
+        conf = verdict.get("confidence")
+        conf_str = f"{conf:.0%}" if isinstance(conf, (int, float)) else "n/a"
+        detail = verdict.get("detail") or verdict.get("reason") or ""
+        lines = [
+            f"Threat intelligence - {indicator}",
+            f"  Verdict: {label} (confidence {conf_str})",
+        ]
+        if detail:
+            lines.append(f"  Detail: {detail}")
+        related = self.similar_resolved_alerts(indicator, limit=1)
+        if related:
+            lines.append(
+                f"  Related resolved incident: #{related[0].id} {related[0].name}"
+            )
+        return "\n".join(lines)
+
+    def _fleet_status(self) -> str:
+        endpoints = list(self.session.scalars(select(Endpoint).order_by(Endpoint.host)))
+        if not endpoints:
+            return (
+                "No endpoints are registered yet. Install the fleet agent "
+                "on target hosts and they will appear here automatically."
+            )
+        now = datetime.now(timezone.utc)
+        online, stale = [], []
+        for ep in endpoints:
+            last = ep.last_seen
+            age = (now - last).total_seconds() if last else float("inf")
+            (online if age <= 300 else stale).append((ep, age))
+        lines = [
+            f"Fleet status: {len(endpoints)} endpoint(s) - "
+            f"{len(online)} reporting (within 5 min), {len(stale)} stale."
+        ]
+        for ep, age in sorted(online, key=lambda x: -x[0].alerts_total):
+            lines.append(
+                f"- {ep.host} ({ep.agent_id}) online, {ep.events_total} events, "
+                f"{ep.alerts_total} alerts"
+            )
+        for ep, age in sorted(stale, key=lambda x: -x[1]):
+            mins = int(age // 60)
+            lines.append(
+                f"- {ep.host} ({ep.agent_id}) STALE - last seen {mins} min ago"
+            )
+        return "\n".join(lines)
+
+    def _ml_anomalies(self) -> str:
+        rows = list(
+            self.session.scalars(
+                select(NormalizedEvent)
+                .where(NormalizedEvent.is_anomaly.is_(True))
+                .order_by(NormalizedEvent.timestamp.desc())
+                .limit(15)
+            )
+        )
+        if not rows:
+            return (
+                "No ML-flagged anomalies in the recent event stream. "
+                "The behavioral models are currently at baseline."
+            )
+        lines = [f"{len(rows)} recent ML-flagged anomaly/ies:"]
+        for e in rows:
+            lines.append(
+                f"- [{e.timestamp:%Y-%m-%d %H:%M:%S}] {e.user}@{e.host} "
+                f"event #{e.event_id} {e.category} ml_score={e.ml_score:.2f}"
+            )
+        return "\n".join(lines)
 
     def _generate_note(self, alerts: list[Alert]) -> str:
         if not alerts:
@@ -438,6 +666,39 @@ class SecurityAssistant:
     # ------------------------------------------------------------------
     # Chat
     # ------------------------------------------------------------------
+    def _recent_history(self, limit: int = 8) -> list[AssistantMessage]:
+        """Last N stored turns, oldest first (multi-turn conversation memory)."""
+        rows = self.session.scalars(
+            select(AssistantMessage)
+            .order_by(AssistantMessage.id.desc())
+            .limit(limit)
+        ).all()
+        return list(reversed(rows))
+
+    def _resolve_alert(self, message: str) -> Alert | None:
+        """Resolve an alert from the message, falling back to conversation memory.
+
+        Follow-up questions like "and how do I remediate that?" resolve to the
+        alert most recently mentioned in the conversation history.
+        """
+        alert = self._find_alert(message)
+        if alert is not None:
+            return alert
+        for row in reversed(self._recent_history(limit=10)):
+            if row.role != "user":
+                continue
+            mentioned = self._find_alert(row.content)
+            if mentioned is not None:
+                return mentioned
+        return None
+
+    def clear_history(self) -> int:
+        """Delete all stored conversation turns; returns the number removed."""
+        count = self.session.query(AssistantMessage).count()
+        self.session.execute(AssistantMessage.__table__.delete())
+        self.session.commit()
+        return count
+
     def chat(self, message: str, role: str = "user", persist: bool = True) -> str:
         self._ensure_index()
         intent = self._classify_intent(message)
@@ -447,7 +708,7 @@ class SecurityAssistant:
             self.session.add(AssistantMessage(role="user", content=message))
 
         if AI_API_URL:
-            response = self._remote_completion(message)
+            response = self._remote_completion(message, intent)
         else:
             response = self._respond(intent, message)
 
@@ -468,35 +729,49 @@ class SecurityAssistant:
     def _context_block(self) -> str:
         """Compact live SOC context so the remote model can ground its reply."""
         alerts = self._latest_alerts(5)
+        lines = [f"Security score: {self._compute_score():.1f}/100."]
         if not alerts:
-            return f"Security score: {self._compute_score():.1f}/100. No open alerts."
-        lines = [
-            f"Security score: {self._compute_score():.1f}/100.",
-            f"Open alerts: {len(alerts)}.",
-        ]
-        for a in alerts:
-            lines.append(
-                f"- Alert #{a.id}: {a.name} ({a.severity}) MITRE {a.mitre_id} - {a.mitre_tactic}"
+            lines.append("Open alerts: none.")
+        else:
+            lines.append(f"Open alerts: {len(alerts)}.")
+            for a in alerts:
+                lines.append(
+                    f"- Alert #{a.id}: {a.name} ({a.severity}) MITRE {a.mitre_id} - {a.mitre_tactic}"
+                )
+        try:
+            from backend.database.models import Endpoint
+            eps = list(self.session.scalars(select(Endpoint)))
+            online = sum(
+                1 for e in eps
+                if e.last_seen
+                and (datetime.now(timezone.utc) - e.last_seen).total_seconds() <= 300
             )
+            lines.append(f"Endpoints: {online}/{len(eps)} reporting")
+        except Exception:  # noqa: BLE001
+            pass
         return "\n".join(lines)
 
-    def _remote_completion(self, message: str) -> str:
+    def _remote_completion(self, message: str, intent: str) -> str:
         try:
+            messages: list[dict] = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are the BARAQ security analyst assistant. "
+                        "Answer concisely using the provided SOC context and "
+                        "conversation history. Ground all statements in MITRE "
+                        "ATT&CK where applicable.\n\n"
+                        f"LIVE SOC CONTEXT:\n{self._context_block()}"
+                    ),
+                }
+            ]
+            for row in self._recent_history(limit=6):
+                messages.append({"role": row.role, "content": row.content})
+            messages.append({"role": "user", "content": message})
             payload = json.dumps(
                 {
                     "model": AI_MODEL,
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are the BARAQ security analyst assistant. "
-                                "Answer concisely using the provided SOC context. "
-                                "Ground all statements in MITRE ATT&CK where applicable.\n\n"
-                                f"LIVE SOC CONTEXT:\n{self._context_block()}"
-                            ),
-                        },
-                        {"role": "user", "content": message},
-                    ],
+                    "messages": messages,
                     "max_tokens": 400,
                 }
             ).encode("utf-8")

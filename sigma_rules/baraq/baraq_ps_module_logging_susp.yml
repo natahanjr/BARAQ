@@ -1,0 +1,23 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - PowerShell Module Logging Suspicious API"
+id: baraq-4103-module-logging
+status: experimental
+level: low
+description: "PowerShell module logging captured API-interaction or encoded commands."
+logsource:
+    product: windows
+    service: powershell
+detection:
+    selection_sel:
+        Payload:contains: ["-enc", IEX, "Invoke-Mimikatz", "Add-Type", CreateRemoteThread, OpenProcess]
+    condition: selection_sel
+fields:
+    - Payload
+    - User
+    - ContextInfo
+falsepositives:
+    - Dev automation
+tags:
+    - attack.execution
+    - attack.t1059.001

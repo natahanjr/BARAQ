@@ -15,6 +15,8 @@ const PAGE_SIZE = 25;
 const selectClass =
   "rounded-lg border border-slate-700 bg-slate-800/70 px-4 py-2 text-sm text-slate-200 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors";
 
+const STATUSES = ["open", "in_progress", "contained", "closed"];
+
 function OrgChip({ org }) {
   if (!org) return null;
   return (
@@ -27,9 +29,23 @@ function OrgChip({ org }) {
   );
 }
 
-function AlertRow({ alert, onFix }) {
+function AlertRow({ alert, selected, onToggle, onFix, onQuickStatus }) {
   return (
-    <div className="group flex items-start gap-3 rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-all hover:border-cyan-500/30 hover:bg-slate-800/50">
+    <div
+      className={`group flex items-start gap-3 rounded-xl border p-4 transition-all ${
+        selected
+          ? "border-cyan-500/50 bg-cyan-500/10"
+          : "border-slate-700/50 bg-slate-800/30 hover:border-cyan-500/30 hover:bg-slate-800/50"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={() => onToggle(alert.id)}
+        title="Select for bulk triage"
+        aria-label={`Select alert ${alert.id}`}
+        className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-cyan-500"
+      />
       <Link to={`/alerts/${alert.id}`} className="block min-w-0 flex-1">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
@@ -69,16 +85,32 @@ function AlertRow({ alert, onFix }) {
           </div>
         </div>
       </Link>
-      {isAdmin() && alert.status !== "closed" && (
-        <button
-          type="button"
-          title="Fix alert and restore security score"
-          onClick={() => onFix(alert.id)}
-          className="shrink-0 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-400 transition-colors hover:bg-emerald-500/25"
+      <div className="flex shrink-0 flex-col items-end gap-2">
+        {/* Quick triage: change status without opening the alert */}
+        <select
+          value={alert.status}
+          onChange={(e) => onQuickStatus(alert.id, e.target.value)}
+          title="Quick triage status"
+          aria-label={`Quick status for alert ${alert.id}`}
+          className="rounded-lg border border-slate-700 bg-slate-800/70 px-2 py-1.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
         >
-          Fix
-        </button>
-      )}
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s === "in_progress" ? "investigating" : s}
+            </option>
+          ))}
+        </select>
+        {isAdmin() && alert.status !== "closed" && (
+          <button
+            type="button"
+            title="Fix alert and restore security score"
+            onClick={() => onFix(alert.id)}
+            className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-400 transition-colors hover:bg-emerald-500/25"
+          >
+            Fix
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -91,6 +123,8 @@ export default function Alerts() {
   const [error, setError] = useState("");
   const [clearing, setClearing] = useState(false);
   const [clearResult, setClearResult] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = () => {
     setError("");
@@ -121,6 +155,73 @@ export default function Alerts() {
       load();
     } catch (e) {
       setError(e.message);
+    }
+  };
+
+  const toggleSelect = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectVisible = (checked) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const ids = data ? data.items.map((a) => a.id) : [];
+      ids.forEach((id) => (checked ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  };
+
+  const quickStatus = async (id, status) => {
+    setError("");
+    try {
+      await api.setAlertStatus(id, status);
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const bulkStatus = async (status) => {
+    if (selected.size === 0) return;
+    const label = status === "in_progress" ? "investigating" : status;
+    if (status === "closed" && !window.confirm(`Close ${selected.size} selected alert(s)?`)) return;
+    setBulkBusy(true);
+    setError("");
+    try {
+      const results = await Promise.allSettled(
+        [...selected].map((id) => api.setAlertStatus(id, status))
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) setError(`${failed} alert(s) failed to update`);
+      setSelected(new Set());
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const bulkFix = async () => {
+    if (selected.size === 0) return;
+    if (!window.confirm(`Fix ${selected.size} selected alert(s)?`)) return;
+    setBulkBusy(true);
+    setError("");
+    try {
+      const results = await Promise.allSettled([...selected].map((id) => api.fixAlert(id)));
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) setError(`${failed} alert(s) failed to fix`);
+      setSelected(new Set());
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBulkBusy(false);
     }
   };
 
@@ -189,6 +290,57 @@ export default function Alerts() {
         </div>
       )}
 
+      {/* Bulk triage bar */}
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-3">
+          <span className="text-sm font-semibold text-cyan-200">
+            {selected.size} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => bulkStatus("in_progress")}
+            disabled={bulkBusy}
+            className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-300 transition-colors hover:bg-amber-500/25 disabled:opacity-40"
+          >
+            Investigating
+          </button>
+          <button
+            type="button"
+            onClick={() => bulkStatus("contained")}
+            disabled={bulkBusy}
+            className="rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-xs font-bold text-violet-300 transition-colors hover:bg-violet-500/25 disabled:opacity-40"
+          >
+            Contained
+          </button>
+          <button
+            type="button"
+            onClick={() => bulkStatus("closed")}
+            disabled={bulkBusy}
+            className="rounded-lg border border-slate-500/50 bg-slate-700/40 px-3 py-1.5 text-xs font-bold text-slate-200 transition-colors hover:bg-slate-600/50 disabled:opacity-40"
+          >
+            Close
+          </button>
+          {isAdmin() && (
+            <button
+              type="button"
+              onClick={bulkFix}
+              disabled={bulkBusy}
+              className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-400 transition-colors hover:bg-emerald-500/25 disabled:opacity-40"
+            >
+              Fix all
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            disabled={bulkBusy}
+            className="ml-auto rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-40"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Filters */}
       <Card>
         <div className="flex flex-wrap items-center gap-3">
@@ -252,8 +404,30 @@ export default function Alerts() {
       {data && data.items.length > 0 && (
         <Card>
           <div className="space-y-2">
+            <div className="flex items-center justify-between border-b border-slate-700/40 pb-2">
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={data.items.every((a) => selected.has(a.id))}
+                  onChange={(e) => selectVisible(e.target.checked)}
+                  aria-label="Select all visible alerts"
+                  className="h-4 w-4 cursor-pointer accent-cyan-500"
+                />
+                Select all on this page
+              </label>
+              <span className="text-[11px] text-slate-500">
+                tick the boxes to bulk-triage
+              </span>
+            </div>
             {data.items.map((alert) => (
-              <AlertRow key={alert.id} alert={alert} onFix={fixAlert} />
+              <AlertRow
+                key={alert.id}
+                alert={alert}
+                selected={selected.has(alert.id)}
+                onToggle={toggleSelect}
+                onFix={fixAlert}
+                onQuickStatus={quickStatus}
+              />
             ))}
           </div>
         </Card>

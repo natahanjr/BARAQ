@@ -37,6 +37,7 @@ _ADDITIVE_MIGRATIONS = {
         ("is_anomaly", "BOOLEAN DEFAULT 0"),
         ("ml_score", "REAL"),
         ("org", "VARCHAR(64) DEFAULT ''"),
+        ("data_integrity", "VARCHAR(16) DEFAULT 'complete'"),
     ],
     "alerts": [
         ("detection_method", "VARCHAR(16) DEFAULT 'rule'"),
@@ -81,15 +82,24 @@ _ADDITIVE_MIGRATIONS = {
         ("totp_enabled", "BOOLEAN DEFAULT 0"),
         ("last_login_at", "DATETIME"),
         ("org", "VARCHAR(64) DEFAULT ''"),
+        ("registration_status", "VARCHAR(16) DEFAULT ''"),
+        ("must_change_password", "BOOLEAN DEFAULT 0"),
     ],
     "alerts": [
         ("org", "VARCHAR(64) DEFAULT ''"),
+        ("ticket_links", "JSONB DEFAULT '[]'::jsonb"),
     ],
     "incidents": [
         ("org", "VARCHAR(64) DEFAULT ''"),
     ],
     "endpoints": [
         ("org", "VARCHAR(64) DEFAULT ''"),
+        ("agent_version", "VARCHAR(32) DEFAULT ''"),
+        ("os_info", "VARCHAR(128) DEFAULT ''"),
+        ("tags", "VARCHAR(256) DEFAULT ''"),
+        ("health_status", "VARCHAR(16) DEFAULT 'unknown'"),
+        ("update_status", "VARCHAR(16) DEFAULT 'none'"),
+        ("errors_total", "INTEGER DEFAULT 0"),
     ],
 }
 
@@ -110,6 +120,34 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
+def _readonly_engine():
+    """Build the read-replica engine once (BARAQ_READONLY_DATABASE_URL)."""
+    from backend.config import READONLY_DATABASE_URL
+
+    if not READONLY_DATABASE_URL:
+        return None
+    return create_engine(
+        normalize_database_url(READONLY_DATABASE_URL),
+        echo=ECHO_SQL,
+        pool_pre_ping=True,
+        connect_args={"options": "-c timezone=UTC"},
+    )
+
+
+readonly_engine = _readonly_engine()
+
+SessionReadonly = sessionmaker(bind=readonly_engine or engine, autoflush=False, expire_on_commit=False)
+
+
+def get_db_readonly():
+    """FastAPI dependency: a read-only session (replica when configured)."""
+    db = SessionReadonly()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 def _backfill_audit_chain() -> None:

@@ -1,8 +1,8 @@
 # BARAQ — Performance Benchmarking
 
 **Document:** Throughput, Latency and Resource Footprint on the Target Laptop
-**Version:** 1.0
-**Date:** 2026-08-05
+**Version:** 2.0
+**Date:** 2026-08-13
 
 ---
 
@@ -64,5 +64,64 @@ curl.exe -X POST http://127.0.0.1:8000/api/system/ml/train -H "X-API-Key: baraq-
 ---
 
 ## 5. Reproducing Against Your Deployment
+
+---
+
+## 6. Current Measurements (PostgreSQL Build, 2026-08-13)
+
+The figures below were measured with the built-in harness
+(`tools/perf_benchmark.py`) on a dedicated instance (HTTP 127.0.0.1:8010,
+isolated scratch PostgreSQL database on the portable **PostgreSQL 16.6**
+cluster at port 55432, real **2,512-rule Sigma set**, warm cache where
+noted). After the native rule expansion the engine now runs **100 native
+rules + 2,512 Sigma rules**. Live HTTPS figures (TLS, port 8443) are noted
+where they differ.
+
+| Metric | Value | Measurement |
+|---|---|---|
+| Login (PBKDF2 verification) | 168 ms p50 | 40 logins, HTTP |
+| `GET /api/system/status` | 20.0 ms p50 / 43.5 ms p99 | 60 requests |
+| `GET /api/alerts?limit=50` | 9.8 ms p50 | 60 requests |
+| `GET /api/events?limit=50` | 12.3 ms p50 | 60 requests |
+| `GET /api/dashboard/summary` | 23.9 ms p50 | 60 requests |
+| `GET /api/endpoints` | 8.0 ms p50 | 60 requests |
+| **Ingest, full pipeline incl. Sigma** | **2.7 events/s (377 ms/event)** | 5 batches × 20 records |
+| Ingest latency (10 records) | 3.3 s p50 / 19.1 s p95 | 20 iterations |
+| Sigma engine cold load (2,512 YAMLs) | 14.2 s | first load per process, then cached |
+| Sigma evaluation (2,000 events, cold) | 19.8 s | scratch DB, real rule set |
+| Sigma evaluation (2,000 events, warm) | 18.3 s p50 (≈ 9 ms/event) | 5 runs |
+| Scheduler pipeline cycle (150 records, incl. Sigma) | 17.3 s p50 | 5 runs |
+| Dashboard summary | 24 ms | in-process |
+| Hold-out evaluation detection time | 30.5 s | 422 samples, 11 scenarios, real baseline |
+
+### Hold-out evaluation metrics (2026-08-13, `run_holdout_evaluation`)
+
+| Layer | Accuracy | Precision | Recall | F1 | FPR | TP / FP / TN / FN |
+|---|---|---|---|---|---|---|
+| Rule (100 native) | 99.05% | 100% | 95.12% | 0.975 | 0.0% | 78 / 0 / 340 / 4 |
+| ML (frozen detector) | 89.58% | 100% | 64.29% | 0.783 | 0.0% | 9 / 0 / 34 / 5 |
+| Hybrid | 99.05% | 100% | 95.12% | 0.975 | 0.0% | 78 / 0 / 340 / 4 |
+
+Negative class = 340 live host telemetry records; positives = hold-out attack
+scenarios never seen in ML training. 25 alerts created; the 4 rule-layer
+misses are all in the `ml_c2_beacon` scenario (beacon-cadence features only
+partially scored by the network model — see the FN guidance in
+`backend/evaluation/holdout.py`).
+
+### Interpretation (current build)
+
+- The **persist path is two orders of magnitude faster than the
+  detection-bound ingest path**: each ingest request re-evaluates the last
+  10 minutes of events against all 2,512 Sigma rules (~9 ms per event in
+  the window). This is a deliberate detect-on-ingest trade-off; it is
+  acceptable for the target deployment (small laboratory fleet, small
+  batches every 30–60 s) and documented as future work ("incremental Sigma
+  evaluation") in `limitations_and_future_work.md`.
+- Rule-layer detection on the hold-out set is unchanged by the expansion
+  (99.05% acc / 95.12% recall, same as the pre-expansion run) while adding
+  ~52 new MITRE-mapped techniques; 100% of the documented scenarios are
+  caught by at least one layer (rule or ML).
+- Section 3 numbers (2026-08-05) refer to the earlier SQLite/23-rule build
+  and are kept for history; use section 6 for current-state claims.
 
 ---

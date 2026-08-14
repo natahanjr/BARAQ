@@ -1,0 +1,26 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - COM Object Class Modified"
+id: baraq-4657-com-hijack
+status: experimental
+level: medium
+description: "A COM registration was added under CLSID - potential COM hijack persistence."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectName:contains: [\Classes\CLSID\, InprocServer32]
+        OperationType:startswith: "%%1904"
+    selection_filter:
+        ProcessName:contains: [\installer.exe, \msiexec.exe]
+    condition: selection_sel and not selection_filter
+fields:
+    - ObjectName
+    - ObjectValueName
+    - ProcessName
+falsepositives:
+    - Application installers
+tags:
+    - attack.persistence
+    - attack.t1546.015

@@ -1,0 +1,26 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - SMB Admin Share Access"
+id: baraq-5140-admin-share
+status: experimental
+level: medium
+description: A network admin share was accessed from a remote host.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ShareName:contains: [ADMIN$, C$, IPC$]
+    selection_filter:
+        IpAddress: [127.0.0.1, "::1"]
+    condition: selection_sel and not selection_filter
+fields:
+    - ShareName
+    - IpAddress
+    - AccountName
+    - Computer
+falsepositives:
+    - "Admin file transfers, SCCM pushes"
+tags:
+    - attack.lateral_movement
+    - attack.t1021.002

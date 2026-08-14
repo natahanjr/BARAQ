@@ -14,7 +14,7 @@ A lightweight, production-oriented SOC framework for Windows endpoints — no cl
 |---|---|
 | **Collection** | Windows security event log (4624, 4625, 4720, 4726, 4732, 4740, 4672...), running/new processes with parent-child relationships, active TCP connections + listening ports, PowerShell operational log, **Sysmon (process tree E1 / network E3 / process access E10 / file events E11 / registry E13 / file delete E23)**, plus a realistic attack simulator |
 | **Processing** | Event normalization (Event ID / Category / User / Risk / Timestamp / Host) with **numeric risk scoring (0-100)** per event |
-| **Rule-Based Detection** | 29 rules — Brute Force (T1110), Suspicious PowerShell (T1059.001), Privilege Escalation (T1068), Persistence (T1547), Network Reconnaissance (T1046), Lateral Movement (T1021), Data Staging (T1074), Malware File, Email Phishing, DNS/HTTP Exfiltration, USB Device, Kill-Chain Correlation (T1071), **Vulnerability Exploitation (T1190), Credential Access (T1003), Registry Run Keys (T1547.001), Scheduled Task Abuse (T1053.005), WMI Event Subscriptions (T1546.003), Account Tampering (T1098), Binary Masquerading (T1564), Artifact Hiding (T1564), LOLBins (T1218), Bulk Exfiltration (T1041), Log Clearing (T1070.001), C2 Beaconing (T1071), Ransomware Impact (T1486), Recovery Inhibition (T1490), Credential Store Theft (T1003), BITS Jobs (T1197), Shortcut Modification (T1547.009)** — each mapped to MITRE ATT&CK with confidence + remediation |
+| **Rule-Based Detection** | **100 native rules** covering all 14 MITRE ATT&CK tactic groups — Brute Force (T1110), Suspicious PowerShell (T1059.001), Privilege Escalation (T1068), Persistence (T1547), Network Reconnaissance (T1046), Lateral Movement (T1021), Data Staging (T1074), Malware File, Email Phishing, DNS/HTTP Exfiltration, USB Device, Kill-Chain Correlation (T1071), **Vulnerability Exploitation (T1190), Credential Access (T1003), Registry Run Keys (T1547.001), Scheduled Task Abuse (T1053.005), WMI Event Subscriptions (T1546.003), Account Tampering (T1098), Binary Masquerading (T1564), Artifact Hiding (T1564), LOLBins (T1218), Bulk Exfiltration (T1041), Log Clearing (T1070.001), C2 Beaconing (T1071), Ransomware Impact (T1486), Recovery Inhibition (T1490), Credential Store Theft (T1003), BITS Jobs (T1197), Shortcut Modification (T1547.009)** — each mapped to MITRE ATT&CK with confidence + remediation, plus a **Sigma engine** running the community rule set (2,512 rules, pulled via scripts/sigma_pull.py) |
 | **Alert Aggregation** | Rule-level deduplication (one open alert per signature) with **repeat-trigger severity escalation** (`trigger_count`, escalating LOW→MEDIUM→HIGH→CRITICAL) |
 | **ML Detection** | Per-behavior anomaly analysis (**login / process / network**) with Isolation Forest + Random Forest / XGBoost supervised classifier, **persisted model metadata and a "staleness" signal** with automatic scheduler retraining |
 | **Hybrid Risk Scoring** | Alert risk = **60% rule score + 40% ML anomaly score** → 0-100 score + LOW/MEDIUM/HIGH/CRITICAL level |
@@ -61,7 +61,7 @@ method breakdown, top targets, and open alerts — refreshed in real time.
                 │          BARAQ BACKEND (FastAPI)             │
                 │  Normalizer ─► risk 0-100 ─► PostgreSQL      │
                 │         │                                    │
-                │         ├─► Rule-Based Detection (29 rules)  │
+                │         ├─► Rule-Based Detection (43 rules + Sigma)  │
                 │         ├─► ML Anomaly Engine (IF/RF/XGB)    │
                 │         └─► Hybrid Risk Score (60/40)        │
                 │                   │                          │
@@ -85,7 +85,7 @@ method breakdown, top targets, and open alerts — refreshed in real time.
    PowerShell, Sysmon) over HTTPS with agent-key auth and TLS CA pinning.
 2. **Normalize** — each event is normalized to a common schema and assigned a
    numeric risk score (0-100).
-3. **Detect** — a rule engine (29 built-in MITRE ATT&CK-mapped rules plus the
+3. **Detect** — a rule engine (43 built-in MITRE ATT&CK-mapped rules plus the
    full **SigmaHQ community rule set**, ~3000+ rules, when pulled) and
    per-behavior ML anomaly detection (Isolation Forest / Random Forest /
    XGBoost) evaluate the normalized stream.
@@ -109,7 +109,7 @@ BARAQ/
 │   ├── api/           # FastAPI routers (alerts, auth, incidents, intel, graph, realtime, ...)
 │   ├── collectors/    # Windows event log, process, network, PowerShell, Sysmon, vuln scanner, simulator
 │   ├── database/      # SQLAlchemy models + SQLite/PostgreSQL connection (+ additive migrations)
-│   ├── detection/     # Rules engine, alert workflow, 29 detection rules
+│   ├── detection/     # Rules engine, alert workflow, 43 detection rules
 │   ├── evaluation/    # Detection evaluation framework (metrics, hold-out)
 │   ├── graph/         # Entity graph (Postgres / Neo4j backend)
 │   ├── mitre/         # MITRE ATT&CK techniques data + helpers
@@ -124,7 +124,7 @@ BARAQ/
 ├── logs/              # Runtime logs
 ├── reports/           # Generated security reports
 ├── scripts/           # Agent, agent.ps1, exe builder, cert generation, Postgres migration, launchers
-├── tests/             # pytest test suite (255 tests)
+├── tests/             # pytest test suite (623 tests)
 ├── tools/             # Realtime validation / SOC integration tooling
 ├── documentation/     # User manual, architecture, test results, evaluation report, combined guide
 ├── requirements.txt
@@ -399,7 +399,7 @@ Alerts fan out via webhook, SMTP email, and Windows toast notifications
 python -m pytest tests -v
 ```
 
-Result: **255 tests passed** (collectors incl. Sysmon/vuln scan, 29 detection rules + hold-out evaluation, pipeline, API + auth/RBAC, hybrid risk scoring, evaluation framework, alert aggregation/escalation/workflow verdicts, ML lifecycle + v2 generalization + async training, assistant RAG, multi-endpoint ingest/fleet + agent commands, data retention + schema migrations, entity-graph upsert integrity, encryption at rest, tamper-evident audit chain, LDAP + OIDC SSO, TOTP MFA, CSRF + request-size guards, parameter tuning).
+Result: **623 tests passed** (collectors incl. Sysmon/vuln scan, 29 detection rules + hold-out evaluation, pipeline, API + auth/RBAC, hybrid risk scoring, evaluation framework, alert aggregation/escalation/workflow verdicts, ML lifecycle + v2 generalization + async training + online learning/drift, assistant RAG, multi-endpoint ingest/fleet + agent commands, threat-intel feeds, data retention + schema migrations, entity-graph upsert integrity, encryption at rest, tamper-evident audit chain, LDAP + OIDC SSO, TOTP MFA, CSRF + request-size guards, API hardening/rate limits, observability SLOs, scheduled reports, ticketing integrations, data-quality validation + auto-repair, parameter tuning).
 
 ---
 
@@ -419,7 +419,7 @@ All tunable parameters live in `backend/config.py`:
 | `ALERT_ESCALATE_AFTER` | 5 | Repeat triggers before severity escalates one level |
 | `SECURITY_SCORE_PENALTY` | critical 14 / high 8 / medium 4 / low 1 | Score deduction per open alert |
 
-Environment overrides: `BARAQ_INTERVAL`, `BARAQ_DATABASE_URL`, `BARAQ_AI_API_URL`, `BARAQ_AI_API_KEY`, `BARAQ_AI_MODEL`, `BARAQ_AUTH_ENABLED`, `BARAQ_API_KEYS`, `BARAQ_WEBHOOK_URL`, `BARAQ_SMTP_HOST`, `BARAQ_SMTP_USERNAME`, `BARAQ_SMTP_PASSWORD`, `BARAQ_SMTP_TO`, `BARAQ_TLS`, `BARAQ_TLS_CERT`, `BARAQ_TLS_KEY`, `BARAQ_ALLOW_DEV_KEYS`.
+Environment overrides: `BARAQ_INTERVAL`, `BARAQ_DATABASE_URL`, `BARAQ_AI_API_URL`, `BARAQ_AI_API_KEY`, `BARAQ_AI_MODEL`, `BARAQ_AUTH_ENABLED`, `BARAQ_API_KEYS`, `BARAQ_WEBHOOK_URL`, `BARAQ_SMTP_HOST`, `BARAQ_SMTP_USERNAME`, `BARAQ_SMTP_PASSWORD`, `BARAQ_SMTP_TO`, `BARAQ_TLS`, `BARAQ_TLS_CERT`, `BARAQ_TLS_KEY`, `BARAQ_ALLOW_DEV_KEYS`. The complete reference (147 flags) is in `.env.example` — regenerate it with `python scripts/gen_env_example.py`.
 
 ### Authentication & RBAC
 
@@ -568,6 +568,11 @@ See `documentation/` for:
 - `red_team_validation.md` — realistic live-attack validation incl. documented false negatives
 - `performance_benchmarks.md` — throughput/latency/memory on the target laptop
 - `BARAQ_Combined_Guide.md` — single consolidated operator/maintenance walkthrough
+
+Academic: `docs/THESIS_GUIDE.md` — full thesis/research writing scaffold
+(proposed titles, research questions, literature-review map, methodology
+template, the measured evaluation and performance results with reproduction
+commands, limitations, ethics and a chapter-by-chapter outline).
 
 Security: see `SECURITY.md` for the coordinated-disclosure policy and
 `SECURITY_AUDIT.md` for the hardening controls inventory and pen-test

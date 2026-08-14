@@ -1,0 +1,28 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - RunAs Alternate Credentials Logon"
+id: baraq-4624-runas
+status: experimental
+level: medium
+description: "A RunAs (type 9) logon with alternate credentials. Watch for use by non-privileged users."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        LogonType: 9
+        LogonProcessName:contains: seclogo
+        AccountName:endswith: "@"
+    selection_filter:
+        AccountName:endswith: $
+    condition: selection_sel and not selection_filter
+fields:
+    - AccountName
+    - IpAddress
+    - LogonType
+    - SubjectUserName
+falsepositives:
+    - "Legitimate run-as usage by IT"
+tags:
+    - attack.privilege_escalation
+    - attack.t1078

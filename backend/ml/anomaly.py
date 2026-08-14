@@ -35,6 +35,7 @@ from pathlib import Path
 import numpy as np
 from sqlalchemy import func, select
 
+from backend.collectors.validation import orm_event_is_corrupted
 from backend.config import (
     ML_CONTAMINATION,
     ML_DRIFT_MIN_SAMPLES,
@@ -48,6 +49,7 @@ from backend.config import (
     ML_RETRAIN_MIN_NEW_VERDICTS,
     ML_TARGET_FPR,
     ML_TRAIN_MIN_SAMPLES,
+    ML_VERSION_HISTORY,
 )
 from backend.database.connection import SessionLocal
 from backend.database.models import (
@@ -284,6 +286,9 @@ def _load_behavior_features(
     y = []
     verdicts = _verdict_map(session) if with_labels else {}
     for ev in rows:
+        if orm_event_is_corrupted(ev)[0]:
+            # Corrupted rendering debris must never be trained on.
+            continue
         features = event_feature_vector(ev)
         if not features:
             continue
@@ -363,6 +368,13 @@ class MLAnomalyDetector:
         self.thresholds: dict[str, float] = dict(_DEFAULT_THRESHOLDS)
         self.baselines: dict[str, np.ndarray] = {}
         self._persisted = False
+        #: Roadmap 4.1 - online learning: model versioning + feedback weights.
+        self.version = 0
+        self.versions: list[dict] = []
+        self.last_train_kind = "initial"
+        #: Per-behavior multiplier applied to anomaly scores; analysts damp
+        #: false positives (weight < 1) and reinforce true positives (> 1).
+        self.feedback_weights: dict[str, float] = {}
         self._load_meta()
         if load_persisted and not self.models:
             self._load_bundle()
@@ -372,6 +384,10 @@ class MLAnomalyDetector:
     # ------------------------------------------------------------------
     def _bundle_path(self) -> Path:
         return Path(ML_MODEL_BUNDLE)
+
+    def _prev_bundle_path(self) -> Path:
+        """Archive bundle for A/B: kept one version behind the live one."""
+        return Path(ML_MODEL_BUNDLE).with_suffix(".prev.joblib")
 
     def _meta_path(self):
         return ML_META_FILE
@@ -392,6 +408,12 @@ class MLAnomalyDetector:
                 **dict(_DEFAULT_THRESHOLDS),
                 **{k: float(v) for k, v in (meta.get("thresholds") or {}).items()},
             }
+            self.version = int(meta.get("version", 0))
+            self.versions = list(meta.get("versions") or [])
+            self.last_train_kind = meta.get("train_kind", "initial")
+            self.feedback_weights = {
+                k: float(v) for k, v in (meta.get("feedback_weights") or {}).items()
+            }
         except (OSError, ValueError, TypeError):
             logger.warning("Could not read ML metadata at %s", ML_META_FILE)
 
@@ -410,6 +432,10 @@ class MLAnomalyDetector:
                         "supervised": self.supervised_name,
                         "thresholds": self.thresholds,
                         "feature_version": ML_FEATURE_VERSION,
+                        "version": self.version,
+                        "versions": self.versions[-ML_VERSION_HISTORY:],
+                        "train_kind": self.last_train_kind,
+                        "feedback_weights": self.feedback_weights,
                     },
                     fh,
                     indent=2,
@@ -434,9 +460,16 @@ class MLAnomalyDetector:
                 "supervised_name_by_stream": self.supervised_name_by_stream,
                 "thresholds": self.thresholds,
                 "baselines": {k: v.tolist() for k, v in self.baselines.items()},
+                "version": self.version,
+                "feedback_weights": self.feedback_weights,
             }
             path = self._bundle_path()
             path.parent.mkdir(parents=True, exist_ok=True)
+            # Archive the current live bundle one slot back (A/B compare).
+            if path.exists():
+                import shutil
+
+                shutil.copy2(path, self._prev_bundle_path())
             joblib.dump(bundle, path, compress=3)
             self._persisted = True
         except Exception:  # noqa: BLE001
@@ -468,11 +501,63 @@ class MLAnomalyDetector:
                 k: np.asarray(v, dtype=float)
                 for k, v in (bundle.get("baselines") or {}).items()
             }
+            self.version = int(bundle.get("version", 0))
+            self.feedback_weights = {
+                k: float(v) for k, v in (bundle.get("feedback_weights") or {}).items()
+            }
             self._persisted = True
             return bool(self.models)
         except Exception:  # noqa: BLE001
             logger.warning("Could not load ML model bundle; retraining", exc_info=True)
             return False
+
+    # ------------------------------------------------------------------
+    # Roadmap 4.1 - online feedback + versioning
+    # ------------------------------------------------------------------
+    def apply_feedback(self, verdict: str, behavior: str | None = None) -> None:
+        """Adjust the per-behavior anomaly-score weight from analyst verdicts.
+
+        ``false_positive`` dampens the signal (weight *= 0.95, floor 0.5);
+        ``true_positive`` reinforces it (weight *= 1.05, cap 1.5). The
+        weights are persisted so the correction survives restarts and is
+        applied to every subsequent score.
+        """
+        behavior = behavior or "login"
+        if verdict not in ("true_positive", "false_positive"):
+            return
+        current = self.feedback_weights.get(behavior, 1.0)
+        if verdict == "true_positive":
+            self.feedback_weights[behavior] = min(1.5, current * 1.05)
+        else:
+            self.feedback_weights[behavior] = max(0.5, current * 0.95)
+        try:
+            self._save_meta()
+            path = self._bundle_path()
+            if path.exists():
+                import joblib
+
+                bundle = joblib.load(path)
+                bundle["feedback_weights"] = dict(self.feedback_weights)
+                joblib.dump(bundle, path, compress=3)
+        except Exception:  # noqa: BLE001
+            logger.warning("Could not persist feedback weights", exc_info=True)
+        logger.info(
+            "ML feedback %s -> %s weight %.3f",
+            verdict, behavior, self.feedback_weights[behavior],
+        )
+
+    def _weighted_score(self, behavior: str, score: float) -> float:
+        return float(max(0.0, min(1.0, score * self.feedback_weights.get(behavior, 1.0))))
+
+    def version_info(self) -> dict:
+        """Snapshot for /ml/status: serving version + history + feedback."""
+        return {
+            "version": self.version,
+            "train_kind": self.last_train_kind,
+            "trained_at": self.trained_at,
+            "history": list(self.versions[-ML_VERSION_HISTORY:]),
+            "feedback_weights": dict(self.feedback_weights),
+        }
 
     # ------------------------------------------------------------------
     def _events_since_train(self, session) -> int:
@@ -763,6 +848,8 @@ class MLAnomalyDetector:
         ).all()
         verdicts = _verdict_map(session)
         for event_id, raw, eid in rows:
+            if orm_event_is_corrupted({"user": "-", "raw_json": raw})[0]:
+                continue
             facts = (raw or {}).get("facts", {})
             behavior = _behavior_of(int(eid))
             if behavior not in out:
@@ -796,6 +883,8 @@ class MLAnomalyDetector:
         out: dict[str, list] = {"login": [[], []], "process": [[], []], "network": [[], []]}
         verdicts = _verdict_map(session)
         for row_id, raw, event_id, timestamp in rows:
+            if orm_event_is_corrupted({"user": "-", "raw_json": raw})[0]:
+                continue
             facts = (raw or {}).get("facts", {})
             features = event_feature_vector(
                 {"event_id": event_id, "raw_json": raw, "timestamp": timestamp}
@@ -823,6 +912,7 @@ class MLAnomalyDetector:
         validate: bool = False,
         persist: bool = True,
         cutoff: datetime | None = None,
+        kind: str = "initial",
     ) -> dict:
         """Train per-stream Isolation Forests + supervised classifier.
 
@@ -835,6 +925,11 @@ class MLAnomalyDetector:
 
         ``cutoff`` (e.g. a campaign start) caps the training window so the
         baseline fit never sees the attack window.
+
+        ``kind`` (roadmap 4.1) records the training kind ("initial",
+        "incremental", "drift", "scheduled") in the version history; every
+        successful persistent train bumps ``version`` and archives the old
+        bundle for A/B.
         """
         if not HAS_SKLEARN:
             return {"status": "sklearn-not-installed", "trained": False}
@@ -958,6 +1053,19 @@ class MLAnomalyDetector:
             self.events_at_train = int(
                 session.scalar(select(func.count(NormalizedEvent.id))) or 0
             )
+            self.version += 1
+            self.last_train_kind = kind
+            self.versions.append({
+                "version": self.version,
+                "kind": kind,
+                "trained_at": self.trained_at,
+                "samples": self.n_samples,
+                "events_at_train": self.events_at_train,
+                "streams": list(self.models.keys()),
+                "supervised": self.supervised_name,
+                "thresholds": {k: round(v, 3) for k, v in self.thresholds.items()},
+            })
+            self.versions = self.versions[-ML_VERSION_HISTORY:]
             if persist:
                 self._save_meta()
                 self._save_bundle()
@@ -1065,13 +1173,13 @@ class MLAnomalyDetector:
         if behavior not in self.models:
             behavior = "login" if "login" in self.models else next(iter(self.models))
         model = self.models.get(behavior)
-        return self._combined_score(behavior, model, features)
+        return self._weighted_score(behavior, self._combined_score(behavior, model, features))
 
     def score_event_for_behavior(self, behavior: str, features: list[float]) -> float:
         model = self.models.get(behavior)
         if model is None:
             return 0.0
-        return self._combined_score(behavior, model, features)
+        return self._weighted_score(behavior, self._combined_score(behavior, model, features))
 
     def score_network_connection(
         self,
@@ -1100,14 +1208,17 @@ class MLAnomalyDetector:
         sent_mb = float(bytes_sent) / 1_000_000.0
         hours_dur = float(duration) / 3600.0
         rate = sent_mb / max(hours_dur, 0.01)
-        return self._combined_score(
+        return self._weighted_score(
             "network",
-            model,
-            [
-                code, float(count), float(distinct_ports),
-                sent_mb, float(bytes_recv) / 1_000_000.0,
-                hours_dur, rate, novel, 0.0,
-            ],
+            self._combined_score(
+                "network",
+                model,
+                [
+                    code, float(count), float(distinct_ports),
+                    sent_mb, float(bytes_recv) / 1_000_000.0,
+                    hours_dur, rate, novel, 0.0,
+                ],
+            ),
         )
 
     @staticmethod
@@ -1140,6 +1251,8 @@ class MLAnomalyDetector:
             flagged = 0
             scored = 0
             for ev in events:
+                if orm_event_is_corrupted(ev)[0]:
+                    continue
                 behavior = _behavior_of(ev.event_id)
                 model = self.models.get(behavior)
                 if model is None:
@@ -1148,7 +1261,9 @@ class MLAnomalyDetector:
                 if features is None:
                     continue
                 try:
-                    score = self._combined_score(behavior, model, features)
+                    score = self._weighted_score(
+                        behavior, self._combined_score(behavior, model, features)
+                    )
                 except Exception:  # noqa: BLE001
                     continue
                 ev.ml_score = round(score, 4)

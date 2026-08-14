@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Service Principal Name Modified"
+id: baraq-5136-spn-added
+status: experimental
+level: high
+description: "A directory attribute for SPNs or machine quotas was modified - can enable Kerberoasting primitives."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        OperationType:contains: Added
+        AttributeValue:contains: ["Machine-Account-Quota", servicePrincipalName]
+    condition: selection_sel
+fields:
+    - AttributeValue
+    - SubjectUserName
+    - ObjectDN
+falsepositives:
+    - Devops registering gMSA services
+tags:
+    - attack.persistence
+    - attack.t1098

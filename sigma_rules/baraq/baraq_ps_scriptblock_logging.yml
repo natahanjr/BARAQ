@@ -1,0 +1,23 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Suspicious PowerShell Script Block"
+id: baraq-4104-scriptblock
+status: experimental
+level: high
+description: PowerShell script block logging captured suspicious content.
+logsource:
+    product: windows
+    service: powershell
+detection:
+    selection_sel:
+        ScriptBlockText:contains: [IEX(, "Invoke-Expression", DownloadString, "Invoke-WebRequest", EncodedCommand, frombase64string, "Get-Process lsass", mimikatz, sekurlsa, "New-ScheduledTask"]
+    condition: selection_sel
+fields:
+    - ScriptBlockText
+    - Path
+    - User
+falsepositives:
+    - Orchestration runbooks
+tags:
+    - attack.execution
+    - attack.t1059.001

@@ -96,8 +96,15 @@ class BaseRule(ABC):
         return (model.org == self.org,)
 
     @abstractmethod
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
-        """Evaluate the rule against events in the DB and return findings."""
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
+        """Evaluate the rule against events in the DB and return findings.
+
+        ``since_id`` (optional) is the incremental-detection cursor: rules
+        that support it only examine events with ``id > since_id``. Rules
+        that need window history (aggregations, cross-event correlation)
+        ignore it and keep evaluating the full window; the engine only
+        passes it to rules that declare the parameter.
+        """
 
     def _result(self, evidence: str, event_ids: list[int], **overrides) -> DetectionResult:
         return DetectionResult(

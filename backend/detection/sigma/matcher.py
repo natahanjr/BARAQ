@@ -27,6 +27,43 @@ _ALIAS_KEYS = {
     "eventid": "event_id",
 }
 
+#: Fields carrying process identity/activity. Rules depending on them cannot
+#: be trusted when the event's process data is incomplete or truncated.
+PROCESS_FIELDS = {
+    "image", "image_path", "new_process", "parent_image", "source_image",
+    "target_image", "image_loaded", "command_line", "script_block",
+}
+
+
+def event_data_integrity(event) -> dict:
+    """Data-integrity flags for one event (set by the normalizer).
+
+    Returns ``complete`` / ``truncated_fields`` / ``process_incomplete``
+    (no process data captured at all) / ``process_truncated`` (process
+    fields present but cut short).
+    """
+    raw = event.raw_json or {}
+    integrity = raw.get("data_integrity")
+    if not isinstance(integrity, dict):
+        return {
+            "complete": True,
+            "truncated_fields": [],
+            "process_incomplete": False,
+            "process_truncated": False,
+        }
+    truncated = [str(f) for f in integrity.get("truncated_fields") or []]
+    process_fields = {p.lower().replace("_", "") for p in PROCESS_FIELDS}
+    process_bad = [
+        f for f in truncated
+        if f.lower().replace("_", "") in process_fields or f.lower() == "process_data"
+    ]
+    return {
+        "complete": not truncated,
+        "truncated_fields": truncated,
+        "process_incomplete": "process_data" in truncated,
+        "process_truncated": bool(process_bad),
+    }
+
 
 def build_event_fields(event) -> dict[str, str]:
     """Flatten a normalized event into Sigma-matchable string fields."""
@@ -39,9 +76,28 @@ def build_event_fields(event) -> dict[str, str]:
     out["category"] = str(event.category or "")
     out["command_line"] = ""
     out["image_path"] = ""
+    #: Data-integrity status so rules can filter incomplete events, e.g.
+    #: ``data_integrity: complete`` or a ``filter`` selection on it.
+    integrity = raw_json.get("data_integrity")
+    if isinstance(integrity, dict):
+        out["data_integrity"] = "truncated" if integrity.get("truncated_fields") else "complete"
+    else:
+        out["data_integrity"] = str(integrity or "complete").lower()
     for key, value in facts.items():
         normalized = _ALIAS_KEYS.get(str(key).lower(), str(key).lower())
         out[normalized] = str(value)
+    #: Canonical Sigma process fields -> BARAQ fact vocabulary, so community
+    #: rules written against Sysmon/Windows "Image", "ParentImage" and
+    #: "CommandLine" match what the collectors actually ship.
+    proc = str(facts.get("new_process") or facts.get("NewProcessName") or "")
+    if proc:
+        out["image"] = proc
+        out["image_path"] = proc
+    parent = str(facts.get("ParentProcessName") or "")
+    if parent:
+        out["parent_image"] = parent
+    if facts.get("CommandLine"):
+        out["command_line"] = str(facts["CommandLine"])
     return out
 
 

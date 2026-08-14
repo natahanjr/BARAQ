@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Remote Service Creation via SC"
+id: baraq-4688-sc-remote
+status: experimental
+level: high
+description: "SC used to create a service on a remote host - consistent with lateral movement tooling."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: \sc.exe
+        CommandLine:contains: [\\, " create ", "binPath="]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - "Patch-management agents creating remote services"
+tags:
+    - attack.execution
+    - attack.t1569.002

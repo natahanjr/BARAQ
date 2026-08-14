@@ -18,6 +18,7 @@ from backend.api import (
     alerts,
     assistant,
     auth,
+    compliance,
     dashboard,
     endpoints,
     evaluation,
@@ -25,6 +26,7 @@ from backend.api import (
     graph,
     incidents,
     intel,
+    integrations,
     investigation,
     reports,
     realtime,
@@ -37,17 +39,26 @@ from backend.config import (
     API_KEYS,
     AUTH_ENABLED,
     CORS_ORIGINS,
+    DEFAULT_ADMIN_PASSWORD,
+    HSTS_MAX_AGE,
     IS_PRODUCTION,
     METRICS_PUBLIC,
     REPORT_DIR,
+    SECURITY_HEADERS,
     BARAQ_ENV,
     SINGLE_INSTANCE,
 )
+from backend.audit import client_ip
 from backend.database.connection import SessionLocal, get_db, init_db
 from backend.logging_config import setup_logging
 
 setup_logging()
 logger = logging.getLogger("baraq")
+
+# Roadmap 5.2 - optional OpenTelemetry export (no-op when not configured).
+from backend.observability import setup_observability  # noqa: E402
+
+setup_observability()
 
 def _seed_admin_user() -> None:
     """Create the bootstrap admin account if the users table is empty."""
@@ -66,6 +77,7 @@ def _seed_admin_user() -> None:
             role="admin",
             full_name="BARAQ Administrator",
             is_active=True,
+            must_change_password=ADMIN_PASSWORD == DEFAULT_ADMIN_PASSWORD,
         )
         db.add(admin)
         db.commit()
@@ -87,7 +99,7 @@ def _scheduler_loop(interval_seconds: int = 15):
     from backend.ml.anomaly import get_detector
 
     manager = CollectorManager()
-    from backend.api.system import run_pipeline
+    from backend.api.system import run_detection_for_orgs, run_pipeline
 
     counter = 0
     while not _scheduler_stop.is_set():
@@ -96,15 +108,30 @@ def _scheduler_loop(interval_seconds: int = 15):
             try:
                 from sqlalchemy import func, select
 
-                from backend.config import ML_TRAIN_MIN_SAMPLES
+                from backend.config import AGENT_ORGS, ML_TRAIN_MIN_SAMPLES
                 from backend.database.models import NormalizedEvent
 
+                # 1. Persist local host telemetry (never inline-detect: the
+                #    detection pass below covers every tenant in one cursor
+                #    scope, so a local batch is detected the same cycle).
                 records = manager.collect()
                 if records:
-                    result = run_pipeline(db, records)
+                    result = run_pipeline(db, records, org="", detect=False)
                     logger.info(
-                        "Scheduler cycle: %d records, %d new alerts",
-                        result["collected"], result["alerts_created"],
+                        "Scheduler cycle: %d records collected",
+                        result["collected"],
+                    )
+
+                # 2. Incremental detection for every tenant ("" system org
+                #    plus each configured agent organization). With
+                #    BARAQ_INGEST_ASYNC_DETECT=1 this is the only place the
+                #    rules engine runs; each event is evaluated exactly once.
+                orgs = [""] + sorted({o for o in AGENT_ORGS.values() if o})
+                _findings, created = run_detection_for_orgs(db, orgs)
+                if created:
+                    logger.info(
+                        "Scheduler cycle: %d new alert(s) across %d tenant(s)",
+                        len(created), len(orgs),
                     )
                 counter += 1
                 from backend.realtime import publish_status
@@ -130,7 +157,54 @@ def _scheduler_loop(interval_seconds: int = 15):
                         else:
                             logger.info("ML model stale (%s); retraining", reason)
                             get_detector().train(db, hours=24, validate=False)
+                # Roadmap 4.1 - online learning: every ~30 min check PSI drift
+                # against the baselines; on "drift" retrain on the recent
+                # window so the baseline follows the environment.
+                if counter % 120 == 0 and get_detector().is_ready:
+                    try:
+                        from backend.ml.drift import check_drift
+
+                        drift = check_drift(db, hours=12)
+                        if drift.get("status") == "drift":
+                            logger.warning("ML drift detected; incremental retrain")
+                            get_detector().train(db, hours=6, validate=False, kind="drift")
+                        elif drift.get("status") == "watch":
+                            logger.info("ML drift watch; incremental retrain")
+                            get_detector().train(db, hours=6, validate=False, kind="incremental")
+                    except Exception:  # noqa: BLE001 - drift must not wedge the loop
+                        logger.exception("ML drift check failed")
                 if counter % 240 == 0:  # every ~1 hour (240 cycles x 15s)
+                    # Roadmap 4.1 - scheduled incremental update when the
+                    # analyst feedback queue is busy enough to matter.
+                    try:
+                        from backend.config import (
+                            ML_INCREMENTAL_HOURS,
+                            ML_INCREMENTAL_MIN_VERDICTS,
+                        )
+                        from backend.database.models import Verdict as _Verdict
+                        from datetime import datetime, timedelta
+                        from sqlalchemy import func as _func
+
+                        recent_verdicts = db.scalar(
+                            select(_func.count(_Verdict.id)).where(
+                                _Verdict.created_at
+                                >= datetime.now(timezone.utc) - timedelta(hours=24)
+                            )
+                        ) or 0
+                        if (
+                            get_detector().is_ready
+                            and recent_verdicts >= ML_INCREMENTAL_MIN_VERDICTS
+                        ):
+                            logger.info(
+                                "ML incremental update (%d verdicts in 24h)",
+                                recent_verdicts,
+                            )
+                            get_detector().train(
+                                db, hours=ML_INCREMENTAL_HOURS,
+                                validate=False, kind="incremental",
+                            )
+                    except Exception:  # noqa: BLE001
+                        logger.exception("ML incremental update failed")
                     from backend.database.retention import purge_old_data
                     purged = purge_old_data(db)
                     if any(purged.values()):
@@ -138,6 +212,35 @@ def _scheduler_loop(interval_seconds: int = 15):
                             "Retention: purged %d old record(s)",
                             sum(purged.values()),
                         )
+                    # Roadmap 3.3: the chained audit trail ages out on its own
+                    # regulatory window (BARAQ_AUDIT_RETENTION_DAYS).
+                    from backend.compliance import purge_old_audit
+                    from backend.config import AUDIT_RETENTION_DAYS
+
+                    if purge_old_audit(db, AUDIT_RETENTION_DAYS):
+                        logger.info("Audit retention: old entries purged")
+                if counter % 720 == 0:  # every ~3 hours: threat-intel feeds
+                    # Roadmap 4.3: ingest configured STIX/TAXII/MISP/URL feeds
+                    # into the intel cache; failure must not wedge the loop.
+                    try:
+                        from backend.intel.feeds import refresh_feeds
+
+                        summary = refresh_feeds(db)
+                        if summary["feeds"]:
+                            logger.info("Threat-intel feed refresh: %s", summary)
+                    except Exception:  # noqa: BLE001
+                        logger.exception("Threat-intel feed refresh failed")
+                if counter % 240 == 0:  # every ~1 hour: scheduled reports
+                    # Roadmap 6.2: generate due reports (and email them when
+                    # SMTP + recipients are configured).
+                    try:
+                        from backend.reports.schedule import run_due_schedules
+
+                        summary = run_due_schedules(db)
+                        if summary["due"]:
+                            logger.info("Scheduled reports: %s", summary)
+                    except Exception:  # noqa: BLE001
+                        logger.exception("Scheduled reports failed")
             finally:
                 db.close()
         except Exception as exc:  # noqa: BLE001
@@ -155,14 +258,49 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     hub.bind(asyncio.get_running_loop())
     init_db()
     _seed_admin_user()
+    from backend.licensing import enforce_license
+
+    db = SessionLocal()
+    try:
+        enforce_license(db)
+    finally:
+        db.close()
+    from backend.config import TLS_ENABLED
+
+    if (
+        IS_PRODUCTION
+        and not TLS_ENABLED
+        and os.environ.get("BARAQ_ALLOW_PLAINTEXT_PROD", "0").lower()
+        not in ("1", "true", "yes", "on")
+    ):
+        raise RuntimeError(
+            "Production mode requires TLS: set BARAQ_TLS=1 with a valid "
+            "certificate (BARAQ_TLS_CERT/BARAQ_TLS_KEY), or set "
+            "BARAQ_ALLOW_PLAINTEXT_PROD=1 to override (not recommended)."
+        )
+    # Startup collector permission probe: report unreadable channels up
+    # front (with the fix command) instead of failing silently each cycle.
+    from backend.collectors.health import check_collector_permissions
+    from backend.config import POWERSHELL_CHANNELS, SECURITY_LOG_CHANNELS, SYSMON_CHANNELS
+
+    check_collector_permissions([*SECURITY_LOG_CHANNELS, *POWERSHELL_CHANNELS, *SYSMON_CHANNELS])
     from backend.locks import acquire_instance_lock, release_instance_lock
 
     global _scheduler_thread
     no_scheduler = os.environ.get("BARAQ_NO_SCHEDULER", "0").lower() in (
         "1", "true", "yes", "on",
     )
+    # Roadmap 3.1: BARAQ_ROLE=api runs the API without a scheduler - the
+    # scheduler lives in its own service (backend/scheduler_service.py).
+    from backend.config import APP_ROLE
+
+    if APP_ROLE not in ("all", "scheduler"):
+        logger.warning(
+            "BARAQ_ROLE=%s not recognised; treating as 'all'", APP_ROLE
+        )
+    no_scheduler = no_scheduler or APP_ROLE == "api"
     scheduler_owner = True
-    if SINGLE_INSTANCE:
+    if SINGLE_INSTANCE and APP_ROLE != "api":
         from backend.database.connection import engine as app_engine
 
         scheduler_owner = acquire_instance_lock(app_engine)
@@ -184,6 +322,9 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     from backend.streaming import start as start_streaming
 
     start_streaming()
+    from backend.monitor import data_quality as dq_monitor
+
+    dq_monitor.start()
     logger.info(
         "BARAQ API is ready (profile=%s%s, scheduler=%s)",
         BARAQ_ENV,
@@ -194,6 +335,12 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     _scheduler_stop.set()
     if _scheduler_thread:
         _scheduler_thread.join(timeout=5)
+    try:
+        from backend.monitor import data_quality as dq_monitor
+
+        dq_monitor.stop()
+    except Exception:  # noqa: BLE001
+        pass
     release_instance_lock()
     logger.info("BARAQ API shut down")
 
@@ -219,7 +366,116 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Baraq-Code"],
 )
+
+# ---------------------------------------------------------------------------
+# API hardening (roadmap 5.3): security headers, rate limiting, IP ACLs.
+# Middleware order matters: the cheap IP/rate gates run before auth so
+# unauthenticated floods are rejected without touching the key store.
+# ---------------------------------------------------------------------------
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    "X-XSS-Protection": "1; mode=block",
+}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    if SECURITY_HEADERS:
+        for header, value in _SECURITY_HEADERS.items():
+            response.headers.setdefault(header, value)
+        if HSTS_MAX_AGE > 0:
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                f"max-age={HSTS_MAX_AGE}",
+            )
+    return response
+
+
+#: In-memory fixed-window rate tracker: client -> (window_start, count).
+#: Stale windows are pruned lazily when the table grows (cheap dict ops).
+_RATE_WINDOW_SECONDS = 60
+_rate_buckets: dict[str, list] = {}
+
+
+def _client_identity(request: Request) -> str:
+    key = request.headers.get("X-API-Key", "") or (
+        request.headers.get("Authorization", "")[:32]
+    )
+    return key or client_ip(request)
+
+
+def _ip_allowed(request: Request) -> bool:
+    """Enforce BARAQ_API_IP_BLOCKLIST / BARAQ_API_IP_WHITELIST (CIDRs)."""
+    from backend.config import API_IP_BLOCKLIST, API_IP_WHITELIST
+
+    if not API_IP_BLOCKLIST and not API_IP_WHITELIST:
+        return True
+    import ipaddress
+
+    remote = client_ip(request)
+    try:
+        addr = ipaddress.ip_address(remote)
+    except ValueError:
+        return False
+    for block in API_IP_BLOCKLIST:
+        if addr in ipaddress.ip_network(block, strict=False):
+            return False
+    if API_IP_WHITELIST:
+        for allow in API_IP_WHITELIST:
+            if addr in ipaddress.ip_network(allow, strict=False):
+                return True
+        return False
+    return True
+
+
+def _rate_allowed(request: Request, identity: str) -> tuple[bool, int]:
+    """Fixed-window rate gate; returns (allowed, retry_after_seconds)."""
+    from backend.config import API_RATE_BURST, API_RATE_LIMIT
+
+    if API_RATE_LIMIT <= 0:
+        return True, 0
+    import time as _time
+
+    now = _time.monotonic()
+    window_start, count = _rate_buckets.get(identity, (now, 0))
+    if now - window_start >= _RATE_WINDOW_SECONDS:
+        window_start, count = now, 0
+    if count >= API_RATE_BURST:
+        if len(_rate_buckets) > 10_000:
+            _rate_buckets.clear()
+        return False, int(_RATE_WINDOW_SECONDS - (now - window_start)) + 1
+    _rate_buckets[identity] = (window_start, count + 1)
+    return True, 0
+
+
+@app.middleware("http")
+async def api_gates(request: Request, call_next):
+    """IP ACLs (403) and API rate limiting (429) before authentication."""
+    path = request.url.path
+    if path.startswith("/api/") and not path.startswith(("/api/health", "/api/auth/login")):
+        if not _ip_allowed(request):
+            return JSONResponse(
+                {"detail": "Client IP not permitted"},
+                status_code=403,
+            )
+        allowed, retry_after = _rate_allowed(request, _client_identity(request))
+        if not allowed:
+            return JSONResponse(
+                {
+                    "detail": "API rate limit exceeded",
+                    "retry_after_seconds": retry_after,
+                },
+                status_code=429,
+                headers={"Retry-After": str(retry_after)},
+            )
+    return await call_next(request)
 
 # ---------------------------------------------------------------------------
 # API key authentication (RBAC). Every /api/* request must carry a valid
@@ -230,6 +486,7 @@ app.add_middleware(
 _PUBLIC_PREFIXES = (
     "/api/health",
     "/api/auth/login",
+    "/api/auth/register",
     "/api/auth/mfa/verify",
     "/api/auth/oidc/login",
     "/api/auth/oidc/callback",
@@ -375,9 +632,11 @@ for router in (
     endpoints.router,
     incidents.router,
     intel.router,
+    integrations.router,
     graph.router,
     auth.router,
     realtime.router,
+    compliance.router,
 ):
     app.include_router(router)
 
@@ -386,9 +645,18 @@ app.mount("/reports", StaticFiles(directory=REPORT_DIR), name="reports")
 
 @app.get("/api/health")
 def health():
+    from backend.collectors.quality import quality, status_for_rate
     from backend.locks import instance_lock_status
 
-    return {"status": "ok", "single_instance": instance_lock_status()}
+    rate = quality.window_rate()
+    return {
+        "status": "ok",
+        "single_instance": instance_lock_status(),
+        "data_quality": {
+            "corruption_rate": round(rate, 4),
+            "status": status_for_rate(rate),
+        },
+    }
 
 
 @app.get("/metrics")

@@ -84,6 +84,44 @@ venv\Scripts\python scripts\provision_agent.py revoke edge-host-1
 - The endpoint row (historical volume) is retained after revoke; only the
   credential is removed.
 
+## Fleet health, grouping and auto-update (roadmap 3.4)
+
+Every ingest doubles as a heartbeat. Agents report `agent_version` and
+`os_info` (set automatically by `scripts/agent.py`); the server computes a
+health status on read:
+
+| Status   | Meaning (since last ingest)                       |
+|----------|---------------------------------------------------|
+| `ok`     | within `BARAQ_AGENT_STALE_SECONDS` (default 300)  |
+| `stale`  | past stale window, within `BARAQ_AGENT_OFFLINE_SECONDS` (3600) |
+| `offline`| past the offline window                           |
+
+Fleet dashboard (admin + analyst, tenant-scoped):
+
+```http
+GET /api/endpoints/overview     # health buckets, by-org/version/tag, stale+offline lists
+GET /api/endpoints?tag=web      # filtered fleet list (also ?health=stale)
+POST /api/endpoints/<agent>/tags  {"tags": "dmz,web"}     # admin - grouping
+```
+
+Grouping: comma-separated tags per agent drive the `by_tag` breakdown and
+`?tag=` filter, so operators can treat "all web servers" or "all DMZ hosts"
+as one unit.
+
+Auto-update: queue an update the same way as any command:
+
+```http
+POST /api/endpoints/<agent>/commands
+{"action": "update_agent", "target": "2.1.0", "note": "rollout batch 1"}
+```
+
+The agent executes it on its next poll: `scripts/agent_updater.ps1` swaps
+the agent files (downloads `baraq-agent-v<VERSION>.zip` from
+`BARAQ_UPDATE_URL` if set; otherwise records the rollout target in
+`agent.config.json`) and restarts the scheduled task. The fleet view shows
+`update_status = pending` during rollout and `current` after the agent
+reports success; failed commands bump `errors_total`.
+
 ## Notes & limits
 
 - Ingest records must carry a numeric `event_id`, `source`, and

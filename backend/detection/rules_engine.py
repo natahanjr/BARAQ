@@ -64,7 +64,80 @@ from backend.detection.rules.exfil_c2 import (
     DnsTunnelingRule,
     WebhookC2Rule,
 )
+from backend.detection.rules.initial_access import (
+    DriveByCompromiseRule,
+    ExternalServiceExploitRule,
+    SpearphishingAttachmentRule,
+    SpearphishingLinkRule,
+)
+from backend.detection.rules.execution import (
+    AtJobRule,
+    CmdScriptExecutionRule,
+    MsBuildExecutionRule,
+    PythonExecutionRule,
+    ServiceExecutionRule,
+    WmiExecutionRule,
+)
+from backend.detection.rules.persistence_extra import (
+    AccessibilityFeatureRule,
+    AppInitDllRule,
+    IfeoDebuggerRule,
+    LogonScriptRule,
+    NetshHelperRule,
+    ServiceImagePathPersistenceRule,
+    StartupFolderRule,
+)
+from backend.detection.rules.privilege_escalation_extra import (
+    AlwaysInstallElevatedRule,
+    NamedPipeImpersonationRule,
+    SeDebugPrivilegeRule,
+    UacBypassRule,
+    UnquotedServicePathRule,
+)
+from backend.detection.rules.defense_evasion_extra import (
+    DisableAuditRule,
+    DisableDefenderRule,
+    DisableFirewallRule,
+    DisableSystemRestoreRule,
+    HiddenFileAttributeRule,
+)
+from backend.detection.rules.credential_access_extra import (
+    CachedCredentialsRule,
+    KeyloggingRule,
+    LsassDumpRule,
+    NetworkSniffingRule,
+    NtdsDumpRule,
+    PasswordStoreTheftRule,
+)
+from backend.detection.rules.discovery import (
+    AccountDiscoveryRule,
+    DomainDiscoveryRule,
+    FileSystemDiscoveryRule,
+    SecuritySoftwareDiscoveryRule,
+    ShareDiscoveryRule,
+    SystemInfoDiscoveryRule,
+)
+from backend.detection.rules.lateral_movement_extra import (
+    RdpLateralRule,
+    SmbAdminShareRule,
+    SshLateralRule,
+    WinRmLateralRule,
+)
+from backend.detection.rules.collection import (
+    ArchiveCollectionRule,
+    ClipboardCaptureRule,
+    LocalDataCollectionRule,
+    ScreenCaptureRule,
+)
+from backend.detection.rules.c2_exfil_extra import (
+    EncryptedChannelRule,
+    ExfilAlternativeProtocolRule,
+    ExfilWebServiceRule,
+    ProxyToolRule,
+    UnusualPortRule,
+)
 from backend.detection.sigma.engine import SigmaRuleEngine
+from backend.config import KILL_CHAIN, RULES_COUNT, RULE_OVERRIDES
 from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
 
 logger = logging.getLogger("baraq.detection")
@@ -82,7 +155,7 @@ def build_rules(session: Session, overrides: dict | None = None) -> list[BaseRul
         kwargs.update(overrides.get(rule_id, {}))
         return cls(*args, **kwargs)
 
-    return [
+    rules = [
         build(BruteForceRule, "brute_force", session),
         SuspiciousPowerShellRule(session),
         PrivilegeEscalationRule(session),
@@ -131,8 +204,101 @@ def build_rules(session: Session, overrides: dict | None = None) -> list[BaseRul
         CloudSyncExfilRule(session),
         WebhookC2Rule(session),
         DnsTunnelingRule(session),
+        # ---- 52-rule native expansion (tactic groups) ----
+        SpearphishingAttachmentRule(session),
+        SpearphishingLinkRule(session),
+        DriveByCompromiseRule(session),
+        ExternalServiceExploitRule(session),
+        CmdScriptExecutionRule(session),
+        WmiExecutionRule(session),
+        AtJobRule(session),
+        ServiceExecutionRule(session),
+        MsBuildExecutionRule(session),
+        PythonExecutionRule(session),
+        StartupFolderRule(session),
+        ServiceImagePathPersistenceRule(session),
+        AppInitDllRule(session),
+        AccessibilityFeatureRule(session),
+        IfeoDebuggerRule(session),
+        NetshHelperRule(session),
+        LogonScriptRule(session),
+        UacBypassRule(session),
+        SeDebugPrivilegeRule(session),
+        NamedPipeImpersonationRule(session),
+        UnquotedServicePathRule(session),
+        AlwaysInstallElevatedRule(session),
+        DisableDefenderRule(session),
+        DisableFirewallRule(session),
+        DisableAuditRule(session),
+        HiddenFileAttributeRule(session),
+        DisableSystemRestoreRule(session),
+        LsassDumpRule(session),
+        NtdsDumpRule(session),
+        PasswordStoreTheftRule(session),
+        KeyloggingRule(session),
+        NetworkSniffingRule(session),
+        CachedCredentialsRule(session),
+        AccountDiscoveryRule(session),
+        ShareDiscoveryRule(session),
+        SystemInfoDiscoveryRule(session),
+        DomainDiscoveryRule(session),
+        SecuritySoftwareDiscoveryRule(session),
+        FileSystemDiscoveryRule(session),
+        SmbAdminShareRule(session),
+        RdpLateralRule(session),
+        WinRmLateralRule(session),
+        SshLateralRule(session),
+        ClipboardCaptureRule(session),
+        ScreenCaptureRule(session),
+        ArchiveCollectionRule(session),
+        LocalDataCollectionRule(session),
+        ProxyToolRule(session),
+        UnusualPortRule(session),
+        EncryptedChannelRule(session),
+        ExfilAlternativeProtocolRule(session),
+        ExfilWebServiceRule(session),
         SigmaRuleEngine(session),
     ]
+    return _apply_feature_flags(rules)
+
+
+def _apply_feature_flags(rules: list) -> list[BaseRule]:
+    """Honour the roadmap feature toggles (BARAQ_KILL_CHAIN, BARAQ_RULES_COUNT)
+    and per-rule overrides (BARAQ_RULE_OVERRIDES).
+
+    ``RULES_COUNT`` caps the number of *native* rules (0 = all); the Sigma
+    engine is always kept so file-based rules keep working on constrained
+    hosts. ``KILL_CHAIN=0`` drops the correlation rule. Overrides can
+    disable individual rules or adjust their severity/confidence without
+    touching rule code.
+    """
+    filtered = [
+        rule
+        for rule in rules
+        if KILL_CHAIN or rule.rule_id != KillChainCorrelationRule.rule_id
+    ]
+    if RULE_OVERRIDES:
+        applied = []
+        for rule in filtered:
+            override = RULE_OVERRIDES.get(rule.rule_id) or {}
+            if override.get("enabled") is False:
+                logger.info("Rule %s disabled via BARAQ_RULE_OVERRIDES", rule.rule_id)
+                continue
+            severity = override.get("severity")
+            if severity in ("low", "medium", "high", "critical"):
+                rule.severity = severity
+            confidence = override.get("confidence")
+            if isinstance(confidence, (int, float)) and 0.0 <= float(confidence) <= 1.0:
+                rule.confidence = float(confidence)
+            applied.append(rule)
+        filtered = applied
+    if RULES_COUNT > 0:
+        natives = [r for r in filtered if r.rule_id != "sigma_rules"]
+        sigma = [r for r in filtered if r.rule_id == "sigma_rules"]
+        natives = natives[:RULES_COUNT]
+        filtered = natives + sigma
+        logger.info("BARAQ_RULES_COUNT=%d: engine trimmed to %d rules", RULES_COUNT, len(filtered))
+    return filtered
 
 
 class RulesEngine:
@@ -141,12 +307,12 @@ class RulesEngine:
         self.org = org
         self.rules = build_rules(session)
 
-    def run(self, window_minutes: int = 10) -> list[DetectionResult]:
+    def run(self, window_minutes: int = 10, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         for rule in self.rules:
             try:
                 rule.org = self.org
-                rule_findings = rule.evaluate(window_minutes)
+                rule_findings = self._evaluate_rule(rule, window_minutes, since_id)
                 for f in rule_findings:
                     if not f.mitre_id or f.mitre_id == "T0000":
                         f.mitre_id = getattr(rule, "mitre_id", "T0000")
@@ -160,6 +326,21 @@ class RulesEngine:
                 logger.exception("Rule %s failed: %s", rule.rule_id, exc)
                 self.session.rollback()
         return findings
+
+    @staticmethod
+    def _evaluate_rule(rule, window_minutes: int, since_id: int | None) -> list:
+        """Call a rule's evaluate(), passing the cursor only when it accepts it.
+
+        Native rules implement ``evaluate(window_minutes)`` and keep scanning
+        their (indexed) window; the Sigma engine opts in to ``since_id`` for
+        incremental evaluation.
+        """
+        import inspect
+
+        params = inspect.signature(rule.evaluate).parameters
+        if "since_id" in params:
+            return rule.evaluate(window_minutes, since_id=since_id)
+        return rule.evaluate(window_minutes)
 
 
 def enrich_result(result: DetectionResult) -> dict:

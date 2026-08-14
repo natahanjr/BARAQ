@@ -9,10 +9,11 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install_service.ps1 install [-Lan] [-UseTaskScheduler]
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install_service.ps1 uninstall
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install_service.ps1 status
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install_service.ps1 fix
 #
 # Requires an elevated shell (this script re-launches itself elevated if not).
 param(
-    [ValidateSet("install", "uninstall", "status")]
+    [ValidateSet("install", "uninstall", "status", "fix")]
     [string]$Action = "status",
     [string]$NssmPath = "",
     [switch]$UseTaskScheduler,
@@ -63,6 +64,17 @@ function Install-NssmService([string]$Nssm) {
     if ($LASTEXITCODE -eq 0) { Write-Host "  started." } else { Write-Host "  service registered but start returned exit $LASTEXITCODE" }
 }
 
+function Get-TaskSettings {
+    # Batteries: a laptop on battery must NOT queue the task (DisallowStartIfOnBatteries
+    # keeps it "Queued" forever). Restart on crash so the server self-heals.
+    # NOTE: RestartInterval must be ISO 8601 ("PT1M"), not a TimeSpan - the
+    # TimeSpan serializes to "00:01:00" which Task Scheduler rejects (0x80041318).
+    $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -StartWhenAvailable -RestartCount 3
+    $s.RestartInterval = "PT1M"
+    $s.StopIfGoingOnBatteries = $false
+    return $s
+}
+
 function Install-Task {
     # Runs at LOGON as the CURRENT USER (no password prompt). The DPAPI vault
     # (secrets.dat) is CurrentUser-scoped, so a SYSTEM task could not decrypt
@@ -73,9 +85,22 @@ function Install-Task {
     $action    = New-ScheduledTaskAction -Execute $ps -Argument $args -WorkingDirectory $Root
     $trigger   = New-ScheduledTaskTrigger -AtLogOn
     $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
-    Register-ScheduledTask -TaskName "BARAQ" -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+    Register-ScheduledTask -TaskName "BARAQ" -Action $action -Trigger $trigger -Principal $principal -Settings (Get-TaskSettings) -Force | Out-Null
     Start-ScheduledTask -TaskName "BARAQ"
     Write-Host "Task 'BARAQ' registered (AtLogon, $env:USERDOMAIN\$env:USERNAME). Started now."
+}
+
+function Fix-Task {
+    # Patch an existing "BARAQ" task: battery tolerance, start-if-missed, auto-restart.
+    $task = Get-ScheduledTask -TaskName "BARAQ" -ErrorAction SilentlyContinue
+    if (-not $task) { throw "Task 'BARAQ' is not registered - run install first." }
+    $task.Settings.DisallowStartIfOnBatteries = $false
+    $task.Settings.StopIfGoingOnBatteries     = $false
+    $task.Settings.StartWhenAvailable         = $true
+    $task.Settings.RestartCount               = 3
+    $task.Settings.RestartInterval            = "PT1M"
+    Set-ScheduledTask -TaskName "BARAQ" -Settings $task.Settings -ErrorAction Stop | Out-Null
+    Write-Host "Task 'BARAQ' settings patched (battery-tolerant, auto-restart)."
 }
 
 function Remove-Service {
@@ -123,4 +148,5 @@ switch ($Action) {
     }
     "uninstall" { Remove-Service }
     "status"   { Show-Status }
+    "fix"      { Fix-Task }
 }

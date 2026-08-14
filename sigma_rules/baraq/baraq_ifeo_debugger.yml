@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Image File Execution Options Debugger"
+id: baraq-4657-ifeo-debugger
+status: experimental
+level: high
+description: "An IFEO Debugger value was set - redirects a target binary to an attacker-controlled process."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectName:contains: \Image File Execution Options
+        ObjectValueName: Debugger
+    condition: selection_sel
+fields:
+    - ObjectName
+    - ObjectValueName
+    - ProcessName
+    - SubjectUserName
+falsepositives:
+    - Debugging tooling on dev hosts
+tags:
+    - attack.persistence
+    - attack.t1546.012

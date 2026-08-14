@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Netsh Port Forwarding"
+id: baraq-4688-netsh-portproxy
+status: experimental
+level: high
+description: "Netsh portproxy installed on a host - used to pivot or tunnel through an internal machine."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: \netsh.exe
+        CommandLine:contains: [interface portproxy, add v4tov4]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - Network team configuration
+tags:
+    - attack.command_and_control
+    - attack.t1090

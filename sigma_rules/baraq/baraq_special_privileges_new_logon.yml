@@ -1,0 +1,27 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Special Privileges Assigned to New Logon"
+id: baraq-4672-special-priv
+status: experimental
+level: medium
+description: A new logon was granted special privileges including administration and backup rights.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        PrivilegeList:contains: [SeDebugPrivilege, SeTcbPrivilege, SeBackupPrivilege, SeRestorePrivilege]
+        SubjectUserName:contains: \
+        SubjectLogonId: 0x3e7
+    selection_filter:
+        SubjectUserName: [SYSTEM, NETWORK SERVICE, LOCAL SERVICE]
+    condition: selection_sel and not selection_filter
+fields:
+    - PrivilegeList
+    - SubjectUserName
+    - SubjectLogonId
+falsepositives:
+    - Interactive admin logons (expected)
+tags:
+    - attack.privilege_escalation
+    - attack.t1078

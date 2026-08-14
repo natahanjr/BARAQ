@@ -1,0 +1,23 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - GPO Startup/Shutdown Script Pushed"
+id: baraq-5136-gpo-install
+status: experimental
+level: medium
+description: "A GPO script configuration was added - can push a task to every domain member."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        AttributeValue:contains: [scripts.ini, Startup, Shutdown, adminScripts]
+    condition: selection_sel
+fields:
+    - ObjectDN
+    - AttributeValue
+    - SubjectUserName
+falsepositives:
+    - Standard GPO script deployment
+tags:
+    - attack.persistence
+    - attack.t1547

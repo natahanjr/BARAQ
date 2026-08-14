@@ -196,6 +196,10 @@ def collect_metrics(session=None) -> str:
         _emit("baraq_db_size_bytes", "gauge",
               "Size of the PostgreSQL database in bytes.", None,
               _db_size_bytes(session))
+        # Roadmap 5.2 - service-level objectives (declared targets + live health).
+        from backend.observability import slo_metrics
+
+        lines.extend(slo_metrics(session))
     finally:
         if close:
             session.close()

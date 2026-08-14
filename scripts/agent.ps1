@@ -119,6 +119,14 @@ function Invoke-Command {
                 Write-Host "[$hostname] ESCALATION flagged - operator review required"
                 return @{ status = "success"; detail = "Acknowledged" }
             }
+            "update_agent" {
+                $updater = Join-Path $PSScriptRoot "agent_updater.ps1"
+                if (Test-Path -LiteralPath $updater) {
+                    & $updater -Version $target
+                    return @{ status = "success"; detail = "updated to $target via agent_updater.ps1" }
+                }
+                return @{ status = "success"; detail = "target version $target recorded (no updater configured)" }
+            }
             default { return @{ status = "failed"; detail = "unknown action: $action" } }
         }
     } catch {

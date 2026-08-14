@@ -1,0 +1,22 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Defender Exclusion Added"
+id: baraq-5007-exclusion
+status: experimental
+level: high
+description: "A path, process or extension was added to Defender exclusions - an evasion precedent."
+logsource:
+    product: windows
+    service: windefend
+detection:
+    selection_sel:
+        New Value:contains: [ExclusionPath, ExclusionProcess, ExclusionExtension]
+    condition: selection_sel
+fields:
+    - New Value
+    - Computer
+falsepositives:
+    - Application teams excluding their software
+tags:
+    - attack.defense_evasion
+    - attack.t1562.001

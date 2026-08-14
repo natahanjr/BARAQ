@@ -44,6 +44,9 @@ function Build-Frontend {
 function New-SeedEnv {
     # Sealed first-run credentials embedded in the executables - the product
     # boots with these on every machine (preferred over random generation).
+    # The admin password is the well-known default: fresh installs seed the
+    # account with it and the console forces a change (must_change_password)
+    # before it can be used.
     $envFile = Join-Path $Dist ".env"
     if (Test-Path $envFile) { return }
     New-Item -ItemType Directory -Path $envFile.Substring(0, $envFile.LastIndexOf("\")) -Force | Out-Null
@@ -53,7 +56,7 @@ function New-SeedEnv {
     $bytes = New-Object byte[] 32
     $rng.GetBytes($bytes)
     $secret = [System.BitConverter]::ToString($bytes).Replace("-", "")
-    $pass = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 12 | ForEach-Object { [char]$_ })
+    $pass = "baraqadmin"
     @(
         "BARAQ_ADMIN_PASSWORD=$pass",
         "BARAQ_API_KEYS=""{""$adminKey"":""admin"",""$analystKey"":""analyst""}""",
@@ -65,8 +68,7 @@ function New-SeedEnv {
     if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
         [System.IO.File]::WriteAllBytes($envFile, $bytes[3..($bytes.Length-1)])
     }
-    Write-Host "  seed written to dist\.env (admin password printed to console only)"
-    Write-Host "  ADMIN PASSWORD : $pass  (first-run credentials - save them now)"
+    Write-Host "  seed written to dist\.env (default password baraqadmin; change forced on first login)"
 }
 
 Ensure-PyInstaller
@@ -124,6 +126,25 @@ BARAQ fleet agent package - deploy on every host you want monitored:
 if (-not $SkipInstaller) {
     Step "installer (Inno Setup)"
     & (Join-Path $PSScriptRoot "build_installer.ps1")
+}
+
+Step "code signing (optional)"
+$pfx = $env:BARAQ_SIGN_CERT_PFX
+$pass = $env:BARAQ_SIGN_CERT_PASS
+$ts = $env:BARAQ_SIGN_TIMESTAMP
+$storeSubj = $env:BARAQ_SIGN_STORE_SUBJECT
+if ($pfx -or $storeSubj) {
+    $signArgs = @()
+    if ($pfx) {
+        $signArgs += @("-CertPfx", $pfx)
+        if ($pass) { $signArgs += @("-CertPassword", $pass) }
+    } else {
+        $signArgs += @("-StoreSubject", $storeSubj)
+    }
+    if ($ts) { $signArgs += @("-TimestampUrl", $ts) }
+    & (Join-Path $PSScriptRoot "sign_binaries.ps1") @signArgs
+} else {
+    Write-Host "  no certificate configured (BARAQ_SIGN_CERT_PFX / BARAQ_SIGN_STORE_SUBJECT) - artifacts unsigned"
 }
 
 Write-Host "`nBuild complete. Artifacts in $Dist"

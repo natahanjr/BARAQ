@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - User Account Deleted"
+id: baraq-4726-user-deleted
+status: experimental
+level: low
+description: A user account was deleted. Confirm deletion was part of a request.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        TargetUserName:endswith: "@"
+    selection_filter:
+        TargetUserName:endswith: $
+    condition: selection_sel and not selection_filter
+fields:
+    - TargetUserName
+    - SubjectUserName
+    - TargetSid
+falsepositives:
+    - Offboarding procedures
+tags:
+    - attack.impact
+    - attack.t1531

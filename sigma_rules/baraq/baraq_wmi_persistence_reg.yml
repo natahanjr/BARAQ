@@ -1,0 +1,23 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - WMI Subscription Registry Modified"
+id: baraq-4657-wmi-subscription
+status: experimental
+level: high
+description: "A WMI event subscription was registered - persistent execution via WMI."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectName:contains: [\root\subscription, CommandLineEventConsumer, ActiveScriptEventConsumer]
+    condition: selection_sel
+fields:
+    - ObjectName
+    - ProcessName
+    - SubjectUserName
+falsepositives:
+    - Configuration management agents
+tags:
+    - attack.persistence
+    - attack.t1546.003

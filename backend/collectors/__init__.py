@@ -36,6 +36,8 @@ class CollectorManager:
         ]
 
     def collect(self) -> list[dict]:
+        from backend.collectors.health import registry
+
         records: list[dict] = []
         for collector in self.collectors:
             try:
@@ -43,5 +45,21 @@ class CollectorManager:
                     records.extend(collector.collect())
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Collector %s failed: %s", collector.name, exc)
+                registry.record_failure(collector.name, str(exc))
         logger.info("Collector manager returned %d raw records", len(records))
         return records
+
+    def health(self) -> dict:
+        """Per-collector + per-channel health snapshot for the API."""
+        from backend.collectors.health import registry
+
+        return {
+            "collectors": [
+                {
+                    "name": collector.name,
+                    "enabled": collector.enabled(),
+                }
+                for collector in self.collectors
+            ],
+            "channels": registry.snapshot(),
+        }

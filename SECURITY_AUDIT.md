@@ -129,3 +129,49 @@ entry fires. Root-cause fix for the previously failing ML recall assertion:
 `MasqueradingRule`/`SuspiciousPowerShellRule` could not read; rules now scan
 4688 rows (masquerading, powershell-with-powershell-filter), and a new
 `c2_beacon` rule (T1071.001) covers the network C2 hold-out.
+
+---
+
+## Commercial-readiness updates (2026-08-13)
+
+Items added/closed during the commercialization workstream:
+
+### 6. Input validation & API hygiene (updated)
+
+- [x] CSRF protection: double-submit cookie pattern, `CSRF_ENABLED` default ON
+- [x] Request-size caps: `MAX_REQUEST_BYTES` (16 MB) enforced with 413 before parsing
+
+### 7. Host-level (updated)
+
+- [x] Auto-update channel: `/api/system/update/check` + `updates.json` manifest
+      with SHA-256 download verification (see `deploy/updates.json.sample`)
+- [x] Production TLS gate: `BARAQ_ENV=production` refuses to boot without
+      `BARAQ_TLS=1` (override `BARAQ_ALLOW_PLAINTEXT_PROD=1` documented)
+
+### 9. Commercial licensing (new)
+
+- [x] Ed25519-signed license keys (vendor private key never shipped)
+- [x] Trial fallback (30 days, `BARAQ_TRIAL_DAYS`), fail-closed in production
+- [x] `POST /api/system/license/activate` (admin), `GET /api/system/license`
+- [x] Vendor tooling: `scripts/license_gen.py` (+ `--generate-keypair`)
+- [x] Tests: `tests/test_licensing.py` (12 passed) — forgery, tamper, expiry,
+      wrong-key, trial grace, fail-closed boot
+
+### 10. Code signing (new — tooling ready, cert to purchase)
+
+- [x] `scripts/sign_binaries.ps1` signs installer + server + agent exes
+      (SHA-256, RFC 3161 timestamp)
+- [x] `scripts/build_release.ps1` auto-signs when `BARAQ_SIGN_CERT_PFX` /
+      `BARAQ_SIGN_STORE_SUBJECT` are set
+- [ ] Purchase Authenticode (EV preferred) certificate; run the signing step
+- [ ] Re-run `pip-audit` + `npm audit`, record output at tag time
+
+### Pen-test handoff
+
+External engagement template: `documentation/PENTEST_BRIEF.md` (scope,
+objectives, in/out-of-scope, rules of engagement, deliverables, acceptance
+criteria). Commercial compliance documents: `COMPLIANCE_AND_EXPORT.md`,
+`GDPR_PROCESSING.md`, `SUPPORT_SLA.md`, `LICENSE`/`EULA.md`.
+
+Last verified: 2026-08-13 (full `pytest tests` suite 380 passed, 1 warning;
+12 licensing tests; live activation/update-check verified on TLS 8443).

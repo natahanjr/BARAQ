@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Boot Execute Modified"
+id: baraq-4657-global-boot
+status: experimental
+level: high
+description: "Session Manager BootExecute changed - executes commands early in the boot sequence."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectName:contains: \Control\Session Manager
+        ObjectValueName: BootExecute
+    condition: selection_sel
+fields:
+    - ObjectName
+    - ObjectValueName
+    - ProcessName
+falsepositives:
+    - Chkdsk configuration
+tags:
+    - attack.persistence
+    - attack.t1547

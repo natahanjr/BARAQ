@@ -48,7 +48,7 @@ if not exist "venv\Scripts\python.exe" (
         pause
         exit /b 1
     )
-    echo  [SETUP] Installing dependencies (first run only, takes a few minutes)...
+    echo  [SETUP] Installing dependencies ^(first run only, takes a few minutes^)...
     venv\Scripts\python -m pip install --upgrade pip >nul 2>&1
     venv\Scripts\pip install -r requirements.txt
     if errorlevel 1 (
@@ -64,7 +64,7 @@ if not exist "frontend\dist\index.html" (
         echo  [WARN] Node.js not found - dashboard UI will not be served.
         echo         Install Node.js 18+ then run:  cd frontend ^&^& npm install ^&^& npm run build
     ) else (
-        echo  [SETUP] Building dashboard (first run only)...
+        echo  [SETUP] Building dashboard ^(first run only^)...
         pushd frontend
         call npm install
         if errorlevel 1 (
@@ -85,7 +85,7 @@ if not exist "frontend\dist\index.html" (
 )
 
 if /i "%SECURE_MODE%"=="secure" (
-    echo  [SETUP] Generating TLS certificate (if needed)...
+    echo  [SETUP] Generating TLS certificate ^(if needed^)...
     powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\gen_cert.ps1" >nul 2>&1
     if not exist "certs\baraq.crt" (
         echo  [ERROR] Certificate generation failed. Run this from the project
@@ -104,7 +104,7 @@ if /i "%LAN_MODE%"=="lan" (
         set "FW_PORT=8001"
         set "FW_PROTO=http"
     )
-    echo  [SETUP] Opening port %FW_PORT% in Windows Firewall (needs admin)...
+    echo  [SETUP] Opening port %FW_PORT% in Windows Firewall ^(needs admin^)...
     netsh advfirewall firewall add rule name="BARAQ" dir=in action=allow protocol=TCP localport=%FW_PORT% >nul 2>&1
     if errorlevel 1 (
         echo  [WARN] Firewall rule not added - run this as Administrator if
@@ -116,7 +116,7 @@ echo.
     echo   %FW_PROTO%://%MY_IP%:%FW_PORT%
     echo.
     echo  Create a user account for each person in the dashboard:
-    echo  Users ^& Audit -^> Add User (analyst role).
+    echo  Users ^& Audit -^> Add User ^(analyst role^).
     echo.
     if /i "%SECURE_MODE%"=="secure" (
         echo  Remote agents should pin the TLS certificate when connecting:
@@ -135,12 +135,13 @@ if errorlevel 1 (
 )
 
 if /i "%SECURE_MODE%"=="secure" (
-    echo  [START] Launching BARAQ (HTTPS) - open https://127.0.0.1:8443
+    echo  [START] Launching BARAQ ^(HTTPS^) - open https://127.0.0.1:8443
     echo  [NOTE]  Your browser will warn about the self-signed certificate.
     echo          Trust it once, or import certs\baraq.crt as a root CA.
-    echo  [STOP]  Close this window (Ctrl+C) to shut BARAQ down.
+    echo  [STOP]  Close this window ^(Ctrl+C^) to shut BARAQ down.
+    echo         The browser opens automatically once the app is ready ^(up to 3 min^).
     echo.
-    start "" powershell -NoProfile -Command "Start-Sleep -Seconds 4; Start-Process 'https://127.0.0.1:8443'"
+    start "" powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\open_dashboard.ps1" -Url "https://127.0.0.1:8443"
 
     if /i "%LAN_MODE%"=="lan" (
         venv\Scripts\python -m uvicorn backend.main:app --host 0.0.0.0 --port 8443 --ssl-certfile certs\baraq.crt --ssl-keyfile certs\baraq.key
@@ -149,9 +150,10 @@ if /i "%SECURE_MODE%"=="secure" (
     )
 ) else (
     echo  [START] Launching BARAQ - open http://127.0.0.1:8001 in your browser
-    echo  [STOP]  Close this window (Ctrl+C) to shut BARAQ down.
+    echo  [STOP]  Close this window ^(Ctrl+C^) to shut BARAQ down.
+    echo         The browser opens automatically once the app is ready ^(up to 3 min^).
     echo.
-    start "" powershell -NoProfile -Command "Start-Sleep -Seconds 4; Start-Process 'http://127.0.0.1:8001'"
+    start "" powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\open_dashboard.ps1" -Url "http://127.0.0.1:8001"
 
     if /i "%LAN_MODE%"=="lan" (
         venv\Scripts\python -m uvicorn backend.main:app --host 0.0.0.0 --port 8001
