@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
@@ -63,11 +64,16 @@ def latest(db: Session = Depends(get_db)):
     ).first()
     if not overall:
         return {"items": []}
+    # Scenario runs of the same suite are committed microseconds apart, so
+    # match by a small time window around the overall run instead of exact
+    # timestamp equality (which always came back empty).
+    window = timedelta(seconds=10)
     runs = db.scalars(
         select(EvaluationRun)
         .where(
             EvaluationRun.scenario != "overall",
-            EvaluationRun.created_at == overall.created_at,
+            EvaluationRun.created_at >= overall.created_at - window,
+            EvaluationRun.created_at <= overall.created_at + window,
         )
         .order_by(EvaluationRun.id)
     ).all()

@@ -26,6 +26,90 @@ def test_security_headers_present():
         main_mod.SECURITY_HEADERS = old
 
 
+def test_api_csp_is_lockdown():
+    """API responses must keep the strictest possible policy."""
+    import backend.config as cfg
+    import backend.main as main_mod
+
+    from backend.main import app
+
+    old = cfg.SECURITY_HEADERS
+    cfg.SECURITY_HEADERS = True
+    main_mod.SECURITY_HEADERS = True
+    try:
+        with TestClient(app, headers={"X-API-Key": "baraq-dev-admin"}) as client:
+            r = client.get("/api/system/status")
+            assert r.status_code == 200
+            csp = r.headers.get("content-security-policy", "")
+            assert "default-src 'none'" in csp
+            assert "script-src" not in csp
+    finally:
+        cfg.SECURITY_HEADERS = old
+        main_mod.SECURITY_HEADERS = old
+
+
+def test_spa_page_csp_allows_bundles():
+    """The SPA page must never get 'default-src none' - that blocks the JS/CSS
+    bundles and inline bootstrap scripts and renders a black screen.
+
+    Regression: the security-header middleware once applied the API lock-down
+    policy to every response, breaking the dashboard (black screen) because
+    the browser refused to load /assets/* and the inline scripts.
+    """
+    import backend.config as cfg
+    import backend.main as main_mod
+
+    from backend.main import app
+
+    old = cfg.SECURITY_HEADERS
+    cfg.SECURITY_HEADERS = True
+    main_mod.SECURITY_HEADERS = True
+    try:
+        with TestClient(app) as client:
+            r = client.get("/")
+            assert r.status_code == 200
+            assert "text/html" in r.headers["content-type"]
+            csp = r.headers.get("content-security-policy", "")
+            assert "default-src 'none'" not in csp
+            assert "script-src 'self'" in csp
+            assert "style-src 'self'" in csp
+            # The SPA entry point must never be cached so the browser always
+            # picks up the latest hashed asset references.
+            assert r.headers.get("cache-control") == "no-store"
+    finally:
+        cfg.SECURITY_HEADERS = old
+        main_mod.SECURITY_HEADERS = old
+
+
+def test_spa_assets_served_with_spa_csp():
+    """Hashed /assets/* bundles must be reachable under the SPA policy."""
+    import backend.config as cfg
+    import backend.main as main_mod
+
+    from backend.main import app
+
+    old = cfg.SECURITY_HEADERS
+    cfg.SECURITY_HEADERS = True
+    main_mod.SECURITY_HEADERS = True
+    try:
+        with TestClient(app) as client:
+            html = client.get("/").text
+            asset = next(
+                (m for m in __import__("re").finditer(r'/assets/[^"\']+\.js', html)),
+                None,
+            )
+            assert asset is not None, "index.html should reference a JS bundle"
+            r = client.get(asset.group(0))
+            assert r.status_code == 200
+            csp = r.headers.get("content-security-policy", "")
+            assert "default-src 'none'" not in csp
+            assert "script-src 'self'" in csp
+            assert r.headers.get("cache-control") == "public, max-age=31536000, immutable"
+    finally:
+        cfg.SECURITY_HEADERS = old
+        main_mod.SECURITY_HEADERS = old
+
+
 def test_rate_limit_returns_429():
     import backend.config as cfg
     import backend.main as main_mod

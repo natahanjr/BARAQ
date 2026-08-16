@@ -75,6 +75,24 @@ class PrivilegeEscalationRule(BaseRule):
                     ev_ids.append(add.id)
                     covered_event_ids.add(add.id)
 
+            # 3) The escalation completes when the new admin actually logs in
+            # with special privileges (Event 4672) inside the window.
+            privileged_logons = self.session.scalars(
+                select(NormalizedEvent).where(
+                    NormalizedEvent.event_id == 4672,
+                    NormalizedEvent.timestamp >= since,
+                    *self._org_conds(NormalizedEvent),
+                )
+            ).all()
+            for logon in privileged_logons:
+                facts = (logon.raw_json or {}).get("facts", {}) if logon.raw_json else {}
+                logon_user = facts.get("new_account") or facts.get("account_name") or logon.user
+                if logon_user and logon_user.lower() == account.lower():
+                    evidence_bits.append(
+                        f"privileged logon with special privileges (Event 4672)"
+                    )
+                    ev_ids.append(logon.id)
+
             if len(ev_ids) > 1:
                 covered_event_ids.add(creation.id)
                 findings.append(

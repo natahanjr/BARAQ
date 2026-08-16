@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Routes, Route, NavLink, Link, useLocation, Navigate } from "react-router";
+import { Routes, Route, NavLink, Link, useLocation, useNavigate, Navigate } from "react-router";
 import { api, authStore } from "./api.js";
 import { useRealtime } from "./realtime.js";
+import BARAQLogo from "./components/BARAQLogo.jsx";
+import AssistantPanel from "./components/AssistantPanel.jsx";
 import Login from "./pages/Login.jsx";
 
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
@@ -14,6 +16,10 @@ const Assistant = lazy(() => import("./pages/Assistant.jsx"));
 const Reports = lazy(() => import("./pages/Reports.jsx"));
 const Evaluation = lazy(() => import("./pages/Evaluation.jsx"));
 const Incidents = lazy(() => import("./pages/Incidents.jsx"));
+const RBACenter = lazy(() => import("./pages/RBACenter.jsx"));
+const Search = lazy(() => import("./pages/Search.jsx"));
+const Automation = lazy(() => import("./pages/Automation.jsx"));
+const Dashboards = lazy(() => import("./pages/Dashboards.jsx"));
 const Endpoints = lazy(() => import("./pages/Endpoints.jsx"));
 const AgentSetup = lazy(() => import("./pages/AgentSetup.jsx"));
 const Users = lazy(() => import("./pages/Users.jsx"));
@@ -37,23 +43,59 @@ import {
   MoonIcon,
   EndpointIcon,
   AgentIcon,
+  RiskShieldIcon,
+  RulesIcon,
+  BoltIcon,
+  ActivityIcon,
+  SearchIcon,
+  BellIcon,
 } from "./components/icons.jsx";
 
-const NAV = [
-  { section: "Operations" },
-  { to: "/", label: "Dashboard", icon: DashboardIcon, end: true },
-  { to: "/alerts", label: "Alerts", icon: AlertsIcon },
-  { to: "/entities", label: "Entity Graph", icon: NetworkIcon },
-  { to: "/telemetry", label: "Telemetry", icon: TelemetryIcon },
-  { to: "/assistant", label: "AI Assistant", icon: AssistantIcon },
-  { to: "/reports", label: "Reports", icon: ReportsIcon },
-  { to: "/incidents", label: "Incidents", icon: IncidentsIcon },
-  { to: "/evaluation", label: "Evaluation", icon: EvaluationIcon, adminOnly: true },
-  { to: "/endpoints", label: "Endpoints", icon: EndpointIcon, adminOnly: true },
-  { to: "/agent-setup", label: "Agent Setup", icon: AgentIcon },
-  { section: "System" },
-  { to: "/settings", label: "Settings", icon: SystemIcon },
-  { to: "/users", label: "Users & Audit", icon: UsersIcon, adminOnly: true },
+const PODS = [
+  {
+    id: "INTEL",
+    title: "INTEL",
+    tagline: "The Eyes",
+    items: [
+      { to: "/", label: "Dashboard", icon: DashboardIcon, end: true },
+      { to: "/alerts", label: "Alerts", icon: AlertsIcon, badge: "alerts" },
+      { to: "/search", label: "Search", icon: ShieldIcon },
+      { to: "/telemetry", label: "Telemetry", icon: TelemetryIcon },
+      { to: "/dashboards", label: "Dashboards", icon: ActivityIcon },
+    ],
+  },
+  {
+    id: "ENGAGE",
+    title: "ENGAGE",
+    tagline: "The Hands",
+    items: [
+      { to: "/incidents", label: "Incidents", icon: IncidentsIcon, badge: "incidents" },
+      { to: "/entities", label: "Entity Graph", icon: NetworkIcon },
+      { to: "/automation", label: "Automation", icon: BoltIcon },
+      { to: "/evaluation", label: "Evaluation", icon: EvaluationIcon, adminOnly: true },
+      { to: "/rba", label: "Entity Risk", icon: RiskShieldIcon },
+    ],
+  },
+  {
+    id: "ADMIN",
+    title: "ADMIN",
+    tagline: "The Backbone",
+    items: [
+      { to: "/endpoints", label: "Endpoints", icon: EndpointIcon, adminOnly: true },
+      { to: "/agent-setup", label: "Agent Setup", icon: AgentIcon },
+      { to: "/users", label: "Users & Audit", icon: UsersIcon, adminOnly: true },
+      { to: "/settings", label: "Settings", icon: SystemIcon },
+    ],
+  },
+  {
+    id: "AUGMENT",
+    title: "AUGMENT",
+    tagline: "The Brain",
+    items: [
+      { to: "/assistant", label: "AI Assistant", icon: AssistantIcon },
+      { to: "/reports", label: "Reports", icon: ReportsIcon },
+    ],
+  },
 ];
 
 function useBackendStatus() {
@@ -95,39 +137,52 @@ function useBackendStatus() {
 }
 
 function useTheme() {
-  const [theme, setTheme] = useState(() =>
-    typeof document !== "undefined" && document.documentElement.classList.contains("light")
-      ? "light"
-      : "dark"
+  // Theme preference: "dark" | "light" | "system" (follows the OS). The
+  // effective appearance is derived from system only when chosen; analysts
+  // can always override per-session from the topbar.
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("baraq-theme") || "system";
+    } catch {
+      return "system";
+    }
+  });
+
+  const [systemDark, setSystemDark] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches,
   );
 
-  // Keep the latest theme visible to the event listener below (Settings page
-  // can toggle the theme too and must stay in sync with this component).
-  const themeRef = useRef(theme);
   useEffect(() => {
-    themeRef.current = theme;
+    if (theme !== "system") return;
+    const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!mq) return;
+    const onChange = (e) => setSystemDark(e.matches);
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
   }, [theme]);
+
+  const effective = theme === "system" ? (systemDark ? "dark" : "light") : theme;
 
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle("light", theme === "light");
+    root.classList.toggle("light", effective === "light");
     try {
       localStorage.setItem("baraq-theme", theme);
     } catch {
       /* private mode etc. */
     }
-  }, [theme]);
+  }, [theme, effective]);
 
   useEffect(() => {
     const onThemeChange = (e) => {
       const next = e.detail;
-      if (next && next !== themeRef.current) setTheme(next);
+      if (next === "dark" || next === "light" || next === "system") setTheme(next);
     };
     window.addEventListener("baraq:theme-change", onThemeChange);
     return () => window.removeEventListener("baraq:theme-change", onThemeChange);
   }, []);
 
-  return [theme, setTheme];
+  return [theme, setTheme, effective];
 }
 
 function AdminGate({ user, children }) {
@@ -211,47 +266,91 @@ function SetupBanner({ setup, user, setNavOpen }) {
   );
 }
 
-function BARAQLogo() {
-  return (
-    <svg className="h-10 w-10" viewBox="0 0 64 64">
-      <defs>
-        <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#06b6d4" />
-          <stop offset="100%" stopColor="#0e7490" />
-        </linearGradient>
-        <linearGradient id="centerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#34d399" />
-          <stop offset="100%" stopColor="#059669" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M32 6 L52 12 L52 28 Q52 42 32 52 Q12 42 12 28 L12 12 Z"
-        fill="url(#shieldGradient)"
-        opacity="0.9"
-      />
-      <path
-        d="M32 10 L48 15 L48 28 Q48 38 32 46 Q16 38 16 28 L16 15 Z"
-        fill="none"
-        stroke="#22d3ee"
-        strokeWidth="1.2"
-        opacity="0.6"
-      />
-      <circle cx="32" cy="28" r="6" fill="url(#centerGradient)" opacity="0.85" />
-      <circle cx="32" cy="28" r="3.5" fill="#34d399" />
-      <path
-        d="M28.5 28 L31 30.5 L35.5 25.5"
-        stroke="white"
-        strokeWidth="1.8"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user, onLogout, org, onOrg, orgOptions }) {
+function Sidebar({
+  open,
+  onClose,
+  online,
+  collapsed,
+  onToggleCollapsed,
+  activeAlerts,
+  criticalAlerts,
+  openIncidents,
+  criticalIncidents,
+  user,
+  onLogout,
+  org,
+  onOrg,
+  orgOptions,
+}) {
   const location = useLocation();
+
+  const navItems = (pod) =>
+    pod.items.filter((item) => (item.adminOnly ? user?.role === "admin" : true));
+
+  const badgeFor = (item) => {
+    if (item.badge === "alerts") {
+      if (!activeAlerts) return null;
+      return { count: activeAlerts, critical: criticalAlerts > 0 };
+    }
+    if (item.badge === "incidents") {
+      if (!openIncidents) return null;
+      return { count: openIncidents, critical: criticalIncidents > 0 };
+    }
+    return null;
+  };
+
+  const link = (item, mobile) => {
+    const isActive =
+      item.end ? location.pathname === item.to : location.pathname.startsWith(item.to);
+    const Icon = item.icon;
+    const badge = badgeFor(item);
+    return (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        end={item.end}
+        onClick={onClose}
+        title={collapsed && !mobile ? item.label : undefined}
+        className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-150 ${
+          isActive
+            ? "border border-cyan-400/20 bg-gradient-to-r from-cyan-500/15 via-violet-500/5 to-transparent text-white"
+            : "border border-transparent text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+        } ${collapsed && !mobile ? "justify-center px-0" : ""}`}
+      >
+        <Icon
+          className={`h-[18px] w-[18px] shrink-0 transition-all ${
+            isActive
+              ? "text-cyan-400 drop-shadow-[0_0_6px_rgba(0,240,255,0.6)]"
+              : "text-slate-500 group-hover:text-cyan-300"
+          }`}
+        />
+        {!(collapsed && !mobile) && <span className="truncate">{item.label}</span>}
+        {isActive && (
+          <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-violet-500 shadow-[0_0_10px_rgba(123,97,255,0.8)]" />
+        )}
+        {badge && (
+          <span
+            className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums ${
+              badge.critical
+                ? "badge-critical bg-red-500/20 text-red-400"
+                : "bg-slate-600/40 text-slate-400"
+            } ${collapsed && !mobile ? "absolute right-1 top-1" : ""}`}
+          >
+            {badge.count}
+          </span>
+        )}
+      </NavLink>
+    );
+  };
+
+  const podDivider = (pod) => (
+    <div key={pod.id} className="mx-3 mt-5 flex items-center gap-2 first:mt-2">
+      <span className="h-px flex-1 bg-gradient-to-r from-cyan-500/40 via-violet-500/25 to-transparent" />
+      {!collapsed && (
+        <span className="text-[9px] font-bold tracking-[0.22em] text-slate-500">{pod.title}</span>
+      )}
+    </div>
+  );
 
   return (
     <>
@@ -262,73 +361,52 @@ function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user,
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-800/60 bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900/80 transition-transform duration-200 lg:translate-x-0 ${
-          open ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`glass-line fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-200 lg:translate-x-0 ${
+          collapsed ? "w-[60px]" : "w-60"
+        } ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         {/* Brand */}
-        <div className="flex items-center gap-3 px-5 pb-5 pt-6">
-          <BARAQLogo />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold tracking-wide text-white">BARAQ</p>
-            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
-              Threat Detection
-            </p>
-          </div>
+        <div className={`flex items-center gap-3 px-4 pb-4 pt-5 ${collapsed ? "justify-center px-0" : ""}`}>
+          <BARAQLogo className="h-9 w-9 shrink-0" />
+          {!collapsed && (
+            <div className="min-w-0">
+              <p className="text-base font-bold tracking-wide text-white">BARAQ</p>
+              <p className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <span className={`h-1.5 w-1.5 rounded-full ${online ? "pulse-dot bg-emerald-400 shadow-[0_0_6px_rgba(0,230,118,0.9)]" : "bg-red-500"}`} />
+                {online ? "System Operational" : "Offline"}
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-          {NAV.filter(
-            (item) => !item.to || (item.adminOnly ? user?.role === "admin" : true),
-          ).map((item) => {
-            if (!item.to) {
-              return (
-                <p
-                  key={item.section}
-                  className="pb-1 pl-3.5 pt-4 text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-600 first:pt-0"
-                >
-                  {item.section}
-                </p>
-              );
-            }
-            const isActive =
-              item.end
-                ? location.pathname === item.to
-                : location.pathname.startsWith(item.to);
-            const Icon = item.icon;
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                onClick={onClose}
-                className={`group relative flex items-center gap-3 rounded-lg px-3.5 py-2 text-sm font-medium transition-all duration-150 ${
-                  isActive
-                    ? "border border-cyan-500/25 bg-gradient-to-r from-cyan-500/20 to-cyan-500/5 text-cyan-200 shadow-[0_0_18px_-6px_rgba(34,211,238,0.45)]"
-                    : "border border-transparent text-slate-500 hover:bg-white/[0.03] hover:text-slate-300"
-                }`}
-              >
-                <Icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? "text-cyan-400" : "text-slate-600 group-hover:text-slate-400"}`} />
-                <span className="truncate">{item.label}</span>
-                {item.to === "/alerts" && activeAlerts > 0 && (
-                  <span className="ml-auto rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400">
-                    {activeAlerts}
-                  </span>
-                )}
-                {isActive && (
-                  <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-cyan-400" />
-                )}
-              </NavLink>
-            );
-          })}
+        {/* Collapse toggle */}
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="mx-3 mb-1 hidden items-center justify-center gap-2 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 transition-colors hover:border-cyan-400/30 hover:text-cyan-300 lg:flex"
+        >
+          {collapsed ? "▸" : "◂ Expand / Collapse"}
+        </button>
+
+        {/* Pods */}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2">
+          {PODS.map((pod) => (
+            <div key={pod.id}>
+              {podDivider(pod)}
+              <div className="mt-1.5 space-y-0.5">
+                {navItems(pod).map((item) => link(item, false))}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {/* Footer status */}
-        <div className="space-y-3 border-t border-white/5 px-5 py-4">
+        <div className="space-y-3 border-t border-white/5 px-3 py-3">
           {user && (
             <>
-              {user.role === "admin" && orgOptions.length > 0 && (
+              {user.role === "admin" && orgOptions.length > 0 && !collapsed && (
                 <label className="block">
                   <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Organization
@@ -336,7 +414,7 @@ function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user,
                   <select
                     value={org}
                     onChange={(e) => onOrg(e.target.value)}
-                    className="w-full rounded-lg border border-slate-700/70 bg-slate-900/80 px-2.5 py-1.5 text-xs font-medium text-slate-200 outline-none transition-colors focus:border-cyan-500/60"
+                    className="w-full rounded-lg border border-slate-700/70 bg-slate-900/80 px-2.5 py-1.5 text-xs font-medium text-slate-200 outline-none transition-colors focus:border-cyan-400/60"
                     title="Narrow the whole console to one organization (admins)"
                   >
                     <option value="">All organizations</option>
@@ -348,37 +426,39 @@ function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user,
                   </select>
                 </label>
               )}
-              <div className="flex items-center gap-2.5">
-                <span
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                    user.role === "admin" ? "bg-violet-400" : "bg-cyan-400"
-                  }`}
-                />
-                <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-200">
-                  {user.username}
+              <div
+                className={`flex items-center gap-2.5 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2.5 ${collapsed ? "justify-center px-0" : ""}`}
+              >
+                <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 text-xs font-bold uppercase text-white shadow-[0_0_14px_-2px_rgba(0,240,255,0.5)]">
+                  {(user.username || "?").slice(0, 2)}
+                  {user.mfa_enabled && (
+                    <span
+                      className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-white/20 bg-emerald-500 text-[7px] text-white"
+                      title="MFA enabled"
+                    >
+                      ✓
+                    </span>
+                  )}
                 </span>
-                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
-                  {user.role}
-                </span>
-                {user.role !== "admin" && user.org ? (
-                  <span
-                    className="max-w-[90px] truncate rounded-full bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-300"
-                    title={`Organization: ${user.org}`}
-                  >
-                    {user.org}
-                  </span>
-                ) : null}
+                {!collapsed && (
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-slate-200">{user.username}</p>
+                    <p className="truncate text-[10px] uppercase tracking-wider text-slate-500">
+                      {user.role}
+                      {user.role !== "admin" && user.org ? ` · ${user.org}` : ""}
+                    </p>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={onLogout}
                   aria-label="Log out"
                   title="Log out"
-                  className="rounded-md border border-white/10 bg-white/[0.04] p-1.5 text-slate-300 transition-colors hover:border-red-500/40 hover:text-red-400"
+                  className="shrink-0 rounded-lg border border-white/10 bg-white/[0.04] p-1.5 text-slate-300 transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
                 >
                   <LogoutIcon className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <div className="h-px bg-white/5" />
             </>
           )}
         </div>
@@ -387,41 +467,197 @@ function Sidebar({ open, onClose, online, activeAlerts, realtimeConnected, user,
   );
 }
 
-function Topbar({ onMenuClick, online, summary, theme, onToggleTheme }) {
+function useClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const fmt = (d, tz) =>
+    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: tz });
+  const day = (d, tz) =>
+    d.toLocaleDateString([], { month: "short", day: "numeric", timeZone: tz }).toUpperCase();
+  return { local: fmt(now), utc: fmt(now, "UTC"), localDay: day(now), utcDay: day(now, "UTC") };
+}
+
+/* Notification center — only actionable items, never spam. */
+function NotificationBell({ summary, setup, user }) {
+  const [open, setOpen] = useState(false);
+  const [seen, setSeen] = useState(false);
+
+  const items = [];
+  if ((summary?.critical_threats ?? 0) > 0) {
+    items.push({
+      level: "critical",
+      text: `${summary.critical_threats} critical alert${summary.critical_threats > 1 ? "s" : ""} require response`,
+      to: "/alerts",
+    });
+  }
+  if ((summary?.anomalies_detected ?? 0) > 0) {
+    items.push({
+      level: "medium",
+      text: `${summary.anomalies_detected} ML anomaly${summary.anomalies_detected > 1 ? "ies" : "y"} flagged`,
+      to: "/alerts",
+    });
+  }
+  if (user?.role === "admin" && setup && !setup.credentials_configured) {
+    items.push({ level: "high", text: "Default admin credentials still in use", to: "/users" });
+  }
+  if (setup && !setup.ml_trained) {
+    items.push({ level: "medium", text: "ML detection model not trained yet", to: "/settings" });
+  }
+
+  const unread = items.length > 0 && !seen ? items.length : 0;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => {
+          setOpen((o) => !o);
+          setSeen(true);
+        }}
+        aria-label={`Notifications (${unread} unread)`}
+        title="Notification center"
+        className="relative rounded-xl border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-colors hover:bg-white/[0.08]"
+      >
+        <BellIcon className="h-4 w-4" />
+        {unread > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 font-mono text-[9px] font-bold text-white">
+            {unread}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="drawer-in absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-white/10 bg-[#101827]/95 shadow-2xl backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
+              <p className="text-xs font-semibold text-slate-100">Notifications</p>
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-[9px] text-slate-400">
+                {items.length} actionable
+              </span>
+            </div>
+            {items.length > 0 ? (
+              <ul className="max-h-80 overflow-auto p-2">
+                {items.map((item, idx) => (
+                  <li key={idx}>
+                    <Link
+                      to={item.to}
+                      onClick={() => setOpen(false)}
+                      className="flex items-start gap-2.5 rounded-xl px-2.5 py-2.5 transition-colors hover:bg-white/[0.04]"
+                    >
+                      <span
+                        className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
+                          item.level === "critical"
+                            ? "pulse-dot bg-red-500"
+                            : item.level === "high"
+                              ? "bg-orange-400"
+                              : "bg-amber-400"
+                        }`}
+                      />
+                      <span className="text-xs leading-snug text-slate-300">{item.text}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="px-4 py-8 text-center">
+                <p className="text-xs text-slate-400">All systems nominal</p>
+                <p className="mt-1 text-[10px] text-slate-600">
+                  You will only be interrupted for actionable events
+                </p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Topbar({ onMenuClick, online, summary, theme, onToggleTheme, warRoom, onToggleWarRoom, setup, user }) {
   const location = useLocation();
-  const page = NAV.find(
-    (n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to))
-  )?.label ?? "BARAQ";
+  const navigate = useNavigate();
+  const page =
+    PODS.flatMap((p) => p.items).find(
+      (n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to))
+    )?.label ?? "BARAQ";
+
+  const [q, setQ] = useState("");
+  const clock = useClock();
 
   const score = summary?.security_score ?? 0;
   const scoreClass =
     score >= 70 ? "text-emerald-400" : score >= 40 ? "text-amber-400" : "text-red-400";
 
+  // Demo/test mode: seeded telemetry is excluded from every production view.
+
+  const submitSearch = (e) => {
+    e.preventDefault();
+    const query = q.trim();
+    navigate(query ? `/search?q=${encodeURIComponent(query)}` : "/search");
+  };
+
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-800/50 bg-gradient-to-r from-slate-950/90 via-slate-950/80 to-slate-900/85 px-4 py-3.5 shadow-lg shadow-black/20 backdrop-blur-xl sm:px-6 lg:px-8">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <button
-            type="button"
-            onClick={onMenuClick}
-            aria-label="Open navigation"
-            className="rounded-lg border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-colors hover:bg-white/[0.08] lg:hidden"
-          >
-            <MenuIcon className="h-5 w-5" />
-          </button>
+    <header className="glass-line sticky top-0 z-20">
+      <div className="flex items-center gap-3 px-4 py-2.5 sm:px-5 lg:px-6">
+        <button
+          type="button"
+          onClick={onMenuClick}
+          aria-label="Open navigation"
+          className="rounded-xl border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-colors hover:bg-white/[0.08] lg:hidden"
+        >
+          <MenuIcon className="h-4 w-4" />
+        </button>
+
+        {/* Brand + page context */}
+        <div className="hidden min-w-0 items-center gap-2.5 lg:flex">
+          <BARAQLogo className="h-7 w-7 shrink-0" />
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold tracking-tight text-white sm:text-xl">
-              {page}
-            </h1>
-            <p className="mt-0.5 hidden text-xs text-slate-500 sm:block">
-              Real-time endpoint security monitoring
+            <h1 className="truncate text-sm font-bold tracking-wide text-white">{page}</h1>
+            <p className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${online ? "pulse-dot bg-emerald-400 shadow-[0_0_6px_rgba(0,230,118,0.9)]" : "bg-red-500"}`}
+              />
+              {online ? "System Operational" : "Backend Offline"}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Universal search */}
+        <form onSubmit={submitSearch} className="ml-1 hidden max-w-xl flex-1 md:block">
+          <div className="group flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2 transition-all focus-within:border-cyan-400/50 focus-within:bg-white/[0.06] focus-within:shadow-[0_0_24px_-6px_rgba(0,240,255,0.4)]">
+            <SearchIcon className="h-4 w-4 shrink-0 text-slate-500 transition-colors group-focus-within:text-cyan-300" />
+            <input
+              id="global-search"
+              type="text"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search…"
+              className="w-full bg-transparent text-sm text-slate-200 outline-none placeholder:text-slate-500"
+            />
+            <kbd className="hidden shrink-0 rounded border border-white/10 bg-black/30 px-1.5 py-0.5 font-mono text-[9px] text-slate-500 lg:inline-block">
+              /
+            </kbd>
+          </div>
+        </form>
+        <div className="flex-1 md:hidden" />
+
+        <div className="ml-auto flex items-center gap-2">
+          {/* Live clock — local time */}
+          <div
+            className="hidden items-center rounded-xl border border-white/5 bg-white/[0.03] px-3 py-1.5 xl:flex"
+            title={`Local ${clock.localDay}`}
+          >
+            <div className="text-right leading-tight">
+              <p className="font-mono text-[11px] font-semibold text-cyan-300">{clock.local}</p>
+            </div>
+          </div>
+
           {summary && (
-            <div className="hidden items-center overflow-hidden rounded-md border border-white/5 bg-white/[0.02] md:flex">
+            <div className="hidden items-center overflow-hidden rounded-xl border border-white/5 bg-white/[0.03] lg:flex">
               {[
                 { label: "Score", value: Math.round(score), cls: scoreClass },
                 {
@@ -433,7 +669,7 @@ function Topbar({ onMenuClick, online, summary, theme, onToggleTheme }) {
               ].map((s, i) => (
                 <div
                   key={s.label}
-                  className={`flex items-center gap-1.5 px-3 py-1 ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 ${
                     i > 0 ? "border-l border-white/5" : ""
                   }`}
                 >
@@ -446,17 +682,45 @@ function Topbar({ onMenuClick, online, summary, theme, onToggleTheme }) {
             </div>
           )}
 
+          {/* War Room toggle */}
+          <button
+            type="button"
+            onClick={onToggleWarRoom}
+            aria-pressed={warRoom}
+            title={warRoom ? "Exit War Room mode" : "War Room mode — distraction-free monitoring"}
+            className={`hidden items-center gap-1.5 rounded-xl border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider transition-colors md:inline-flex ${
+              warRoom
+                ? "border-violet-500/50 bg-violet-500/15 text-violet-300 shadow-[0_0_18px_-4px_rgba(123,97,255,0.6)]"
+                : "border-white/10 bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-slate-200"
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${warRoom ? "pulse-dot bg-violet-400" : "bg-slate-600"}`} />
+            War Room
+          </button>
+
+          {/* Notification center */}
+          <NotificationBell summary={summary} setup={setup} user={user} />
+
+          {/* Theme: dark → light → system (follow OS) */}
           <button
             type="button"
             onClick={onToggleTheme}
-            aria-label={theme === "light" ? "Switch to dark theme" : "Switch to light theme"}
-            title={theme === "light" ? "Dark mode" : "Light mode"}
-            className="rounded-lg border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-colors hover:bg-white/[0.08]"
+            aria-label={`Theme: ${theme} — click to switch`}
+            title={
+              theme === "dark"
+                ? "Theme: Dark — click for Light"
+                : theme === "light"
+                  ? "Theme: Light — click for System (follow OS)"
+                  : "Theme: System — click for Dark"
+            }
+            className="rounded-xl border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-colors hover:bg-white/[0.08]"
           >
             {theme === "light" ? (
-              <MoonIcon className="h-5 w-5" />
+              <SunIcon className="h-4 w-4" />
+            ) : theme === "system" ? (
+              <SystemIcon className="h-4 w-4" />
             ) : (
-              <SunIcon className="h-5 w-5" />
+              <MoonIcon className="h-4 w-4" />
             )}
           </button>
         </div>
@@ -609,14 +873,351 @@ function ForcePasswordChange({ user, onDone, onLogout }) {
   );
 }
 
+function BoltTransition() {
+  const location = useLocation();
+  const [bolt, setBolt] = useState(null);
+  const prevPath = useRef(location.pathname);
+
+  useEffect(() => {
+    if (prevPath.current !== location.pathname) {
+      prevPath.current = location.pathname;
+      setBolt(Date.now());
+      const t = setTimeout(() => setBolt(null), 750);
+      return () => clearTimeout(t);
+    }
+  }, [location.pathname]);
+
+  if (!bolt) return null;
+  return (
+    <div
+      key={bolt}
+      className="pointer-events-none fixed inset-0 z-[60]"
+      aria-hidden="true"
+    >
+      <div className="bolt-streak absolute left-0 top-0 h-full w-2 bg-gradient-to-b from-cyan-400 via-violet-500 to-cyan-400" />
+    </div>
+  );
+}
+
+function CommandPalette({ open, onClose }) {
+  const navigate = useNavigate();
+  const [q, setQ] = useState("");
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (open) {
+      setQ("");
+      setTimeout(() => inputRef.current?.focus(), 10);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    if (open) window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const actions = PODS.flatMap((pod) =>
+    pod.items.map((item) => ({ ...item, pod: pod.title })),
+  );
+  const query = q.trim().toLowerCase();
+  const filtered = actions.filter(
+    (a) =>
+      !query ||
+      a.label.toLowerCase().includes(query) ||
+      a.pod.toLowerCase().includes(query),
+  );
+
+  const go = (to) => {
+    onClose();
+    navigate(to);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[75] flex items-start justify-center bg-black/60 px-4 pt-[12vh] backdrop-blur-sm"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="palette-in w-full max-w-lg overflow-hidden rounded-2xl border border-cyan-400/25 bg-[#0b1320]/95 shadow-[0_0_60px_-12px_rgba(0,240,255,0.4)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2.5 border-b border-white/10 px-4 py-3">
+          <span className="text-cyan-400">⚡</span>
+          <input
+            ref={inputRef}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && filtered.length > 0) go(filtered[0].to);
+            }}
+            placeholder="Type a page or search…"
+            className="w-full bg-transparent text-sm text-slate-200 outline-none placeholder:text-slate-500"
+          />
+          <kbd className="shrink-0 rounded border border-white/10 bg-black/30 px-1.5 py-0.5 font-mono text-[9px] text-slate-500">
+            ESC
+          </kbd>
+        </div>
+        <div className="max-h-[46vh] overflow-y-auto p-2">
+          {query && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                navigate(`/search?q=${encodeURIComponent(q.trim())}`);
+              }}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs text-slate-300 transition-colors hover:bg-cyan-500/10"
+            >
+              <SearchIcon className="h-4 w-4 text-cyan-400" />
+              <span>
+                Search <strong className="text-cyan-300">"{q.trim()}"</strong> across events,
+                alerts and entities
+              </span>
+            </button>
+          )}
+          {filtered.map((a) => {
+            const Icon = a.icon;
+            return (
+              <button
+                key={a.to}
+                type="button"
+                onClick={() => go(a.to)}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
+              >
+                <Icon className="h-4 w-4 text-slate-400" />
+                <span className="flex-1 text-xs font-medium text-slate-200">{a.label}</span>
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-600">
+                  {a.pod}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Keyboard shortcut reference (press ?) */
+function ShortcutsHelp({ open, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    if (open) window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const groups = [
+    {
+      title: "Navigate",
+      rows: [
+        ["g d", "Dashboard"],
+        ["g a", "Alerts"],
+        ["g i", "Incidents"],
+        ["g e", "Entity Graph"],
+        ["g m", "MITRE / Risk Center"],
+        ["g s", "Search"],
+        ["g u", "Automation"],
+      ],
+    },
+    {
+      title: "Act",
+      rows: [
+        ["/", "Focus global search"],
+        ["n", "Incident center"],
+        ["Ctrl / ⌘ K", "Command palette"],
+        ["?", "Keyboard shortcuts"],
+        ["Esc", "Close panel"],
+      ],
+    },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-[75] flex items-start justify-center bg-black/60 px-4 pt-[10vh] backdrop-blur-sm"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Keyboard shortcuts"
+    >
+      <div
+        className="palette-in w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-[#0b1320]/95 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <p className="text-sm font-bold text-white">Keyboard Shortcuts</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-slate-400 transition-colors hover:border-red-500/40 hover:text-red-400"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-x-6 p-4">
+          {groups.map((g) => (
+            <div key={g.title}>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                {g.title}
+              </p>
+              <ul className="space-y-2">
+                {g.rows.map(([key, desc]) => (
+                  <li key={key} className="flex items-center justify-between gap-3">
+                    <kbd className="shrink-0 rounded border border-cyan-400/25 bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-cyan-300">
+                      {key}
+                    </kbd>
+                    <span className="text-right text-[11px] text-slate-400">{desc}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AssistantDrawer({ open, onClose }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-[2px]" onClick={onClose}>
+      <div
+        className="drawer-in glass-line absolute bottom-0 right-0 flex h-[72vh] w-full max-w-[420px] flex-col rounded-t-2xl sm:bottom-4 sm:right-4 sm:max-h-[600px] sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="AI Assistant"
+      >
+        <div className="flex items-center gap-2.5 border-b border-white/10 px-4 py-3">
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-violet-400/40 bg-violet-500/15 shadow-[0_0_14px_-4px_rgba(123,97,255,0.7)]">
+            <AssistantIcon className="h-4 w-4 text-violet-300" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-white">AI Assistant</p>
+            <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Local threat intelligence
+            </p>
+          </div>
+          <span className="pulse-dot ml-1 h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close assistant"
+            className="ml-auto rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-slate-400 transition-colors hover:border-red-500/40 hover:text-red-400"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col p-4">
+          <AssistantPanel compact />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [navOpen, setNavOpen] = useState(false);
-  const { status, online, realtimeConnected } = useBackendStatus();
+  const [warRoom, setWarRoom] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem("baraq:sidebar:collapsed") === "1",
+  );
+  const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+
+  // Global shortcuts: Ctrl/Cmd+K → command palette, "/" → universal search,
+  // g <key> → page jump, n → incidents, "?" → shortcut help.
+  const gPending = useRef(false);
+  useEffect(() => {
+    const onKey = (e) => {
+      const target = e.target;
+      const typing =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+        return;
+      }
+      if (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        document.getElementById("global-search")?.focus();
+        return;
+      }
+      if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const key = e.key.toLowerCase();
+      if (key === "g") {
+        e.preventDefault();
+        gPending.current = true;
+        setTimeout(() => {
+          gPending.current = false;
+        }, 1500);
+        return;
+      }
+      if (gPending.current) {
+        const JUMP = {
+          d: "/",
+          a: "/alerts",
+          i: "/incidents",
+          e: "/entities",
+          m: "/rba",
+          s: "/search",
+          u: "/automation",
+          r: "/reports",
+        };
+        if (JUMP[key]) {
+          e.preventDefault();
+          gPending.current = false;
+          navigateRef.current(JUMP[key]);
+          return;
+        }
+        gPending.current = false;
+        return;
+      }
+      if (key === "?") {
+        e.preventDefault();
+        setShortcutsOpen((o) => !o);
+        return;
+      }
+      if (key === "n") {
+        e.preventDefault();
+        navigateRef.current("/incidents");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const [badges, setBadges] = useState({ openIncidents: 0, criticalIncidents: 0 });
+  const { status, online } = useBackendStatus();
   const [theme, setTheme] = useTheme();
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [org, setOrg] = useState(() => authStore.org || "");
   const [orgOptions, setOrgOptions] = useState([]);
+
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      localStorage.setItem("baraq:sidebar:collapsed", c ? "0" : "1");
+      return !c;
+    });
+  };
 
   useEffect(() => {
     // Session may be restored from the httpOnly cookie on reload; an
@@ -651,6 +1252,32 @@ export default function App() {
     setOrg(value);
     authStore.org = value;
   };
+
+  // Sidebar badges: open incidents and open critical incidents, refreshed
+  // alongside the backend status poll.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const refresh = () => {
+      api
+        .incidents({ status: "open", limit: 100 })
+        .then((res) => {
+          if (cancelled) return;
+          const items = res.items || [];
+          setBadges({
+            openIncidents: items.length,
+            criticalIncidents: items.filter((i) => i.severity === "critical").length,
+          });
+        })
+        .catch(() => {});
+    };
+    refresh();
+    const t = setInterval(refresh, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [user]);
 
   useEffect(() => {
     authStore.user = user;
@@ -697,66 +1324,138 @@ export default function App() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-[var(--app-bg)] text-slate-200">
-        <Sidebar
-          open={navOpen}
-          onClose={() => setNavOpen(false)}
-          online={online}
-          realtimeConnected={realtimeConnected}
-          activeAlerts={status?.summary?.active_alerts ?? 0}
-          user={user}
-          onLogout={logout}
-          org={org}
-          onOrg={changeOrg}
-          orgOptions={user?.role === "admin" ? orgOptions : []}
-        />
-        <div className="flex min-h-screen flex-col lg:pl-64">
-          <Topbar
-            onMenuClick={() => setNavOpen(true)}
+  const shell =
+    user && !user.must_change_password ? (
+      <div
+        className={`min-h-screen bg-[var(--app-bg)] text-slate-200 ${warRoom ? "war-room" : ""}`}
+      >
+        {!warRoom && (
+          <Sidebar
+            open={navOpen}
+            onClose={() => setNavOpen(false)}
             online={online}
-            summary={status?.summary}
-            theme={theme}
-            onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
+            collapsed={collapsed}
+            onToggleCollapsed={toggleCollapsed}
+            activeAlerts={status?.summary?.active_alerts ?? 0}
+            criticalAlerts={status?.summary?.critical_threats ?? 0}
+            openIncidents={badges.openIncidents}
+            criticalIncidents={badges.criticalIncidents}
+            user={user}
+            onLogout={logout}
+            org={org}
+            onOrg={changeOrg}
+            orgOptions={user?.role === "admin" ? orgOptions : []}
           />
-          <SetupBanner setup={status?.setup} user={user} setNavOpen={setNavOpen} />
-        <main className="fade-in mx-auto w-full max-w-[1400px] flex-1 px-4 py-7 sm:px-6 lg:px-8">
-          <Suspense
-            fallback={
-              <div className="flex min-h-[40vh] items-center justify-center">
-                <div className="flex items-center gap-3 text-sm text-slate-400">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-600 border-t-cyan-400" />
-                  Loading page…
-                </div>
-              </div>
-            }
+        )}
+        <div
+          className={`flex min-h-screen flex-col ${!warRoom && (collapsed ? "lg:pl-[60px]" : "lg:pl-60")}`}
+        >
+          {!warRoom && (
+            <Topbar
+              onMenuClick={() => setNavOpen(true)}
+              online={online}
+              summary={status?.summary}
+              theme={theme}
+              onToggleTheme={() =>
+                setTheme(theme === "dark" ? "light" : theme === "light" ? "system" : "dark")
+              }
+              warRoom={warRoom}
+              onToggleWarRoom={() => setWarRoom((w) => !w)}
+              setup={status?.setup}
+              user={user}
+            />
+          )}
+          {warRoom && (
+            <div className="sticky top-0 z-20 flex items-center gap-3 px-5 py-2">
+              <BARAQLogo className="h-6 w-6 shrink-0" />
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                War Room · Live Monitoring
+              </p>
+              <button
+                type="button"
+                onClick={() => setWarRoom(false)}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-300 transition-colors hover:border-red-500/40 hover:text-red-400"
+              >
+                Exit War Room
+              </button>
+            </div>
+          )}
+          {!warRoom && <SetupBanner setup={status?.setup} user={user} setNavOpen={setNavOpen} />}
+          <main
+            className={`fade-in mx-auto w-full flex-1 px-4 py-5 sm:px-6 lg:px-7 ${
+              warRoom ? "max-w-[1900px]" : "max-w-[1440px]"
+            }`}
           >
-            <Routes key={`${user.role}:${org}`}>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/alerts" element={<Alerts />} />
-              <Route path="/alerts/:id" element={<AlertDetail />} />
-              <Route path="/investigation" element={<Investigation />} />
-              <Route path="/entities" element={<EntityGraph />} />
-              <Route path="/telemetry" element={<Telemetry />} />
-              <Route path="/assistant" element={<Assistant />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/incidents" element={<Incidents />} />
-              <Route path="/evaluation" element={<AdminGate user={user}><Evaluation /></AdminGate>} />
-              <Route path="/endpoints" element={<AdminGate user={user}><Endpoints /></AdminGate>} />
-              <Route path="/agent-setup" element={<AgentSetup />} />
-              <Route path="/users" element={<AdminGate user={user}><Users /></AdminGate>} />
-              <Route path="/settings" element={<Settings user={user} onUserChange={setUser} />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
-        </main>
-        <footer className="border-t border-white/5 px-6 py-5 text-center text-xs text-slate-600">
-          <span className="inline-flex items-center gap-1.5">
-            <ShieldIcon className="h-3.5 w-3.5" />
-            BARAQ · Real-Time Endpoint Security Operations
-          </span>
-        </footer>
+            <Suspense
+              fallback={
+                <div className="space-y-4 py-2">
+                  <div className="skeleton h-9 w-64 rounded-xl" />
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className="skeleton h-28 rounded-2xl" />
+                    ))}
+                  </div>
+                  <div className="skeleton h-80 rounded-2xl" />
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    <div className="skeleton h-64 rounded-2xl" />
+                    <div className="skeleton h-64 rounded-2xl" />
+                  </div>
+                </div>
+              }
+            >
+              <Routes key={`${user.role}:${org}`}>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/alerts" element={<Alerts />} />
+                <Route path="/alerts/:id" element={<AlertDetail />} />
+                <Route path="/investigation" element={<Investigation />} />
+                <Route path="/entities" element={<EntityGraph />} />
+                <Route path="/telemetry" element={<Telemetry />} />
+                <Route path="/assistant" element={<Assistant />} />
+                <Route path="/reports" element={<Reports />} />
+                <Route path="/incidents" element={<Incidents />} />
+                <Route path="/rba" element={<RBACenter />} />
+                <Route path="/search" element={<Search />} />
+                <Route path="/dashboards" element={<Dashboards />} />
+                <Route path="/automation" element={<Automation />} />
+                <Route path="/evaluation" element={<AdminGate user={user}><Evaluation /></AdminGate>} />
+                <Route path="/endpoints" element={<AdminGate user={user}><Endpoints /></AdminGate>} />
+                <Route path="/agent-setup" element={<AgentSetup />} />
+                <Route path="/users" element={<AdminGate user={user}><Users /></AdminGate>} />
+                <Route path="/settings" element={<Settings user={user} onUserChange={setUser} />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          </main>
+          {!warRoom && (
+            <footer className="border-t border-white/5 px-6 py-4 text-center text-xs text-slate-600">
+              <span className="inline-flex items-center gap-1.5">
+                <ShieldIcon className="h-3.5 w-3.5 text-cyan-500/60" />
+                BARAQ · Real-Time Endpoint Security Operations
+              </span>
+            </footer>
+          )}
+        </div>
+        <BoltTransition />
+        {!warRoom && (
+          <>
+            <button
+              type="button"
+              onClick={() => setAssistantOpen(true)}
+              title="Open AI Assistant"
+              aria-label="Open AI Assistant"
+              className="launcher-pulse fixed bottom-5 right-5 z-[65] flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-400/40 bg-[#0e1a2b]/90 text-cyan-300 backdrop-blur-xl transition-all hover:scale-110 hover:border-cyan-300/70 hover:text-cyan-200"
+            >
+              <AssistantIcon className="h-5 w-5" />
+            </button>
+            <AssistantDrawer open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+          </>
+        )}
+        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+        <ShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       </div>
-    </div>
+    ) : null;
+
+  return (
+    <div className="min-h-screen bg-[var(--app-bg)] text-slate-200">{shell}</div>
   );
 }

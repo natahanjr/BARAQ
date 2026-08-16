@@ -78,6 +78,12 @@ def test_psi_identical_and_drifted_distributions():
 
 
 def test_train_bumps_version_and_history(db):
+    from backend.ml.anomaly import get_detector
+
+    # The singleton detector loads persisted version history from the shared
+    # meta file (which survives between pytest sessions) - reset it so the
+    # assertion below is deterministic.
+    get_detector().versions = []
     _seed_events(db)
     det, _ = _train_detector(db, kind="initial")
     v1 = det.version

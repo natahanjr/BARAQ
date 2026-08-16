@@ -461,6 +461,240 @@ function SystemAdminPanel() {
   );
 }
 
+function TuningPanel() {
+  const [fp, setFp] = useState(null);
+  const [groups, setGroups] = useState(null);
+  const [error, setError] = useState("");
+
+  const refresh = async () => {
+    const [a, b] = await Promise.allSettled([api.fpAnalysis(), api.alertGroups()]);
+    if (a.status === "fulfilled") setFp(a.value);
+    if (b.status === "fulfilled") setGroups(b.value);
+    if (a.status !== "fulfilled") setError(a.reason.message);
+  };
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const pct = (v) => `${Math.round((v || 0) * 100)}%`;
+  const fpTone = (s) =>
+    s >= 0.6 ? "text-red-400" : s >= 0.35 ? "text-amber-400" : "text-emerald-400";
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-2">
+      <Card tone="amber">
+        <h3 className="text-base font-semibold text-white">False-Positive Analysis</h3>
+        <p className="mt-1 text-xs leading-relaxed text-slate-400">
+          Per-rule FP candidate score from closed-without-action ratio, trigger density,
+          confidence and severity. High scores = tuning candidates (roadmap P0).
+        </p>
+        {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+        {!fp ? (
+          <p className="mt-4 text-xs text-slate-500">Loading…</p>
+        ) : fp.items.length === 0 ? (
+          <p className="mt-4 text-xs text-slate-500">No alert history to analyze yet.</p>
+        ) : (
+          <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
+            {fp.items.map((item) => (
+              <div key={item.rule} className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs font-semibold text-slate-200">{item.rule}</span>
+                  <span className={`font-mono text-sm font-bold ${fpTone(item.fp_candidate_score)}`}>
+                    {item.fp_candidate_score.toFixed(2)}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                  <span>{item.total} alerts</span>
+                  <span>· {item.closed} closed ({pct(item.closed / item.total)})</span>
+                  <span>· {item.closed_without_action} closed w/o action</span>
+                  <span>· avg triggers {item.avg_trigger_count}</span>
+                  <span>· conf {item.avg_confidence}</span>
+                </div>
+                {item.top_evidence_tokens.length > 0 && (
+                  <p className="mt-1.5 truncate font-mono text-[10px] text-slate-500">
+                    {item.top_evidence_tokens.join(", ")}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card tone="violet">
+        <h3 className="text-base font-semibold text-white">Repeated Detections</h3>
+        <p className="mt-1 text-xs leading-relaxed text-slate-400">
+          Open alerts grouped by rule + host + user: one recurring event vs a campaign
+          (roadmap P0). Groups with the same signature collapse into one entry.
+        </p>
+        {!groups ? (
+          <p className="mt-4 text-xs text-slate-500">Loading…</p>
+        ) : groups.items.length === 0 ? (
+          <p className="mt-4 text-xs text-slate-500">No open alerts to group.</p>
+        ) : (
+          <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
+            {groups.items.slice(0, 20).map((g) => (
+              <div key={`${g.rule}-${g.host}-${g.user}`} className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs font-semibold text-slate-200">{g.rule}</span>
+                  <span className="rounded-full bg-cyan-500/15 px-2 py-0.5 font-mono text-[10px] font-bold text-cyan-400">
+                    ×{g.count}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-[11px] text-slate-400">
+                  host <span className="text-slate-300">{g.host || "?"}</span>
+                  {g.user !== "?" && (
+                    <>
+                      {" "}· user <span className="text-slate-300">{g.user}</span>
+                    </>
+                  )}
+                </p>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  {g.trigger_count} triggers · first{" "}
+                  {new Date(g.first_seen).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </p>
+                {g.sample_names.length > 0 && (
+                  <p className="mt-1 truncate font-mono text-[10px] text-slate-500">{g.sample_names.join(" | ")}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function SuppressionPanel() {
+  const [rules, setRules] = useState(null);
+  const [form, setForm] = useState({ rule: "", host: "*", user: "*", reason: "", expires_hours: 168 });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const refresh = () => {
+    api
+      .listSuppressions()
+      .then((r) => setRules(r.items))
+      .catch((e) => setError(e.message));
+  };
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setMessage("");
+    setError("");
+    try {
+      await api.createSuppression({
+        rule: form.rule.trim(),
+        host: form.host.trim() || "*",
+        user: form.user.trim() || "*",
+        reason: form.reason.trim(),
+        expires_hours: Number(form.expires_hours) || 168,
+      });
+      setMessage(`Suppression created for rule "${form.rule.trim()}".`);
+      setForm({ rule: "", host: "*", user: "*", reason: "", expires_hours: 168 });
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm("Delete this suppression rule? Detections will alert again.")) return;
+    try {
+      await api.deleteSuppression(id);
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <Card tone="sky">
+      <h3 className="text-base font-semibold text-white">Alert Suppression</h3>
+      <p className="mt-1 text-xs leading-relaxed text-slate-400">
+        Declare expected behaviour: while a rule matches rule/host/user, findings are
+        suppressed instead of becoming alerts (roadmap P2). Default expiry: 7 days.
+      </p>
+
+      <form onSubmit={submit} className="mt-4 grid gap-2.5 sm:grid-cols-2">
+        <input
+          required
+          placeholder="Rule id (e.g. python_execution) or *"
+          value={form.rule}
+          onChange={(e) => setForm({ ...form, rule: e.target.value })}
+          className={inputCls}
+        />
+        <div className="grid grid-cols-2 gap-2.5">
+          <input placeholder="Host (or *)" value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} className={inputCls} />
+          <input placeholder="User (or *)" value={form.user} onChange={(e) => setForm({ ...form, user: e.target.value })} className={inputCls} />
+        </div>
+        <input placeholder="Reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} className={`${inputCls} sm:col-span-2`} />
+        <div className="sm:col-span-2 flex items-end gap-2.5">
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={form.expires_hours}
+            onChange={(e) => setForm({ ...form, expires_hours: e.target.value })}
+            className={`${inputCls} w-28`}
+            title="Expiry in hours (0 = no expiry)"
+          />
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:from-sky-500 hover:to-cyan-400 disabled:opacity-50"
+          >
+            {busy ? "Creating…" : "Create Suppression"}
+          </button>
+        </div>
+      </form>
+
+      {message && (
+        <p className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">
+          ✓ {message}
+        </p>
+      )}
+      {error && (
+        <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+          {error}
+        </p>
+      )}
+
+      {rules && rules.length > 0 && (
+        <div className="mt-4 max-h-64 space-y-2 overflow-y-auto pr-1">
+          {rules.map((r) => (
+            <div key={r.id} className="flex items-center gap-3 rounded-lg border border-slate-800/60 bg-slate-900/40 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="font-mono text-xs font-semibold text-slate-200">
+                  {r.rule} <span className="text-slate-500">· {r.host}/{r.user}</span>
+                </p>
+                <p className="truncate text-[10px] text-slate-500">
+                  {r.reason || "no reason"} · suppressed {r.suppressed_count || 0}×
+                  {r.expires_at && <> · until {new Date(r.expires_at).toLocaleDateString()}</>}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => remove(r.id)}
+                className="rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-400 transition-colors hover:bg-red-500/20"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function AccountCard({ me }) {
   if (!me) return null;
   return (
@@ -815,11 +1049,18 @@ function MfaCard({ enabled, onChanged }) {
 }
 
 function PreferencesCard({ me }) {
-  const [theme, setTheme] = useState(() =>
-    typeof document !== "undefined" && document.documentElement.classList.contains("light")
+  const [theme, setTheme] = useState(() => {
+    try {
+      const stored = localStorage.getItem("baraq-theme");
+      if (stored === "light" || stored === "dark") return stored;
+    } catch {
+      /* ignore */
+    }
+    return typeof document !== "undefined" &&
+      document.documentElement.classList.contains("light")
       ? "light"
-      : "dark"
-  );
+      : "dark";
+  });
 
   const toggleTheme = (next) => {
     setTheme(next);
@@ -884,6 +1125,11 @@ export default function Settings({ user, onUserChange }) {
             System Operations
           </h2>
           <SystemAdminPanel />
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+            Detection Tuning
+          </h2>
+          <TuningPanel />
+          <SuppressionPanel />
         </div>
       )}
 

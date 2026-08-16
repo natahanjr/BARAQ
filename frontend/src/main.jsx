@@ -35,22 +35,23 @@ class ErrorBoundary extends React.Component {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "#0f172a",
+            background: "#0a0e17",
             fontFamily: "system-ui, sans-serif",
             color: "#e2e8f0",
             padding: "24px",
           }}
         >
           <div style={{ maxWidth: "760px", width: "100%" }}>
-            <div style={{ fontSize: "22px", fontWeight: 700, color: "#22d3ee", marginBottom: "8px" }}>
-              BARAQ hit a rendering error
+            <div style={{ fontSize: "22px", fontWeight: 700, color: "#00f0ff", marginBottom: "8px" }}>
+              ⚡ BARAQ hit a rendering error
             </div>
             <pre
               style={{
                 fontSize: "12px",
-                color: "#fca5a5",
-                background: "#1e293b",
-                border: "1px solid #334155",
+                fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+                color: "#ff3d71",
+                background: "#131b2a",
+                border: "1px solid rgba(0, 240, 255, 0.25)",
                 borderRadius: "8px",
                 padding: "12px",
                 overflow: "auto",
@@ -66,13 +67,13 @@ class ErrorBoundary extends React.Component {
               type="button"
               onClick={() => window.location.reload()}
               style={{
-                background: "#0e7490",
-                color: "#fff",
+                background: "linear-gradient(90deg, #00f0ff, #7b61ff)",
+                color: "#0a0e17",
                 border: "0",
                 borderRadius: "8px",
                 padding: "10px 18px",
                 fontSize: "14px",
-                fontWeight: 600,
+                fontWeight: 700,
                 cursor: "pointer",
                 marginTop: "12px",
               }}

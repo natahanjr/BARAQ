@@ -1,4 +1,4 @@
-"""Evaluation Framework (isolated scenario mode).
+﻿"""Evaluation Framework (isolated scenario mode).
 
 Runs the 5 attack scenarios plus a benign baseline through the full
 detection pipeline (rules engine + alerting) inside a throwaway temp
@@ -104,8 +104,15 @@ def run_evaluation(db, with_ml: bool = True) -> dict:
         fired = detection["fired_rules"]
         linked = detection["linked_event_ids"]
         elapsed = detection["elapsed_ms"]
+        #: Actual per-alert latency (last evidence event -> alert creation).
+        #: The wall-clock runtime is kept as pipeline overhead for context.
+        latency = detection["per_alert_latency_ms"]
+        latency_avg_ms = float(latency.get("avg_ms", 0.0))
 
-        # ---- Per-scenario + overall confusion matrices --------------------
+# ---- Per-scenario + overall confusion matrices --------------------
+        #: Honest "detection time" = wall-clock pipeline time. The per-alert
+        #: latency field is kept separately in ``info`` - in the evaluation
+        #: fixtures are backdated so ``now - last_evidence`` is meaningless.
         runs: list[EvaluationRun] = []
         fp_total = len([e for e in baseline_events if e in linked])
         tp_total = 0
@@ -134,8 +141,8 @@ def run_evaluation(db, with_ml: bool = True) -> dict:
                 precision=metrics["precision"],
                 recall=metrics["recall"],
                 f1_score=metrics["f1_score"],
-                false_positive_rate=metrics["false_positive_rate"],
-                detection_time_ms=elapsed,
+false_positive_rate=metrics["false_positive_rate"],
+                detection_time_ms=round(elapsed, 2),
             ))
 
         # Baseline row: TN = clean baseline, FP = baseline events linked.
@@ -153,8 +160,8 @@ def run_evaluation(db, with_ml: bool = True) -> dict:
             precision=baseline_metrics["precision"],
             recall=baseline_metrics["recall"],
             f1_score=baseline_metrics["f1_score"],
-            false_positive_rate=baseline_metrics["false_positive_rate"],
-            detection_time_ms=elapsed,
+false_positive_rate=baseline_metrics["false_positive_rate"],
+            detection_time_ms=round(elapsed, 2),
         ))
 
         overall_metrics = _metrics(tp_total, fp_total, max(0, n_baseline - fp_total), n_positives - tp_total)
@@ -171,11 +178,11 @@ def run_evaluation(db, with_ml: bool = True) -> dict:
             precision=overall_metrics["precision"],
             recall=overall_metrics["recall"],
             f1_score=overall_metrics["f1_score"],
-            false_positive_rate=overall_metrics["false_positive_rate"],
-            detection_time_ms=elapsed,
+false_positive_rate=overall_metrics["false_positive_rate"],
+            detection_time_ms=round(elapsed, 2),
         )
 
-        # ---- Persist ONLY the metric history (never the alerts) -----------
+# ---- Persist ONLY the metric history (never the alerts) -----------
         db.add(overall)
         for run in runs:
             db.add(run)
@@ -187,6 +194,8 @@ def run_evaluation(db, with_ml: bool = True) -> dict:
             "rules_fired": len(fired),
             "open_alerts": 0,
             "detection_time_ms": round(elapsed, 2),
+            "pipeline_elapsed_ms": round(elapsed, 2),
+            "per_alert_latency_ms": latency,
         }
         logger.info(
             "Scenario evaluation: %d positives, %d baseline, %d rules fired",
@@ -205,3 +214,4 @@ def run_evaluation(db, with_ml: bool = True) -> dict:
         return result
     finally:
         _cleanup(test_db, engine, path)
+

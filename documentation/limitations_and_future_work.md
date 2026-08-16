@@ -539,7 +539,7 @@ corpus"). Covered by `tests/test_holdout.py`.
 **Limitation:** No comparison against existing SOC solutions or open-source alternatives.
 
 **Missing Comparisons:**
-- Commercial SOCs: Splunk, Sumo Logic, Datadog Security
+- Commercial SOCs: Sumo Logic, Datadog Security
 - Open-source alternatives: Wazuh, Graylog, OpenSearch
 - Academic work: similar Windows threat detection research
 

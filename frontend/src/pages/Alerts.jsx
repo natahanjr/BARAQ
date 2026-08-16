@@ -66,6 +66,14 @@ function AlertRow({ alert, selected, onToggle, onFix, onQuickStatus }) {
                   {alert.mitre_id}
                 </span>
               )}
+              {(alert.intel_hits || 0) > 0 && (
+                <span
+                  title="Known-bad indicator(s) flagged at detection time"
+                  className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold text-rose-300"
+                >
+                  ⚡ {alert.intel_hits} intel hit{alert.intel_hits > 1 ? "s" : ""}
+                </span>
+              )}
             </div>
           </div>
           <div className="shrink-0 text-right">

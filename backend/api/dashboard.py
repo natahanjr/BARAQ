@@ -22,60 +22,88 @@ def _scope(request: Request) -> str | None:
 
 
 @router.get("/summary")
-def summary(request: Request, db: Session = Depends(get_db_readonly)):
-    return dashboard.dashboard_summary(db, org=_scope(request))
+def summary(
+    request: Request,
+    include_demo: int = Query(0, ge=0, le=1),
+    db: Session = Depends(get_db_readonly),
+):
+    return dashboard.dashboard_summary(db, org=_scope(request), include_demo=bool(include_demo))
 
 
 @router.get("/timeline")
 def timeline(
     request: Request,
     hours: int = Query(24, ge=1, le=720),
+    include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db_readonly),
 ):
+    show_demo = bool(include_demo)
     return {
-        "events": dashboard.event_timeline(db, hours, org=_scope(request)),
-        "alerts": dashboard.alert_timeline(db, hours, org=_scope(request)),
+        "events": dashboard.event_timeline(db, hours, org=_scope(request), include_demo=show_demo),
+        "alerts": dashboard.alert_timeline(db, hours, org=_scope(request), include_demo=show_demo),
     }
 
 
 @router.get("/threat-categories")
-def threat_categories(request: Request, db: Session = Depends(get_db_readonly)):
-    return dashboard.threat_categories(db, org=_scope(request))
+def threat_categories(
+    request: Request,
+    include_demo: int = Query(0, ge=0, le=1),
+    db: Session = Depends(get_db_readonly),
+):
+    return dashboard.threat_categories(db, org=_scope(request), include_demo=bool(include_demo))
 
 
 @router.get("/severity-distribution")
-def severity_distribution(request: Request, db: Session = Depends(get_db_readonly)):
-    return dashboard.severity_distribution(db, org=_scope(request))
+def severity_distribution(
+    request: Request,
+    include_demo: int = Query(0, ge=0, le=1),
+    db: Session = Depends(get_db_readonly),
+):
+    return dashboard.severity_distribution(db, org=_scope(request), include_demo=bool(include_demo))
 
 
 @router.get("/attack-stats")
-def attack_stats(request: Request, db: Session = Depends(get_db_readonly)):
-    return dashboard.attack_stats(db, org=_scope(request))
+def attack_stats(
+    request: Request,
+    include_demo: int = Query(0, ge=0, le=1),
+    db: Session = Depends(get_db_readonly),
+):
+    return dashboard.attack_stats(db, org=_scope(request), include_demo=bool(include_demo))
 
 
 @router.get("/top-attackers")
 def top_attackers(
     request: Request,
     limit: int = Query(5, ge=1, le=50),
+    include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db_readonly),
 ):
-    return dashboard.top_attackers(db, limit, org=_scope(request))
+    return dashboard.top_attackers(db, limit, org=_scope(request), include_demo=bool(include_demo))
 
 
 @router.get("/user-behavior")
 def user_behavior(
     request: Request,
     limit: int = Query(8, ge=1, le=100),
+    include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db_readonly),
 ):
-    return dashboard.user_behavior(db, limit, org=_scope(request))
+    return dashboard.user_behavior(db, limit, org=_scope(request), include_demo=bool(include_demo))
 
 
 @router.get("/detection-methods")
-def detection_methods(request: Request, db: Session = Depends(get_db_readonly)):
-    return dashboard.detection_method_breakdown(db, org=_scope(request))
+def detection_methods(
+    request: Request,
+    include_demo: int = Query(0, ge=0, le=1),
+    db: Session = Depends(get_db_readonly),
+):
+    return dashboard.detection_method_breakdown(db, org=_scope(request), include_demo=bool(include_demo))
 
 
 @router.get("/risk-distribution")
-def risk_distribution(request: Request, db: Session = Depends(get_db_readonly)):
-    return dashboard.risk_distribution(db, org=_scope(request))
+def risk_distribution(
+    request: Request,
+    include_demo: int = Query(0, ge=0, le=1),
+    db: Session = Depends(get_db_readonly),
+):
+    return dashboard.risk_distribution(db, org=_scope(request), include_demo=bool(include_demo))

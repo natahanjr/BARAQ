@@ -289,9 +289,39 @@ DATABASE_DIR = APP_DIR / "database"
 LOG_DIR = APP_DIR / "logs"
 REPORT_DIR = APP_DIR / "reports"
 DOCUMENTATION_DIR = APP_DIR / "documentation"
+DATASET_DIR = APP_DIR / "datasets"
 
-for _d in (DATABASE_DIR, LOG_DIR, REPORT_DIR):
+for _d in (DATABASE_DIR, LOG_DIR, REPORT_DIR, DATASET_DIR):
     _d.mkdir(parents=True, exist_ok=True)
+
+# --------------------------------------------------------------------------
+# Research dataset collector
+# --------------------------------------------------------------------------
+#: Defaults for a new dataset collection session (overridable per session
+#: through the API; see backend/dataset/).
+DATASET_NAME = os.environ.get("BARAQ_DATASET_NAME", "BARAQ_Research_Dataset")
+DATASET_TARGET_EVENTS = int(os.environ.get("BARAQ_DATASET_TARGET_EVENTS", "1000000"))
+DATASET_EVENTS_PER_FILE = int(os.environ.get("BARAQ_DATASET_EVENTS_PER_FILE", "100000"))
+DATASET_EXPORT_INTERVAL_HOURS = int(
+    os.environ.get("BARAQ_DATASET_EXPORT_INTERVAL_HOURS", "24")
+)
+DATASET_FORMAT = os.environ.get("BARAQ_DATASET_FORMAT", "csv")
+DATASET_ENABLED = os.environ.get("BARAQ_DATASET_ENABLED", "true").lower() in (
+    "1", "true", "yes",
+)
+DATASET_ANONYMIZE = os.environ.get("BARAQ_DATASET_ANONYMIZE", "false").lower() in (
+    "1", "true", "yes",
+)
+DATASET_INCLUDE_LABELS = os.environ.get("BARAQ_DATASET_INCLUDE_LABELS", "true").lower() in (
+    "1", "true", "yes",
+)
+#: Events consumed per sweep cycle (rate-limit so normal telemetry is not
+#: impacted by the research store).
+DATASET_COLLECT_BATCH = int(os.environ.get("BARAQ_DATASET_COLLECT_BATCH", "500"))
+#: Rows read per keyset batch while streaming an export.
+DATASET_EXPORT_BATCH = int(os.environ.get("BARAQ_DATASET_EXPORT_BATCH", "10000"))
+DATASET_SCHEMA_VERSION = "v1"
+DATASET_COLLECTOR_VERSION = "v1"
 
 # --------------------------------------------------------------------------
 # Database
@@ -517,6 +547,70 @@ ML_DETECTION_WEIGHT = 0.4
 RISK_LEVEL_MEDIUM = 40
 RISK_LEVEL_HIGH = 65
 RISK_LEVEL_CRITICAL = 85
+
+# --------------------------------------------------------------------------
+# Entity Risk-Based Alerting (RBA)
+# --------------------------------------------------------------------------
+# Persistent risk accumulates per entity (user / host / ip) across every
+# detection and decays exponentially over time; crossing a threshold raises
+# an escalated "entity notable" alert that links the contributing findings.
+ENTITY_RISK_ENABLED = os.environ.get("BARAQ_ENTITY_RISK", "1").lower() not in (
+    "0", "false", "no", "off",
+)
+#: Exponential-decay half-life in days (score 90 today -> ~45 after one
+#: half-life, -> ~22 after two). 7 days mirrors the default risk window.
+ENTITY_RISK_DECAY_DAYS = max(
+    0.1, float(os.environ.get("BARAQ_ENTITY_RISK_DECAY_DAYS", "7"))
+)
+#: Score thresholds at which an entity becomes MEDIUM / HIGH / CRITICAL.
+ENTITY_RISK_LEVEL_MEDIUM = float(
+    os.environ.get("BARAQ_ENTITY_RISK_MEDIUM", str(RISK_LEVEL_MEDIUM))
+)
+ENTITY_RISK_LEVEL_HIGH = float(
+    os.environ.get("BARAQ_ENTITY_RISK_HIGH", str(RISK_LEVEL_HIGH))
+)
+ENTITY_RISK_LEVEL_CRITICAL = float(
+    os.environ.get("BARAQ_ENTITY_RISK_CRITICAL", str(RISK_LEVEL_CRITICAL))
+)
+#: Per-rule risk modifiers ("risk modifiers"): JSON mapping rule_id ->
+#: multiplier applied to that rule's score contribution, e.g.
+#:   BARAQ_RULE_RISK_WEIGHTS='{"brute_force": 2.0, "usb_device": 0.5}'
+RULE_RISK_WEIGHTS: dict = {}
+try:
+    _risk_weights_raw = os.environ.get("BARAQ_RULE_RISK_WEIGHTS", "").strip()
+    if _risk_weights_raw:
+        _parsed_weights = json.loads(_risk_weights_raw)
+        if isinstance(_parsed_weights, dict):
+            RULE_RISK_WEIGHTS = {
+                str(k): float(v) for k, v in _parsed_weights.items()
+            }
+except (ValueError, TypeError) as _exc:  # noqa: PERF203 - config errors surface at boot
+    raise RuntimeError(
+        f"BARAQ_RULE_RISK_WEIGHTS is not valid JSON: {_exc}"
+    ) from _exc
+#: Reopen window for entity-risk notables: an escalated notable alert for an
+#: entity is only opened once within this window even if the score keeps
+#: climbing (updates refresh the open alert instead of spamming).
+ENTITY_RISK_NOTABLE_WINDOW_HOURS = max(
+    1, int(os.environ.get("BARAQ_ENTITY_RISK_NOTABLE_WINDOW_HOURS", "6"))
+)
+
+# --------------------------------------------------------------------------
+# Declarative correlation engine
+# --------------------------------------------------------------------------
+#: Directory of YAML correlation rules (see backend/detection/correlation.py).
+#: Every ``*.yml`` / ``*.yaml`` file here is loaded and evaluated by the
+#: engine; analysts add multi-stage detection without writing code.
+CORRELATION_RULES_DIR = Path(
+    os.environ.get(
+        "CORRELATION_RULES_DIR",
+        str(
+            (BUNDLE_DIR / "detection" / "correlation_rules")
+            if FROZEN and (BUNDLE_DIR / "detection" / "correlation_rules").exists()
+            else APP_DIR / "backend" / "detection" / "correlation_rules"
+        ),
+    )
+)
 
 # --------------------------------------------------------------------------
 # Server

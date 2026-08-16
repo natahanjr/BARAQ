@@ -101,18 +101,105 @@ def list_incidents(
     status: IncidentStatus | None = None,
     severity: IncidentSeverity | None = None,
     limit: int = Query(50, ge=1, le=200),
+    include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db),
 ):
     scope = tenant_scope(request)
     stmt = _with_links(select(Incident).order_by(Incident.created_at.desc()).limit(limit))
     if scope is not None:
         stmt = stmt.where(Incident.org == scope)
+    if not include_demo:
+        stmt = stmt.where(Incident.demo.is_(False))
     if status:
         stmt = stmt.where(Incident.status == status.value)
     if severity:
         stmt = stmt.where(Incident.severity == severity.value)
     rows = db.scalars(stmt).all()
     return {"items": [i.to_dict() for i in rows]}
+
+
+# P1-13: first-response SLA targets per severity (minutes). The same ladder
+# drives the Dashboard's aging panel, so the numbers never diverge.
+SLA_MINUTES = {"critical": 15, "high": 60, "medium": 120, "low": 240}
+ACTIVE_STATUSES = ("open", "acknowledged", "investigating", "contained")
+
+
+@router.get("/workload")
+def workload(request: Request, db: Session = Depends(get_db)):
+    """Analyst workload + SLA posture for open cases (backend-computed).
+
+    Per-owner open/overdue counts, per-severity SLA buckets (within /
+    overdue), aging bands and first-response time statistics derived from
+    the incident ``responded_at`` clock.
+    """
+    scope = tenant_scope(request)
+    stmt = _with_links(select(Incident).order_by(Incident.created_at.desc()))
+    if scope is not None:
+        stmt = stmt.where(Incident.org == scope)
+    rows = db.scalars(stmt).all()
+
+    now = datetime.now(timezone.utc)
+    active = [i for i in rows if i.status in ACTIVE_STATUSES and not i.demo]
+
+    owners: dict[str, dict] = {}
+    sla: dict[str, dict] = {
+        sev: {"open": 0, "within": 0, "overdue": 0} for sev in SLA_MINUTES
+    }
+    aging = {"0-15": 0, "15-60": 0, "60-240": 0, "240+": 0}
+
+    for incident in active:
+        owner = incident.owner or "unassigned"
+        bucket = owners.setdefault(
+            owner, {"owner": owner, "open": 0, "overdue": 0}
+        )
+        bucket["open"] += 1
+        anchor = incident.created_at or incident.opened_at
+        age_minutes = (now - anchor).total_seconds() / 60 if anchor else 0.0
+        if age_minutes <= 15:
+            aging["0-15"] += 1
+        elif age_minutes <= 60:
+            aging["15-60"] += 1
+        elif age_minutes <= 240:
+            aging["60-240"] += 1
+        else:
+            aging["240+"] += 1
+        sev = incident.severity if incident.severity in SLA_MINUTES else "high"
+        bucket_sla = sla[sev]
+        bucket_sla["open"] += 1
+        if age_minutes > SLA_MINUTES[sev]:
+            bucket_sla["overdue"] += 1
+            bucket["overdue"] += 1
+        else:
+            bucket_sla["within"] += 1
+
+    # First-response times (minutes) for every engaged case.
+    response_times = []
+    for incident in rows:
+        anchor = incident.created_at or incident.opened_at
+        if incident.responded_at and anchor:
+            delta = (incident.responded_at - anchor).total_seconds() / 60
+            if delta >= 0:
+                response_times.append(delta)
+
+    response_stats = {"count": 0, "avg_minutes": None, "median_minutes": None, "p95_minutes": None}
+    if response_times:
+        ordered = sorted(response_times)
+        n = len(ordered)
+        response_stats = {
+            "count": n,
+            "avg_minutes": round(sum(ordered) / n, 1),
+            "median_minutes": round(ordered[n // 2], 1),
+            "p95_minutes": round(ordered[min(n - 1, int(0.95 * n))], 1),
+        }
+
+    return {
+        "active_total": len(active),
+        "unassigned": owners.get("unassigned", {}).get("open", 0),
+        "owners": sorted(owners.values(), key=lambda o: -o["open"]),
+        "sla": sla,
+        "aging": aging,
+        "response": response_stats,
+    }
 
 
 @router.get("/{incident_id}")
@@ -125,6 +212,41 @@ def get_incident(incident_id: int, request: Request, db: Session = Depends(get_d
     if not incident:
         raise HTTPException(404, "Incident not found")
     return incident.to_dict(include_links=True)
+
+
+@router.get("/{incident_id}/investigation")
+def incident_investigation(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Phase-1 investigation enrichment for an incident.
+
+    Aggregates everything the analyst needs from the incident's linked
+    alerts: evidence events, files / processes / network / registry
+    entities, the who-what-when-where-how-why summary, the process tree
+    and a full-confidence recomputation with factor breakdown.
+    """
+    scope = tenant_scope(request)
+    stmt = _with_links(select(Incident)).where(Incident.id == incident_id)
+    if scope is not None:
+        stmt = stmt.where(Incident.org == scope)
+    incident = db.scalars(stmt).first()
+    if not incident:
+        raise HTTPException(404, "Incident not found")
+
+    from backend.investigation.confidence import incident_confidence
+    from backend.investigation.enrichment import enrich_incident
+
+    enrichment = enrich_incident(db, incident)
+    confidence = incident_confidence(db, incident, enrichment=enrichment)
+    return {
+        "incident_id": incident.id,
+        "ref": f"INC-{incident.id:04d}",
+        "title": incident.title,
+        "confidence": confidence,
+        "enrichment": enrichment,
+    }
 
 
 @router.post("", dependencies=[Depends(require_admin)])
@@ -206,6 +328,22 @@ def update_incident(
             incident.closed_at = now
         if body.status.value in ("open", "investigating", "contained"):
             incident.closed_at = None
+        # First-response SLA clock: the moment an analyst engages the case.
+        if (
+            body.status.value in ("investigating", "contained", "resolved", "closed")
+            and incident.responded_at is None
+        ):
+            incident.responded_at = now
+            changes.append("responded_at->set")
+
+    # Assigning an owner also counts as a first response (the case is engaged).
+    if (
+        body.owner
+        and body.owner != incident.owner
+        and incident.responded_at is None
+    ):
+        incident.responded_at = datetime.now(timezone.utc)
+        changes.append("responded_at->set")
 
     if changes:
         db.add(IncidentComment(

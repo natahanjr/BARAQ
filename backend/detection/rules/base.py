@@ -24,6 +24,7 @@ class DetectionResult:
         "event_ids",
         "mitre_id",
         "recommendation",
+        "correlation_id",
     )
 
     def __init__(
@@ -37,6 +38,7 @@ class DetectionResult:
         event_ids: list[int],
         mitre_id: str = "T0000",
         recommendation: str = "",
+        correlation_id: str = "",
     ):
         self.rule = rule
         self.name = name
@@ -47,6 +49,7 @@ class DetectionResult:
         self.event_ids = event_ids
         self.mitre_id = mitre_id
         self.recommendation = recommendation
+        self.correlation_id = correlation_id
 
     def to_dict(self) -> dict:
         return {
@@ -59,6 +62,7 @@ class DetectionResult:
             "event_ids": self.event_ids,
             "mitre_id": self.mitre_id,
             "recommendation": self.recommendation,
+            "correlation_id": self.correlation_id,
         }
 
 

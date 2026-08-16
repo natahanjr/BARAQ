@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api.js";
+import { api, isAdmin } from "../api.js";
 import Card from "../components/Card.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import Pagination from "../components/Pagination.jsx";
@@ -10,8 +10,8 @@ const EVENTS_PAGE_SIZE = 50;
 
 function EventRow({ event }) {
   const categoryColor = {
-    Authentication: "border-blue-500/40 bg-blue-500/10",
-    "Account Management": "border-purple-500/40 bg-purple-500/10",
+    Authentication: "border-cyan-400/40 bg-cyan-500/10",
+    "Account Management": "border-violet-500/40 bg-violet-500/10",
     Service: "border-amber-500/40 bg-amber-500/10",
     PowerShell: "border-emerald-500/40 bg-emerald-500/10",
     Other: "border-slate-500/40 bg-slate-500/10",
@@ -452,7 +452,7 @@ function NetworkRow({ connection }) {
   const [showNote, setShowNote] = useState(false);
   const stateColor = {
     ESTABLISHED: "bg-emerald-500/15 text-emerald-400",
-    LISTEN: "bg-blue-500/15 text-blue-400",
+    LISTEN: "bg-cyan-500/15 text-cyan-400",
     SYN_SENT: "bg-amber-500/15 text-amber-400",
     TIME_WAIT: "bg-slate-500/15 text-slate-400",
   };
@@ -538,6 +538,450 @@ function NetworkRow({ connection }) {
   );
 }
 
+function DatasetCollectorPanel() {
+  const [data, setData] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [exportsList, setExportsList] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const [expanded, setExpanded] = useState(null);
+
+  const admin = isAdmin();
+
+  const load = () => {
+    Promise.all([
+      api.datasetStatus(),
+      api.datasetStats().catch(() => null),
+      api.datasetExports(20).catch(() => null),
+    ])
+      .then(([st, sts, ex]) => {
+        setData(st);
+        setStats(sts);
+        setExportsList(ex);
+      })
+      .catch((e) => setError(e.message));
+  };
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 15000);
+    return () => clearInterval(t);
+  }, []);
+
+  const act = (fn, label, okMsg) => {
+    setBusy(label);
+    setMsg("");
+    fn()
+      .then(() => {
+        setMsg(okMsg);
+        load();
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setBusy(""));
+  };
+
+  const saveConfig = (e) => {
+    e.preventDefault();
+    const form = new FormData(e.target);
+    const body = {
+      name: form.get("name"),
+      target_events: Number(form.get("target_events")),
+      events_per_file: Number(form.get("events_per_file")),
+      export_interval_hours: Number(form.get("export_interval_hours")),
+      anonymize: form.get("anonymize") === "on",
+      include_labels: form.get("include_labels") === "on",
+    };
+    act(() => api.datasetUpdateConfig(body), "saving", "Settings saved");
+  };
+
+  if (!data) {
+    return (
+      <Card>
+        <Loading label="Loading dataset collector" />
+      </Card>
+    );
+  }
+
+  const coll = data.collection;
+  const statusColor =
+    coll?.status === "complete"
+      ? "bg-emerald-500/15 text-emerald-400"
+      : coll?.status === "paused"
+        ? "bg-amber-500/15 text-amber-400"
+        : coll?.status === "active"
+          ? "bg-cyan-500/15 text-cyan-400"
+          : "bg-slate-500/15 text-slate-400";
+
+  return (
+    <div className="space-y-4">
+      {error && <ErrorBanner message={error} onRetry={load} />}
+      {msg && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300">
+          {msg}
+        </div>
+      )}
+
+      {!data.enabled ? (
+        <EmptyState
+          title="Dataset collector disabled"
+          subtitle="Enable it in backend config to start collecting research data"
+          icon="🗄"
+        />
+      ) : (
+        <>
+          <Card>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">{coll.name}</p>
+                <p className="mt-0.5 text-[11px] text-slate-500">
+                  Collector v{data.collector_version} · Format: {coll.format} · Schema v
+                  {coll.schema_version ?? "—"}
+                </p>
+              </div>
+              <span className={`rounded px-2.5 py-1 text-xs font-semibold ${statusColor}`}>
+                {coll.status?.toUpperCase() || "INACTIVE"}
+              </span>
+            </div>
+
+            <div className="mt-4">
+              <div className="flex items-baseline justify-between text-xs">
+                <span className="text-slate-400">
+                  {coll.total_events.toLocaleString()} / {coll.target_events.toLocaleString()} events
+                </span>
+                <span className="font-semibold text-cyan-300">{data.progress_percent}%</span>
+              </div>
+              <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500 transition-all"
+                  style={{ width: `${Math.min(100, Math.max(0, data.progress_percent))}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+              <div className="rounded-lg bg-black/20 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Remaining
+                </p>
+                <p className="mt-0.5 font-mono text-slate-200">
+                  {data.remaining.toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded-lg bg-black/20 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Parts exported
+                </p>
+                <p className="mt-0.5 font-mono text-slate-200">{coll.parts ?? 0}</p>
+              </div>
+              <div className="rounded-lg bg-black/20 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Next export
+                </p>
+                <p className="mt-0.5 font-mono text-slate-200">
+                  {data.next_export
+                    ? new Date(data.next_export).toLocaleString([], {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "—"}
+                </p>
+              </div>
+              <div className="rounded-lg bg-black/20 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Anonymized
+                </p>
+                <p className="mt-0.5 font-mono text-slate-200">{coll.anonymize ? "Yes" : "No"}</p>
+              </div>
+            </div>
+
+            {admin && (
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-700/40 pt-4">
+                {coll.status === "paused" && (
+                  <button
+                    type="button"
+                    disabled={busy === "resume"}
+                    onClick={() => act(() => api.datasetResume(), "resume", "Collection resumed")}
+                    className="rounded-lg bg-emerald-600/80 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"
+                  >
+                    {busy === "resume" ? "Resuming…" : "Resume"}
+                  </button>
+                )}
+                {(coll.status === "active" || coll.status === "complete") && (
+                  <button
+                    type="button"
+                    disabled={busy === "pause"}
+                    onClick={() => act(() => api.datasetPause(), "pause", "Collection paused")}
+                    className="rounded-lg bg-amber-600/80 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
+                  >
+                    {busy === "pause" ? "Pausing…" : "Pause"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={busy === "export"}
+                  onClick={() =>
+                    act(() => api.datasetExportNow(), "export", "Export started in background")
+                  }
+                  className="rounded-lg bg-cyan-600/80 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-600 disabled:opacity-50"
+                >
+                  {busy === "export" ? "Exporting…" : "Export now"}
+                </button>
+              </div>
+            )}
+          </Card>
+
+          <Card>
+            <p className="text-sm font-semibold text-white">Dataset settings</p>
+            <form onSubmit={saveConfig} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block text-xs">
+                <span className="font-semibold uppercase tracking-wider text-slate-500">
+                  Dataset name
+                </span>
+                <input
+                  name="name"
+                  defaultValue={coll.name}
+                  className="mt-1 w-full rounded-lg border border-slate-700/60 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-500/50"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="font-semibold uppercase tracking-wider text-slate-500">
+                  Target events
+                </span>
+                <input
+                  name="target_events"
+                  type="number"
+                  min="1"
+                  defaultValue={coll.target_events}
+                  className="mt-1 w-full rounded-lg border border-slate-700/60 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-500/50"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="font-semibold uppercase tracking-wider text-slate-500">
+                  Events per file (split boundary)
+                </span>
+                <input
+                  name="events_per_file"
+                  type="number"
+                  min="1"
+                  defaultValue={coll.events_per_file}
+                  className="mt-1 w-full rounded-lg border border-slate-700/60 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-500/50"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="font-semibold uppercase tracking-wider text-slate-500">
+                  Export interval (hours)
+                </span>
+                <input
+                  name="export_interval_hours"
+                  type="number"
+                  min="1"
+                  defaultValue={coll.export_interval_hours}
+                  className="mt-1 w-full rounded-lg border border-slate-700/60 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-500/50"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-xs text-slate-300">
+                <input
+                  name="anonymize"
+                  type="checkbox"
+                  defaultChecked={coll.anonymize}
+                  className="h-4 w-4 accent-cyan-500"
+                />
+                Anonymize hosts/users (pseudonyms)
+              </label>
+              <label className="flex items-center gap-2 text-xs text-slate-300">
+                <input
+                  name="include_labels"
+                  type="checkbox"
+                  defaultChecked={coll.include_labels}
+                  className="h-4 w-4 accent-cyan-500"
+                />
+                Include alert verdict labels
+              </label>
+              {admin && (
+                <button
+                  type="submit"
+                  disabled={busy === "saving"}
+                  className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-600 disabled:opacity-50 sm:col-span-2 sm:justify-self-start"
+                >
+                  {busy === "saving" ? "Saving…" : "Save settings"}
+                </button>
+              )}
+            </form>
+          </Card>
+
+          {stats && (
+            <Card>
+              <p className="text-sm font-semibold text-white">Composition</p>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-3 lg:grid-cols-5">
+                <div className="rounded-lg bg-black/20 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Hosts
+                  </p>
+                  <p className="mt-0.5 font-mono text-slate-200">{stats.hosts ?? 0}</p>
+                </div>
+                <div className="rounded-lg bg-black/20 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Users
+                  </p>
+                  <p className="mt-0.5 font-mono text-slate-200">{stats.users ?? 0}</p>
+                </div>
+                <div className="rounded-lg bg-black/20 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Alerts
+                  </p>
+                  <p className="mt-0.5 font-mono text-slate-200">{stats.alerts ?? 0}</p>
+                </div>
+                <div className="rounded-lg bg-black/20 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Incidents
+                  </p>
+                  <p className="mt-0.5 font-mono text-slate-200">{stats.incidents ?? 0}</p>
+                </div>
+                <div className="rounded-lg bg-black/20 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    MITRE techniques
+                  </p>
+                  <p className="mt-0.5 font-mono text-slate-200">
+                    {Object.keys(stats.mitre_techniques ?? {}).length}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {Object.entries(stats.by_event_type ?? {}).map(([k, v]) => (
+                  <span
+                    key={k}
+                    className="rounded bg-slate-800/80 px-2.5 py-1 font-mono text-[11px] text-slate-300"
+                  >
+                    {k}: <strong className="text-cyan-300">{v.toLocaleString()}</strong>
+                  </span>
+                ))}
+              </div>
+              {(stats.first_timestamp || stats.last_timestamp) && (
+                <p className="mt-3 text-[11px] text-slate-500">
+                  Range:{" "}
+                  <span className="font-mono text-slate-300">
+                    {stats.first_timestamp
+                      ? new Date(stats.first_timestamp).toLocaleString()
+                      : "—"}
+                  </span>{" "}
+                  →{" "}
+                  <span className="font-mono text-slate-300">
+                    {stats.last_timestamp ? new Date(stats.last_timestamp).toLocaleString() : "—"}
+                  </span>
+                </p>
+              )}
+            </Card>
+          )}
+
+          <Card>
+            <p className="text-sm font-semibold text-white">Export history</p>
+            {!exportsList || exportsList.items.length === 0 ? (
+              <p className="mt-3 text-xs text-slate-500">No exports yet.</p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {exportsList.items.map((e) => (
+                  <div key={e.id} className="rounded-lg border border-slate-700/40 bg-black/20 px-3 py-2.5">
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 text-left"
+                      onClick={() => {
+                        if (expanded === e.id) {
+                          setExpanded(null);
+                        } else {
+                          setExpanded(e.id);
+                          api
+                            .datasetExportDetail(e.id)
+                            .then((detail) => {
+                              setExportsList((prev) =>
+                                prev
+                                  ? { ...prev, items: prev.items.map((x) => (x.id === detail.id ? detail : x)) }
+                                  : prev
+                              );
+                            })
+                            .catch((err) => setError(err.message));
+                        }
+                      }}
+                    >
+                      <span className="text-xs text-slate-300">
+                        <span className="font-mono font-semibold text-cyan-300">#{e.id}</span>{" "}
+                        <span className="text-slate-500">({e.trigger})</span>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
+                            e.status === "completed"
+                              ? "bg-emerald-500/15 text-emerald-400"
+                              : e.status === "failed"
+                                ? "bg-rose-500/15 text-rose-400"
+                                : "bg-amber-500/15 text-amber-400"
+                          }`}
+                        >
+                          {e.status.toUpperCase()}
+                        </span>
+                        <span className="font-mono text-[11px] text-slate-400">
+                          {e.event_count.toLocaleString()} events · {e.files_count} part
+                          {e.files_count === 1 ? "" : "s"}
+                        </span>
+                      </span>
+                    </button>
+                    {expanded === e.id && (
+                      <div className="mt-2 border-t border-slate-700/40 pt-2 text-[11px] text-slate-400">
+                        <p>
+                          Started:{" "}
+                          <span className="font-mono text-slate-300">
+                            {e.started_at ? new Date(e.started_at).toLocaleString() : "—"}
+                          </span>{" "}
+                          · Finished:{" "}
+                          <span className="font-mono text-slate-300">
+                            {e.completed_at ? new Date(e.completed_at).toLocaleString() : "—"}
+                          </span>
+                        </p>
+                        {e.error_message && (
+                          <p className="mt-1 text-rose-400">Error: {e.error_message}</p>
+                        )}
+                        <div className="mt-2 space-y-1.5">
+                          {(e.files ?? []).map((f) => (
+                            <div
+                              key={f.id}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-800/60 px-2.5 py-1.5"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate font-mono text-slate-200">{f.filename}</p>
+                                <p className="mt-0.5 text-[10px] text-slate-500">
+                                  {f.event_count.toLocaleString()} events ·{" "}
+                                  <span className="font-mono">sha256:{f.sha256.slice(0, 16)}…</span>
+                                </p>
+                              </div>
+                              {admin && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    api.datasetDownload(f.id).catch((err) => setError(err.message))
+                                  }
+                                  className="rounded bg-cyan-600/70 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-cyan-600"
+                                >
+                                  Download
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Telemetry() {
   const [tab, setTab] = useState("processes");
   const [processes, setProcesses] = useState([]);
@@ -594,6 +1038,9 @@ export default function Telemetry() {
               Events{eventsTotal != null ? ` (${eventsTotal.toLocaleString()})` : ""}
             </span>
           </button>
+          <button type="button" onClick={() => setTab("dataset")} className={tabClass(tab === "dataset")}>
+            Dataset Collector
+          </button>
           <button
             type="button"
             onClick={load}
@@ -608,6 +1055,8 @@ export default function Telemetry() {
 
       {tab === "events" ? (
         <EventsPanel />
+      ) : tab === "dataset" ? (
+        <DatasetCollectorPanel />
       ) : (
         <>
           {loading && <Loading label="Loading telemetry" />}

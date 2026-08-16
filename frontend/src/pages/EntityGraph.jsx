@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import {
   Background,
@@ -19,21 +19,21 @@ import { Loading, EmptyState, ErrorBanner } from "../components/Feedback.jsx";
 import { NetworkIcon, RefreshIcon } from "../components/icons.jsx";
 
 const KINDS = {
-  user: { label: "User", color: "#38bdf8" },
-  device: { label: "Device", color: "#818cf8" },
+  user: { label: "User", color: "#00f0ff" },
+  device: { label: "Device", color: "#7b61ff" },
   process: { label: "Process", color: "#f472b6" },
   ip: { label: "IP", color: "#fb923c" },
   domain: { label: "Domain", color: "#34d399" },
   file: { label: "File", color: "#e879f9" },
   technique: { label: "Technique", color: "#a3e635" },
-  threat_actor: { label: "Threat Actor", color: "#f87171" },
+  threat_actor: { label: "Threat Actor", color: "#ff3d71" },
 };
 
 const RISK_COLORS = {
-  CRITICAL: "#ef4444",
+  CRITICAL: "#ff3d71",
   HIGH: "#f97316",
-  MEDIUM: "#f59e0b",
-  LOW: "#10b981",
+  MEDIUM: "#ffb300",
+  LOW: "#00e676",
 };
 
 //: Keep the DOM light on busy graphs: max rendered edges (the backend already
@@ -90,12 +90,12 @@ const EntityNodeWidget = memo(function EntityNodeWidget({ data, selected }) {
     <div
       className="relative w-[168px] rounded-lg border bg-slate-900 px-2.5 py-2"
       style={{
-        borderColor: selected ? "#22d3ee" : riskColor,
+        borderColor: selected ? "#00f0ff" : riskColor,
         outline: selected ? "2px solid rgba(34,211,238,0.35)" : "none",
       }}
     >
-      <Handle type="target" position={Position.Left} style={{ background: "#475569" }} />
-      <Handle type="source" position={Position.Right} style={{ background: "#475569" }} />
+      <Handle type="target" position={Position.Left} style={{ background: "#4a5578" }} />
+      <Handle type="source" position={Position.Right} style={{ background: "#4a5578" }} />
       <div className="flex items-center justify-between gap-2">
         <span
           className="flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold text-slate-950"
@@ -106,6 +106,14 @@ const EntityNodeWidget = memo(function EntityNodeWidget({ data, selected }) {
         <span className="font-mono text-[10px] font-semibold text-slate-400">
           {data.risk_score?.toFixed(0) ?? "—"}
         </span>
+        {data.rba && (
+          <span
+            title={`RBA accumulated risk: ${data.rba.score} (${data.rba.risk_level}) across ${data.rba.alerts_count} detection(s)`}
+            className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-amber-300"
+          >
+            RBA {Number(data.rba.score).toFixed(0)}
+          </span>
+        )}
       </div>
       <p className="mt-1.5 truncate text-xs font-medium text-slate-100" title={data.name}>
         {data.name}
@@ -150,7 +158,7 @@ const GraphCanvas = memo(function GraphCanvas({ nodes, edges, onNodeClick }) {
       colorMode="dark"
       proOptions={{ hideAttribution: true }}
     >
-      <Background gap={24} color="#1e293b" />
+      <Background gap={24} color="#131b2a" />
       <Controls showInteractive={false} />
     </ReactFlow>
   );
@@ -212,6 +220,25 @@ export default function EntityGraph() {
   const [selected, setSelected] = useState(null);
   const [profile, setProfile] = useState(null);
   const [profileError, setProfileError] = useState("");
+  const rbaRef = useRef({});
+
+  const rbaKey = (kind, name) =>
+    `${kind === "host" ? "device" : kind}:${String(name || "").toLowerCase()}`;
+
+  const loadRbaIndex = useCallback(() => {
+    return api
+      .rbaEntities({ limit: 500 })
+      .then((res) => {
+        const idx = {};
+        for (const r of res.entities || []) {
+          idx[rbaKey(r.entity_kind, r.entity_name)] = r;
+        }
+        rbaRef.current = idx;
+      })
+      .catch(() => {
+        /* RBA overlay is non-fatal */
+      });
+  }, []);
 
   const applyGraph = useCallback((data, centerKey) => {
     const gf = data.nodes || [];
@@ -230,7 +257,7 @@ export default function EntityGraph() {
         id: keyOf(n),
         type: "entity",
         position: layout.get(keyOf(n)) || { x: 0, y: 0 },
-        data: n,
+        data: { ...n, rba: rbaRef.current[rbaKey(n.kind, n.name)] || null },
       })),
     );
     setEdges(
@@ -243,9 +270,9 @@ export default function EntityGraph() {
           target,
           type: "smoothstep",
           label: String(e.rel).toUpperCase(),
-          labelStyle: { fontSize: 9, fill: "#94a3b8" },
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#334155" },
-          style: { stroke: "#334155", strokeWidth: 1.2 },
+          labelStyle: { fontSize: 9, fill: "#8892b0" },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#4a5578" },
+          style: { stroke: "#4a5578", strokeWidth: 1.2 },
         };
       }),
     );
@@ -292,6 +319,7 @@ export default function EntityGraph() {
       .entityStatus()
       .then(async (st) => {
         setStatus(st);
+        await loadRbaIndex();
         const top = st.top_risk && st.top_risk[0];
         if (top) {
           await loadGraph(top.kind, top.name);
@@ -371,6 +399,7 @@ export default function EntityGraph() {
   }
 
   const entity = profile?.entity;
+  const rbaRow = entity ? rbaRef.current[rbaKey(entity.kind, entity.name)] : null;
 
   const byKind = status?.by_kind ? Object.entries(status.by_kind).sort((a, b) => b[1] - a[1]) : [];
   const kindChips = byKind
@@ -548,6 +577,32 @@ export default function EntityGraph() {
                 </div>
                 <RiskRing score={entity.risk_score} level={entity.risk_level} />
               </div>
+
+              {rbaRow && (
+                <div className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-300">
+                      RBA accumulated risk
+                    </p>
+                    <span className="font-mono text-xs font-semibold text-amber-200">
+                      {Number(rbaRow.score).toFixed(1)}{" "}
+                      <span className="text-[9px] uppercase opacity-70">{rbaRow.risk_level}</span>
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    {rbaRow.alerts_count} contributing detection(s)
+                    {rbaRow.last_escalated_at
+                      ? ` · last escalated ${new Date(rbaRow.last_escalated_at).toLocaleString()}`
+                      : ""}
+                  </p>
+                  <Link
+                    to={`/rba?kind=${encodeURIComponent(rbaRow.entity_kind)}&name=${encodeURIComponent(rbaRow.entity_name)}`}
+                    className="mt-1.5 inline-block text-[11px] font-semibold text-cyan-400 hover:text-cyan-300"
+                  >
+                    Open risk profile →
+                  </Link>
+                </div>
+              )}
 
               {Object.keys(entity.properties || {}).length > 0 && (
                 <div className="mt-4">

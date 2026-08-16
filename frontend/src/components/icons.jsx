@@ -48,6 +48,15 @@ export function InvestigationIcon(props) {
   );
 }
 
+export function SearchIcon(props) {
+  return (
+    <Icon {...props}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+    </Icon>
+  );
+}
+
 export function EventsIcon(props) {
   return (
     <Icon {...props}>
@@ -252,6 +261,15 @@ export function MoonIcon(props) {
   );
 }
 
+export function BellIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </Icon>
+  );
+}
+
 export function CommandIcon(props) {
   return (
     <Icon {...props}>
@@ -315,6 +333,35 @@ export function AgentIcon(props) {
       <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2Z" />
       <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
       <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+    </Icon>
+  );
+}
+
+export function RiskShieldIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M12 2 4 5v6c0 5.25 3.4 10.14 8 11 4.6-.86 8-5.75 8-11V5l-8-3Z" />
+      <path d="M12 8v4" />
+      <path d="M12 16h.01" />
+    </Icon>
+  );
+}
+
+export function RulesIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M9 11V6a3 3 0 0 1 6 0v5" />
+      <path d="M6 11h12a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2Z" />
+      <path d="M12 15v.01" />
+    </Icon>
+  );
+}
+
+export function IntelIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M4 12h2l2.5-6 3 10 2.5-6H20" />
+      <path d="M4 4h16v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4Z" />
     </Icon>
   );
 }

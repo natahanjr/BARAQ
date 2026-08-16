@@ -18,18 +18,24 @@ from backend.api import (
     alerts,
     assistant,
     auth,
+    automation,
     compliance,
     dashboard,
+    dataset,
     endpoints,
     evaluation,
     events,
     graph,
+    hunting,
     incidents,
     intel,
     integrations,
     investigation,
+    rba,
     reports,
     realtime,
+    saved,
+    search,
     system,
 )
 from backend.auth import verify_token
@@ -105,6 +111,11 @@ def _scheduler_loop(interval_seconds: int = 15):
     while not _scheduler_stop.is_set():
         try:
             db = SessionLocal()
+            # Production partition for the whole cycle: detection, RBA,
+            # entity-risk escalation and ML all query on this session, and
+            # every query must see production data only (demo/test telemetry
+            # is excluded unless a demo run explicitly opts in).
+            db.info["baraq_demo"] = False
             try:
                 from sqlalchemy import func, select
 
@@ -137,6 +148,32 @@ def _scheduler_loop(interval_seconds: int = 15):
                 from backend.realtime import publish_status
 
                 publish_status({"summary": dashboard.dashboard_summary(db)})
+
+                # Dataset collector: consume new telemetry into the research
+                # store every cycle (batched, never blocks ingestion).
+                try:
+                    from backend.dataset.scheduler import dataset_sweep
+
+                    swept = dataset_sweep(db)
+                    if swept.get("collected"):
+                        logger.info(
+                            "Dataset collector: %d event(s) collected (total %d)",
+                            swept["collected"], swept["total"],
+                        )
+                    if swept.get("target_reached"):
+                        logger.info("Dataset collector: target reached, collection complete")
+                except Exception:  # noqa: BLE001
+                    logger.exception("Dataset sweep failed")
+
+                if counter % 240 == 0:  # every ~1 hour: dataset auto-export check
+                    try:
+                        from backend.dataset.scheduler import dataset_maybe_export
+
+                        due = dataset_maybe_export(db)
+                        if due.get("due"):
+                            logger.info("Dataset auto-export ran: %s", due.get("result", {}).get("status"))
+                    except Exception:  # noqa: BLE001
+                        logger.exception("Dataset auto-export check failed")
                 if counter % 20 == 0:
                     dashboard.snapshot(db)
                 if counter % 4 == 0 and get_detector().is_ready:
@@ -153,32 +190,69 @@ def _scheduler_loop(interval_seconds: int = 15):
                                     "ML never trained; initial auto-training on %d events",
                                     total_events,
                                 )
-                                get_detector().train(db, hours=24, validate=False)
+                                get_detector().train(db, hours=None, validate=False)
                         else:
                             logger.info("ML model stale (%s); retraining", reason)
-                            get_detector().train(db, hours=24, validate=False)
-                # Roadmap 4.1 - online learning: every ~30 min check PSI drift
-                # against the baselines; on "drift" retrain on the recent
-                # window so the baseline follows the environment.
-                if counter % 120 == 0 and get_detector().is_ready:
-                    try:
-                        from backend.ml.drift import check_drift
+                            get_detector().train(db, hours=None, validate=False)
+                
+                # RBA - Correlate alerts into incidents
+                from backend.detection.rba import RBAManager
+                rba = RBAManager(db)
+                rba.process_all_hosts(org="")
+                
+                # Entity RBA - decay accumulated risk, raise escalated
+                # notables for entities above threshold.
+                try:
+                    from backend.config import ENTITY_RISK_ENABLED
+                    from backend.risk.entity_risk import EntityRiskManager
 
-                        drift = check_drift(db, hours=12)
-                        if drift.get("status") == "drift":
-                            logger.warning("ML drift detected; incremental retrain")
-                            get_detector().train(db, hours=6, validate=False, kind="drift")
-                        elif drift.get("status") == "watch":
-                            logger.info("ML drift watch; incremental retrain")
-                            get_detector().train(db, hours=6, validate=False, kind="incremental")
-                    except Exception:  # noqa: BLE001 - drift must not wedge the loop
-                        logger.exception("ML drift check failed")
+                    if ENTITY_RISK_ENABLED:
+                        risk = EntityRiskManager(db)
+                        if counter % 4 == 0:
+                            risk.decay()
+                        if counter % 6 == 0:
+                            # Backfill: fold recent alerts into the risk store
+                            # (idempotent - alerts already reflected are skipped),
+                            # so entities keep accruing risk even when a detection
+                            # cycle misses the alert-creation hook.
+                            risk.sweep_entities_from_events(hours=24, org="")
+                        notables = risk.escalate(org="")
+                        if notables:
+                            from backend.realtime import publish_alert
+
+                            for notable in notables:
+                                try:
+                                    publish_alert(notable.to_dict())
+                                except Exception:  # noqa: BLE001
+                                    pass
+                except Exception:  # noqa: BLE001 - RBA must not wedge the loop
+                    logger.exception("Entity RBA cycle failed")
+                
+                
+# against the baselines; on "drift" retrain so the baseline
+                    # follows the environment. Retrains always use the FULL
+                    # collected history (hours=None) - the model must reflect
+                    # every event gathered, not a sample window.
+                    if counter % 120 == 0 and get_detector().is_ready:
+                        try:
+                            from backend.ml.drift import check_drift
+
+                            drift = check_drift(db, hours=12)
+                            if drift.get("status") == "drift":
+                                logger.warning("ML drift detected; retrain on full history")
+                                get_detector().train(db, hours=None, validate=False, kind="drift")
+                            elif drift.get("status") == "watch":
+                                logger.info("ML drift watch; retrain on full history")
+                                get_detector().train(db, hours=None, validate=False, kind="incremental")
+                        except Exception:  # noqa: BLE001 - drift must not wedge the loop
+                            logger.exception("ML drift check failed")
                 if counter % 240 == 0:  # every ~1 hour (240 cycles x 15s)
                     # Roadmap 4.1 - scheduled incremental update when the
-                    # analyst feedback queue is busy enough to matter.
+                    # analyst feedback queue is busy enough to matter. Trains
+                    # on the full history so the model never shrinks to a
+                    # recent sample window.
                     try:
                         from backend.config import (
-                            ML_INCREMENTAL_HOURS,
                             ML_INCREMENTAL_MIN_VERDICTS,
                         )
                         from backend.database.models import Verdict as _Verdict
@@ -200,7 +274,7 @@ def _scheduler_loop(interval_seconds: int = 15):
                                 recent_verdicts,
                             )
                             get_detector().train(
-                                db, hours=ML_INCREMENTAL_HOURS,
+                                db, hours=None,
                                 validate=False, kind="incremental",
                             )
                     except Exception:  # noqa: BLE001
@@ -379,9 +453,26 @@ _SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
     "X-XSS-Protection": "1; mode=block",
 }
+
+#: API responses carry no HTML/CSS/JS of their own, so the most restrictive
+#: policy possible is used. The SPA page (and its hashed /assets/* files)
+#: needs a policy that still allows the app to run: same-origin bundles,
+#: the small inline bootstrap/fail-safe scripts in index.html, React's
+#: inline style attributes, the data: favicon, the MFA QR-code images, and
+#: the realtime WebSocket. Anything else stays blocked.
+_API_CSP = "default-src 'none'; frame-ancestors 'none'"
+_SPA_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: https://api.qrserver.com; "
+    "font-src 'self'; "
+    "connect-src 'self' ws: wss:; "
+    "frame-ancestors 'none'; "
+    "form-action 'self'; base-uri 'self'"
+)
 
 
 @app.middleware("http")
@@ -395,6 +486,11 @@ async def security_headers(request: Request, call_next):
                 "Strict-Transport-Security",
                 f"max-age={HSTS_MAX_AGE}",
             )
+        # The SPA mount at "/" serves the entry HTML plus its assets; every
+        # other path (API, reports, docs) is not browser-rendered app code
+        # and keeps the lock-down policy.
+        csp = _SPA_CSP if not request.url.path.startswith("/api/") else _API_CSP
+        response.headers.setdefault("Content-Security-Policy", csp)
     return response
 
 
@@ -633,10 +729,16 @@ for router in (
     incidents.router,
     intel.router,
     integrations.router,
+    hunting.router,
     graph.router,
+    rba.router,
     auth.router,
     realtime.router,
     compliance.router,
+    search.router,
+    automation.router,
+    saved.router,
+    dataset.router,
 ):
     app.include_router(router)
 

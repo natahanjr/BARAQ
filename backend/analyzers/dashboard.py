@@ -29,42 +29,65 @@ def _alert_org(org: str | None):
     return Alert.org == org
 
 
-def compute_security_score(session: Session, org: str | None = None) -> float:
+def _demo_expr(model, include_demo: bool):
+    """Demo/test separation: production KPIs exclude seeded data unless the
+    console explicitly runs in demo mode (``include_demo=True``)."""
+    if include_demo:
+        return None
+    return model.demo.is_(False)
+
+
+def _conds(*exprs):
+    """Flatten optional ORM conditions, dropping None."""
+    return tuple(e for e in exprs if e is not None)
+
+
+def compute_security_score(
+    session: Session, org: str | None = None, include_demo: bool = False
+) -> float:
     """Security score 0-100 derived from open alerts (optionally per tenant)."""
     score = 100.0
-    stmt = select(Alert.severity, func.count(Alert.id)).where(Alert.status == "open")
-    if org is not None:
-        stmt = stmt.where(Alert.org == org)
+    stmt = select(Alert.severity, func.count(Alert.id)).where(
+        Alert.status == "open", *_conds(_alert_org(org), _demo_expr(Alert, include_demo))
+    )
     counts = dict(session.execute(stmt.group_by(Alert.severity)).all())
     for severity, penalty in SECURITY_SCORE_PENALTY.items():
         score -= counts.get(severity, 0) * penalty
     return round(max(0.0, min(100.0, score)), 1)
 
 
-def dashboard_summary(session: Session, org: str | None = None) -> dict:
+def dashboard_summary(
+    session: Session, org: str | None = None, include_demo: bool = False
+) -> dict:
     """Aggregated KPIs for the main dashboard.
 
     ``org`` is the tenant scope requested by the caller: ``None`` means the
     whole platform, any string (including "") restricts every counter to
-    records tagged with that organization.
+    records tagged with that organization. ``include_demo`` shows demo/test
+    data alongside production telemetry (console demo mode).
     """
     total_events = session.scalar(
-        select(func.count(NormalizedEvent.id)).where(*([_event_org(org)] if org is not None else []))
+        select(func.count(NormalizedEvent.id)).where(
+            *_conds(_event_org(org), _demo_expr(NormalizedEvent, include_demo))
+        )
     ) or 0
     active_alerts = session.scalar(
-        select(func.count(Alert.id)).where(Alert.status == "open", *([_alert_org(org)] if org is not None else []))
+        select(func.count(Alert.id)).where(
+            Alert.status == "open",
+            *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
+        )
     ) or 0
     critical_threats = session.scalar(
         select(func.count(Alert.id)).where(
             Alert.status == "open",
             Alert.severity.in_(["critical", "high"]),
-            *([_alert_org(org)] if org is not None else []),
+            *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
         )
     ) or 0
     anomalies = session.scalar(
         select(func.count(NormalizedEvent.id)).where(
             NormalizedEvent.is_anomaly.is_(True),
-            *([_event_org(org)] if org is not None else []),
+            *_conds(_event_org(org), _demo_expr(NormalizedEvent, include_demo)),
         )
     ) or 0
 
@@ -72,7 +95,7 @@ def dashboard_summary(session: Session, org: str | None = None) -> dict:
     events_last_hour = session.scalar(
         select(func.count(NormalizedEvent.id)).where(
             NormalizedEvent.timestamp >= hour_ago,
-            *([_event_org(org)] if org is not None else []),
+            *_conds(_event_org(org), _demo_expr(NormalizedEvent, include_demo)),
         )
     ) or 0
 
@@ -81,14 +104,14 @@ def dashboard_summary(session: Session, org: str | None = None) -> dict:
             select(func.count(Alert.id)).where(
                 Alert.status == "open",
                 Alert.severity == s,
-                *([_alert_org(org)] if org is not None else []),
+                *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
             )
         )
         or 0
         for s in SEVERITY_ORDER
     }
 
-    score = compute_security_score(session, org=org)
+    score = compute_security_score(session, org=org, include_demo=include_demo)
     system_status = (
         "CRITICAL"
         if score < 40
@@ -127,43 +150,51 @@ def _format_bucket(value) -> str:
     return text.replace("Z", "T")[:13] + ":00:00" if text.endswith("Z") else text[:19]
 
 
-def event_timeline(session: Session, hours: int = 24, org: str | None = None) -> list[dict]:
+def event_timeline(
+    session: Session, hours: int = 24, org: str | None = None, include_demo: bool = False
+) -> list[dict]:
     """Event counts bucketed per hour for the timeline chart."""
     since = datetime.now(timezone.utc) - timedelta(hours=hours)
     bucket = _hour_bucket(NormalizedEvent.timestamp, session)
     stmt = select(bucket.label("bucket"), func.count(NormalizedEvent.id)).where(
-        NormalizedEvent.timestamp >= since
+        NormalizedEvent.timestamp >= since,
+        *_conds(_event_org(org), _demo_expr(NormalizedEvent, include_demo)),
     )
-    if org is not None:
-        stmt = stmt.where(NormalizedEvent.org == org)
     rows = session.execute(stmt.group_by("bucket").order_by("bucket")).all()
     return [{"bucket": _format_bucket(r[0]), "count": int(r[1])} for r in rows]
 
 
-def alert_timeline(session: Session, hours: int = 24, org: str | None = None) -> list[dict]:
+def alert_timeline(
+    session: Session, hours: int = 24, org: str | None = None, include_demo: bool = False
+) -> list[dict]:
     since = datetime.now(timezone.utc) - timedelta(hours=hours)
     bucket = _hour_bucket(Alert.created_at, session)
     stmt = select(bucket.label("bucket"), func.count(Alert.id)).where(
-        Alert.created_at >= since
+        Alert.created_at >= since,
+        *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
     )
-    if org is not None:
-        stmt = stmt.where(Alert.org == org)
     rows = session.execute(stmt.group_by("bucket").order_by("bucket")).all()
     return [{"bucket": _format_bucket(r[0]), "count": int(r[1])} for r in rows]
 
 
-def threat_categories(session: Session, org: str | None = None) -> list[dict]:
-    stmt = select(Alert.mitre_tactic, func.count(Alert.id)).where(Alert.status == "open")
-    if org is not None:
-        stmt = stmt.where(Alert.org == org)
+def threat_categories(
+    session: Session, org: str | None = None, include_demo: bool = False
+) -> list[dict]:
+    stmt = select(Alert.mitre_tactic, func.count(Alert.id)).where(
+        Alert.status == "open",
+        *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
+    )
     rows = session.execute(stmt.group_by(Alert.mitre_tactic)).all()
     return [{"tactic": r[0] or "Unknown", "count": int(r[1])} for r in rows]
 
 
-def severity_distribution(session: Session, org: str | None = None) -> list[dict]:
-    stmt = select(Alert.severity, func.count(Alert.id)).where(Alert.status == "open")
-    if org is not None:
-        stmt = stmt.where(Alert.org == org)
+def severity_distribution(
+    session: Session, org: str | None = None, include_demo: bool = False
+) -> list[dict]:
+    stmt = select(Alert.severity, func.count(Alert.id)).where(
+        Alert.status == "open",
+        *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
+    )
     rows = session.execute(stmt.group_by(Alert.severity)).all()
     counts = dict(rows)
     return [
@@ -171,30 +202,35 @@ def severity_distribution(session: Session, org: str | None = None) -> list[dict
     ]
 
 
-def attack_stats(session: Session, org: str | None = None) -> list[dict]:
+def attack_stats(
+    session: Session, org: str | None = None, include_demo: bool = False
+) -> list[dict]:
     stmt = (
         select(Alert.name, func.count(Alert.id))
-        .where(Alert.status == "open")
+        .where(Alert.status == "open", *_conds(_alert_org(org), _demo_expr(Alert, include_demo)))
         .group_by(Alert.name)
         .order_by(func.count(Alert.id).desc())
     )
-    if org is not None:
-        stmt = stmt.where(Alert.org == org)
     rows = session.execute(stmt).all()
     return [{"attack": r[0], "count": int(r[1])} for r in rows]
 
 
-def top_attackers(session: Session, limit: int = 5, org: str | None = None) -> list[dict]:
+def top_attackers(
+    session: Session, limit: int = 5, org: str | None = None, include_demo: bool = False
+) -> list[dict]:
     """Most frequent users/IPs in open alert evidence (top talkers)."""
     import re
     from collections import Counter
 
     stmt = (
         select(Alert)
-        .where(Alert.status == "open", Alert.mitre_id == "T1110", Alert.evidence != "")
+        .where(
+            Alert.status == "open",
+            Alert.mitre_id == "T1110",
+            Alert.evidence != "",
+            *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
+        )
     )
-    if org is not None:
-        stmt = stmt.where(Alert.org == org)
     alerts = session.scalars(stmt).all()
     users: Counter = Counter()
     for a in alerts:
@@ -205,7 +241,11 @@ def top_attackers(session: Session, limit: int = 5, org: str | None = None) -> l
 
 
 def user_behavior(
-    session: Session, limit: int = 8, since_hours: int = 24, org: str | None = None
+    session: Session,
+    limit: int = 8,
+    since_hours: int = 24,
+    org: str | None = None,
+    include_demo: bool = False,
 ) -> list[dict]:
     """Per-user login behavior statistics for the last ``since_hours``."""
     from sqlalchemy import case
@@ -220,9 +260,8 @@ def user_behavior(
     ).where(
         NormalizedEvent.event_id.in_([4624, 4625]),
         NormalizedEvent.timestamp >= since,
+        *_conds(_event_org(org), _demo_expr(NormalizedEvent, include_demo)),
     )
-    if org is not None:
-        stmt = stmt.where(NormalizedEvent.org == org)
     rows = session.execute(
         stmt.group_by(NormalizedEvent.user)
         .order_by(func.count(NormalizedEvent.id).desc())
@@ -240,28 +279,28 @@ def user_behavior(
     ]
 
 
-def detection_method_breakdown(session: Session, org: str | None = None) -> list[dict]:
+def detection_method_breakdown(
+    session: Session, org: str | None = None, include_demo: bool = False
+) -> list[dict]:
     """Open alerts grouped by detection method (rule / hybrid)."""
     stmt = (
         select(Alert.detection_method, func.count(Alert.id))
-        .where(Alert.status == "open")
+        .where(Alert.status == "open", *_conds(_alert_org(org), _demo_expr(Alert, include_demo)))
         .group_by(Alert.detection_method)
     )
-    if org is not None:
-        stmt = stmt.where(Alert.org == org)
     rows = session.execute(stmt).all()
     return [{"method": r[0] or "rule", "count": int(r[1])} for r in rows]
 
 
-def risk_distribution(session: Session, org: str | None = None) -> list[dict]:
+def risk_distribution(
+    session: Session, org: str | None = None, include_demo: bool = False
+) -> list[dict]:
     """Open alerts grouped by hybrid risk level."""
     stmt = (
         select(Alert.risk_level, func.count(Alert.id))
-        .where(Alert.status == "open")
+        .where(Alert.status == "open", *_conds(_alert_org(org), _demo_expr(Alert, include_demo)))
         .group_by(Alert.risk_level)
     )
-    if org is not None:
-        stmt = stmt.where(Alert.org == org)
     rows = session.execute(stmt).all()
     order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
     items = [{"risk_level": r[0] or "LOW", "count": int(r[1])} for r in rows]

@@ -39,6 +39,23 @@ _STRUCTURED_PROCESS_KEYS = ("NewProcessName", "ParentProcessName", "Image", "Com
 #: Event IDs whose process facts drive detection and must arrive intact.
 _PROCESS_EVENT_IDS = (4688, 1, 4104, 4103)
 
+#: Message field label -> authoritative structured facts keys (priority
+#: order). SafeFormatMessage truncates these values to 1-char debris
+#: ("New Process Name: C"); the structured XML copy is complete and wins.
+_MESSAGE_LABEL_FACTS = {
+    "New Process Name": ("NewProcessName", "new_process"),
+    "Creator Process Name": ("CreatorProcessName", "creator_process"),
+    "Process Name": ("Image", "image", "NewProcessName", "new_process"),
+    "Parent Process Name": ("ParentProcessName", "parent_image", "parent_process"),
+    "ParentProcessName": ("ParentProcessName", "parent_image", "parent_process"),
+    "Process Command Line": ("CommandLine", "command_line"),
+    "CommandLine": ("CommandLine", "command_line"),
+    "Command Line": ("CommandLine", "command_line"),
+    "Image": ("Image", "image"),
+    "TargetImage": ("TargetImage", "target_image"),
+}
+_FIELD_LINE_RE = re.compile(r"^([A-Za-z][A-Za-z ]+):\s*(.*)$")
+
 # ---------------------------------------------------------------------------
 # Event metadata tables
 # ---------------------------------------------------------------------------
@@ -97,6 +114,10 @@ MESSAGE_PATTERNS = {
     "client_ip": re.compile(r"Client Address:\s+(\S+)", re.IGNORECASE),
     "logon_type": re.compile(r"Logon Type:\s+(\d+)", re.IGNORECASE),
     "new_process": re.compile(r"New Process Name:\s+(\S+)", re.IGNORECASE),
+    "new_process_id": re.compile(r"NewProcessId:\s+(\S+)", re.IGNORECASE),
+    "process_id": re.compile(r"\bProcessId:\s+(\S+)", re.IGNORECASE),
+    "parent_process_id": re.compile(r"ParentProcessId:\s+(\S+)", re.IGNORECASE),
+    "command_line": re.compile(r"CommandLine:\s+(.+)", re.IGNORECASE),
     "service_name": re.compile(r"Service Name:\s+(\S+)", re.IGNORECASE),
     "service_file": re.compile(r"Service File Name:\s+(\S+)", re.IGNORECASE),
     "task_name": re.compile(r"Task Name:\s+(\S+)", re.IGNORECASE),
@@ -179,6 +200,25 @@ class Normalizer:
             truncated.append("message")
             reasons.append(f"formatted message longer than {MAX_MESSAGE_LEN} chars")
 
+        # SafeFormatMessage debris: field values cut to 1-char stubs
+        # ("New Process Name: C"). Silent before - the message is short, so
+        # the length cap never fired; flag it so repair/quality tracking sees it.
+        if message:
+            from backend.collectors.validation import is_debris_value
+
+            for line in message.splitlines():
+                m = _FIELD_LINE_RE.match(line)
+                if not m:
+                    continue
+                label, value = m.group(1), m.group(2).strip()
+                if label in _MESSAGE_LABEL_FACTS and value and is_debris_value(value):
+                    truncated.append("message")
+                    reasons.append(
+                        f"message field '{label}' truncated to debris by the "
+                        "message formatter (structured copy used)"
+                    )
+                    break
+
         structured = {k: str(facts[k]) for k in _STRUCTURED_PROCESS_KEYS if facts.get(k)}
         if structured:
             for key, value in structured.items():
@@ -205,6 +245,41 @@ class Normalizer:
                     truncated.append("process_data")
                     reasons.append("message copy only (structured process fields unavailable) - command line may be lost")
         return truncated, reasons
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def repair_message(message: str, facts: dict) -> tuple[str, list[str]]:
+        """Repair SafeFormatMessage-truncated field values from structured facts.
+
+        The legacy message formatter cuts long values to 1-char debris
+        ("New Process Name: C", "Process Command Line: \\\""). When the
+        structured XML copy of the field is available it is authoritative
+        and wins. Returns ``(repaired_message, repaired_field_labels)``.
+        """
+        from backend.collectors.validation import is_debris_value
+
+        message = str(message or "")
+        if not message or not facts:
+            return message, []
+        repaired: list[str] = []
+        lines = message.splitlines()
+
+        def substitute(line: str) -> str:
+            m = _FIELD_LINE_RE.match(line)
+            if not m:
+                return line
+            label, value = m.group(1), m.group(2).strip()
+            if not is_debris_value(value):
+                return line
+            for key in _MESSAGE_LABEL_FACTS.get(label, ()):
+                real = facts.get(key)
+                if real and not is_debris_value(str(real)):
+                    repaired.append(label)
+                    return f"{label}: {real}"
+            return line
+
+        fixed = "\n".join(substitute(line) for line in lines)
+        return (fixed, repaired) if repaired else (message, [])
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -347,6 +422,16 @@ class Normalizer:
             )
         data_integrity = "truncated" if truncated_fields else "complete"
 
+        # SafeFormatMessage repair: truncated field values in the message are
+        # replaced with the complete structured copy (when available) so the
+        # analyst interface never sees "New Process Name: C" debris.
+        message, repaired_fields = self.repair_message(message, facts)
+        if repaired_fields:
+            logger.info(
+                "Data integrity: event %s message repaired from structured "
+                "fields: %s", event_id, ", ".join(repaired_fields),
+            )
+
         risk_score = RISK_BAND_SCORES.get(meta["risk"], 15)
         risk_score = min(100, risk_score + self._risk_modifiers(event_id, facts))
 
@@ -369,6 +454,7 @@ class Normalizer:
                 "data_integrity": {
                     "complete": not truncated_fields,
                     "truncated_fields": truncated_fields,
+                    "repaired_fields": repaired_fields,
                     "reasons": truncation_reasons,
                 },
             },

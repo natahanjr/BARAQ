@@ -17,8 +17,11 @@ logger = logging.getLogger("baraq.ml.tasks")
 _train_lock = threading.Lock()
 
 
-def train_in_background(hours: int = 24, validate: bool = True, force: bool = False) -> bool:
-    """Start a background training job; False if one is already running."""
+def train_in_background(hours: int | None = None, validate: bool = True, force: bool = False) -> bool:
+    """Start a background training job; False if one is already running.
+
+    ``hours=None`` trains on the FULL collected history (no sample window).
+    """
     if not _train_lock.acquire(blocking=False):
         return False
 

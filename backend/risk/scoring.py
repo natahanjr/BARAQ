@@ -60,10 +60,31 @@ def hybrid_risk(
     ml_weight: float = ML_DETECTION_WEIGHT,
 ) -> tuple[float, str]:
     """Fuse rule + ML signals into (final_risk_0_100, risk_level)."""
-    rule_part = rule_score(severity, confidence, event_count) * rule_weight
-    ml_part = ml_anomaly_score(anomaly_scores) * ml_weight
+    final, _, _, level = hybrid_parts(
+        severity, confidence, event_count, anomaly_scores,
+        rule_weight=rule_weight, ml_weight=ml_weight,
+    )
+    return final, level
+
+
+def hybrid_parts(
+    severity: str,
+    confidence: float,
+    event_count: int,
+    anomaly_scores: list,
+    rule_weight: float = ML_RULE_WEIGHT,
+    ml_weight: float = ML_DETECTION_WEIGHT,
+) -> tuple[float, float, float, str]:
+    """Explainable decomposition of the hybrid risk.
+
+    Returns ``(final, rule_part, ml_part, level)`` so the analyst sees
+    exactly which share of a 0-100 score came from the rule signal vs the
+    ML anomaly signal (weights from config).
+    """
+    rule_part = round(rule_score(severity, confidence, event_count) * rule_weight, 2)
+    ml_part = round(ml_anomaly_score(anomaly_scores) * ml_weight, 2)
     final = round(min(100.0, rule_part + ml_part), 2)
-    return final, risk_level(final)
+    return final, rule_part, ml_part, risk_level(final)
 
 
 def risk_level(score: float) -> str:

@@ -137,6 +137,7 @@ from backend.detection.rules.c2_exfil_extra import (
     UnusualPortRule,
 )
 from backend.detection.sigma.engine import SigmaRuleEngine
+from backend.detection.correlation_engine import CorrelationEngine
 from backend.config import KILL_CHAIN, RULES_COUNT, RULE_OVERRIDES
 from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
 
@@ -258,6 +259,7 @@ def build_rules(session: Session, overrides: dict | None = None) -> list[BaseRul
         ExfilAlternativeProtocolRule(session),
         ExfilWebServiceRule(session),
         SigmaRuleEngine(session),
+        CorrelationEngine(session),
     ]
     return _apply_feature_flags(rules)
 

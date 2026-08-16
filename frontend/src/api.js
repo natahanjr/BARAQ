@@ -9,6 +9,41 @@ let sessionToken = null;
 // their own org by the backend, so this is only ever attached for admins.
 const ORG_KEY = "baraq-org-filter";
 
+// Demo/test separation: seeded demo telemetry is excluded from every
+// production view by default. Flipping the demo switch on appends
+// include_demo=1 so the console explicitly shows demo data.
+const DEMO_KEY = "baraq-demo-mode";
+
+export const demoStore = {
+  get enabled() {
+    try {
+      return localStorage.getItem(DEMO_KEY) === "1";
+    } catch {
+      return false;
+    }
+  },
+  set enabled(value) {
+    try {
+      if (value) localStorage.setItem(DEMO_KEY, "1");
+      else localStorage.removeItem(DEMO_KEY);
+    } catch {
+      /* private mode etc. */
+    }
+  },
+};
+
+// Append include_demo=1 to a params object when the console runs in demo
+// mode; production stays clean unless the analyst opted in.
+function demoParams(params = {}) {
+  return demoStore.enabled ? { ...params, include_demo: 1 } : params;
+}
+
+// "&include_demo=1" suffix for URLs that already carry other params.
+function qsSuffix(params = {}) {
+  const qs = new URLSearchParams(demoParams(params)).toString();
+  return qs ? `&${qs}` : "";
+}
+
 export const authStore = {
   get token() {
     return sessionToken;
@@ -65,7 +100,13 @@ async function request(path, options = {}) {
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail || body.message || detail;
+      if (Array.isArray(body.detail)) {
+        detail = body.detail
+          .map((d) => d.msg || d.loc?.join(".") || JSON.stringify(d))
+          .join("; ");
+      } else {
+        detail = body.detail || body.message || detail;
+      }
     } catch {
       /* ignore */
     }
@@ -108,15 +149,18 @@ export const api = {
   },
   clearAudit: () => request("/api/auth/audit/clear", { method: "POST" }),
 
-  summary: () => request("/api/dashboard/summary"),
-  timeline: (hours = 24) => request(`/api/dashboard/timeline?hours=${hours}`),
-  threatCategories: () => request("/api/dashboard/threat-categories"),
-  severityDistribution: () => request("/api/dashboard/severity-distribution"),
-  attackStats: () => request("/api/dashboard/attack-stats"),
-  topAttackers: (limit = 5) => request(`/api/dashboard/top-attackers?limit=${limit}`),
-  userBehavior: (limit = 8) => request(`/api/dashboard/user-behavior?limit=${limit}`),
-  detectionMethods: () => request("/api/dashboard/detection-methods"),
-  riskDistribution: () => request("/api/dashboard/risk-distribution"),
+  summary: () => request("/api/dashboard/summary?" + new URLSearchParams(demoParams()).toString()),
+  timeline: (hours = 24) =>
+    request(`/api/dashboard/timeline?hours=${hours}` + qsSuffix(demoParams())),
+  threatCategories: () => request("/api/dashboard/threat-categories" + qsSuffix(demoParams())),
+  severityDistribution: () => request("/api/dashboard/severity-distribution" + qsSuffix(demoParams())),
+  attackStats: () => request("/api/dashboard/attack-stats" + qsSuffix(demoParams())),
+  topAttackers: (limit = 5) =>
+    request(`/api/dashboard/top-attackers?limit=${limit}` + qsSuffix(demoParams())),
+  userBehavior: (limit = 8) =>
+    request(`/api/dashboard/user-behavior?limit=${limit}` + qsSuffix(demoParams())),
+  detectionMethods: () => request("/api/dashboard/detection-methods" + qsSuffix(demoParams())),
+  riskDistribution: () => request("/api/dashboard/risk-distribution" + qsSuffix(demoParams())),
 
   evaluationRun: () => request("/api/evaluation/run?with_ml=true", { method: "POST" }),
   evaluationResults: (limit = 50) => request(`/api/evaluation/results?limit=${limit}`),
@@ -124,7 +168,7 @@ export const api = {
 
   alerts: (params = {}) => {
     const qs = new URLSearchParams();
-    Object.entries(params).forEach(([k, v]) => {
+    Object.entries(demoParams(params)).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== "") qs.set(k, v);
     });
     return request(`/api/alerts?${qs.toString()}`);
@@ -136,10 +180,20 @@ export const api = {
     request(`/api/alerts/${id}/actions`, { method: "POST", body: JSON.stringify({ action, target }) }),
   fixAlert: (id) => api.takeAction(id, "fix"),
   clearAlerts: () => request("/api/alerts/clear", { method: "POST" }),
+  fpAnalysis: () => request("/api/alerts/fp-analysis"),
+  alertGroups: () => request("/api/alerts/groups"),
+  alertVerdict: (id) => request(`/api/alerts/${id}/verdict`),
+  submitAlertVerdict: (id, body) =>
+    request(`/api/alerts/${id}/verdict`, { method: "POST", body: JSON.stringify(body) }),
+  listSuppressions: () => request("/api/alerts/suppressions/list"),
+  createSuppression: (body) =>
+    request("/api/alerts/suppressions", { method: "POST", body: JSON.stringify(body) }),
+  deleteSuppression: (id) =>
+    request(`/api/alerts/suppressions/${id}`, { method: "DELETE" }),
 
   events: (params = {}) => {
     const qs = new URLSearchParams();
-    Object.entries(params).forEach(([k, v]) => {
+    Object.entries(demoParams(params)).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== "") qs.set(k, v);
     });
     return request(`/api/events?${qs.toString()}`);
@@ -148,7 +202,40 @@ export const api = {
   network: (limit = 200) => request(`/api/network?limit=${limit}`),
   eventStatistics: () => request("/api/events/statistics"),
 
+  datasetStatus: () => request("/api/telemetry/dataset"),
+  datasetStats: () => request("/api/telemetry/dataset/stats"),
+  datasetExports: (limit = 20) => request(`/api/telemetry/dataset/exports?limit=${limit}`),
+  datasetExportDetail: (id) => request(`/api/telemetry/dataset/exports/${id}`),
+  datasetManifest: () => request("/api/telemetry/dataset/manifest"),
+  datasetStart: () => request("/api/telemetry/dataset/start", { method: "POST" }),
+  datasetPause: () => request("/api/telemetry/dataset/pause", { method: "POST" }),
+  datasetResume: () => request("/api/telemetry/dataset/resume", { method: "POST" }),
+  datasetExportNow: () => request("/api/telemetry/dataset/export", { method: "POST" }),
+  datasetUpdateConfig: (body) =>
+    request("/api/telemetry/dataset/config", { method: "POST", body: JSON.stringify(body) }),
+  datasetDownload: async (fileId) => {
+    const headers = {};
+    if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
+    else headers["X-API-Key"] = API_KEY;
+    const res = await fetch(`${BASE}/api/telemetry/dataset/download/${fileId}`, {
+      headers,
+      credentials: "include",
+    });
+    if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
+    const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition") || "";
+    const name = (cd.match(/filename="?([^";]+)"?/) || [])[1] || `part_${fileId}.csv`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
   investigate: (alertId) => request(`/api/investigation/alert/${alertId}`),
+  processTree: (params) =>
+    request(`/api/investigation/process-tree?${new URLSearchParams(params).toString()}`),
   endpoints: () => request("/api/endpoints"),
   sendCommand: (agentId, action, target, note = "") =>
     request(`/api/endpoints/${agentId}/commands`, { method: "POST", body: JSON.stringify({ action, target, note }) }),
@@ -199,12 +286,13 @@ export const api = {
 
   incidents: (params = {}) => {
     const qs = new URLSearchParams();
-    Object.entries(params).forEach(([k, v]) => {
+    Object.entries(demoParams(params)).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== "") qs.set(k, v);
     });
     return request(`/api/incidents?${qs.toString()}`);
   },
   incident: (id) => request(`/api/incidents/${id}`),
+  incidentInvestigation: (id) => request(`/api/incidents/${id}/investigation`),
   createIncident: (body) => request("/api/incidents", { method: "POST", body: JSON.stringify(body) }),
   updateIncident: (id, body) => request(`/api/incidents/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   linkIncidentAlerts: (id, alertIds) =>
@@ -228,4 +316,51 @@ export const api = {
     return request(`/api/system/ml/train?${qs.toString()}`, { method: "POST" });
   },
   mlAnalyze: () => request("/api/system/ml/analyze", { method: "POST" }),
+
+  rbaEntities: (params = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(demoParams(params)).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") qs.set(k, v);
+    });
+    return request(`/api/rba/entities?${qs.toString()}`);
+  },
+  rbaEntity: (kind, name, timelineLimit = 100) =>
+    request(
+      `/api/rba/entities/${encodeURIComponent(kind)}/${encodeURIComponent(name)}?timeline_limit=${timelineLimit}` +
+        qsSuffix(demoParams()),
+    ),
+  rbaRules: () => request("/api/rba/rules"),
+  rbaDecay: () => request("/api/rba/decay", { method: "POST" }),
+  rbaSync: (hours = 24) => request(`/api/rba/sync?hours=${hours}`, { method: "POST" }),
+  rbaTuning: () => request("/api/rba/tuning"),
+  rbaSetTuning: (body) => request("/api/rba/tuning", { method: "PUT", body: JSON.stringify(body) }),
+
+  search: (query, opts = {}) => {
+    const body = { query, ...(opts.earliest ? { earliest: opts.earliest } : {}), ...(opts.latest ? { latest: opts.latest } : {}) };
+    if (opts.limit) body.limit = opts.limit;
+    if (demoStore.enabled) body.include_demo = 1;
+    return request("/api/search", { method: "POST", body: JSON.stringify(body) });
+  },
+  searchSuggest: (q) => request(`/api/search/suggest?q=${encodeURIComponent(q)}`),
+
+  automationPlaybooks: () => request("/api/automation/playbooks"),
+  automationCreatePlaybook: (body) => request("/api/automation/playbooks", { method: "POST", body: JSON.stringify(body) }),
+  automationUpdatePlaybook: (id, body) => request(`/api/automation/playbooks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  automationDeletePlaybook: (id) => request(`/api/automation/playbooks/${id}`, { method: "DELETE" }),
+  automationTestPlaybook: (id, alertId) => request(`/api/automation/playbooks/${id}/test?alert_id=${alertId}`, { method: "POST" }),
+  automationRunPlaybook: (id, alertId) => request(`/api/automation/playbooks/${id}/run?alert_id=${alertId}`, { method: "POST" }),
+  automationRuns: (limit = 50, alertId) =>
+    request(`/api/automation/runs?limit=${limit}${alertId ? `&alert_id=${alertId}` : ""}`),
+  automationPreview: (alertId) => request(`/api/automation/preview?alert_id=${alertId}`),
+
+  savedSearches: () => request("/api/saved/searches"),
+  saveSearch: (body) => request("/api/saved/searches", { method: "POST", body: JSON.stringify(body) }),
+  updateSavedSearch: (id, body) => request(`/api/saved/searches/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteSavedSearch: (id) => request(`/api/saved/searches/${id}`, { method: "DELETE" }),
+  runSavedSearch: (id) => request(`/api/saved/searches/${id}/run` + qsSuffix(demoParams()), { method: "POST" }),
+  dashboards: () => request("/api/saved/dashboards"),
+  createDashboard: (body) => request("/api/saved/dashboards", { method: "POST", body: JSON.stringify(body) }),
+  updateDashboard: (id, body) => request(`/api/saved/dashboards/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteDashboard: (id) => request(`/api/saved/dashboards/${id}`, { method: "DELETE" }),
+  renderDashboard: (id) => request(`/api/saved/dashboards/${id}/render` + qsSuffix(demoParams())),
 };

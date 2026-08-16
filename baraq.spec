@@ -13,6 +13,7 @@ datas = [
     (str(ROOT / "backend" / "mitre" / "techniques.json"), "backend/mitre"),
     (str(ROOT / "backend" / "vulnscan" / "cves.json"), "backend/vulnscan"),
     (str(ROOT / "backend" / "detection" / "signatures.json"), "detection"),
+    (str(ROOT / "backend" / "detection" / "correlation_rules"), "detection/correlation_rules"),
     (str(ROOT / "frontend" / "dist"), "frontend/dist"),
     (str(ROOT / "dist" / ".env"), "seed"),
     (str(ROOT / "sigma_rules"), "sigma_rules"),

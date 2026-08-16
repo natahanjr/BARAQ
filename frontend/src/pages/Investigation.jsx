@@ -218,6 +218,471 @@ function InvolvedEntities({ data }) {
   );
 }
 
+function ConfidenceMeter({ score, label }) {
+  const pct = Math.round((score || 0) * 100);
+  const color =
+    pct >= 75 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-500" : "bg-rose-500";
+  return (
+    <div>
+      <div className="flex items-center justify-between text-[11px] text-slate-400">
+        <span>
+          Story confidence:{" "}
+          <strong className="uppercase text-slate-200">{label || "low"}</strong>
+        </span>
+        <span className="font-mono">{pct}%</span>
+      </div>
+      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function ProcessTreeNode({ node, depth, children }) {
+  const isRoot = !node.parent_pid;
+  const kids = children(node.pid);
+  const [expanded, setExpanded] = useState(depth < 2 || isRoot);
+  return (
+    <li>
+      <div
+        className={`rounded-lg border px-3 py-2 ${
+          node.seed
+            ? "border-cyan-500/50 bg-cyan-500/10"
+            : isRoot
+              ? "border-violet-500/40 bg-violet-500/10"
+              : "border-slate-700/50 bg-slate-800/30"
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {kids.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setExpanded(!expanded)}
+              aria-label={expanded ? "Collapse subtree" : "Expand subtree"}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-black/30 font-mono text-[10px] text-slate-300 transition-colors hover:bg-slate-700"
+            >
+              {expanded ? "−" : `${kids.length}+`}
+            </button>
+          )}
+          <span className="font-mono text-xs font-semibold text-slate-100">
+            {node.name || "unknown"}
+          </span>
+          <span className="rounded bg-black/30 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+            pid {node.pid}
+          </span>
+          {node.verified && (
+            <span
+              className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300"
+              title="Parent edge verified by telemetry"
+            >
+              ✓ verified
+            </span>
+          )}
+          {node.seed && (
+            <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+              seed
+            </span>
+          )}
+          {isRoot && (
+            <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-violet-300">
+              root
+            </span>
+          )}
+          {node.source && (
+            <span className="rounded bg-slate-700/40 px-1.5 py-0.5 text-[10px] text-slate-400">
+              {node.source}
+            </span>
+          )}
+          <span className="text-[10px] text-slate-500">
+            {node.first_seen
+              ? new Date(node.first_seen).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })
+              : ""}
+          </span>
+        </div>
+        {node.cmdline && (
+          <p className="mt-1 truncate font-mono text-[10px] text-slate-500" title={node.cmdline}>
+            {node.cmdline}
+          </p>
+        )}
+      </div>
+      {expanded && kids.length > 0 && (
+        <ul className="ml-5 space-y-1.5 border-l border-slate-700/50 pl-3 pt-1.5">
+          {kids.map((c) => (
+            <ProcessTreeNode key={c.pid} node={c} depth={depth + 1} children={children} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function ProcessTreePanel({ tree }) {
+  if (!tree || !tree.primary || tree.node_count === 0) {
+    return (
+      <Card>
+        <h3 className="mb-2 text-base font-semibold text-white">Process Tree</h3>
+        <p className="text-sm text-slate-400">
+          No process-creation events found around this alert — the tree could not be
+          reconstructed.
+        </p>
+      </Card>
+    );
+  }
+
+  const primary = tree.primary;
+  const children = (parentPid) =>
+    (primary.nodes || []).filter((n) => n.parent_pid === parentPid && n.pid !== parentPid);
+  const roots = (primary.nodes || []).filter((n) => !n.parent_pid);
+
+  return (
+    <Card>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-white">
+            Process Tree{" "}
+            <span className="text-xs font-normal text-slate-500">
+              ({primary.node_count} nodes · host {primary.host})
+            </span>
+          </h3>
+          <p className="mt-0.5 text-sm text-slate-400">
+            Reconstructed parent/child lineage · root → trigger process
+          </p>
+        </div>
+        <span className="shrink-0 rounded bg-slate-800 px-2 py-1 font-mono text-[10px] text-slate-400">
+          completeness {Math.round((tree.completeness || 0) * 100)}%
+        </span>
+      </div>
+
+      {tree.chain && tree.chain.length > 1 && (
+        <div className="mb-4 rounded-lg border border-violet-500/25 bg-violet-500/5 p-3">
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-violet-300">
+            Root → trigger chain
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {tree.chain.map((n, i) => (
+              <span key={i} className="flex items-center gap-1.5">
+                {i > 0 && <span className="text-[10px] text-slate-500">→</span>}
+                <span
+                  className={`rounded px-2 py-0.5 font-mono text-[11px] ${
+                    n.seed
+                      ? "bg-cyan-500/20 font-semibold text-cyan-300"
+                      : "bg-slate-800 text-slate-300"
+                  }`}
+                >
+                  {n.name || `pid ${n.pid}`}
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tree.aftermath && tree.aftermath.length > 0 && (
+        <div className="mb-4 rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-3">
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-cyan-300">
+            Launched after the trigger ({tree.aftermath.length})
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {tree.aftermath.map((n, i) => (
+              <span
+                key={i}
+                className="rounded bg-slate-800 px-2 py-0.5 font-mono text-[11px] text-slate-300"
+              >
+                {n.name || `pid ${n.pid}`}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="max-h-96 space-y-0 overflow-y-auto">
+        {roots.length > 0 ? (
+          roots.map((n) => (
+            <ul key={n.pid} className="space-y-1.5">
+              <ProcessTreeNode node={n} depth={0} children={children} />
+            </ul>
+          ))
+        ) : (
+          <ul className="space-y-1.5">
+            {(primary.nodes || []).slice(0, 50).map((n) => (
+              <ProcessTreeNode key={n.pid} node={n} depth={0} children={() => []} />
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function VerdictPanel({ verdict, alertId, onApply }) {
+  const [applying, setApplying] = useState("");
+  const [applied, setApplied] = useState("");
+  const colors = {
+    true_positive: "border-rose-500/50 bg-rose-500/10 text-rose-300",
+    false_positive: "border-emerald-500/50 bg-emerald-500/10 text-emerald-300",
+    expected_behavior: "border-sky-500/50 bg-sky-500/10 text-sky-300",
+    needs_review: "border-slate-600/50 bg-slate-800/50 text-slate-300",
+  };
+  if (!verdict) return null;
+
+  const apply = async (value) => {
+    setApplying(value);
+    setApplied("");
+    try {
+      await api.submitAlertVerdict(alertId, { verdict: value, note: "Applied from investigation" });
+      setApplied(value);
+      if (onApply) onApply();
+    } catch (e) {
+      setApplied(`error: ${e.message}`);
+    } finally {
+      setApplying("");
+    }
+  };
+
+  const pct = Math.round((verdict.confidence || 0) * 100);
+
+  return (
+    <Card>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="text-base font-semibold text-white">Suggested Verdict</h3>
+        <span className="font-mono text-[10px] text-slate-500">auto-generated</span>
+      </div>
+      <div
+        className={`rounded-lg border px-4 py-3 ${colors[verdict.suggested] || colors.needs_review}`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-bold uppercase tracking-wide">{verdict.label}</span>
+          <span className="font-mono text-xs">{pct}%</span>
+        </div>
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-black/30">
+          <div
+            className="h-full rounded-full bg-current opacity-70"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+      {verdict.reasons && verdict.reasons.length > 0 && (
+        <ul className="mt-3 space-y-1">
+          {verdict.reasons.map((r, i) => (
+            <li key={i} className="flex items-start gap-2 text-[11px] text-slate-400">
+              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-slate-600" />
+              {r}
+            </li>
+          ))}
+        </ul>
+      )}
+      {verdict.suggested !== "needs_review" && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => apply(verdict.suggested)}
+            disabled={!!applying}
+            className="rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-cyan-500 disabled:opacity-50"
+          >
+            {applying ? "Applying..." : `Apply: ${verdict.label}`}
+          </button>
+          <button
+            type="button"
+            onClick={() => apply("false_positive")}
+            disabled={!!applying}
+            className="rounded-lg border border-slate-700 px-4 py-2 text-xs text-slate-300 transition-colors hover:border-emerald-500/50 hover:text-emerald-300 disabled:opacity-50"
+          >
+            Mark FP
+          </button>
+          <button
+            type="button"
+            onClick={() => apply("expected_behavior")}
+            disabled={!!applying}
+            className="rounded-lg border border-slate-700 px-4 py-2 text-xs text-slate-300 transition-colors hover:border-sky-500/50 hover:text-sky-300 disabled:opacity-50"
+          >
+            Expected
+          </button>
+        </div>
+      )}
+      {applied && (
+        <p className="mt-3 text-xs text-emerald-400">
+          {applied.startsWith("error") ? applied : "Verdict saved — feedback fed to ML"}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function RelatedAlertsPanel({ related, onSelect }) {
+  if (!related || related.length === 0) return null;
+  return (
+    <Card>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-base font-semibold text-white">
+            Related Alerts ({related.length})
+          </h3>
+          <p className="mt-0.5 text-sm text-slate-400">
+            Same story: shared events, host, user or correlation chain
+          </p>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {related.map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            onClick={() => onSelect(String(r.id))}
+            className="w-full rounded-lg border border-slate-800/60 bg-slate-900/40 px-3 py-2.5 text-left transition-colors hover:border-cyan-500/40"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <SeverityBadge severity={r.severity} />
+                <span className="truncate text-xs font-semibold text-slate-200">
+                  #{r.id} {r.name}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {r.verdict && (
+                  <span className="rounded bg-black/30 px-1.5 py-0.5 font-mono text-[9px] text-slate-400">
+                    {r.verdict}
+                  </span>
+                )}
+                <span className="font-mono text-[10px] text-slate-500">
+                  rel {r.relevance_score?.toFixed?.(1) ?? r.relevance_score}
+                </span>
+              </div>
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
+              <span className="font-mono">{r.rule}</span>
+              <span>{r.reasons?.join(", ")}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function RiskProfilePanel({ profile }) {
+  if (!profile) return null;
+  const orig = profile.original_risk || 0;
+  const adj = profile.adjusted_risk || 0;
+  const max = Math.max(100, orig, adj);
+  return (
+    <Card>
+      <h3 className="mb-3 text-base font-semibold text-white">Context-Adjusted Risk</h3>
+      <div className="space-y-2">
+        <div>
+          <div className="flex justify-between text-[11px] text-slate-400">
+            <span>Raw risk score</span>
+            <span className="font-mono text-slate-200">{orig.toFixed(1)}</span>
+          </div>
+          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+            <div
+              className="h-full rounded-full bg-orange-500"
+              style={{ width: `${(orig / max) * 100}%` }}
+            />
+          </div>
+        </div>
+        <div>
+          <div className="flex justify-between text-[11px] text-slate-400">
+            <span>Adjusted by context (×{profile.modifier})</span>
+            <span className="font-mono text-emerald-300">{adj.toFixed(1)}</span>
+          </div>
+          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+            <div
+              className="h-full rounded-full bg-emerald-500"
+              style={{ width: `${(adj / max) * 100}%` }}
+            />
+          </div>
+        </div>
+      </div>
+      {profile.notes && profile.notes.length > 0 && (
+        <ul className="mt-3 space-y-1">
+          {profile.notes.map((n, i) => (
+            <li key={i} className="text-[11px] text-slate-500">
+              · {n}
+            </li>
+          ))}
+        </ul>
+      )}
+      {profile.entities && profile.entities.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {profile.entities.map((e, i) => (
+            <span
+              key={i}
+              className="rounded bg-slate-800 px-2 py-0.5 font-mono text-[10px] text-slate-300"
+            >
+              {e.kind}:{e.name} {e.risk_level} ({e.risk_score})
+            </span>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function StoryTimeline({ timeline }) {
+  if (!timeline || timeline.length === 0) return null;
+  const kindColor = {
+    alert: "border-rose-500/40 text-rose-300",
+    network: "border-sky-500/40 text-sky-300",
+    event: "border-slate-600/50 text-slate-300",
+  };
+  return (
+    <Card>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-base font-semibold text-white">
+            Full Story Timeline ({timeline.length})
+          </h3>
+          <p className="mt-0.5 text-sm text-slate-400">
+            Evidence, process activity, network and related alerts in one view
+          </p>
+        </div>
+      </div>
+      <div className="relative ml-2 max-h-96 space-y-2 overflow-y-auto border-l border-slate-700/60 pl-6">
+        {timeline.map((t, idx) => (
+          <div key={idx} className="relative">
+            <span
+              className={`absolute -left-[27px] top-3 h-2.5 w-2.5 rounded-full border-2 border-slate-950 ${
+                t.kind === "alert"
+                  ? "bg-rose-500"
+                  : t.kind === "network"
+                    ? "bg-sky-500"
+                    : t.tag === "evidence"
+                      ? "bg-cyan-400"
+                      : "bg-slate-600"
+              }`}
+            />
+            <div className="rounded-lg border border-slate-700/40 bg-slate-900/30 px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold text-slate-200">{t.title}</span>
+                <span className="font-mono text-[10px] text-slate-500">
+                  {new Date(t.ts).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </span>
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <span
+                  className={`rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase ${kindColor[t.kind] || kindColor.event}`}
+                >
+                  {t.kind}
+                  {t.tag ? `·${t.tag}` : ""}
+                </span>
+                {t.detail && <span className="text-[10px] text-slate-500">{t.detail}</span>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 export default function Investigation() {
   const [params, setParams] = useSearchParams();
   const [alerts, setAlerts] = useState([]);
@@ -263,6 +728,14 @@ export default function Investigation() {
   const chooseAlert = (id) => {
     setSelected(id);
     setParams(id ? { alert: id } : {});
+  };
+
+  const reload = () => {
+    if (!selected) return;
+    api
+      .investigate(selected)
+      .then((d) => setData(d))
+      .catch((e) => setError(e.message));
   };
 
   const explain = async () => {
@@ -385,6 +858,31 @@ export default function Investigation() {
                 </div>
               </div>
             </Card>
+
+            <Card>
+              <ConfidenceMeter
+                score={data.story_confidence?.score}
+                label={data.story_confidence?.label}
+              />
+              {data.story_confidence?.breakdown && (
+                <ul className="mt-3 space-y-1 border-t border-slate-800/60 pt-3">
+                  {data.story_confidence.breakdown.map((b, i) => (
+                    <li key={i} className="flex items-center justify-between text-[10px] text-slate-500">
+                      <span>{b.factor}</span>
+                      <span className="font-mono">{Math.round((b.score || 0) * 100)}%</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+
+            <VerdictPanel
+              verdict={data.suggested_verdict}
+              alertId={selected}
+              onApply={reload}
+            />
+
+            <RiskProfilePanel profile={data.risk_profile} />
           </div>
 
           {/* Main investigation area */}
@@ -410,6 +908,15 @@ export default function Investigation() {
                 windowMinutes={30}
               />
             </Card>
+
+            {/* Full story timeline */}
+            <StoryTimeline timeline={data.timeline} />
+
+            {/* Process tree */}
+            <ProcessTreePanel tree={data.process_tree} />
+
+            {/* Related alerts */}
+            <RelatedAlertsPanel related={data.related_alerts} onSelect={chooseAlert} />
 
             {/* Involved entities */}
             <InvolvedEntities data={data} />

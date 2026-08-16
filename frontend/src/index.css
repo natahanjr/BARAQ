@@ -1,19 +1,172 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+ * BARAQ — "Lightning" theme (בָּרָק = lightning / flash of sword).
+ *
+ * Deep obsidian canvas, electric cyan (live data) + neon violet (critical
+ * action), glass-morphism surfaces with a cyan→violet gradient hairline,
+ * and generous spacing so the glow can breathe. Dark mode first, tuned for
+ * long SOC shifts.
+ * ------------------------------------------------------------------------- */
+
 :root {
   color-scheme: dark;
-  --app-bg: #0a0f1a;
-  --app-fg: #e2e8f0;
-  --chart-grid: #1e293b;
-  --chart-track: #1e293b;
+  --app-bg: #0a0e17;
+  --app-fg: #d5dbea;
+  --chart-grid: #232d45;
+  --chart-track: #232d45;
+
+  /* Radius scale — modern, generous. */
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+
+  /* Neutral scale — obsidian → steel navy → lavender gray text. */
+  --color-white: #ffffff;
+  --color-slate-50: #ffffff;
+  --color-slate-100: #edf0f8;
+  --color-slate-200: #d5dbea;
+  --color-slate-300: #aeb8d4;
+  --color-slate-400: #8892b0;
+  --color-slate-500: #4a5578;
+  --color-slate-600: #2a3350;
+  --color-slate-700: #232d45;
+  --color-slate-800: #1a2236;
+  --color-slate-900: #131b2a;
+  --color-slate-950: #0a0e17;
+
+  /* Primary accent — the lightning (electric cyan). */
+  --color-cyan-50: #ecfeff;
+  --color-cyan-100: #cffafe;
+  --color-cyan-200: #a5f3fc;
+  --color-cyan-300: #7ff5ff;
+  --color-cyan-400: #00f0ff;
+  --color-cyan-500: #00d8e6;
+  --color-cyan-600: #00b8c9;
+  --color-cyan-700: #0e96a8;
+  --color-cyan-800: #157585;
+  --color-cyan-900: #165e6b;
+  --color-cyan-950: #083344;
+
+  /* Secondary accent — the sword (neon violet). */
+  --color-violet-50: #f5f3ff;
+  --color-violet-100: #ede9fe;
+  --color-violet-200: #ddd6fe;
+  --color-violet-300: #c4b5fd;
+  --color-violet-400: #9a85ff;
+  --color-violet-500: #7b61ff;
+  --color-violet-600: #6a4fff;
+  --color-violet-700: #5b3fe8;
+  --color-violet-800: #4c33c4;
+  --color-violet-900: #3e2a9e;
+  --color-violet-950: #2e1065;
+
+  /* Success — all-clear neon green. */
+  --color-emerald-50: #ecfdf5;
+  --color-emerald-100: #d1fae5;
+  --color-emerald-200: #a7f3d0;
+  --color-emerald-300: #6ee7b7;
+  --color-emerald-400: #2bfa99;
+  --color-emerald-500: #00e676;
+  --color-emerald-600: #00c861;
+  --color-emerald-700: #04a04f;
+  --color-emerald-800: #067d42;
+  --color-emerald-900: #064e3b;
+  --color-emerald-950: #022c22;
+
+  /* Danger — hot pink, used sparingly for critical only. */
+  --color-red-50: #fff1f3;
+  --color-red-100: #ffe4e9;
+  --color-red-200: #ffc9d3;
+  --color-red-300: #ff9fb1;
+  --color-red-400: #ff6b93;
+  --color-red-500: #ff3d71;
+  --color-red-600: #e81e56;
+  --color-red-700: #c21446;
+  --color-red-800: #9a133d;
+  --color-red-900: #7e1238;
+  --color-red-950: #4c0519;
+
+  --color-rose-50: #fff1f3;
+  --color-rose-100: #ffe4e9;
+  --color-rose-200: #ffc9d3;
+  --color-rose-300: #ff9fb1;
+  --color-rose-400: #ff6b93;
+  --color-rose-500: #ff3d71;
+  --color-rose-600: #e81e56;
+  --color-rose-700: #c21446;
+  --color-rose-800: #9a133d;
+  --color-rose-900: #7e1238;
+  --color-rose-950: #4c0519;
+
+  /* Warning — amber gold. */
+  --color-amber-50: #fff8eb;
+  --color-amber-100: #feefc7;
+  --color-amber-200: #fddf8f;
+  --color-amber-300: #ffd257;
+  --color-amber-400: #ffb300;
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #d97706;
+  --color-amber-700: #b45309;
+  --color-amber-800: #92400e;
+  --color-amber-900: #78350f;
+  --color-amber-950: #451a03;
+
+  --color-sky-50: #f0f9ff;
+  --color-sky-100: #e0f2fe;
+  --color-sky-200: #bae6fd;
+  --color-sky-300: #7dd3fc;
+  --color-sky-400: #38bdf8;
+  --color-sky-500: #0ea5e9;
+  --color-sky-600: #0284c7;
+  --color-sky-700: #0369a1;
+  --color-sky-800: #075985;
+  --color-sky-900: #0c4a6e;
+  --color-sky-950: #082f49;
+
+  --color-blue-50: #eff6ff;
+  --color-blue-100: #dbeafe;
+  --color-blue-200: #bfdbfe;
+  --color-blue-300: #93c5fd;
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-blue-600: #2563eb;
+  --color-blue-700: #1d4ed8;
+  --color-blue-800: #1e40af;
+  --color-blue-900: #1e3a8a;
+  --color-blue-950: #172554;
+
+  --color-orange-50: #fff7ed;
+  --color-orange-100: #ffedd5;
+  --color-orange-200: #fed7aa;
+  --color-orange-300: #fdba74;
+  --color-orange-400: #fb923c;
+  --color-orange-500: #f97316;
+  --color-orange-600: #ea580c;
+  --color-orange-700: #c2410c;
+  --color-orange-800: #9a3412;
+  --color-orange-900: #7c2d12;
+  --color-orange-950: #431407;
+
+  --color-fuchsia-50: #fdf4ff;
+  --color-fuchsia-100: #fae8ff;
+  --color-fuchsia-200: #f5d0fe;
+  --color-fuchsia-300: #f0abfc;
+  --color-fuchsia-400: #e879f9;
+  --color-fuchsia-500: #d946ef;
+  --color-fuchsia-600: #c026d3;
+  --color-fuchsia-700: #a21caf;
+  --color-fuchsia-800: #86198f;
+  --color-fuchsia-900: #701a75;
+  --color-fuchsia-950: #4a044e;
 }
 
 /* ---------------------------------------------------------------------------
- * Light theme
- * Tailwind v4 utilities resolve to runtime CSS variables (e.g. --color-slate-*),
- * so redefining the palette under html.light re-themes the whole application.
- * Curated values: white cards on a cool gray-blue page, dark ink text,
- * saturated accent buttons that keep white labels.
+ * Light theme — clean white surfaces, same accent vibrancy.
  * ------------------------------------------------------------------------- */
 html.light {
   color-scheme: light;
@@ -40,19 +193,22 @@ html.light {
   --color-cyan-200: #155e75;
   --color-cyan-300: #0e7490;
   --color-cyan-400: #0e7490;
-  --color-cyan-500: #06b6d4;
+  --color-cyan-500: #00c4d6;
   --color-cyan-600: #0891b2;
   --color-cyan-700: #0e7490;
   --color-cyan-800: #155e75;
   --color-cyan-900: #164e63;
   --color-cyan-950: #083344;
 
+  --color-violet-500: #7b61ff;
+  --color-violet-600: #6a4fff;
+
   --color-emerald-50: #022c22;
   --color-emerald-100: #064e3b;
   --color-emerald-200: #065f46;
   --color-emerald-300: #047857;
   --color-emerald-400: #047857;
-  --color-emerald-500: #10b981;
+  --color-emerald-500: #00a95e;
   --color-emerald-600: #047857;
   --color-emerald-700: #047857;
   --color-emerald-800: #065f46;
@@ -64,18 +220,15 @@ html.light {
   --color-rose-500: #f43f5e;
   --color-red-300: #b91c1c;
   --color-red-400: #dc2626;
-  --color-red-500: #ef4444;
+  --color-red-500: #ff3d71;
   --color-amber-300: #b45309;
   --color-amber-400: #d97706;
   --color-amber-500: #d97706;
-  --color-violet-300: #6d28d9;
-  --color-violet-400: #7c3aed;
-  --color-violet-500: #7c3aed;
   --color-blue-500: #2563eb;
 }
 
 /* White text flips to ink on light surfaces; keep it white only on solid
-   accent buttons (opaque from-*-600 gradients) and solid accent badges. */
+   accent buttons and solid accent badges. */
 html.light .text-white,
 html.light .text-slate-50,
 html.light .text-slate-100,
@@ -104,7 +257,6 @@ html.light .bg-violet-500 .text-white {
   color: #fff;
 }
 
-/* Small chips / code blocks: ink-tinted in light mode instead of black-tinted. */
 html.light [class*="bg-black/"] {
   background-color: rgba(15, 23, 42, 0.06);
 }
@@ -112,17 +264,28 @@ html.light .hb-screen [class*="bg-black/"] {
   background-color: rgba(2, 6, 23, 0.45);
 }
 
-/* Cards: clean white surfaces with a soft shadow in light mode. */
 html.light .card-surface {
-  background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
+  background: #ffffff;
   border-color: rgba(148, 163, 184, 0.35);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 10px 30px rgba(15, 23, 42, 0.05);
+}
+
+/* Glass surfaces (topbar, sidebar, drawers) switch to light glass so the
+   chrome never stays dark when the analyst picks the light theme. */
+html.light .glass-line {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(238, 242, 247, 0.94));
+}
+html.light .glass-line [class*="bg-white/"] {
+  background-color: rgba(15, 23, 42, 0.05);
+}
+html.light .glass-line [class*="border-white/"] {
+  border-color: rgba(148, 163, 184, 0.3);
 }
 
 /* Heartbeat "screens" stay dark in both themes, like real monitors. */
 .hb-screen {
   background-color: #020617 !important;
-  border-color: rgba(34, 211, 238, 0.15) !important;
+  border-color: rgba(0, 240, 255, 0.25) !important;
 }
 html.light .hb-screen .text-white,
 html.light .hb-screen .text-slate-100,
@@ -132,7 +295,7 @@ html.light .hb-screen .text-slate-300 {
 }
 
 html {
-  scrollbar-color: #1e293b transparent;
+  scrollbar-color: #2a3350 transparent;
   scrollbar-width: thin;
 }
 html.light {
@@ -142,6 +305,11 @@ html.light {
 body {
   font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
   background-color: var(--app-bg);
+  background-image:
+    radial-gradient(ellipse 70% 45% at 50% -15%, rgba(0, 240, 255, 0.06), transparent 60%),
+    radial-gradient(ellipse 55% 40% at 92% 108%, rgba(123, 97, 255, 0.05), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 5% 100%, rgba(0, 230, 118, 0.03), transparent 60%);
+  background-attachment: fixed;
   color: var(--app-fg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -153,21 +321,19 @@ pre {
   font-family: "JetBrains Mono", ui-monospace, monospace;
 }
 
-/* Focus visibility for keyboard users */
 :focus-visible {
-  outline: 2px solid rgba(34, 211, 238, 0.6);
-  outline-offset: 2px;
+  outline: 2px solid rgba(0, 240, 255, 0.55);
+  outline-offset: 1px;
 }
 
 ::selection {
-  background: rgba(34, 211, 238, 0.25);
+  background: rgba(0, 240, 255, 0.3);
   color: #fff;
 }
 html.light ::selection {
   color: #0f172a;
 }
 
-/* Thin scrollbars to match a dark SIEM aesthetic */
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -176,11 +342,11 @@ html.light ::selection {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #2a3350;
   border-radius: 4px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #4a5578;
 }
 html.light *::-webkit-scrollbar-thumb {
   background: #cbd5e1;
@@ -189,27 +355,123 @@ html.light *::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
 
-/* Recharts polish */
 .recharts-cartesian-axis-tick-value {
   font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
 }
 .recharts-default-tooltip {
   background: transparent !important;
 }
 
+/* ---------------------------------------------------------------------------
+ * Lightning surfaces — glass-morphism with a cyan→violet hairline.
+ * ------------------------------------------------------------------------- */
+
+/* Gradient hairline via a masked pseudo-border.
+   NOTE: lives in the components layer so Tailwind layout utilities
+   (fixed/sticky/absolute) can override its position: relative. */
+@layer components {
+  .glass-line {
+    position: relative;
+    background: linear-gradient(180deg, rgba(19, 27, 42, 0.92), rgba(10, 14, 23, 0.94));
+    backdrop-filter: blur(20px);
+  }
+  .glass-line::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(0, 240, 255, 0.28), rgba(123, 97, 255, 0.12) 45%, rgba(0, 240, 255, 0.05));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+mask-composite: exclude;
+  pointer-events: none;
+  }
+}
+
+.card-surface {
+  background: linear-gradient(180deg, rgba(26, 34, 54, 0.7), rgba(19, 27, 42, 0.92));
+  border-color: rgba(138, 146, 176, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 18px 44px -22px rgba(2, 6, 23, 0.9);
+  backdrop-filter: blur(14px);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+.card-surface:hover {
+  border-color: rgba(0, 240, 255, 0.3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 22px 52px -20px rgba(2, 6, 23, 0.95),
+    0 0 28px -10px rgba(0, 240, 255, 0.28);
+}
+
+/* Data tables: tight, hairline dividers, hover glow. */
+.data-table th {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8892b0;
+  border-bottom: 1px solid rgba(138, 146, 176, 0.14);
+  padding-top: 0.375rem;
+  padding-bottom: 0.5rem;
+  white-space: nowrap;
+}
+.data-table td {
+  font-size: 12.5px;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(138, 146, 176, 0.08);
+  vertical-align: middle;
+}
+.data-table tbody tr {
+  transition: background 0.15s ease;
+}
+.data-table tbody tr:hover {
+  background: rgba(0, 240, 255, 0.05);
+}
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Small caps console label. */
+.console-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8892b0;
+}
+
+/* Neon text gradient (cyan → violet). */
+.neon-text {
+  background: linear-gradient(92deg, #00f0ff 0%, #7b61ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---------------------------------------------------------------------------
+ * Signature animations — the "lightning" language.
+ * ------------------------------------------------------------------------- */
+
 @keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
-
 .fade-in {
-  animation: fade-in-up 0.25s ease-out both;
+  animation: fade-in-up 0.32s ease-out both;
 }
 
 @keyframes pulse-dot {
@@ -223,4 +485,238 @@ html.light *::-webkit-scrollbar-thumb:hover {
 }
 .pulse-dot {
   animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+/* Pulsing critical badge. */
+@keyframes badge-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 61, 113, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 12px 3px rgba(255, 61, 113, 0.35);
+  }
+}
+.badge-critical {
+  animation: badge-pulse 1.8s ease-in-out infinite;
+}
+
+/* Ripple micro-interaction on click. */
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+.ripple::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at var(--rx, 50%) var(--ry, 50%), rgba(0, 240, 255, 0.35), transparent 55%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+.ripple:active::after {
+  opacity: 1;
+  animation: ripple-out 0.55s ease-out forwards;
+}
+@keyframes ripple-out {
+  from {
+    transform: scale(0.4);
+  }
+  to {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+/* Skeleton shimmer loading. */
+@keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(90deg, rgba(42, 51, 80, 0.5) 25%, rgba(74, 85, 120, 0.45) 37%, rgba(42, 51, 80, 0.5) 63%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* Lightning bolt streak across the screen on page change. */
+@keyframes bolt-streak {
+  0% {
+    transform: translateX(-40vw) skewX(-18deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(140vw) skewX(-18deg);
+    opacity: 0;
+  }
+}
+.bolt-streak {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 18vw;
+  pointer-events: none;
+  z-index: 100;
+  background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.22), rgba(123, 97, 255, 0.35), transparent);
+  filter: blur(1px);
+  animation: bolt-streak 0.5s ease-out forwards;
+}
+
+/* Alert-feed severity flash for critical items. */
+@keyframes crit-flash {
+  0% {
+    background-color: rgba(255, 61, 113, 0.28);
+  }
+  100% {
+    background-color: rgba(255, 61, 113, 0);
+  }
+}
+.crit-flash {
+  animation: crit-flash 1.1s ease-out forwards;
+}
+
+/* Floating "live" icon drift. */
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+.float-y {
+  animation: float-y 3.2s ease-in-out infinite;
+}
+
+/* Terminal cursor blink. */
+@keyframes blink-caret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+.blink-caret {
+  animation: blink-caret 1.05s step-end infinite;
+}
+/* ---- Strike (SOAR quick-action terminal) ---- */
+@keyframes strike-in {
+  from {
+    transform: translateY(-28px) scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+.strike-modal {
+  animation: strike-in 0.18s ease-out;
+}
+@keyframes strike-line {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.strike-line {
+  animation: strike-line 0.22s ease-out both;
+}
+@keyframes strike-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 22px -4px rgba(0, 240, 255, 0.45);
+    border-color: rgba(0, 240, 255, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 34px -2px rgba(0, 240, 255, 0.8);
+    border-color: rgba(0, 240, 255, 0.9);
+  }
+}
+.strike-glow {
+  animation: strike-glow 1.1s ease-in-out infinite;
+}
+@keyframes toast-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.toast-in {
+  animation: toast-in 0.2s ease-out both;
+}
+@keyframes toast-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+.toast-out {
+  animation: toast-out 0.18s ease-in both;
+}
+
+/* ---- Assistant drawer + command palette ---- */
+@keyframes drawer-in {
+  from {
+    transform: translateY(24px) scale(0.97);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+.drawer-in {
+  animation: drawer-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+@keyframes palette-in {
+  from {
+    transform: scale(0.96) translateY(-8px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+.palette-in {
+  animation: palette-in 0.14s ease-out both;
+}
+@keyframes launcher-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 18px -4px rgba(0, 240, 255, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 30px -2px rgba(123, 97, 255, 0.75);
+  }
+}
+.launcher-pulse {
+  animation: launcher-pulse 2.4s ease-in-out infinite;
 }

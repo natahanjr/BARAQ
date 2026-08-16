@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.analyzers import dashboard
@@ -31,13 +32,19 @@ router = APIRouter(
 )
 
 
-def run_detection(db: Session, org: str = "", window_minutes: int = 10) -> tuple[list, list]:
+def run_detection(
+    db: Session,
+    org: str = "",
+    window_minutes: int = 10,
+    demo: bool = False,
+) -> tuple[list, list]:
     """One incremental detection pass for a single tenant.
 
     Evaluates only events that arrived after the detection cursor, persists
     alerts scoped to ``org``, then advances the cursor. Serialised with the
     scheduler by ``CURSOR_LOCK`` so every event is matched exactly once.
-    Returns ``(findings, created_alerts)``.
+    ``demo`` tags the produced alerts as demo/test data (excluded from the
+    production queue). Returns ``(findings, created_alerts)``.
     """
     from backend.detection.cursor import (
         CURSOR_LOCK,
@@ -50,16 +57,51 @@ def run_detection(db: Session, org: str = "", window_minutes: int = 10) -> tuple
 
     with CURSOR_LOCK:
         cursor = get_cursor(db)
-        engine = RulesEngine(db, org=org)
-        findings = engine.run(window_minutes=window_minutes, since_id=cursor)
-        alerting = AlertingService(db)
-        created = alerting.handle_findings(findings, org=org)
+        # Demo partition: every query in this pass (rules, correlation,
+        # alerting, RBA) sees only the matching demo/production slice. The
+        # flag is restored afterwards so an outer partition (e.g. the
+        # scheduler cycle) keeps applying; cursor bookkeeping runs with the
+        # flag cleared - the watermark is global.
+        prev_demo = db.info.get("baraq_demo")
+        db.info["baraq_demo"] = demo
+        try:
+            engine = RulesEngine(db, org=org)
+            findings = engine.run(window_minutes=window_minutes, since_id=cursor)
+            # Two-phase detection: base findings (Sigma + native rules) are
+            # persisted first, THEN the correlation engine evaluates - so a chain
+            # whose alert stage depends on alerts raised by this same batch can
+            # complete within the pass instead of one scheduler cycle later.
+            # Idle re-runs still evaluate the window but the alerting service
+            # refreshes the open chain alert (never duplicates it).
+            base = [f for f in findings if f.rule != "correlation_engine"]
+            alerting = AlertingService(db)
+            created = alerting.handle_findings(base, org=org, demo=demo)
+            from backend.detection.correlation_engine import CorrelationEngine
+
+            correlation = CorrelationEngine(db)
+            correlation.org = org
+            corr_findings = correlation.evaluate(window_minutes=window_minutes)
+            if corr_findings:
+                findings = base + corr_findings
+                created += alerting.handle_findings(corr_findings, org=org, demo=demo)
+            else:
+                findings = base
+        finally:
+            if prev_demo is None:
+                db.info.pop("baraq_demo", None)
+            else:
+                db.info["baraq_demo"] = prev_demo
         set_cursor(db, max_event_id(db))
         db.commit()
     return findings, created
 
 
-def run_detection_for_orgs(db: Session, orgs: list[str], window_minutes: int = 10) -> tuple[list, list]:
+def run_detection_for_orgs(
+    db: Session,
+    orgs: list[str],
+    window_minutes: int = 10,
+    demo: bool = False,
+) -> tuple[list, list]:
     """Incremental detection across several tenants in one cursor scope.
 
     The cursor is read once, every tenant evaluates its slice of the same
@@ -80,18 +122,43 @@ def run_detection_for_orgs(db: Session, orgs: list[str], window_minutes: int = 1
     created: list = []
     with CURSOR_LOCK:
         cursor = get_cursor(db)
-        for org in orgs:
-            engine = RulesEngine(db, org=org)
-            org_findings = engine.run(window_minutes=window_minutes, since_id=cursor)
-            findings.extend(org_findings)
-            alerting = AlertingService(db)
-            created.extend(alerting.handle_findings(org_findings, org=org))
+        prev_demo = db.info.get("baraq_demo")
+        db.info["baraq_demo"] = demo
+        try:
+            for org in orgs:
+                engine = RulesEngine(db, org=org)
+                org_findings = engine.run(window_minutes=window_minutes, since_id=cursor)
+                base = [f for f in org_findings if f.rule != "correlation_engine"]
+                findings.extend(base)
+                alerting = AlertingService(db)
+                created.extend(alerting.handle_findings(base, org=org, demo=demo))
+                # Correlation runs after base alerts are persisted (see
+                # run_detection): chains complete within the same pass.
+                from backend.detection.correlation_engine import CorrelationEngine
+
+                correlation = CorrelationEngine(db)
+                correlation.org = org
+                corr_findings = correlation.evaluate(window_minutes=window_minutes)
+                if corr_findings:
+                    findings.extend(corr_findings)
+                    created.extend(alerting.handle_findings(corr_findings, org=org, demo=demo))
+        finally:
+            if prev_demo is None:
+                db.info.pop("baraq_demo", None)
+            else:
+                db.info["baraq_demo"] = prev_demo
         set_cursor(db, max_event_id(db))
         db.commit()
     return findings, created
 
 
-def run_pipeline(db: Session, records: list[dict], org: str = "", detect: bool = True) -> dict:
+def run_pipeline(
+    db: Session,
+    records: list[dict],
+    org: str = "",
+    detect: bool = True,
+    demo: bool = False,
+) -> dict:
     """Full pipeline: normalize -> persist -> detect -> alert.
 
     ``org`` is the tenant every record in this batch belongs to (agent
@@ -101,6 +168,10 @@ def run_pipeline(db: Session, records: list[dict], org: str = "", detect: bool =
     immediately; the background scheduler picks up detection on its next
     cycle using the incremental cursor, so ingest throughput is decoupled
     from rules-engine cost.
+
+    ``demo=True`` tags the persisted events and the alerts they produce as
+    demo/test data - they are excluded from every production view unless the
+    console explicitly runs in demo mode.
     """
     from backend.analyzers.normalizer import Normalizer
     from backend.analyzers.normalizer import Normalizer
@@ -151,14 +222,23 @@ def run_pipeline(db: Session, records: list[dict], org: str = "", detect: bool =
                 continue
         source = record.get("source")
         if source == "process":
+            raw = record.get("raw") or {}
+            parent_name = (
+                record.get("parent_name")
+                or (raw.get("parent_image") or "").rsplit("\\", 1)[-1]
+                or ""
+            )
             db.add(ProcessRecord(
                 pid=record["pid"], ppid=record.get("ppid", 0),
                 name=record.get("name", ""), path=record.get("path", ""),
-                command_line=(record.get("raw") or {}).get("cmdline", ""),
-                parent_name="", user=record.get("user", ""),
+                command_line=raw.get("cmdline", ""),
+                parent_name=parent_name, user=record.get("user", ""),
+                guid=raw.get("process_guid", ""),
+                parent_guid=raw.get("parent_process_guid", ""),
                 is_new=record.get("is_new", False),
                 observed_at=Normalizer._safe_ts(record.get("timestamp")),
                 org=org,
+                demo=demo,
             ))
             saved_processes += 1
         elif source == "network":
@@ -171,6 +251,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "", detect: bool =
                 duration_seconds=record.get("duration_seconds", 0.0),
                 observed_at=Normalizer._safe_ts(record.get("timestamp")),
                 org=org,
+                demo=demo,
             ))
             saved_connections += 1
         elif source == "dns":
@@ -180,6 +261,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "", detect: bool =
                 response_size=record.get("response_size", 0),
                 observed_at=Normalizer._safe_ts(record.get("timestamp")),
                 org=org,
+                demo=demo,
             ))
             saved_dns += 1
         elif source == "http":
@@ -191,6 +273,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "", detect: bool =
                 response_body_size=record.get("response_body_size", 0),
                 observed_at=Normalizer._safe_ts(record.get("timestamp")),
                 org=org,
+                demo=demo,
             ))
             saved_http += 1
         elif source == "email":
@@ -201,6 +284,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "", detect: bool =
                 ip_address=record.get("ip_address", ""),
                 received_at=Normalizer._safe_ts(record.get("timestamp")),
                 org=org,
+                demo=demo,
             ))
             saved_emails += 1
         elif source == "usb":
@@ -209,6 +293,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "", detect: bool =
                 vendor=record.get("vendor", ""), serial=record.get("serial", ""),
                 inserted_at=Normalizer._safe_ts(record.get("timestamp")),
                 org=org,
+                demo=demo,
             ))
             saved_usb += 1
         elif source == "malware":
@@ -220,6 +305,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "", detect: bool =
                 signature_name=record.get("signature_name", ""),
                 scanned_at=Normalizer._safe_ts(record.get("timestamp")),
                 org=org,
+                demo=demo,
             ))
             saved_files += 1
         elif source == "vuln":
@@ -234,6 +320,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "", detect: bool =
                 remediation=record.get("remediation", ""),
                 found_at=Normalizer._safe_ts(record.get("timestamp")),
                 org=org,
+                demo=demo,
             ))
             saved_vulns += 1
         else:
@@ -247,7 +334,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "", detect: bool =
                 corrupted_events += 1
                 continue
             record_outcome(channel, True)
-            db.add(NormalizedEvent(**normalized, org=org))
+            db.add(NormalizedEvent(**normalized, org=org, demo=demo))
             saved_events += 1
 
     db.commit()
@@ -258,7 +345,7 @@ def run_pipeline(db: Session, records: list[dict], org: str = "", detect: bool =
         # Incremental detection: evaluate only events that arrived after the
         # last run (cursor), then advance the cursor. The lock serialises
         # ingest handlers + the scheduler so each event is matched once.
-        findings, created = run_detection(db, org=org)
+        findings, created = run_detection(db, org=org, demo=demo)
 
     # Outbound streaming: forward the freshly-persisted records to configured
     # Kafka / Redis / Elasticsearch sinks. Never blocks the pipeline - records
@@ -364,24 +451,27 @@ def notification_health():
 @router.post("/ml/train", dependencies=[Depends(require_admin)])
 def ml_train(
     async_mode: bool = Query(True),
-    hours: int = Query(24, ge=1, le=168),
+    hours: int | None = Query(None, ge=1, le=168),
     force: bool = Query(False),
     db: Session = Depends(get_db),
 ):
     from backend.ml.tasks import train_in_background, training_active
 
+    window = f"full history" if hours is None else f"last {hours}h"
     if async_mode:
         scheduled = train_in_background(hours=hours, force=force)
         return {
             "scheduled": scheduled,
             "force": force,
+            "window": window,
             "message": (
-                "Background training started." if scheduled
+                f"Background training started ({window})." if scheduled
                 else "A training run is already in progress."
             ),
             "training": training_active(),
         }
     result = get_detector().train(db, hours=hours, validate=not force)
+    result["window"] = window
     return result
 
 
@@ -395,10 +485,50 @@ def ml_analyze(hours: int = Query(1, ge=1, le=168), db: Session = Depends(get_db
 def ml_status():
     from backend.ml.tasks import training_active
 
+    detector = get_detector()
+    status = detector.status()
+    info = detector.version_info()
+
+    # P0 - live ML health semantics: the analyst sees one unambiguous
+    # MODEL STATE, not contradictory fragments ("ATTENTION" + "no stream
+    # samples"). Health = trained + fresh + not drifted; drift is the
+    # hardest failure (the model no longer matches live traffic).
+    if not status["trained_at"]:
+        state = "CRITICAL"
+    elif status["drift"]:
+        state = "CRITICAL"
+    elif status["stale"] or not status["ready"]:
+        state = "WARNING"
+    else:
+        state = "HEALTHY"
+
+    scored_events = 0
+    try:
+        from backend.database.connection import SessionLocal
+        from backend.database.models import NormalizedEvent
+        from sqlalchemy import func
+
+        db = SessionLocal()
+        try:
+            scored_events = db.scalar(
+                select(func.count(NormalizedEvent.id)).where(
+                    NormalizedEvent.ml_score.isnot(None)
+                )
+            ) or 0
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001 - health endpoint must never 500
+        pass
+
     return {
-        **get_detector().status(),
+        **status,
+        "model_state": state,
+        "model_version": str(info["version"]),
+        "version": str(info["version"]),  # serialization fix: string, never dict
+        "train_kind": info["train_kind"],
+        "scored_events": scored_events,
         "training": training_active(),
-        "version": get_detector().version_info(),
+        "version_info": info,
     }
 
 

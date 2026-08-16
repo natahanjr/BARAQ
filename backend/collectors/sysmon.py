@@ -38,6 +38,8 @@ _FIELD = {
     "image": re.compile(r"Image:\s+(\S+)", re.IGNORECASE),
     "command_line": re.compile(r"CommandLine:\s+(.+)", re.IGNORECASE),
     "parent_image": re.compile(r"ParentImage:\s+(\S+)", re.IGNORECASE),
+    "process_guid": re.compile(r"ProcessGuid:\s+(\S+)", re.IGNORECASE),
+    "parent_process_guid": re.compile(r"ParentProcessGuid:\s+(\S+)", re.IGNORECASE),
     "user": re.compile(r"User:\s+(\S+)", re.IGNORECASE),
     "protocol": re.compile(r"Protocol:\s+(\S+)", re.IGNORECASE),
     "source_ip": re.compile(r"SourceIp:\s+(\S+)", re.IGNORECASE),
@@ -112,6 +114,8 @@ class SysmonCollector(BaseCollector):
                 "raw": {
                     "cmdline": cmdline,
                     "parent_image": _match(message, "parent_image"),
+                    "process_guid": _match(message, "process_guid"),
+                    "parent_process_guid": _match(message, "parent_process_guid"),
                 },
             }]
 

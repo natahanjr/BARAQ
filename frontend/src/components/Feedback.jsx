@@ -1,6 +1,6 @@
 export function Loading({ label = "Loading" }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-slate-800/60 bg-slate-900/40 py-20">
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] py-20">
       <div className="relative h-10 w-10">
         <div className="absolute inset-0 animate-spin rounded-full border-2 border-slate-700 border-t-cyan-400" />
         <div className="absolute inset-0 animate-pulse rounded-full border border-cyan-500/20" />
@@ -12,8 +12,8 @@ export function Loading({ label = "Loading" }) {
 
 export function EmptyState({ title = "No data", subtitle, icon = "◌" }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700/60 bg-slate-900/30 py-16 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-700/60 bg-slate-800/50 text-2xl text-slate-500">
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700/60 bg-white/[0.02] py-16 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-700/60 bg-white/[0.04] text-2xl text-slate-500">
         {icon}
       </div>
       <p className="mt-4 text-sm font-semibold text-slate-300">{title}</p>
@@ -24,7 +24,7 @@ export function EmptyState({ title = "No data", subtitle, icon = "◌" }) {
 
 export function ErrorBanner({ message, onRetry }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
       <span className="flex items-center gap-2">
         <span aria-hidden>⚠</span>
         <span>{message}</span>

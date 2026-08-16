@@ -1,0 +1,27 @@
+title: "BARAQ - Curl/Wget Download to Temp"
+id: baraq-4688-curl-wget-temp
+status: experimental
+level: high
+description: "curl or wget downloading a file into a temp/user-writable location - the signature of a payload drop before execution."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        EventID: 4688
+        CommandLine|contains:
+            - "curl -o"
+            - "curl --output"
+            - "wget -O"
+            - "wget --output-document"
+            - "certutil -urlcache"
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - "Legitimate software update downloads to temp directories"
+tags:
+    - attack.command_and_control
+    - attack.t1105

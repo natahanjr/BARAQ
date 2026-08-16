@@ -963,7 +963,7 @@ def benign_baseline(n: int = 60) -> list[dict]:
                 "source": "eventlog", "channel": "Security", "event_id": 4688,
                 "timestamp": _ts(-i * 0.5).isoformat(), "user": user,
                 "message": "A new process has been created. New Process Name: C:\\Windows\\System32\\notepad.exe.",
-                "raw": {"new_process": "notepad.exe"},
+                "raw": {"new_process": "C:\\Windows\\System32\\notepad.exe"},
             })
         elif kind == 2:
             failure = logon_failure(user=user, source_ip=f"192.168.1.{10 + (i % 20)}")

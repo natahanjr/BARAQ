@@ -135,30 +135,39 @@ if errorlevel 1 (
 )
 
 if /i "%SECURE_MODE%"=="secure" (
-    echo  [START] Launching BARAQ ^(HTTPS^) - open https://127.0.0.1:8443
-    echo  [NOTE]  Your browser will warn about the self-signed certificate.
-    echo          Trust it once, or import certs\baraq.crt as a root CA.
-    echo  [STOP]  Close this window ^(Ctrl+C^) to shut BARAQ down.
-    echo         The browser opens automatically once the app is ready ^(up to 3 min^).
+    echo  [START] Launching BARAQ in the background ^(HTTPS^) - https://127.0.0.1:8443
+    echo  [STOP]  The console closes automatically; the server keeps running
+    echo          in the background. Re-run start.bat to restart it.
     echo.
     start "" powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\open_dashboard.ps1" -Url "https://127.0.0.1:8443"
-
-    if /i "%LAN_MODE%"=="lan" (
-        venv\Scripts\python -m uvicorn backend.main:app --host 0.0.0.0 --port 8443 --ssl-certfile certs\baraq.crt --ssl-keyfile certs\baraq.key
-    ) else (
-        venv\Scripts\python -m uvicorn backend.main:app --host 127.0.0.1 --port 8443 --ssl-certfile certs\baraq.crt --ssl-keyfile certs\baraq.key
-    )
 ) else (
-    echo  [START] Launching BARAQ - open http://127.0.0.1:8001 in your browser
-    echo  [STOP]  Close this window ^(Ctrl+C^) to shut BARAQ down.
-    echo         The browser opens automatically once the app is ready ^(up to 3 min^).
+    echo  [START] Launching BARAQ in the background - open http://127.0.0.1:8001
+    echo  [STOP]  The console closes automatically; the server keeps running
+    echo          in the background. Re-run start.bat to restart it.
     echo.
     start "" powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\open_dashboard.ps1" -Url "http://127.0.0.1:8001"
-
-    if /i "%LAN_MODE%"=="lan" (
-        venv\Scripts\python -m uvicorn backend.main:app --host 0.0.0.0 --port 8001
-    ) else (
-        venv\Scripts\python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001
-    )
 )
-pause
+
+rem ---------------------------------------------------------------------------
+rem  Background start (canonical entry: scripts\run_server.ps1, writes
+rem  logs\server.pid). Any previous hidden server on the target port is
+rem  killed first so re-running start.bat restarts cleanly instead of
+rem  silently failing on the occupied port.
+rem ---------------------------------------------------------------------------
+set "TARGET_PORT=8001"
+if /i "%SECURE_MODE%"=="secure" set "TARGET_PORT=8443"
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:":%TARGET_PORT% .*LISTENING"') do (
+    echo  [KILL]  Stopping previous BARAQ server ^(PID %%p^) on port %TARGET_PORT%...
+    taskkill /f /pid %%p >nul 2>&1
+)
+
+set "SERVER_ARGS=-NoProfile -ExecutionPolicy Bypass -File scripts\run_server.ps1"
+if /i "%LAN_MODE%"=="lan" set "SERVER_ARGS=%SERVER_ARGS% -Lan"
+set "TLS_PREFIX="
+if /i "%SECURE_MODE%"=="secure" set "TLS_PREFIX=$env:BARAQ_TLS='1'; "
+powershell -NoProfile -ExecutionPolicy Bypass -Command "%TLS_PREFIX%Start-Process -FilePath 'powershell.exe' -ArgumentList '%SERVER_ARGS%' -WindowStyle Hidden -WorkingDirectory '%CD%' -RedirectStandardOutput 'logs\server.out.log' -RedirectStandardError 'logs\server.err.log'"
+
+echo.
+echo  [DONE]  BARAQ is starting in the background. Closing this window...
+ping -n 3 127.0.0.1 >nul
+exit

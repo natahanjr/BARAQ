@@ -15,6 +15,11 @@ A lightweight, production-oriented SOC framework for Windows endpoints — no cl
 | **Collection** | Windows security event log (4624, 4625, 4720, 4726, 4732, 4740, 4672...), running/new processes with parent-child relationships, active TCP connections + listening ports, PowerShell operational log, **Sysmon (process tree E1 / network E3 / process access E10 / file events E11 / registry E13 / file delete E23)**, plus a realistic attack simulator |
 | **Processing** | Event normalization (Event ID / Category / User / Risk / Timestamp / Host) with **numeric risk scoring (0-100)** per event |
 | **Rule-Based Detection** | **100 native rules** covering all 14 MITRE ATT&CK tactic groups — Brute Force (T1110), Suspicious PowerShell (T1059.001), Privilege Escalation (T1068), Persistence (T1547), Network Reconnaissance (T1046), Lateral Movement (T1021), Data Staging (T1074), Malware File, Email Phishing, DNS/HTTP Exfiltration, USB Device, Kill-Chain Correlation (T1071), **Vulnerability Exploitation (T1190), Credential Access (T1003), Registry Run Keys (T1547.001), Scheduled Task Abuse (T1053.005), WMI Event Subscriptions (T1546.003), Account Tampering (T1098), Binary Masquerading (T1564), Artifact Hiding (T1564), LOLBins (T1218), Bulk Exfiltration (T1041), Log Clearing (T1070.001), C2 Beaconing (T1071), Ransomware Impact (T1486), Recovery Inhibition (T1490), Credential Store Theft (T1003), BITS Jobs (T1197), Shortcut Modification (T1547.009)** — each mapped to MITRE ATT&CK with confidence + remediation, plus a **Sigma engine** running the community rule set (2,512 rules, pulled via scripts/sigma_pull.py) |
+| **Correlation Rules** | **11 declarative YAML correlation chains** — multi-stage, multi-source joins (alert stages + raw-telemetry event stages on the same entity): initial-access→execution, persistence→credential access, discovery→lateral movement, collection→exfiltration, defense evasion→impact (ransomware), download→C2 beacon, plus event-telemetry brute-force→credential-theft chains |
+| **Search** | Pipe-based search language over events and alerts — filters, free text, `| stats`, `| top`, `| rare`, `| table`, `| fields`, `| sort`, `| where`, `| limit`, `| timechart span=1d count by user` (pivoted trends), `| transaction by host maxspan=5m` (session grouping); relative/ISO time windows; full reference in [`docs/search_language.md`](docs/search_language.md) |
+| **Saved Searches & Dashboards** | One-click saved hunt queries with custom panels (table / count / top-N / trend) rendered live — the analyst workspace equivalent of saved searches and dashboards |
+| **Risk-Based Alerting (RBA)** | Entity risk engine — every alert feeds user/host/IP risk scores with MITRE-weighted contributions, decay over time, HIGH/CRITICAL escalation alerts, a risk leaderboard, and a **live tuning UI** (rule weights, thresholds, decay, notable window — persisted, no restart) |
+| **SOAR Automation** | Playbooks (trigger conditions → ordered actions: block_ip, quarantine, isolate, disable_account, escalate, create_incident, notify, …) that fire automatically from the detection pipeline, with a run log and manual test/run |
 | **Alert Aggregation** | Rule-level deduplication (one open alert per signature) with **repeat-trigger severity escalation** (`trigger_count`, escalating LOW→MEDIUM→HIGH→CRITICAL) |
 | **ML Detection** | Per-behavior anomaly analysis (**login / process / network**) with Isolation Forest + Random Forest / XGBoost supervised classifier, **persisted model metadata and a "staleness" signal** with automatic scheduler retraining |
 | **Hybrid Risk Scoring** | Alert risk = **60% rule score + 40% ML anomaly score** → 0-100 score + LOW/MEDIUM/HIGH/CRITICAL level |
@@ -106,20 +111,22 @@ BARAQ/
 ├── backend/
 │   ├── ai/            # AI security assistant (local engine + RAG)
 │   ├── analyzers/     # Normalizer (numeric risk) + dashboard analytics
-│   ├── api/           # FastAPI routers (alerts, auth, incidents, intel, graph, realtime, ...)
+│   ├── api/           # FastAPI routers (alerts, auth, incidents, intel, graph, realtime, search, saved, automation, rba, ...)
+│   ├── automation/    # SOAR playbooks (triggers -> actions, auto-fire from pipeline)
 │   ├── collectors/    # Windows event log, process, network, PowerShell, Sysmon, vuln scanner, simulator
 │   ├── database/      # SQLAlchemy models + SQLite/PostgreSQL connection (+ additive migrations)
-│   ├── detection/     # Rules engine, alert workflow, 43 detection rules
+│   ├── detection/     # Rules engine, alert workflow, 100 detection rules, Sigma engine, YAML correlation rules
 │   ├── evaluation/    # Detection evaluation framework (metrics, hold-out)
 │   ├── graph/         # Entity graph (Postgres / Neo4j backend)
 │   ├── mitre/         # MITRE ATT&CK techniques data + helpers
 │   ├── ml/            # Isolation Forest / Random Forest / XGBoost + SHAP/LIME explanations
 │   ├── reports/       # Report generator + exporters (PDF/HTML/JSON/CSV)
-│   ├── risk/          # Hybrid risk scoring engine (rule 60% + ML 40%)
+│   ├── risk/          # Hybrid risk scoring engine (rule 60% + ML 40%) + entity risk (RBA)
+│   ├── search/        # Pipe-based search engine (stats/top/timechart/transaction pipes)
 │   ├── streaming/      # Kafka / Redis Streams / ES forwarding
 │   ├── threatintel/   # IOC enrichment (AbuseIPDB / OTX / VirusTotal)
 │   └── vulnscan/      # CVE database + local inventory matching
-├── frontend/          # React 18 + Tailwind CSS 4 + Recharts dashboard (login/MFA/SSO, alerts, incidents, users & audit, realtime)
+├── frontend/          # React 18 + Tailwind CSS 4 + Recharts dashboard (login/MFA/SSO, alerts, incidents, users & audit, realtime, Search, Dashboards, Automation, Entity Risk Center)
 ├── database/          # Local database (SQLite by default, PostgreSQL for fleets)
 ├── logs/              # Runtime logs
 ├── reports/           # Generated security reports
@@ -290,19 +297,38 @@ executable on first run.
 ## Quick Start: Generate Your First Alerts
 
 1. Start the backend and the dashboard (above).
-2. In the dashboard, open **System → Run simulation** (or use the API):
+2. Seed a realistic SOC demo dataset — 20 curated ATT&CK attack timelines over
+   the last 48 h plus 14 days of benign baseline, run through the real
+   detection pipeline (alerts, entity risk, playbook runs, incidents,
+   dashboards included):
 
 ```powershell
-# Full attack suite (brute force, PowerShell, privesc, persistence, port scan)
-curl.exe -X POST http://127.0.0.1:8000/api/system/simulate -H "Content-Type: application/json" -d "{}"
-
-# Single scenario
-curl.exe -X POST http://127.0.0.1:8000/api/system/simulate -H "Content-Type: application/json" -d "{\"scenario\":\"brute_force\"}"
+python scripts\seed_demo.py             # full demo dataset
+python scripts\seed_demo.py --wipe      # reset demo tables first (re-seed)
+python scripts\seed_demo.py --scenarios brute_force,phishing --days 7
+python scripts\seed_demo.py --org tenant-alpha
 ```
 
 3. Open **Alerts** to review detections; click any alert for MITRE mapping, evidence and recommended action.
-4. Open **Investigation**, select an alert, and inspect its attack chain; use **AI explanation**.
-5. Open **Reports**, choose Executive/Technical + PDF/HTML/JSON/CSV and click **Generate report**.
+4. Open **Search** and try `event_id=4625 | top 10 user`, `| timechart span=1d count by user`,
+   or `index=alerts severity=critical | table name, rule, host | sort -risk_score`.
+5. Open **Dashboards** — the seeded *SOC Overview* renders live panels from the saved searches.
+6. Open **Investigation**, select an alert, and inspect its attack chain; use **AI explanation**.
+7. Open **Automation** to review the seeded playbook runs, and **Entity Risk Center** to tune risk live.
+8. Open **Reports**, choose Executive/Technical + PDF/HTML/JSON/CSV and click **Generate report**.
+
+### Demo mode
+
+Seeded demo data (events, alerts, entity risk, incidents) is tagged with a
+`demo` flag and **excluded from every production view and the detection
+pipeline**. The scheduler, RBA and entity-risk escalation are scoped so demo
+telemetry can never surface as production alerts or merge into production
+state.
+
+- Toggle **Demo** in the console top bar (or add `include_demo=1` to any API
+  query) to browse the seeded dataset; the toggle is persisted per browser.
+- Re-seed anytime: `python scripts\seed_demo.py --wipe` (applies schema
+  migrations automatically).
 
 ### Collect real host telemetry
 
@@ -385,6 +411,25 @@ python scripts\agent.py --server https://soc.example.com:8443 --key "<host-key>"
 curl.exe https://<soc-host>:8443/api/endpoints -H "X-API-Key: baraq-dev-admin" -k
 ```
 
+## Search Language
+
+BARAQ ships a pipe-based query language over events and
+alerts — the same syntax in the Search page, saved searches, dashboard
+panels and the API (`POST /api/search`):
+
+```
+source=sysmon event_id=4625 "failed logon" | stats count by user, host | sort -count
+event_id=4625 | timechart span=1d count by user
+event_id=4625 | transaction by host maxspan=5m
+index=alerts severity=critical | table name, rule, host, risk_score | sort -risk_score
+```
+
+Pipes: `stats` · `top` · `rare` · `table` · `fields` · `sort` · `where` ·
+`limit` · `timechart` (time-bucketed, pivoted trends) · `transaction`
+(session grouping with `maxspan`). Time windows are relative (`-24h`, `-7d`)
+or ISO. The full reference is in
+[`docs/search_language.md`](docs/search_language.md).
+
 ### Real-time alerting
 
 Alerts fan out via webhook, SMTP email, and Windows toast notifications
@@ -399,7 +444,7 @@ Alerts fan out via webhook, SMTP email, and Windows toast notifications
 python -m pytest tests -v
 ```
 
-Result: **623 tests passed** (collectors incl. Sysmon/vuln scan, 29 detection rules + hold-out evaluation, pipeline, API + auth/RBAC, hybrid risk scoring, evaluation framework, alert aggregation/escalation/workflow verdicts, ML lifecycle + v2 generalization + async training + online learning/drift, assistant RAG, multi-endpoint ingest/fleet + agent commands, threat-intel feeds, data retention + schema migrations, entity-graph upsert integrity, encryption at rest, tamper-evident audit chain, LDAP + OIDC SSO, TOTP MFA, CSRF + request-size guards, API hardening/rate limits, observability SLOs, scheduled reports, ticketing integrations, data-quality validation + auto-repair, parameter tuning).
+Result: **660+ tests passed** (collectors incl. Sysmon/vuln scan, 100 detection rules + Sigma engine + 11 correlation chains + hold-out evaluation, pipeline, API + auth/RBAC, hybrid risk scoring, search engine incl. timechart/transaction, saved searches & dashboards, automation playbooks, entity risk + tuning, evaluation framework, alert aggregation/escalation/workflow verdicts, ML lifecycle + v2 generalization + async training + online learning/drift, assistant RAG, multi-endpoint ingest/fleet + agent commands, threat-intel feeds, data retention + schema migrations, entity-graph upsert integrity, encryption at rest, tamper-evident audit chain, LDAP + OIDC SSO, TOTP MFA, CSRF + request-size guards, API hardening/rate limits, observability SLOs, scheduled reports, ticketing integrations, data-quality validation + auto-repair, parameter tuning).
 
 ---
 
@@ -569,10 +614,9 @@ See `documentation/` for:
 - `performance_benchmarks.md` — throughput/latency/memory on the target laptop
 - `BARAQ_Combined_Guide.md` — single consolidated operator/maintenance walkthrough
 
-Academic: `docs/THESIS_GUIDE.md` — full thesis/research writing scaffold
-(proposed titles, research questions, literature-review map, methodology
-template, the measured evaluation and performance results with reproduction
-commands, limitations, ethics and a chapter-by-chapter outline).
+Product docs: `docs/search_language.md` — the complete search-language reference
+(filters, indexes, pipes incl. `timechart` / `transaction`, time windows,
+API + examples).
 
 Security: see `SECURITY.md` for the coordinated-disclosure policy and
 `SECURITY_AUDIT.md` for the hardening controls inventory and pen-test
@@ -598,11 +642,15 @@ expected. It exits non-zero with a message on the first failing check.
 
 ## Roadmap
 
-HTTPS is now the standard deployment path (`start.bat secure`, agent
-`--tls-ca` pinning). Remaining planned hardening: managed certificate
-rotation/CA integration, secure secret management, multi-node/ha deployment,
-SOC2/ISO 27001-aligned audit trails, immutable evidence storage, and a
-managed-versioning/update channel. See the phased deployment plan for details.
+The analyst workspace now covers the enterprise security surface:
+RBA with live tuning, declarative multi-source correlation, pipe-based search
+(`stats` / `timechart` / `transaction`), saved searches, dashboards and SOAR
+automation — all with a web UI. Remaining planned work: managed certificate
+rotation/CA integration, secure secret management, **multi-node/HA
+deployment** (the one intentionally-out-of-scope area — it requires a
+distributed-architecture rewrite), SOC2/ISO 27001-aligned audit trails,
+immutable evidence storage, and a managed-versioning/update channel. See the
+phased deployment plan for details.
 
 ---
 

@@ -73,3 +73,6 @@ licensing/private_key.pem
 
 
 database/*.sentinel.lock
+.aider*
+
+datasets/

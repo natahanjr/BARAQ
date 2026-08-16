@@ -89,23 +89,47 @@ export default function Login({ onAuthenticated }) {
     "w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-500";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 px-4">
-      <div className="w-full max-w-sm">
+    <div className="flex min-h-screen items-center justify-center bg-[#0a0e17] px-4">
+      <div
+        className="pointer-events-none fixed inset-0"
+        style={{
+          background:
+            "radial-gradient(600px 400px at 20% 10%, rgba(0,240,255,0.07), transparent 60%), radial-gradient(600px 400px at 80% 90%, rgba(123,97,255,0.08), transparent 60%)",
+        }}
+      />
+      <div className="relative w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3">
           <svg className="h-16 w-16" viewBox="0 0 64 64">
             <defs>
               <linearGradient id="lgShield" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#06b6d4" />
-                <stop offset="100%" stopColor="#0e7490" />
+                <stop offset="0%" stopColor="#00f0ff" />
+                <stop offset="100%" stopColor="#7b61ff" />
               </linearGradient>
+              <filter id="lgGlow" x="-40%" y="-40%" width="180%" height="180%">
+                <feGaussianBlur stdDeviation="2.4" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
             </defs>
             <path
-              d="M32 6 L52 12 L52 28 Q52 42 32 52 Q12 42 12 28 L12 12 Z"
+              d="M32 3 L57 13.5 L57 30 Q57 47 32 61 Q7 47 7 30 L7 13.5 Z"
               fill="url(#lgShield)"
+              opacity="0.16"
+            />
+            <path
+              d="M32 3 L57 13.5 L57 30 Q57 47 32 61 Q7 47 7 30 L7 13.5 Z"
+              fill="none"
+              stroke="url(#lgShield)"
+              strokeWidth="2"
               opacity="0.9"
             />
-            <circle cx="32" cy="28" r="6" fill="none" stroke="#22d3ee" strokeWidth="1.2" opacity="0.7" />
-            <path d="M28.5 28 L31 30.5 L35.5 25.5" stroke="#34d399" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d="M36.5 12 L22 34.5 L30.5 34.5 L26.5 52 L44 27.5 L34.5 27.5 Z"
+              fill="#00f0ff"
+              filter="url(#lgGlow)"
+            />
           </svg>
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-wide text-white">BARAQ</h1>
@@ -117,7 +141,7 @@ export default function Login({ onAuthenticated }) {
 
         <form
           onSubmit={submit}
-          className="space-y-4 rounded-2xl border border-slate-800/70 bg-slate-900/60 p-6 shadow-2xl backdrop-blur"
+          className="glass-line space-y-4 rounded-2xl bg-[#131b2a]/85 p-6 shadow-[0_0_60px_-15px_rgba(0,240,255,0.35)] backdrop-blur-xl"
         >
           {challenge ? (
             <div>

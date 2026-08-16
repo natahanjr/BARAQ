@@ -1,0 +1,20 @@
+name: lateral_movement_chain
+description: RDP/SMB lateral access combined with a remote service installation indicates an adversary moving between hosts via stolen credentials.
+enabled: true
+severity: critical
+confidence: 0.9
+mitre_id: T1021
+recommendation: Isolate the affected hosts, hunt for additional pivots in the entity graph and rotate the credentials used for the logons.
+window_minutes: 90
+group_by: host
+match: all
+stages:
+  - label: Remote Access Logon
+    rules: [rdp_lateral, lateral_movement]
+    tactics: [Lateral Movement]
+  - label: Service Installed Remotely
+    rules: [service_image_path_persistence, persistence]
+    tactics: [Persistence]
+  - label: Execution
+    rules: [cmd_script_execution, wmi_execution, msbuild_execution]
+    tactics: [Execution]

@@ -89,12 +89,17 @@ def list_alerts(
     severity: Literal["critical", "high", "medium", "low", "info"] | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
+    include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db),
 ):
     scope = tenant_scope(request)
     stmt = select(Alert)
     if scope is not None:
         stmt = stmt.where(Alert.org == scope)
+    if not include_demo:
+        # Demo/test separation: the production queue never shows seeded data
+        # unless the console explicitly runs in demo mode.
+        stmt = stmt.where(Alert.demo.is_(False))
     if status:
         stmt = stmt.where(Alert.status == status.value)
     if severity:
@@ -106,6 +111,203 @@ def list_alerts(
         .limit(page_size)
     ).all()
     return {"total": total, "page": page, "page_size": page_size, "items": [a.to_dict() for a in rows]}
+
+
+@router.get("/fp-analysis")
+def fp_analysis(request: Request, db: Session = Depends(get_db)):
+    """False-positive analysis over the alert history (roadmap P0).
+
+    Ranks every rule with an FP candidate score derived from closed-without-
+    action ratios, trigger density, confidence and severity. Read-only.
+    """
+    from backend.api.fp_analysis import analyze as fp_analyze
+
+    scope = tenant_scope(request)
+    return fp_analyze(db, org=scope or "")
+
+
+class VerdictCreate(BaseModel):
+    verdict: Literal["true_positive", "false_positive", "expected_behavior"]
+    note: str = Field(default="", max_length=1000)
+    suppress: bool = Field(default=False, description="Create a scoped suppression rule (expected_behavior only)")
+
+
+@router.post("/{alert_id}/verdict")
+def submit_verdict(
+    alert_id: int,
+    body: VerdictCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Analyst verdict on an alert (roadmap P2).
+
+    ``expected_behavior`` verdicts may also create a scoped suppression rule
+    (rule + host + user) so the workflow stops alerting. All verdicts feed
+    the ML feedback weights via the detector's feedback loop.
+    """
+    from datetime import datetime, timezone
+
+    from backend.database.models import AlertVerdict
+    from backend.detection.suppression import create as create_suppression
+    from backend.ml.anomaly import get_detector
+
+    alert = _scoped_alert(request, alert_id, db)
+    actor = actor_name(request)
+
+    existing = db.scalars(
+        select(AlertVerdict).where(AlertVerdict.alert_id == alert_id)
+    ).first()
+    if existing:
+        existing.verdict = body.verdict
+        existing.note = body.note
+        existing.created_by = actor
+        existing.created_at = datetime.now(timezone.utc)
+        verdict = existing
+    else:
+        verdict = AlertVerdict(
+            alert_id=alert_id,
+            verdict=body.verdict,
+            note=body.note,
+            created_by=actor,
+        )
+        db.add(verdict)
+
+    if body.verdict == "expected_behavior":
+        alert.status = "closed"
+        if body.suppress:
+            user = _evidence_user(alert)
+            create_suppression(
+                db, rule=alert.rule, host=alert.host or "*",
+                user=user if user else "*",
+                reason=f"Analyst verdict: expected behavior - {body.note[:200]}",
+                created_by=actor, org=alert.org or "",
+            )
+
+    # Feed the ML feedback loop: false_positive and expected_behavior dampen
+    # the signal, true_positive strengthens it.
+    try:
+        behavior = alert.rule
+        get_detector().apply_feedback(
+            "true_positive" if body.verdict == "true_positive" else "false_positive",
+            behavior,
+        )
+    except Exception:  # noqa: BLE001 - feedback must never break the verdict
+        logger.debug("ML feedback skipped for alert #%s", alert_id, exc_info=True)
+
+    db.commit()
+    log_action(db, actor, "alert.verdict", "alert", str(alert_id),
+               f"{body.verdict}: {body.note[:200]}", client_ip(request))
+    return verdict.to_dict()
+
+
+@router.get("/{alert_id}/verdict")
+def get_verdict(alert_id: int, request: Request, db: Session = Depends(get_db)):
+    _scoped_alert(request, alert_id, db)
+    from backend.database.models import AlertVerdict
+
+    verdict = db.scalars(
+        select(AlertVerdict).where(AlertVerdict.alert_id == alert_id)
+    ).first()
+    return verdict.to_dict() if verdict else None
+
+
+@router.get("/suppressions/list")
+def list_suppressions(
+    request: Request,
+    include_expired: int = Query(0, ge=0, le=1),
+    db: Session = Depends(get_db),
+):
+    """Active (or all, including expired) suppression rules (roadmap P2)."""
+    from backend.detection.suppression import list_rules
+
+    scope = tenant_scope(request)
+    rules = list_rules(db, org=scope or "", include_expired=bool(include_expired))
+    return {"items": [r.to_dict() for r in rules]}
+
+
+class SuppressionCreate(BaseModel):
+    rule: str = Field(min_length=1, max_length=64)
+    host: str = Field(default="*", max_length=128)
+    user: str = Field(default="*", max_length=128)
+    reason: str = Field(default="", max_length=512)
+    expires_hours: float = Field(default=168.0, ge=0)
+
+
+@router.post("/suppressions", dependencies=[Depends(require_admin)])
+def create_suppression_rule(
+    body: SuppressionCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    from backend.detection.suppression import create as create_suppression
+
+    scope = tenant_scope(request)
+    rule = create_suppression(
+        db, rule=body.rule, host=body.host, user=body.user,
+        reason=body.reason, created_by=actor_name(request),
+        org=scope or "", expires_hours=body.expires_hours,
+    )
+    log_action(db, actor_name(request), "suppression.create", "suppression",
+               str(rule.id), f"{body.rule} {body.host}/{body.user}", client_ip(request))
+    return rule.to_dict()
+
+
+@router.delete("/suppressions/{rule_id}", dependencies=[Depends(require_admin)])
+def delete_suppression_rule(
+    rule_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    from backend.detection.suppression import delete as delete_suppression
+
+    scope = tenant_scope(request)
+    if not delete_suppression(db, rule_id, org=scope or ""):
+        raise HTTPException(404, "Suppression rule not found")
+    log_action(db, actor_name(request), "suppression.delete", "suppression",
+               str(rule_id), "", client_ip(request))
+    return {"deleted": rule_id}
+
+
+@router.get("/groups")
+def alert_groups(request: Request, db: Session = Depends(get_db)):
+    """Group repeated detections (roadmap P0): open alerts bucketed by
+    (rule, host, evidence-user) with repeat counts - one glance tells an
+    analyst which detections are a single recurring event, not a campaign."""
+    from backend.detection.workflow import ACTIVE_STATES
+
+    scope = tenant_scope(request)
+    stmt = select(Alert).where(Alert.status.in_(ACTIVE_STATES))
+    if scope is not None:
+        stmt = stmt.where(Alert.org == scope)
+    alerts = db.scalars(stmt.order_by(Alert.created_at.desc()).limit(2000)).all()
+
+    groups: dict[tuple[str, str, str], list[Alert]] = {}
+    for alert in alerts:
+        user = _evidence_user(alert)
+        key = (alert.rule, alert.host or "", user)
+        groups.setdefault(key, []).append(alert)
+
+    items = []
+    for (rule, host, user), rows in groups.items():
+        rows_sorted = sorted(rows, key=lambda a: a.created_at)
+        items.append({
+            "rule": rule,
+            "host": host,
+            "user": user,
+            "count": len(rows),
+            "trigger_count": sum(a.trigger_count or 1 for a in rows),
+            "severity": max(rows_sorted, key=lambda a: _SEV_ORDER.get(a.severity, 0)).severity,
+            "max_severity_index": max(_SEV_ORDER.get(a.severity, 0) for a in rows),
+            "first_seen": rows_sorted[0].created_at.isoformat(),
+            "last_seen": rows_sorted[-1].created_at.isoformat(),
+            "alert_ids": [a.id for a in rows_sorted[-5:]],
+            "sample_names": sorted({a.name for a in rows}),
+        })
+    items.sort(key=lambda g: (-g["count"], -g["max_severity_index"]))
+    return {"items": items, "groups": len(items), "alerts_grouped": len(alerts)}
+
+
+_SEV_ORDER = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
 
 @router.get("/{alert_id}")
@@ -168,6 +370,13 @@ _ACCOUNT_QUOTED = re.compile(r"(?:account|user) '([^']+)'", re.IGNORECASE)
 
 def _basename(path_or_name: str) -> str:
     return path_or_name.replace("\\", "/").rsplit("/", 1)[-1].strip()
+
+
+def _evidence_user(alert: Alert) -> str:
+    """Best-effort user extraction from alert evidence + linked events."""
+    scope = _evidence_scope(alert)
+    m = re.search(r"\b(?:user|user_name|user_id|account)\s*[:=]\s*([A-Za-z0-9_.\\-]+)", scope)
+    return m.group(1) if m else ""
 
 
 def _evidence_scope(alert: Alert) -> str:
@@ -284,14 +493,29 @@ def take_action(alert_id: int, body: ActionRequest, request: Request, db: Sessio
 
 
 def _bump_severity(alert: Alert) -> None:
-    """Escalate an alert one step up the severity ladder."""
+    """Escalate an alert one step up the severity ladder.
+
+    Risk bookkeeping is recomputed from the new severity so the displayed
+    severity and the risk level never diverge (roadmap P0 consistency).
+    """
     ladder = ("low", "medium", "high", "critical")
     try:
         idx = ladder.index(alert.severity)
     except ValueError:
         return
-    if idx < len(ladder) - 1:
-        alert.severity = ladder[idx + 1]
+    if idx >= len(ladder) - 1:
+        return
+    alert.severity = ladder[idx + 1]
+    from backend.risk.scoring import hybrid_risk
+
+    score, level = hybrid_risk(
+        severity=alert.severity,
+        confidence=alert.confidence or 0.5,
+        event_count=alert.event_count or 1,
+        anomaly_scores=[],
+    )
+    alert.risk_score = score
+    alert.risk_level = level
 
 
 @router.get("/{alert_id}/actions")

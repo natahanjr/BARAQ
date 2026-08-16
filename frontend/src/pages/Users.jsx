@@ -518,7 +518,7 @@ export default function Users() {
             </p>
           ) : (
             <div className="max-h-[480px] overflow-y-auto">
-              <table className="w-full text-left text-xs">
+              <table className="data-table w-full">
                 <thead className="sticky top-0 bg-slate-950">
                   <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500">
                     <th className="pb-2 pr-3 font-medium">When</th>

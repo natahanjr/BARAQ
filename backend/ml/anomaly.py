@@ -264,7 +264,7 @@ def _verdict_map(session) -> dict[int, int]:
 
 def _load_behavior_features(
     session,
-    since: datetime,
+    since: datetime | None,
     event_ids: set[int],
     with_labels: bool = False,
     cutoff: datetime | None = None,
@@ -274,11 +274,14 @@ def _load_behavior_features(
     ``with_labels=True`` also returns a binary label per row - analyst
     verdicts override the heuristic facts for events the analyst reviewed.
     ``cutoff`` caps the upper bound so baseline fitting never sees a window.
+    ``since=None`` means the FULL history (no lower time bound) - training
+    on every collected event instead of a sample window.
     """
     stmt = select(NormalizedEvent).where(
         NormalizedEvent.event_id.in_(event_ids),
-        NormalizedEvent.timestamp >= since,
     )
+    if since is not None:
+        stmt = stmt.where(NormalizedEvent.timestamp >= since)
     if cutoff is not None:
         stmt = stmt.where(NormalizedEvent.timestamp < cutoff)
     rows = session.scalars(stmt).all()
@@ -310,12 +313,13 @@ def _load_behavior_features(
 
 
 def _load_network_features(
-    session, since: datetime, cutoff: datetime | None = None
+    session, since: datetime | None, cutoff: datetime | None = None
 ) -> tuple[np.ndarray, list[dict]]:
     """Per-remote-IP flow features: count, distinct ports, bytes, duration.
 
     Returns (X, rows) where ``rows`` carries the remote_ip label for each
     feature row so the IP encoder can be retained for scoring unseen hosts.
+    ``since=None`` means the FULL history (all collected connections).
     """
     stmt = select(
         NetworkConnection.remote_ip,
@@ -324,7 +328,9 @@ def _load_network_features(
         func.sum(NetworkConnection.bytes_sent),
         func.sum(NetworkConnection.bytes_recv),
         func.avg(NetworkConnection.duration_seconds),
-    ).where(NetworkConnection.observed_at >= since)
+    )
+    if since is not None:
+        stmt = stmt.where(NetworkConnection.observed_at >= since)
     if cutoff is not None:
         stmt = stmt.where(NetworkConnection.observed_at < cutoff)
     rows = session.execute(stmt.group_by(NetworkConnection.remote_ip)).all()
@@ -814,7 +820,7 @@ class MLAnomalyDetector:
         return bool(facts.get("is_anomalous") or facts.get("attack"))
 
     @staticmethod
-    def _labeled_network_samples(session, since: datetime) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    def _labeled_network_samples(session, since: datetime | None) -> tuple[np.ndarray, np.ndarray, list[str]]:
         """Per-remote-IP flow features with attack labels for the network stream.
 
         Label source: remote IPs inside the known attack prefixes (scripted
@@ -863,23 +869,25 @@ class MLAnomalyDetector:
                 is_attack = MLAnomalyDetector._is_attack_sample(eid, facts)
             (out[behavior][0] if is_attack else out[behavior][1]).append(features)
 
-        since = datetime.now(timezone.utc) - timedelta(hours=24)
-        net_X, net_y, net_ips = MLAnomalyDetector._labeled_network_samples(session, since)
+        net_X, net_y, net_ips = MLAnomalyDetector._labeled_network_samples(session, None)
         for i, ip in enumerate(net_ips):
             (out["network"][0] if net_y[i] else out["network"][1]).append(net_X[i].tolist())
         return out
 
-    def _validation_data(self, session, since: datetime) -> dict[str, tuple[np.ndarray, np.ndarray]]:
-        """Windowed labelled validation set, grouped by behavior stream."""
-        rows = session.execute(
-            select(
-                NormalizedEvent.id,
-                NormalizedEvent.raw_json,
-                NormalizedEvent.event_id,
-                NormalizedEvent.timestamp,
-            )
-            .where(NormalizedEvent.timestamp >= since)
-        ).all()
+    def _validation_data(self, session, since: datetime | None) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+        """Windowed labelled validation set, grouped by behavior stream.
+
+        ``since=None`` validates on the FULL history.
+        """
+        stmt = select(
+            NormalizedEvent.id,
+            NormalizedEvent.raw_json,
+            NormalizedEvent.event_id,
+            NormalizedEvent.timestamp,
+        )
+        if since is not None:
+            stmt = stmt.where(NormalizedEvent.timestamp >= since)
+        rows = session.execute(stmt).all()
         out: dict[str, list] = {"login": [[], []], "process": [[], []], "network": [[], []]}
         verdicts = _verdict_map(session)
         for row_id, raw, event_id, timestamp in rows:
@@ -908,13 +916,18 @@ class MLAnomalyDetector:
     def train(
         self,
         session=None,
-        hours: int = 24,
+        hours: int | None = 24,
         validate: bool = False,
         persist: bool = True,
         cutoff: datetime | None = None,
         kind: str = "initial",
     ) -> dict:
         """Train per-stream Isolation Forests + supervised classifier.
+
+        ``hours=None`` trains on the FULL collected history (every event /
+        connection, no sample window); ``hours=N`` restricts to the last N
+        hours. Production paths default to the full history so the model
+        reflects everything the collector has gathered.
 
         ``validate=True`` gates replacement behind a labelled-window
         comparison against the currently loaded models (production path);
@@ -937,7 +950,10 @@ class MLAnomalyDetector:
         close = session is None
         session = session or SessionLocal()
         try:
-            since = datetime.now(timezone.utc) - timedelta(hours=hours)
+            since = (
+                None if not hours
+                else datetime.now(timezone.utc) - timedelta(hours=hours)
+            )
 
             login_X, login_y = _load_behavior_features(
                 session, since, LOGIN_EVENTS, with_labels=True, cutoff=cutoff
@@ -1174,6 +1190,53 @@ class MLAnomalyDetector:
             behavior = "login" if "login" in self.models else next(iter(self.models))
         model = self.models.get(behavior)
         return self._weighted_score(behavior, self._combined_score(behavior, model, features))
+
+    def score_events(self, features_list: list[list[float]]) -> list[float]:
+        """Batched :meth:`score_event` - one IsolationForest ``decision_function``
+        and one supervised ``predict_proba`` per behavior group instead of one
+        per row (the calibrated classifier pays a ~240-call joblib spawn per
+        row when scored individually)."""
+        if not self.is_ready or not features_list:
+            return [0.0] * len(features_list)
+        out: list[float] = [0.0] * len(features_list)
+        groups: dict[str, list[int]] = {}
+        for idx, features in enumerate(features_list):
+            try:
+                behavior = _behavior_of(int(features[0]))
+            except (TypeError, ValueError, IndexError):
+                behavior = "login"
+            if behavior not in self.models:
+                behavior = "login" if "login" in self.models else next(iter(self.models))
+            groups.setdefault(behavior, []).append(idx)
+        for behavior, idxs in groups.items():
+            model = self.models.get(behavior)
+            if model is None:
+                continue
+            try:
+                X = np.array([features_list[i] for i in idxs], dtype=float)
+            except (TypeError, ValueError):
+                continue
+            if X.shape[1] != model.n_features_in_:
+                continue
+            try:
+                raw = 0.5 - model.decision_function(X)
+            except Exception:  # noqa: BLE001
+                continue
+            base = self._rank_of(raw, self.baselines.get(behavior))
+            classifier = self.supervised_by_stream.get(behavior) or self.supervised
+            p = np.zeros(len(idxs), dtype=float)
+            if classifier is not None and X.shape[1] == classifier.n_features_in_:
+                try:
+                    proba = classifier.predict_proba(X)
+                    if proba.shape[1] > 1:
+                        p = proba[:, 1]
+                except Exception:  # noqa: BLE001
+                    p = np.zeros(len(idxs), dtype=float)
+            scores = np.clip(0.6 * base + 0.4 * p, 0.0, 1.0)
+            weight = self.feedback_weights.get(behavior, 1.0)
+            for pos, idx in enumerate(idxs):
+                out[idx] = float(max(0.0, min(1.0, scores[pos] * weight)))
+        return out
 
     def score_event_for_behavior(self, behavior: str, features: list[float]) -> float:
         model = self.models.get(behavior)

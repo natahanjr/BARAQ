@@ -105,8 +105,8 @@ Before using telemetry in research, theses, or publications:
 - Strip command lines that may contain personal content (names, file
   paths with personal data) from exported datasets.
 - The hold-out evaluation's negative class already uses real host
-  telemetry — export only aggregated metrics (as in `THESIS_GUIDE.md`),
-  never raw telemetry, for publication.
+  telemetry — export only aggregated metrics, never raw telemetry, for
+  publication.
 
 ## 7. Processor obligations (vendor side)
 

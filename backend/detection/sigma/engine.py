@@ -36,6 +36,41 @@ MAX_FINDINGS_PER_RULE = 20
 #: Canonical severity ladder used to demote unreliable matches.
 _SEVERITY_ORDER = ("info", "low", "medium", "high", "critical")
 
+#: Sigma ``logsource.category`` -> BARAQ NormalizedEvent event IDs. Rules are
+#: only evaluated against events matching their declared logsource, so e.g. a
+#: ``raw_access_thread`` rule can never fire on logon/process events (a rule
+#: written for Sysmon Event 25 must not match Event 4688).
+_LOGSOURCE_CATEGORY_EVENT_IDS = {
+    "process_creation": {1, 4688},
+    "raw_access_thread": {25},
+    "network_connection": {3},
+    "dns_query": {22},
+    "file_event": {11, 23, 26, 4656, 4660, 4663, 4662},
+    "file_delete": {23, 26, 4663},
+    "file_rename": {4663, 27, 28},
+    "file_access": {4656, 4663},
+    "file_change": {4663},
+    "file_executable_detected": {1, 4688},
+    "image_load": {7},
+    "process_access": {10},
+    "create_remote_thread": {8},
+    "driver_load": {6},
+    "pipe_created": {17, 18},
+    "create_stream_hash": {15},
+    "wmi_event": {19, 20, 21},
+    "process_tampering": {10},
+    "registry_set": {13, 4657, 12},
+    "registry_event": {12, 13, 14, 4657},
+    "registry_add": {12, 4657},
+    "registry_delete": {12, 4657},
+    "ps_script": {4104},
+    "ps_module": {4103, 4104},
+    "ps_classic_start": {400, 403},
+    "ps_classic_provider_start": {400},
+    "sysmon_error": {255},
+    "sysmon_status": {255},
+}
+
 
 def _demote_severity(severity: str) -> str:
     """One step down the severity ladder (critical -> high -> ... -> info)."""
@@ -107,6 +142,13 @@ def _required_event_ids(rule: SigmaRule) -> set[int] | None:
                 event_ids = set()
             event_ids |= ids
     return event_ids
+
+
+def _logsource_event_ids(rule: SigmaRule) -> set[int] | None:
+    """Event IDs allowed by the rule's declared logsource category, or None
+    when the category is unknown / absent (rule stays unconstrained)."""
+    category = str(rule.logsource.get("category", "")).strip().lower()
+    return _LOGSOURCE_CATEGORY_EVENT_IDS.get(category)
 
 
 def _agg_details(condition: str) -> tuple[str, str, str, int] | None:
@@ -202,9 +244,22 @@ class SigmaRuleEngine(BaseRule):
                 aggregation_rules.append(rule)
                 continue
             ids = _required_event_ids(rule)
+            scope = _logsource_event_ids(rule)
             if ids is None:
+                # No EventID constraint: the logsource scope decides which
+                # events the rule may see; without either it stays global.
+                if scope:
+                    for eid in scope:
+                        rules_by_event_id.setdefault(eid, []).append(rule)
+                    continue
                 unconstrained.append(rule)
                 continue
+            if scope:
+                # The rule's own EventIDs must fall inside its logsource
+                # scope; a rule written for another event type cannot match.
+                ids = ids & scope
+                if not ids:
+                    continue
             for eid in ids:
                 rules_by_event_id.setdefault(eid, []).append(rule)
 
@@ -221,8 +276,11 @@ class SigmaRuleEngine(BaseRule):
                 pre_cond = SigmaCondition(pre)
                 compiled[rule.rule_id] = pre_cond
             rule_uses_process = _rule_uses_process_fields(rule)
+            scope = _logsource_event_ids(rule)
             counts: Counter[str] = Counter()
             for event in events:
+                if scope and event.event_id not in scope:
+                    continue
                 integrity = event_data_integrity(event)
                 if integrity["process_incomplete"] and rule_uses_process:
                     continue

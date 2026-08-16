@@ -210,6 +210,10 @@ class NormalizedEvent(Base):
     #: Tenant scoping: telemetry from remote agents is tagged with the
     #: organization the agent key belongs to; "" is the local/system host.
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    #: Demo/test marker: rows created by the demo seeder are tagged so they
+    #: never mix into the production alert queue unless the analyst
+    #: explicitly switches the console into demo mode (``include_demo=1``).
+    demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     risk: Mapped[str] = mapped_column(String(16), index=True, default="Low")
     severity: Mapped[str] = mapped_column(String(16), index=True, default="info")
     message: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # NormalizedEvent
@@ -235,6 +239,7 @@ class NormalizedEvent(Base):
             "user": self.user,
             "host": self.host,
             "org": self.org,
+            "demo": self.demo,
             "risk": self.risk,
             "risk_score": self.risk_score,
             "severity": self.severity,
@@ -268,11 +273,26 @@ class Alert(Base):
     host: Mapped[str] = mapped_column(String(128), index=True, default="")
     #: Tenant scoping: inherits the org of the evidence events ("" = system).
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    #: Demo/test marker - demo-seeded alerts never appear in the production
+    #: queue unless the console runs in demo mode (see ``demo`` on events).
+    demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    #: Correlation chain identifier, e.g. "CORR-20260815-00031". Set for
+    #: multi-stage correlation notables and entity-risk escalations so
+    #: analysts can trace every alert back to the chain that produced it.
+    correlation_id: Mapped[str] = mapped_column(String(64), default="", index=True)
     event_count: Mapped[int] = mapped_column(Integer, default=0)
     trigger_count: Mapped[int] = mapped_column(Integer, default=1)
     detection_method: Mapped[str] = mapped_column(String(16), index=True, default="rule")
     risk_score: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     risk_level: Mapped[str] = mapped_column(String(16), index=True, default="MEDIUM")
+    #: P1 explainable risk: structured breakdown of how the score was built
+    #: (hybrid composition, context modifier, per-signal dynamic adjustments).
+    #: JSON payload - see ``backend.detection.alerting._risk_payload``.
+    risk_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: P1 detection-time threat-intel annotation: reputation verdicts for
+    #: the alert's indicators, computed while the alert is created (offline
+    #: fast path - see ``backend.intel.detection``).
+    intel_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     #: Ticket links from ticketing integrations (roadmap 6.3), e.g.
     #: [{"system": "jira", "key": "SOC-42", "url": "..."}].
     ticket_links: Mapped[list] = mapped_column(JSONColumnType, default=list)
@@ -309,6 +329,8 @@ class Alert(Base):
             "rule": self.rule,
             "host": self.host,
             "org": self.org,
+            "demo": self.demo,
+            "correlation_id": self.correlation_id,
             "event_count": self.event_count,
             "trigger_count": self.trigger_count,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -322,6 +344,30 @@ class Alert(Base):
                 for n in sorted(self.notes, key=lambda n: n.created_at)
             ]
         data["ticket_links"] = self.ticket_links or []
+        if self.risk_json:
+            try:
+                payload = json.loads(self.risk_json)
+                data["risk_adjustments"] = payload.get("adjustments", [])
+                data["risk_composition"] = {
+                    "method": payload.get("method"),
+                    "final": payload.get("final"),
+                    "base": payload.get("base"),
+                    "rule_share": payload.get("rule_share"),
+                    "ml_share": payload.get("ml_share"),
+                }
+                data["context_modifier"] = payload.get("context_modifier", 1.0)
+            except (TypeError, ValueError):
+                pass
+        if self.intel_json:
+            try:
+                payload = json.loads(self.intel_json)
+                from backend.intel.detection import intel_hits
+
+                data["intel_hits"] = intel_hits(payload)
+                data["intel_indicators"] = payload.get("indicators", [])
+                data["intel_checked_at"] = payload.get("checked_at")
+            except (TypeError, ValueError):
+                pass
         return data
 
 
@@ -396,6 +442,10 @@ class ProcessRecord(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     pid: Mapped[int] = mapped_column(Integer, index=True)
     ppid: Mapped[int] = mapped_column(Integer, default=0)
+    #: Sysmon ProcessGuid / ParentProcessGuid (stable process identity across
+    #: PID reuse) - empty for non-Sysmon sources.
+    guid: Mapped[str] = mapped_column(String(64), default="", index=True)
+    parent_guid: Mapped[str] = mapped_column(String(64), default="")
     name: Mapped[str] = mapped_column(String(256), index=True)
     path: Mapped[str] = mapped_column(Text, default="")
     command_line: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # ProcessRecord
@@ -404,12 +454,15 @@ class ProcessRecord(Base):
     is_new: Mapped[bool] = mapped_column(Boolean, default=False)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "pid": self.pid,
             "ppid": self.ppid,
+            "guid": self.guid,
+            "parent_guid": self.parent_guid,
             "name": self.name,
             "path": self.path,
             "command_line": self.command_line,
@@ -418,6 +471,7 @@ class ProcessRecord(Base):
             "is_new": self.is_new,
             "observed_at": self.observed_at.isoformat() if self.observed_at else None,
             "org": self.org,
+            "demo": self.demo,
         }
 
 
@@ -440,6 +494,7 @@ class NetworkConnection(Base):
     duration_seconds: Mapped[float] = mapped_column(Float, default=0.0)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -457,6 +512,7 @@ class NetworkConnection(Base):
             "duration_seconds": self.duration_seconds,
             "observed_at": self.observed_at.isoformat() if self.observed_at else None,
             "org": self.org,
+            "demo": self.demo,
         }
 
 
@@ -478,6 +534,7 @@ class DnsQuery(Base):
     response_size: Mapped[int] = mapped_column(Integer, default=0)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -489,6 +546,7 @@ class DnsQuery(Base):
             "response_size": self.response_size,
             "observed_at": self.observed_at.isoformat() if self.observed_at else None,
             "org": self.org,
+            "demo": self.demo,
         }
 
 
@@ -512,6 +570,7 @@ class HttpRequest(Base):
     response_body_size: Mapped[int] = mapped_column(Integer, default=0)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -526,6 +585,7 @@ class HttpRequest(Base):
             "response_body_size": self.response_body_size,
             "observed_at": self.observed_at.isoformat() if self.observed_at else None,
             "org": self.org,
+            "demo": self.demo,
         }
 
 
@@ -548,6 +608,7 @@ class EmailMessage(Base):
     ip_address: Mapped[str] = mapped_column(String(64), default="")
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -559,6 +620,7 @@ class EmailMessage(Base):
             "ip_address": self.ip_address,
             "received_at": self.received_at.isoformat() if self.received_at else None,
             "org": self.org,
+            "demo": self.demo,
         }
 
 
@@ -578,6 +640,7 @@ class UsbDevice(Base):
     serial: Mapped[str] = mapped_column(String(128), default="")
     inserted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -588,6 +651,7 @@ class UsbDevice(Base):
             "serial": self.serial,
             "inserted_at": self.inserted_at.isoformat() if self.inserted_at else None,
             "org": self.org,
+            "demo": self.demo,
         }
 
 
@@ -607,6 +671,7 @@ class FileScan(Base):
     signature_name: Mapped[str] = mapped_column(String(128), default="")
     scanned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -621,6 +686,7 @@ class FileScan(Base):
             "signature_name": self.signature_name,
             "scanned_at": self.scanned_at.isoformat() if self.scanned_at else None,
             "org": self.org,
+            "demo": self.demo,
         }
 
 
@@ -644,6 +710,7 @@ class VulnFinding(Base):
     remediation: Mapped[str] = mapped_column(Text, default="")
     found_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -658,6 +725,7 @@ class VulnFinding(Base):
             "remediation": self.remediation,
             "found_at": self.found_at.isoformat() if self.found_at else None,
             "org": self.org,
+            "demo": self.demo,
         }
 
 
@@ -952,8 +1020,25 @@ class Incident(Base):
     host: Mapped[str] = mapped_column(String(128), index=True, default="")
     #: Tenant scoping: the org of the alerts that make up the case.
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    #: Demo/test marker (inherited from the source alerts).
+    demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     risk_score: Mapped[float] = mapped_column(Float, default=0.0)
     risk_level: Mapped[str] = mapped_column(String(16), index=True, default="MEDIUM")
+    #: Story-level confidence (0..1) - how trustworthy the reconstructed
+    #: incident narrative is (detection quality + correlation strength +
+    #: enrichment quality - suppression signals).
+    confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    #: Deduplication key: user|host|mitre|root_process|30min-window. Open
+    #: incidents with the same key absorb new alerts instead of spawning
+    #: duplicates (Phase-1 incident dedup engine).
+    correlation_key: Mapped[str] = mapped_column(String(96), index=True, default="")
+    #: P1-1 attack chain: reconstructed multi-stage path (JSON payload of
+    #: ``backend.investigation.attack_chain.reconstruct_chain``), its
+    #: confidence (0..1) and the deterministic risk boost (+0..20) stacked
+    #: on the strongest contributing alert's risk.
+    chain_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chain_confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    chain_risk: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), index=True, default=utcnow
     )
@@ -963,6 +1048,9 @@ class Incident(Base):
     opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: First-response SLA clock: set when an analyst first engages the case
+    #: (status leaves "open" or an owner is assigned). Never overwritten.
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     alerts: Mapped[list["IncidentAlertLink"]] = relationship(
         "IncidentAlertLink",
@@ -990,14 +1078,21 @@ class Incident(Base):
             "mitre_name": self.mitre_name,
             "host": self.host,
             "org": self.org,
+            "demo": self.demo,
             "risk_score": self.risk_score,
             "risk_level": self.risk_level,
+            "confidence": self.confidence,
+            "correlation_key": self.correlation_key,
+            "chain": json.loads(self.chain_json) if self.chain_json else None,
+            "chain_confidence": self.chain_confidence,
+            "chain_risk": self.chain_risk,
             "alert_count": len(self.alerts),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "opened_at": self.opened_at.isoformat() if self.opened_at else None,
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
             "closed_at": self.closed_at.isoformat() if self.closed_at else None,
+            "responded_at": self.responded_at.isoformat() if self.responded_at else None,
         }
         if include_links:
             data["alerts"] = [
@@ -1056,6 +1151,78 @@ class IncidentComment(Base):
             "author": self.author,
             "body": self.body,
             "kind": self.kind,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class AlertVerdict(Base):
+    """Analyst verdict on an alert (roadmap P2 - analyst feedback).
+
+    Verdicts distinguish *real detections* (true_positive), *noise*
+    (false_positive) and *expected behaviour* (expected_behavior - a
+    legitimate workflow that the rule cannot tell apart from an attack).
+    ``expected_behavior`` verdicts can also create a scoped suppression
+    rule so the same workflow stops alerting. Verdicts feed the ML
+    feedback weights the same way event verdicts do.
+    """
+
+    __tablename__ = "alert_verdicts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    alert_id: Mapped[int] = mapped_column(
+        ForeignKey("alerts.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    verdict: Mapped[str] = mapped_column(String(32))  # true_positive | false_positive | expected_behavior
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(128), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    alert: Mapped[Alert] = relationship()
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "alert_id": self.alert_id,
+            "verdict": self.verdict,
+            "note": self.note,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class SuppressionRule(Base):
+    """Scoped alert suppression (roadmap P2).
+
+    An analyst declares that a specific detection is *expected behaviour*
+    on a specific scope (rule / host / user) until an expiry date. While a
+    matching rule is active, findings are suppressed instead of becoming
+    alerts - the target of triage actions for known-good workflows.
+    """
+
+    __tablename__ = "suppression_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rule: Mapped[str] = mapped_column(String(64), index=True)  # rule id or "*"
+    host: Mapped[str] = mapped_column(String(128), default="*", index=True)  # host or "*"
+    user: Mapped[str] = mapped_column(String(128), default="*", index=True)  # user or "*"
+    reason: Mapped[str] = mapped_column(String(512), default="")
+    created_by: Mapped[str] = mapped_column(String(128), default="")
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    suppressed_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "rule": self.rule,
+            "host": self.host,
+            "user": self.user,
+            "reason": self.reason,
+            "created_by": self.created_by,
+            "org": self.org,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "suppressed_count": self.suppressed_count,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -1289,3 +1456,492 @@ class SystemState(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+class EntityRisk(Base):
+    """Risk-Based Alerting state: persistent risk per entity.
+
+    Unlike the per-alert ``Alert.risk_score`` (computed once and forgotten),
+    every detection adds a weighted delta to the *entity's* accumulated
+    score. Scores decay exponentially over time (``ENTITY_RISK_DECAY_DAYS``)
+    so a host with many low-severity hits is distinguishable from a clean
+    host, and stale risk ages out. When the accumulated score crosses a
+    threshold the RBA engine raises an escalated "entity notable" alert that
+    links the contributing findings (see ``backend.risk.entity_risk``).
+    """
+
+    __tablename__ = "entity_risk"
+    __table_args__ = (
+        UniqueConstraint("entity_kind", "entity_name", "org", name="uq_entity_risk"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    entity_kind: Mapped[str] = mapped_column(String(16), index=True)  # user | host | ip
+    entity_name: Mapped[str] = mapped_column(String(512), index=True)
+    #: Tenant scoping: "" = system fleet; otherwise the agent organization.
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    #: Demo/test marker - demo entities are excluded from production views.
+    demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    #: Accumulated, decayed risk score (0-100+; unbounded in theory).
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    risk_level: Mapped[str] = mapped_column(String(16), index=True, default="LOW")
+    #: Count of alert contributions folded into this entity.
+    alerts_count: Mapped[int] = mapped_column(Integer, default=0)
+    #: Most recent contributing findings, e.g.
+    #: [{"rule": "...", "mitre_id": "T1110", "delta": 12.5, "alert_id": 7}].
+    contributions: Mapped[list] = mapped_column(JSONColumnType, default=list)
+    #: Risk level at the last escalation pass. A new "Entity Risk
+    #: Escalation" alert is only raised when the level *changed* (or none
+    #: was ever raised); same-level climbs refresh the open notable instead
+    #: of spamming the alert queue (one detection -> one contribution -> one
+    #: appropriate alert).
+    last_escalated_level: Mapped[str] = mapped_column(String(16), default="")
+    last_escalated_score: Mapped[float] = mapped_column(Float, default=0.0)
+    last_escalated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    #: When the score last changed (drives the exponential decay).
+    last_updated: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "entity_kind": self.entity_kind,
+            "entity_name": self.entity_name,
+            "org": self.org,
+            "demo": self.demo,
+            "score": round(self.score, 2),
+            "risk_level": self.risk_level,
+            "alerts_count": self.alerts_count,
+            "contributions": self.contributions or [],
+            "last_escalated_level": self.last_escalated_level,
+            "last_escalated_at": self.last_escalated_at.isoformat() if self.last_escalated_at else None,
+            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class EntityRiskEvent(Base):
+    """One risk accumulation event on an entity (the RBA timeline).
+
+    Each entry records the delta added, the score immediately after, and the
+    alert/rule that caused it - powering the per-entity risk timeline in the
+    dashboard ("why did this host reach score 80?").
+    """
+
+    __tablename__ = "entity_risk_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    entity_kind: Mapped[str] = mapped_column(String(16), index=True)
+    entity_name: Mapped[str] = mapped_column(String(512), index=True)
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    #: Demo/test marker (inherited from the source alert).
+    demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    delta: Mapped[float] = mapped_column(Float, default=0.0)
+    score_after: Mapped[float] = mapped_column(Float, default=0.0)
+    source_rule: Mapped[str] = mapped_column(String(64), default="")
+    mitre_id: Mapped[str] = mapped_column(String(16), default="T0000")
+    alert_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "entity_kind": self.entity_kind,
+            "entity_name": self.entity_name,
+            "org": self.org,
+            "demo": self.demo,
+            "delta": round(self.delta, 2),
+            "score_after": round(self.score_after, 2),
+            "source_rule": self.source_rule,
+            "mitre_id": self.mitre_id,
+            "alert_id": self.alert_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class DetectionTuning(Base):
+    """Runtime-adjustable detection configuration (on-the-fly tuning).
+
+    Analysts tune risk weights and thresholds from the UI
+    without touching config files; this table is the BARAQ equivalent. Keys
+    understood by ``backend.detection.tuning``:
+
+    * ``rule_risk_weights``   - {"rule_id": multiplier, ...} folded over the
+      env defaults (``BARAQ_RULE_RISK_WEIGHTS``)
+    * ``risk_thresholds``     - {"medium": 40, "high": 65, "critical": 85}
+    * ``risk_decay_days``     - exponential half-life of entity scores
+    * ``risk_notable_window_hours`` - dedup window for entity notables
+    * ``entity_risk_enabled`` - master switch (true/false)
+
+    Values are JSON; changes apply on the next accumulation/decay pass.
+    """
+
+    __tablename__ = "detection_tuning"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[dict | None] = mapped_column(JSONColumnType, nullable=True)
+    updated_by: Mapped[str] = mapped_column(String(128), default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class AutomationPlaybook(Base):
+    """A SOAR automation playbook: when an alert matches -> run actions.
+
+    The BARAQ equivalent of a SOAR playbook: analysts
+    declare trigger conditions (rule ids, severities, MITRE tactics, minimum
+    risk level) and an ordered action list (block_ip, kill_process,
+    quarantine, isolate, disable_account, escalate, create_incident,
+    notify). Matching alerts fire the playbook automatically from the
+    detection pipeline (see backend.automation.playbooks).
+    """
+
+    __tablename__ = "automation_playbooks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    #: Trigger conditions, e.g.
+    #: {"rules": ["brute_force"], "severity": ["high", "critical"],
+    #:  "tactics": ["Credential Access"], "min_risk_level": "HIGH"}.
+    #: Dimensions AND together; values within a dimension OR together.
+    triggers: Mapped[dict] = mapped_column(JSONColumnType, default=dict)
+    #: Ordered actions, e.g. [{"action": "block_ip"}, {"action": "notify"}].
+    actions: Mapped[list] = mapped_column(JSONColumnType, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "enabled": self.enabled,
+            "triggers": self.triggers or {},
+            "actions": self.actions or [],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class PlaybookRun(Base):
+    """Execution log of one automation playbook against one alert."""
+
+    __tablename__ = "playbook_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    playbook_id: Mapped[int] = mapped_column(
+        ForeignKey("automation_playbooks.id", ondelete="CASCADE"), index=True
+    )
+    alert_id: Mapped[int] = mapped_column(
+        ForeignKey("alerts.id", ondelete="CASCADE"), index=True
+    )
+    playbook_name: Mapped[str] = mapped_column(String(128), default="")
+    alert_name: Mapped[str] = mapped_column(String(128), default="")
+    rule: Mapped[str] = mapped_column(String(64), default="")
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    #: [{"action": "block_ip", "status": "success", "detail": "..."}]
+    results: Mapped[list] = mapped_column(JSONColumnType, default=list)
+    status: Mapped[str] = mapped_column(String(16), default="completed")  # completed | partial | failed
+    triggered_by: Mapped[str] = mapped_column(String(32), default="auto")  # auto | manual
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "playbook_id": self.playbook_id,
+            "alert_id": self.alert_id,
+            "playbook_name": self.playbook_name,
+            "alert_name": self.alert_name,
+            "rule": self.rule,
+            "org": self.org,
+            "results": self.results or [],
+            "status": self.status,
+            "triggered_by": self.triggered_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class SavedSearch(Base):
+    """An analyst-saved hunt query (the BARAQ equivalent of a saved search).
+
+    Stores the query plus its time window so it can be re-run
+    one-click, shared with the team, or pinned as a dashboard panel.
+    """
+
+    __tablename__ = "saved_searches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), index=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    query: Mapped[str] = mapped_column(Text)
+    earliest: Mapped[str] = mapped_column(String(32), default="-24h")
+    latest: Mapped[str] = mapped_column(String(32), default="")
+    owner: Mapped[str] = mapped_column(String(128), default="")
+    #: Tenant scoping: "" = global (everyone); otherwise one org.
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "query": self.query,
+            "earliest": self.earliest,
+            "latest": self.latest,
+            "owner": self.owner,
+            "org": self.org,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class Dashboard(Base):
+    """An analyst-built dashboard of search panels.
+
+    Panels are declarative: each references a saved search (or an inline
+    query) and a visualization (table | count | top | area). The backend
+    renders each panel by running its search and post-aggregating where the
+    visualization needs it.
+    """
+
+    __tablename__ = "dashboards"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), index=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    #: Ordered panels, e.g.
+    #: [{"id": "p1", "title": "Failed logons", "saved_search_id": 3,
+    #:   "viz": "top", "field": "user", "limit": 10, "cols": 2}]
+    panels: Mapped[list] = mapped_column(JSONColumnType, default=list)
+    owner: Mapped[str] = mapped_column(String(128), default="")
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "panels": self.panels or [],
+            "owner": self.owner,
+            "org": self.org,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Research dataset collector (Telemetry -> Dataset Collector)
+# ---------------------------------------------------------------------------
+
+
+class DatasetCollection(Base):
+    """One research dataset collection session (default: BARAQ_Research_Dataset).
+
+    A single session is active at a time; when the target is reached the
+    session is marked ``complete`` and collection stops (normal BARAQ
+    telemetry keeps flowing). An admin can start a fresh session later.
+    """
+
+    __tablename__ = "dataset_collections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), default="BARAQ_Research_Dataset")
+    #: active | paused | complete
+    status: Mapped[str] = mapped_column(String(16), default="active", index=True)
+    target_events: Mapped[int] = mapped_column(Integer, default=1_000_000)
+    events_per_file: Mapped[int] = mapped_column(Integer, default=100_000)
+    export_interval_hours: Mapped[int] = mapped_column(Integer, default=24)
+    format: Mapped[str] = mapped_column(String(8), default="csv")
+    anonymize: Mapped[bool] = mapped_column(Boolean, default=False)
+    include_labels: Mapped[bool] = mapped_column(Boolean, default=True)
+    total_events: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    parts: Mapped[int] = mapped_column(Integer, default=0)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_export_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "status": self.status,
+            "target_events": self.target_events,
+            "events_per_file": self.events_per_file,
+            "export_interval_hours": self.export_interval_hours,
+            "format": self.format,
+            "anonymize": self.anonymize,
+            "include_labels": self.include_labels,
+            "total_events": self.total_events,
+            "parts": self.parts,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "last_export_at": self.last_export_at.isoformat() if self.last_export_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class DatasetEvent(Base):
+    """One normalized research event (a copy of the relevant telemetry).
+
+    Only a compact research representation is stored - never the full raw
+    telemetry record. Uniqueness is enforced per collection on both the
+    deterministic fingerprint and the source event id, so no event can be
+    collected twice and no export can produce duplicates.
+    """
+
+    __tablename__ = "dataset_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "collection_id", "event_fingerprint", name="uq_dataset_fingerprint"
+        ),
+        UniqueConstraint(
+            "collection_id", "source_event_id", name="uq_dataset_source_event"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    collection_id: Mapped[int] = mapped_column(
+        Integer, index=True, nullable=False
+    )
+    event_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    source_event_id: Mapped[int] = mapped_column(Integer, index=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64), default="", index=True)
+    event_source: Mapped[str] = mapped_column(String(32), default="")
+    payload_normalized: Mapped[dict] = mapped_column(JSONColumnType, default=dict)
+    exported: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    export_batch_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class DatasetExport(Base):
+    """One export batch (manual or scheduled). Idempotent: only events with
+    ``exported=False`` are selected, and the whole batch is committed only
+    after the CSV files are written and validated."""
+
+    __tablename__ = "dataset_exports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    collection_id: Mapped[int] = mapped_column(Integer, index=True)
+    #: scheduled | manual
+    trigger: Mapped[str] = mapped_column(String(16), default="scheduled")
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    event_count: Mapped[int] = mapped_column(Integer, default=0)
+    files_count: Mapped[int] = mapped_column(Integer, default=0)
+    #: running | completed | failed
+    status: Mapped[str] = mapped_column(String(16), default="running", index=True)
+    error_message: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "collection_id": self.collection_id,
+            "trigger": self.trigger,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "event_count": self.event_count,
+            "files_count": self.files_count,
+            "status": self.status,
+            "error_message": self.error_message,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class DatasetExportFile(Base):
+    """One CSV part file of an export, with its SHA-256 checksum for
+    independent verification (thesis reproducibility)."""
+
+    __tablename__ = "dataset_export_files"
+    __table_args__ = (
+        UniqueConstraint("filename", name="uq_dataset_filename"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    export_id: Mapped[int] = mapped_column(Integer, index=True)
+    collection_id: Mapped[int] = mapped_column(Integer, index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    part_number: Mapped[int] = mapped_column(Integer, default=1)
+    event_count: Mapped[int] = mapped_column(Integer, default=0)
+    sha256: Mapped[str] = mapped_column(String(64), default="")
+    first_timestamp: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_timestamp: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    #: verified | failed
+    status: Mapped[str] = mapped_column(String(16), default="verified")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "export_id": self.export_id,
+            "collection_id": self.collection_id,
+            "filename": self.filename,
+            "part_number": self.part_number,
+            "event_count": self.event_count,
+            "sha256": self.sha256,
+            "first_timestamp": self.first_timestamp.isoformat() if self.first_timestamp else None,
+            "last_timestamp": self.last_timestamp.isoformat() if self.last_timestamp else None,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }

@@ -152,7 +152,7 @@ export default function Evaluation() {
 
           <Card>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+              <table className="data-table w-full">
                 <thead>
                   <tr className="border-b border-slate-700 text-[11px] uppercase tracking-wider text-slate-400">
                     <th className="px-4 py-3">Scenario</th>
@@ -200,20 +200,20 @@ export default function Evaluation() {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                     <XAxis
                       dataKey="scenario"
-                      stroke="#475569"
+                      stroke="var(--chart-grid)"
                       fontSize={10}
                       tickFormatter={(v) => (SCENARIO_LABELS[v] || v).split(" ")[0]}
                       tickLine={false}
                     />
-                    <YAxis domain={[0, 1]} stroke="#475569" fontSize={11} tickLine={false} />
+                    <YAxis domain={[0, 1]} stroke="var(--chart-grid)" fontSize={11} tickLine={false} />
                     <Tooltip
                       content={<ChartTooltip />}
                       labelFormatter={(v) => SCENARIO_LABELS[v] || v}
                     />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Bar dataKey="precision" name="Precision" fill="#22d3ee" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="recall" name="Recall" fill="#a78bfa" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="f1_score" name="F1" fill="#34d399" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="precision" name="Precision" fill="#00f0ff" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="recall" name="Recall" fill="#7b61ff" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="f1_score" name="F1" fill="#00e676" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -227,14 +227,14 @@ export default function Evaluation() {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                     <XAxis
                       dataKey="scenario"
-                      stroke="#475569"
+                      stroke="var(--chart-grid)"
                       fontSize={10}
                       tickFormatter={(v) => (SCENARIO_LABELS[v] || v).split(" ")[0]}
                       tickLine={false}
                     />
-                    <YAxis stroke="#475569" fontSize={11} tickLine={false} />
+                    <YAxis stroke="var(--chart-grid)" fontSize={11} tickLine={false} />
                     <Tooltip content={<ChartTooltip />} labelFormatter={(v) => SCENARIO_LABELS[v] || v} />
-                    <Bar dataKey="detection_time_ms" name="ms" fill="#fbbf24" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="detection_time_ms" name="ms" fill="#ffb300" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

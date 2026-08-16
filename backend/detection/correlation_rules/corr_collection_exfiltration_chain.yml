@@ -1,0 +1,17 @@
+name: collection_exfiltration_chain
+description: Data staged or collected on a host and then pushed out over the network - the tail end of the kill chain before impact.
+enabled: true
+severity: critical
+confidence: 0.9
+mitre_id: T1048
+recommendation: Assume data was exfiltrated. Block the outbound channel, scope the stolen data via the collection evidence and notify data owners.
+window_minutes: 120
+group_by: host
+match: all
+stages:
+  - label: Collection
+    rules: [archive_collection, clipboard_capture, screen_capture, local_data, data_staging, credential_store_theft]
+    tactics: [Collection]
+  - label: Exfiltration
+    rules: [dns_http_exfil, exfiltration_volume, exfil_web, exfil_alt, cloud_sync_exfil, dns_tunnel]
+    tactics: [Exfiltration]

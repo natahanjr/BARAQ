@@ -1,0 +1,17 @@
+name: discovery_lateral_chain
+description: Reconnaissance of accounts, shares or the domain immediately followed by lateral movement from the same host - an adversary mapping the network to pivot.
+enabled: true
+severity: critical
+confidence: 0.9
+mitre_id: T1021
+recommendation: Contain the pivoting host, hunt for additional lateral jumps in the entity graph and rotate the credentials used for the remote logons.
+window_minutes: 90
+group_by: host
+match: all
+stages:
+  - label: Discovery
+    rules: [account_discovery, domain_discovery, share_discovery, bloodhound_recon, security_software, system_info]
+    tactics: [Discovery]
+  - label: Lateral Movement
+    rules: [rdp_lateral, winrm_lateral, smb_admin_share, lateral_movement, pass_the_hash, pass_the_ticket]
+    tactics: [Lateral Movement]

@@ -199,3 +199,115 @@ def test_sigma_complete_data_keeps_severity(db, tmp_path):
     results = engine.evaluate(10)
     assert len(results) == 1
     assert results[0].severity == "high"
+
+
+NULL_IMAGE_RULE = """
+title: Missing Image Field
+id: 5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d
+status: test
+level: medium
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection:
+    EventID: 4688
+  filter_main_null:
+    Image: null
+  condition: selection and not 1 of filter_main_*
+falsepositives:
+  - None
+"""
+
+
+def test_sigma_null_filter_matches_missing_field(db, tmp_path):
+    """``Image: null`` must match events where the field is absent entirely,
+    not only events where it is empty - otherwise every event without image
+    data trips the rule."""
+    rules_dir = _write_rules(tmp_path, [NULL_IMAGE_RULE])
+    engine = SigmaRuleEngine(db, rules_dir=rules_dir)
+    ev = _event(db, command_line="cmd.exe /c whoami")
+    ev.raw_json = {"channel": "Security", "facts": {"CommandLine": "cmd.exe /c whoami"}}
+    db.commit()
+    assert engine.evaluate(10) == []
+
+
+RAW_DISK_RULE = """
+title: Raw Disk Access By Uncommon Tools
+id: 6b7c8d9e-0f1a-4b2c-9d3e-4f5a6b7c8d9e
+status: test
+level: low
+logsource:
+  product: windows
+  category: raw_access_thread
+detection:
+  selection:
+    EventID: 25
+  condition: selection
+falsepositives:
+  - Likely
+"""
+
+
+def test_sigma_logsource_scopes_rule_to_event_type(db, tmp_path):
+    """A rule declared for ``raw_access_thread`` (Sysmon Event 25) must not
+    fire on process-creation events - logsource category is a scope, not a
+    hint."""
+    rules_dir = _write_rules(tmp_path, [RAW_DISK_RULE])
+    engine = SigmaRuleEngine(db, rules_dir=rules_dir)
+    _event(db, command_line="cmd.exe /c whoami")
+    assert engine.evaluate(10) == []
+
+
+def test_sigma_logsource_scopes_rule_without_eventid(db, tmp_path):
+    """A rule with no EventID selection but a process_creation logsource is
+    indexed under the process event IDs, not evaluated globally."""
+    rules_dir = _write_rules(tmp_path, [NULL_IMAGE_RULE.replace(
+        "  selection:\n    EventID: 4688\n", "  selection:\n    CommandLine|contains: whoami\n")])
+    engine = SigmaRuleEngine(db, rules_dir=rules_dir)
+    _event(db, event_id=4625, command_line="whoami")
+    assert engine.evaluate(10) == []
+
+
+PUBLIC_IP_RULE = """
+title: Failed Logon From Public IP
+id: 7c8d9e0f-1a2b-4c3d-8e4f-5a6b7c8d9e0f
+status: test
+level: medium
+logsource:
+  product: windows
+  service: security
+detection:
+  selection:
+    EventID: 4625
+  filter_main_local_ranges:
+    IpAddress|cidr:
+      - '10.0.0.0/8'
+      - '127.0.0.0/8'
+      - '172.16.0.0/12'
+      - '192.168.0.0/16'
+  condition: selection and not 1 of filter_main_*
+falsepositives:
+  - None
+"""
+
+
+def test_sigma_ipaddress_aliases_to_source_ip(db, tmp_path):
+    """``IpAddress`` (Sigma/Sysmon spelling) must resolve to BARAQ's
+    ``source_ip`` fact so CIDR filters exclude private logon sources."""
+    rules_dir = _write_rules(tmp_path, [PUBLIC_IP_RULE])
+    engine = SigmaRuleEngine(db, rules_dir=rules_dir)
+    raw_json = {
+        "channel": "Security",
+        "facts": {"source_ip": "192.168.1.12", "logon_type": "3"},
+    }
+    ev = NormalizedEvent(
+        event_id=4625, category="Authentication", source="windows",
+        user="testuser", host="TESTPC", risk="Low", severity="info",
+        message="failed logon",
+        timestamp=datetime.now(timezone.utc) - timedelta(minutes=1),
+        raw_json=raw_json,
+    )
+    db.add(ev)
+    db.commit()
+    assert engine.evaluate(10) == []

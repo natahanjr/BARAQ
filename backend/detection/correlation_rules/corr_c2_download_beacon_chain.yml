@@ -1,0 +1,17 @@
+name: c2_download_beacon_chain
+description: A download-capable tool fetched something and the host then exhibits C2 beacon cadence - remote tooling pulled in and phoning home.
+enabled: true
+severity: critical
+confidence: 0.9
+mitre_id: T1071
+recommendation: The host is under active C2. Isolate it, capture the beacon destination from the network evidence and block it at the perimeter.
+window_minutes: 120
+group_by: host
+match: all
+stages:
+  - label: Tool Download
+    rules: [bits_download, lolbin_execution, suspicious_powershell, certutil_decode]
+    tactics: [Execution, Command and Control]
+  - label: C2 Beacon
+    rules: [c2_beacon, webhook_c2, dns_tunnel, unusual_port, encrypted_channel]
+    tactics: [Command and Control]

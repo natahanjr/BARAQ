@@ -1,4 +1,4 @@
-"""Entity intelligence graph API (Palantir-style entity investigation).
+"""Entity intelligence graph API (entity investigation graph).
 
 Endpoints (all provider-agnostic through :class:`GraphStore`):
 

@@ -25,6 +25,10 @@ _ALIAS_KEYS = {
     "sourceimage": "source_image",
     "targetimage": "target_image",
     "eventid": "event_id",
+    "ipaddress": "source_ip",
+    "sourceip": "source_ip",
+    "sourceaddress": "source_ip",
+    "clientaddress": "client_ip",
 }
 
 #: Fields carrying process identity/activity. Rules depending on them cannot
@@ -103,6 +107,7 @@ def build_event_fields(event) -> dict[str, str]:
 
 def _lookup(fields: dict[str, str], name: str) -> str | None:
     key = name.lower()
+    key = _ALIAS_KEYS.get(key, key)
     if key in fields:
         return fields[key]
     key = key.replace("_", "").replace(".", "").replace("-", "")
@@ -163,11 +168,15 @@ def _selection_matches(fields: dict[str, str], selection: Any) -> bool:
             field_name = key_parts[0]
             modifiers = {m.lower() for m in key_parts[1:] if m.lower() in _VALUE_MODIFIERS}
             field_value = _lookup(fields, field_name)
-            if field_value is None:
-                return False
-            if "null" in modifiers:
+            if value is None or "null" in modifiers:
+                # Sigma semantics: ``field: null`` (bare YAML null value or
+                # the explicit ``|null`` modifier) matches a missing OR empty
+                # field. Missing keys must not fail the comparison before the
+                # null check.
                 if not field_value:
                     continue
+                return False
+            if field_value is None:
                 return False
             expected = _expand_value(value)
             if "all" in modifiers:
@@ -261,12 +270,21 @@ class SigmaCondition:
             return all(_selection_matches(self._fields, s) for s in self._names.values())
         if lower in self._names:
             return _selection_matches(self._fields, self._names[lower])
+        #: The tokenizer joins ``N of`` into a single token; ``N of X``
+        #: means: at least N selections whose name matches X evaluate True.
+        m = re.fullmatch(r"(\d+)\s+of", lower)
+        if m:
+            if self._pos >= len(self.tokens):
+                return False
+            pattern = self.tokens[self._pos].lower()
+            self._pos += 1
+            return _of_matches(self._names, self._fields, int(m.group(1)), pattern)
         if token.isdigit() and self._pos < len(self.tokens) and self._peek().lower() == "of":
             self._pos += 1
             pattern = self.tokens[self._pos].lower()
             self._pos += 1
             return _of_matches(self._names, self._fields, int(token), pattern)
         if re.fullmatch(r"\d+", token):
-            # 'N of them' written with tokens already joined elsewhere - rare
+            # bare number with no following 'of' - not a valid operand
             return False
         return False

@@ -60,6 +60,11 @@ def _debris_value(value: str) -> bool:
     return False
 
 
+def is_debris_value(value: str) -> bool:
+    """Public alias: is this value corrupted rendering debris (no signal)?"""
+    return _debris_value(value)
+
+
 def is_corrupted_facts(facts: dict) -> tuple[bool, str]:
     """Check normalized facts for corrupted process / command-line values.
 

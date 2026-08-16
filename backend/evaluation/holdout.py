@@ -417,18 +417,55 @@ def _run_test_detection(db: Session) -> dict:
 
     fired_rules = {f.rule for f in findings}
     linked_event_ids: set[int] = set()
+    #: Roadmap P2 - actual per-alert latency: time from the LAST contributing
+    #: evidence event's timestamp to alert creation. The wall-clock runtime
+    #: (``elapsed_ms``) measures the pipeline itself; this measures how fast
+    #: a real alert lands after its final trigger event.
+    latencies: list[float] = []
     for alert in created:
         links = db.scalars(
             select(AlertEventLink.event_id).where(AlertEventLink.alert_id == alert.id)
         ).all()
+        timestamps = []
+        for event_id in links:
+            event = db.get(NormalizedEvent, event_id)
+            if event is not None and event.timestamp is not None:
+                timestamps.append(event.timestamp)
+        if timestamps and alert.created_at:
+            last = max(timestamps)
+            lat = (alert.created_at - last).total_seconds() * 1000.0
+            if lat >= 0:
+                latencies.append(lat)
         linked_event_ids.update(links)
 
+    latency = _latency_summary(latencies)
     return {
         "fired_rules": fired_rules,
         "linked_event_ids": linked_event_ids,
         "created": len(created),
         "elapsed_ms": elapsed,
         "findings": findings,
+        "per_alert_latency_ms": latency,
+    }
+
+
+def _latency_summary(latencies: list[float]) -> dict:
+    """p50 / p95 / avg / max of per-alert latencies (ms)."""
+    if not latencies:
+        return {"count": 0, "avg_ms": 0.0, "p50_ms": 0.0, "p95_ms": 0.0, "max_ms": 0.0}
+    ordered = sorted(latencies)
+    n = len(ordered)
+
+    def percentile(p: float) -> float:
+        idx = min(n - 1, max(0, int(round(p * (n - 1)))))
+        return round(ordered[idx], 2)
+
+    return {
+        "count": n,
+        "avg_ms": round(sum(ordered) / n, 2),
+        "p50_ms": percentile(0.5),
+        "p95_ms": percentile(0.95),
+        "max_ms": round(ordered[-1], 2),
     }
 
 

@@ -1,8 +1,8 @@
 const TONES = {
-  cyan: "border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 via-slate-900/45 to-slate-950/60 shadow-[0_8px_30px_-12px_rgba(34,211,238,0.25)]",
-  green: "border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-slate-900/45 to-slate-950/60 shadow-[0_8px_30px_-12px_rgba(16,185,129,0.2)]",
-  red: "border-red-500/20 bg-gradient-to-br from-red-500/10 via-slate-900/45 to-slate-950/60 shadow-[0_8px_30px_-12px_rgba(239,68,68,0.2)]",
-  amber: "border-amber-500/20 bg-gradient-to-br from-amber-500/10 via-slate-900/45 to-slate-950/60 shadow-[0_8px_30px_-12px_rgba(251,191,36,0.2)]",
+  cyan: "from-cyan-500/15 via-slate-900/60 to-slate-900/70 border-cyan-400/25",
+  green: "from-emerald-500/15 via-slate-900/60 to-slate-900/70 border-emerald-400/25",
+  red: "from-red-500/15 via-slate-900/60 to-slate-900/70 border-red-400/25",
+  amber: "from-amber-500/15 via-slate-900/60 to-slate-900/70 border-amber-400/25",
 };
 
 function toneFor(accent) {
@@ -14,12 +14,14 @@ function toneFor(accent) {
 
 export default function StatCard({ label, value, sub, accent = "text-cyan-400", icon, hint }) {
   return (
-    <div className={`rounded-xl border backdrop-blur-sm ${TONES[toneFor(accent)]} p-5`}>
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-slate-500">{label}</p>
-        {icon && <span className="text-lg opacity-70">{icon}</span>}
+    <div
+      className={`card-surface relative overflow-hidden rounded-2xl border bg-gradient-to-br p-5 ${TONES[toneFor(accent)]}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="console-label">{label}</p>
+        {icon && <span className="text-lg opacity-60">{icon}</span>}
       </div>
-      <p className={`mt-2 text-2xl font-semibold tracking-tight ${accent}`}>{value}</p>
+      <p className={`mt-2 font-mono text-2xl font-semibold tracking-tight ${accent}`}>{value}</p>
       {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
       {hint && <p className="mt-1 text-[11px] text-slate-600">{hint}</p>}
     </div>

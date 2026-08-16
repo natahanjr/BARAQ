@@ -80,11 +80,56 @@ export default function AlertDetail() {
   const [explain, setExplain] = useState(null);
   const [explainLoading, setExplainLoading] = useState(false);
   const [explainError, setExplainError] = useState("");
+  const [verdict, setVerdict] = useState(null);
+  const [verdictNote, setVerdictNote] = useState("");
+  const [verdictSuppress, setVerdictSuppress] = useState(true);
+  const [soarRuns, setSoarRuns] = useState(null);
 
   const load = () => api.alert(id).then(setAlert).catch((e) => setError(e.message));
   useEffect(() => {
     load();
+    api
+      .alertVerdict(id)
+      .then((v) => {
+        if (v) {
+          setVerdict(v);
+          setVerdictNote(v.note || "");
+        }
+      })
+      .catch(() => {});
+    api
+      .automationRuns(10, id)
+      .then((r) => setSoarRuns(r?.runs || []))
+      .catch(() => setSoarRuns([]));
   }, [id]);
+
+  const submitVerdict = async (value) => {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      await api.submitAlertVerdict(alert.id, {
+        verdict: value,
+        note: verdictNote,
+        suppress: value === "expected_behavior" && verdictSuppress,
+      });
+      const saved = await api.alertVerdict(alert.id);
+      setVerdict(saved);
+      setNotice(
+        value === "expected_behavior"
+          ? `Marked as expected behavior${verdictSuppress ? " and suppressed for this rule/host/user" : ""}. ML weights updated.`
+          : value === "false_positive"
+            ? "Marked as false positive. ML weights dampened."
+            : "Confirmed true positive. ML weights strengthened.",
+      );
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const loadIntel = (refresh = false) => {
     if (!alert) return;
@@ -290,6 +335,77 @@ export default function AlertDetail() {
           </Card>
 
           <Card>
+            <SectionHeading>Analyst Verdict</SectionHeading>
+            <p className="mb-3 text-xs leading-relaxed text-slate-400">
+              Is this detection real, noise, or expected behaviour? Verdicts feed the ML
+              feedback loop; expected-behaviour verdicts can also suppress the rule on this
+              host/user so it stops alerting.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => submitVerdict("true_positive")}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  verdict?.verdict === "true_positive"
+                    ? "border-rose-500/60 bg-rose-500/20 text-rose-300"
+                    : "border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20"
+                }`}
+              >
+                True Positive
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => submitVerdict("false_positive")}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  verdict?.verdict === "false_positive"
+                    ? "border-amber-500/60 bg-amber-500/20 text-amber-300"
+                    : "border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
+                }`}
+              >
+                False Positive
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => submitVerdict("expected_behavior")}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  verdict?.verdict === "expected_behavior"
+                    ? "border-sky-500/60 bg-sky-500/20 text-sky-300"
+                    : "border-sky-500/30 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20"
+                }`}
+              >
+                Expected Behavior
+              </button>
+            </div>
+            <label className="mt-3 flex items-center gap-2 text-xs text-slate-400">
+              <input
+                type="text"
+                value={verdictNote}
+                onChange={(e) => setVerdictNote(e.target.value)}
+                placeholder="Why? (optional)"
+                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-200 outline-none transition-colors focus:border-cyan-400/50"
+              />
+            </label>
+            <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-slate-400">
+              <input
+                type="checkbox"
+                checked={verdictSuppress}
+                onChange={(e) => setVerdictSuppress(e.target.checked)}
+                className="accent-cyan-400"
+              />
+              Suppress this rule on {alert.host || "this host"} (expected-behavior verdicts)
+            </label>
+            {verdict && (
+              <p className="mt-3 text-[11px] text-slate-500">
+                Last verdict: <span className="font-medium text-slate-300">{verdict.verdict}</span>
+                {verdict.created_by && <> by {verdict.created_by}</>} · {new Date(verdict.created_at).toLocaleString()}
+              </p>
+            )}
+          </Card>
+
+          <Card>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-semibold text-white">
                 Evidence Events ({alert.events?.length || 0})
@@ -438,6 +554,55 @@ export default function AlertDetail() {
               />
             </div>
 
+            {alert.risk_composition && (
+              <div className="mt-4 rounded-lg border border-slate-700/50 bg-slate-800/40 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-400">
+                  Risk explanation
+                </p>
+                <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+                  {alert.risk_composition.method === "hybrid"
+                    ? "Hybrid: 60% rule signal + 40% ML anomaly"
+                    : "Rule-only: no ML anomaly signal available"}
+                </p>
+                <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-slate-700/60">
+                  <div
+                    className="bg-cyan-500"
+                    style={{ width: `${alert.risk_composition.rule_share}%` }}
+                  />
+                  <div
+                    className="bg-violet-500"
+                    style={{ width: `${alert.risk_composition.ml_share}%` }}
+                  />
+                </div>
+                <div className="mt-1.5 flex justify-between font-mono text-[10px] text-slate-500">
+                  <span>rule {alert.risk_composition.rule_share?.toFixed(1)}</span>
+                  <span>ML {alert.risk_composition.ml_share?.toFixed(1)}</span>
+                  <span>
+                    base {alert.risk_composition.base?.toFixed(1)} ×{" "}
+                    {alert.context_modifier ?? 1.0}
+                  </span>
+                </div>
+                {(alert.risk_adjustments || []).length > 0 && (
+                  <ul className="mt-2 space-y-1 border-t border-white/5 pt-2">
+                    {alert.risk_adjustments.map((a, idx) => (
+                      <li key={idx} className="flex items-center gap-2 text-[11px]">
+                        <span
+                          className={`font-mono font-semibold ${
+                            a.delta > 0 ? "text-red-300" : a.delta < 0 ? "text-emerald-300" : "text-slate-400"
+                          }`}
+                        >
+                          {a.delta > 0 ? "+" : ""}
+                          {a.delta}
+                        </span>
+                        <span className="text-slate-300">{a.signal}</span>
+                        <span className="ml-auto truncate text-[10px] text-slate-500">{a.note}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
             {alert.mitre_id && (
               <a
                 href={MITRE_LINK(alert.mitre_id)}
@@ -472,6 +637,70 @@ export default function AlertDetail() {
           )}
 
           <Card>
+            <SectionHeading>Automation Runs</SectionHeading>
+            {soarRuns === null ? (
+              <Loading label="Loading playbook history" />
+            ) : soarRuns.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                No playbook runs recorded for this alert yet.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {soarRuns.map((r) => (
+                  <li
+                    key={r.id}
+                    className="rounded-lg border border-slate-700/50 bg-slate-800/40 px-3 py-2"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-200">
+                        {r.playbook_name}
+                      </span>
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                          r.status === "completed"
+                            ? "bg-emerald-500/15 text-emerald-300"
+                            : r.status === "partial"
+                              ? "bg-amber-500/15 text-amber-300"
+                              : "bg-rose-500/15 text-rose-300"
+                        }`}
+                      >
+                        {r.status}
+                      </span>
+                      <span className="rounded bg-black/30 px-1.5 py-0.5 text-[10px] text-slate-400">
+                        {r.triggered_by}
+                      </span>
+                      <span className="ml-auto text-[10px] text-slate-500">
+                        {r.created_at
+                          ? new Date(r.created_at).toLocaleString()
+                          : ""}
+                      </span>
+                    </div>
+                    {(r.results || []).length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {r.results.map((res, i) => (
+                          <span
+                            key={i}
+                            title={res.detail}
+                            className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${
+                              res.status === "success"
+                                ? "bg-emerald-500/10 text-emerald-300"
+                                : res.status === "failed"
+                                  ? "bg-rose-500/10 text-rose-300"
+                                  : "bg-slate-700/40 text-slate-400"
+                            }`}
+                          >
+                            {res.action}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <Card>
             <div className="mb-3 flex items-center justify-between">
               <SectionHeading>Threat Intelligence</SectionHeading>
               <button
@@ -483,6 +712,43 @@ export default function AlertDetail() {
                 {intelLoading ? "Checking..." : "↻ Refresh"}
               </button>
             </div>
+            {alert?.intel_checked_at && (
+              <div className="mb-3 rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                    ⚡ Detection-time intel
+                  </span>
+                  <span className="text-[11px] text-slate-300">
+                    {(alert.intel_hits || 0) > 0
+                      ? `${alert.intel_hits} known-bad indicator(s) at detection`
+                      : "All indicators clean at detection"}
+                  </span>
+                  <span className="ml-auto text-[10px] text-slate-500">
+                    {new Date(alert.intel_checked_at).toLocaleString()} · offline fast path
+                  </span>
+                </div>
+                {alert.intel_indicators?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {alert.intel_indicators.slice(0, 8).map((ind) => (
+                      <span
+                        key={ind.indicator}
+                        title={`${ind.label || ind.kind || ""} · conf ${((ind.confidence || 0) * 100).toFixed(0)}%`}
+                        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-semibold ${
+                          ind.category === "malicious"
+                            ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                            : ind.category === "suspicious"
+                              ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                              : "border-slate-600/50 bg-black/20 text-slate-300"
+                        }`}
+                      >
+                        <span className="font-mono">{ind.indicator}</span>
+                        <span className="uppercase text-[9px] opacity-80">{ind.category}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {intel ? (
               <div className="space-y-3">
                 {intel.actors && intel.actors.length > 0 && (

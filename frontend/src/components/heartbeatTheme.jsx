@@ -149,7 +149,7 @@ export function MonitorChrome({ children }) {
       <div
         className="absolute inset-0 rounded-2xl"
         style={{
-          background: "radial-gradient(ellipse at 50% 110%, rgba(8,145,178,0.14), transparent 60%)",
+          background: "radial-gradient(ellipse at 50% 110%, rgba(8,145,178,0.16), transparent 60%)",
         }}
       />
       {children}

@@ -24,6 +24,7 @@ def list_events(
     user: str | None = None,
     category: str | None = None,
     anomaly: bool | None = None,
+    include_demo: int = Query(0, ge=0, le=1),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
@@ -32,6 +33,8 @@ def list_events(
     stmt = select(NormalizedEvent)
     if scope is not None:
         stmt = stmt.where(NormalizedEvent.org == scope)
+    if not include_demo:
+        stmt = stmt.where(NormalizedEvent.demo.is_(False))
     if event_id:
         stmt = stmt.where(NormalizedEvent.event_id == event_id)
     if user:
