@@ -21,6 +21,18 @@ def _seed_events(db, n=120, user="ml-online-user"):
                 message=f"logon attempt {i}",
                 user=user, host="ml-host",
                 timestamp=base - timedelta(minutes=i),
+                raw_json={
+                    "facts": {
+                        # Well-spread IP + logon-type facts keep the feature
+                        # space non-degenerate regardless of wall-clock hour:
+                        # a 120-minute seed window can span only 2 distinct
+                        # hours, which alone leaves the IsolationForest with
+                        # a single-point baseline and check_drift silently
+                        # skips the stream.
+                        "source_ip": i * 16_777_216,
+                        "logon_type": 10 + (i % 4),
+                    }
+                },
             )
         )
     db.add_all(rows)
