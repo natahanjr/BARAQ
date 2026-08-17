@@ -1,10 +1,38 @@
 # BARAQ
 
+> **An intelligent, lightweight SOC platform for real-time Windows endpoint threat detection and incident analysis.**
+
 [![Python Package](https://github.com/natahanjr/BARAQ/actions/workflows/python-package.yml/badge.svg)](https://github.com/natahanjr/BARAQ/actions/workflows/python-package.yml)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React%2018-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![MITRE ATT&CK](https://img.shields.io/badge/MITRE%20ATT%26CK-mapped-red)](https://attack.mitre.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**BARAQ: An Intelligent Lightweight Security Operations Center Framework for Real-Time Windows Endpoint Threat Detection and Incident Analysis**
+**No cloud. No heavy infrastructure. One laptop is enough.**
 
-A lightweight, production-oriented SOC framework for Windows endpoints — no cloud, no heavy infrastructure. It collects real Windows telemetry, normalizes events, detects attacks with a **hybrid rule-based + machine-learning engine**, maps findings to MITRE ATT&CK, computes **hybrid risk scores**, displays everything in a professional SOC dashboard, generates executive/technical reports, and includes an **evaluation framework** that measures detection accuracy.
+BARAQ turns a Windows endpoint into a working Security Operations Center: it collects real Windows telemetry, detects attacks with a **hybrid rule-based + machine-learning engine**, maps every finding to **MITRE ATT&CK**, scores risk in real time, and gives analysts a professional SOC dashboard with investigation, SOAR automation, threat intelligence and reporting — all self-hosted, with full agent→server fleet support.
+
+## Screenshots
+
+| SOC Dashboard | Security Alerts |
+|---|---|
+| ![SOC Dashboard](docs/screenshots/dashboard.png) | ![Security Alerts](docs/screenshots/Security%20Alerts.png) |
+
+| Telemetry & Search | Threat Investigation |
+|---|---|
+| ![Telemetry & Search](docs/screenshots/Telemerty.png) | ![Threat Investigation](docs/screenshots/Threat%20Investigation.png) |
+
+**Why BARAQ?**
+
+- **100 built-in detection rules + 2,500+ Sigma community rules + 11 multi-stage correlation chains** — mapped to all 14 MITRE ATT&CK tactic groups
+- **Hybrid risk scoring** — 60% rule + 40% ML anomaly (Isolation Forest / Random Forest / XGBoost), with live-tuning entity risk engine
+- **Full analyst workspace** — attack-chain investigation, entity graph, saved searches, dashboards, pipe-based search language, incidents & case management
+- **SOAR automation** — playbooks that respond automatically (block, isolate, disable, escalate)
+- **Threat intelligence** — IOC enrichment from AbuseIPDB / AlienVault OTX / VirusTotal
+- **Enterprise hardening** — multi-user RBAC, TOTP 2FA, LDAP/AD + OIDC SSO, AES-256-GCM encryption-at-rest, tamper-evident audit chain
+- **Everything self-hosted** — runs locally, one-click launcher, or a standalone `.exe` with no runtime dependencies
 
 ---
 
@@ -40,18 +68,6 @@ A lightweight, production-oriented SOC framework for Windows endpoints — no cl
 
 ---
 
-## Dashboard
-
-Live SOC command view: security score, current risk level, system status,
-event/alert timelines, severity distribution, attack statistics, detection
-method breakdown, top targets, and open alerts — refreshed in real time.
-
-![BARAQ Dashboard](docs/screenshots/dashboard.png)
-
-![BARAQ Alerts](docs/screenshots/alerts.png)
-
----
-
 ## Architecture
 
 ```
@@ -66,7 +82,7 @@ method breakdown, top targets, and open alerts — refreshed in real time.
                 │          BARAQ BACKEND (FastAPI)             │
                 │  Normalizer ─► risk 0-100 ─► PostgreSQL      │
                 │         │                                    │
-                │         ├─► Rule-Based Detection (43 rules + Sigma)  │
+                │         ├─► Rule-Based Detection (100 rules + Sigma) │
                 │         ├─► ML Anomaly Engine (IF/RF/XGB)    │
                 │         └─► Hybrid Risk Score (60/40)        │
                 │                   │                          │
@@ -84,13 +100,24 @@ method breakdown, top targets, and open alerts — refreshed in real time.
      └──────────────┘  └──────────────┘  └──────────────┘
 ```
 
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Python 3.11+, FastAPI, uvicorn, SQLAlchemy |
+| Frontend | React 18, Tailwind CSS 4, Recharts, WebSocket live updates |
+| Database | PostgreSQL (fleet) · SQLite (local) |
+| Detection | 100 native MITRE-mapped rules · SigmaHQ rule engine (2,512 rules) · 11 YAML correlation chains · Isolation Forest / Random Forest / XGBoost |
+| Integration | Kafka · Redis Streams · Elasticsearch · Prometheus + Grafana · LDAP/AD · OIDC (Entra ID / Keycloak) |
+| Security | RBAC · TOTP 2FA · AES-256-GCM at rest · DPAPI vault · tamper-evident SHA-256 audit chain · CSRF + rate limiting |
+
 ## Detection Pipeline
 
 1. **Collect** — agents push Windows telemetry (event log, processes, network,
    PowerShell, Sysmon) over HTTPS with agent-key auth and TLS CA pinning.
 2. **Normalize** — each event is normalized to a common schema and assigned a
    numeric risk score (0-100).
-3. **Detect** — a rule engine (43 built-in MITRE ATT&CK-mapped rules plus the
+3. **Detect** — a rule engine (100 built-in MITRE ATT&CK-mapped rules plus the
    full **SigmaHQ community rule set**, ~3000+ rules, when pulled) and
    per-behavior ML anomaly detection (Isolation Forest / Random Forest /
    XGBoost) evaluate the normalized stream.
