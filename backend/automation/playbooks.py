@@ -35,6 +35,7 @@ from backend.database.models import (
     Incident,
     PlaybookRun,
 )
+from backend.config import DESTRUCTIVE_ACTIONS, SOAR_DESTRUCTIVE_ACTIONS_ENABLED
 
 logger = logging.getLogger("baraq.automation")
 
@@ -119,6 +120,14 @@ def matches(alert: Alert, triggers: dict) -> bool:
 def _execute_one(db: Session, alert: Alert, action: str) -> tuple[str, str]:
     """Run one action against an alert; returns (status, detail)."""
     from backend.api.alerts import _execute_action, _extract_target
+
+    # Phase 0.12: destructive actions are SIMULATED unless explicitly enabled.
+    if action in DESTRUCTIVE_ACTIONS and not SOAR_DESTRUCTIVE_ACTIONS_ENABLED:
+        target = _extract_target(alert, action)
+        return "success", (
+            f"SIMULATED {action} on {target!r} - destructive SOAR actions "
+            "disabled (BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED=0)."
+        )
 
     if action == "create_incident":
         existing = db.scalars(
