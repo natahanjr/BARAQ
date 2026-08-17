@@ -37,6 +37,7 @@ from backend.api import (
     saved,
     search,
     system,
+    telemetry,
 )
 from backend.auth import verify_token
 from backend.config import (
@@ -739,6 +740,7 @@ for router in (
     automation.router,
     saved.router,
     dataset.router,
+    telemetry.router,
 ):
     app.include_router(router)
 

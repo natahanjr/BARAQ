@@ -57,6 +57,12 @@ from backend.database.models import Base  # noqa: E402
 _TABLE_NAMES = list(Base.metadata.tables.keys())
 
 
+def _table_names() -> list[str]:
+    """All registered tables, including ones imported after conftest loads
+    (e.g. the v2 telemetry models) so every test starts from a clean DB."""
+    return sorted(Base.metadata.tables.keys())
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _init_database():
     init_db()
@@ -72,7 +78,7 @@ def _clean_database():
     engine.dispose()
     session = SessionLocal()
     try:
-        for table in _TABLE_NAMES:
+        for table in _table_names():
             session.execute(text(f'TRUNCATE TABLE "{table}" RESTART IDENTITY CASCADE'))
         session.commit()
     finally:

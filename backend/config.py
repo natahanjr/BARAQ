@@ -1173,6 +1173,32 @@ DESTRUCTIVE_ACTIONS = frozenset(
     {"block_ip", "kill_process", "quarantine", "isolate", "disable_account"}
 )
 
+# --------------------------------------------------------------------------
+# v2 telemetry (Phase 1)
+# --------------------------------------------------------------------------
+# The v2 pipeline is not live yet; the API is inert unless explicitly
+# enabled. Development/evaluation environments may enable it; production
+# must keep it off until Phase 1 validation completes.
+TELEMETRY_V2_ENABLED = (
+    os.environ.get("BARAQ_TELEMETRY_V2", "0").lower()
+    in ("1", "true", "yes", "on")
+)
+
+#: Name of the v1 production database (Phase 0.7). The v2 workstream must
+#: never write to it: this is enforced here and in the ingestion pipeline.
+PRODUCTION_DB_NAME = "sentinel"
+
+from sqlalchemy.engine import make_url as _make_url  # noqa: E402
+
+_DB_NAME = _make_url(DATABASE_URL).database or ""
+
+# Isolation gate (Phase 0.7): the v2 pipeline stays disabled whenever the
+# configured database is the production DB - even if BARAQ_ENV is unset and
+# defaults to "development". BARAQ_ENV alone is not the boundary; the
+# production database is.
+if IS_PRODUCTION or _DB_NAME == PRODUCTION_DB_NAME:
+    TELEMETRY_V2_ENABLED = False
+
 # Run the production gate last: it references many of the flags above and
 # must only fire after every constant is bound.
 _assert_production_safe()

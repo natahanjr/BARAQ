@@ -24,6 +24,21 @@ BARAQ
 4. Dataset exports live under `backups/2026-08-17-baseline/` — the
    evaluation harness reads from there, not from the live tables.
 
+## Enforcement (code, not just this document)
+
+The v1 app itself runs with `BARAQ_ENV=development` against the production
+DB (`sentinel`) — that is v1's own design and stays untouched (production
+profile would refuse v1's dev keys). What is enforced for **v2**:
+
+| Layer | Guard |
+|-------|-------|
+| Config | `TELEMETRY_V2_ENABLED` is forced `False` when the configured DB is `sentinel` — even if `BARAQ_ENV` is unset (defaults to development). See `backend/config.py`. |
+| Pipeline | `ingest()` raises unless the configured DB is not the production DB name. `backend/telemetry/ingestion/pipeline.py`. |
+| API | `/api/v2/telemetry/*` returns `{"status": "disabled"}` whenever the gate is off. |
+| Seed script | `scripts/dev_seed_telemetry.py` refuses `sentinel`, `baraq_test`, and `BARAQ_ENV=production`. |
+
+Regression tests cover the first three: `tests/test_telemetry_v2.py`.
+
 ## Baseline snapshot
 
 | Asset | Location |
