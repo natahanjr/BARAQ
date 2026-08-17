@@ -126,6 +126,66 @@ def fp_analysis(request: Request, db: Session = Depends(get_db)):
     return fp_analyze(db, org=scope or "")
 
 
+@router.get("/feedback-stats")
+def feedback_stats(request: Request, db: Session = Depends(get_db)):
+    """Analyst feedback -> per-rule precision metrics (P1 item 14).
+
+    Read-only aggregation of analyst verdicts: how many true/false positives
+    each rule produced, the resulting precision, the rules currently
+    suppressed by ``expected_behavior`` verdicts, and the most recent
+    verdicts. Nothing here mutates state.
+    """
+    from backend.database.models import Alert, AlertVerdict, SuppressionRule
+
+    scope = tenant_scope(request)
+
+    verdicts = db.scalars(select(AlertVerdict)).all()
+    alerts = {a.id: a for a in db.scalars(select(Alert)).all()}
+    if scope:
+        verdicts = [v for v in verdicts if alerts.get(v.alert_id) and alerts[v.alert_id].org == scope]
+        filtered_ids = {v.alert_id for v in verdicts}
+        alerts = {a_id: a for a_id, a in alerts.items() if a_id in filtered_ids}
+
+    by_rule: dict[str, dict] = {}
+    for v in verdicts:
+        alert = alerts.get(v.alert_id)
+        rule = alert.rule if alert else "?"
+        entry = by_rule.setdefault(rule, {"rule": rule, "true_positive": 0, "false_positive": 0, "total": 0})
+        entry["total"] += 1
+        if v.verdict == "true_positive":
+            entry["true_positive"] += 1
+        elif v.verdict == "false_positive":
+            entry["false_positive"] += 1
+    for entry in by_rule.values():
+        labelled = entry["true_positive"] + entry["false_positive"]
+        entry["precision"] = round(entry["true_positive"] / labelled, 3) if labelled else None
+
+    suppressed_q = select(SuppressionRule.rule).distinct()
+    if scope:
+        suppressed_q = suppressed_q.where(SuppressionRule.org == scope)
+    suppressed_rules = sorted(
+        r for (r,) in db.execute(suppressed_q).all() if r and r != "*"
+    )
+
+    recent = sorted(verdicts, key=lambda v: v.created_at or v.id, reverse=True)[:20]
+    return {
+        "total_feedback": len(verdicts),
+        "rules": sorted(by_rule.values(), key=lambda r: -r["total"]),
+        "suppressed_rules": suppressed_rules,
+        "recent": [
+            {
+                "alert_id": v.alert_id,
+                "rule": alerts.get(v.alert_id).rule if alerts.get(v.alert_id) else "?",
+                "verdict": v.verdict,
+                "note": v.note,
+                "created_by": v.created_by,
+                "created_at": v.created_at.isoformat() if v.created_at else None,
+            }
+            for v in recent
+        ],
+    }
+
+
 class VerdictCreate(BaseModel):
     verdict: Literal["true_positive", "false_positive", "expected_behavior"]
     note: str = Field(default="", max_length=1000)
