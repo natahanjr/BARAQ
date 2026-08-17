@@ -31,6 +31,14 @@ class TelemetryEvent(Base):
     facts: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
     integrity: Mapped[str] = mapped_column(String(16), default="complete")
+    #: Canonical structured fields (contract v1.1) - detection surface.
+    event_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    event_type: Mapped[str] = mapped_column(String(32), default="", index=True)
+    destination: Mapped[str] = mapped_column(String(128), default="", index=True)
+    process: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    network: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    outcome: Mapped[str] = mapped_column(String(16), default="", index=True)
+    schema_version: Mapped[str] = mapped_column(String(8), default="1.1")
     #: Original raw record (audit / reprovenance); never queried, only kept.
     raw_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

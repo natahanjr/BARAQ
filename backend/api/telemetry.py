@@ -63,6 +63,12 @@ def list_events(
                 "source": r.source,
                 "action": r.action,
                 "facts": r.facts,
+                "event_id": r.event_id,
+                "event_type": r.event_type,
+                "destination": r.destination,
+                "process": r.process,
+                "network": r.network,
+                "outcome": r.outcome,
             }
             for r in rows
         ],

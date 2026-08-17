@@ -5,6 +5,31 @@ strict, deterministic ingestion chain. It owns only telemetry: it never
 creates alerts, never mutates risk, never opens incidents (boundary
 enforced and tested).
 
+## Canonical EVENT (contract v1.1)
+
+One structure every telemetry source produces, so detection never parses
+raw formats:
+
+| Field | Meaning |
+|-------|---------|
+| `event_id` | Source-native id (e.g. Windows event id) |
+| `timestamp` | Event time (UTC, tz-aware) |
+| `event_type` | Classification: `authentication`, `process`, `network`, `event`, ... |
+| `host` | Machine the event happened on |
+| `user` | Account involved (or `-`) |
+| `source` | Telemetry source: `windows`, `syslog`, `web`, ... |
+| `destination` | Target host/IP |
+| `process` | `{name, path, pid, parent, ...}` |
+| `network` | `{src_ip, dst_ip, src_port, dst_port, proto}` |
+| `action` | What happened (e.g. `logon_failed`) |
+| `outcome` | `success` / `failure` / `""` |
+| `raw_event` | Original record (audit provenance) |
+| `schema_version` | Contract version (currently `1.1`) |
+
+`facts` carries free-form extras. The fingerprint (dedup key) is computed
+from source/host/user/action/ts-ms/facts/org and is unchanged by the
+structured fields.
+
 ## Pipeline
 
 ```text

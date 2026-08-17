@@ -47,6 +47,15 @@ def normalize_database_url(url: str) -> str:
 
 # In-place additive column migrations (idempotent; used for pre-Alembic DDL).
 _ADDITIVE_MIGRATIONS = {
+    "v2_events": [
+        ("event_id", "VARCHAR(64) DEFAULT ''"),
+        ("event_type", "VARCHAR(32) DEFAULT ''"),
+        ("destination", "VARCHAR(128) DEFAULT ''"),
+        ("process", "JSONB"),
+        ("network", "JSONB"),
+        ("outcome", "VARCHAR(16) DEFAULT ''"),
+        ("schema_version", "VARCHAR(8) DEFAULT '1.1'"),
+    ],
     "events": [
         ("risk_score", "REAL"),
         ("is_anomaly", "BOOLEAN DEFAULT 0"),
