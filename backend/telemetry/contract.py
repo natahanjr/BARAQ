@@ -21,14 +21,18 @@ from typing import Any
 
 @dataclass(frozen=True)
 class EVENT:
-    """Canonical normalized telemetry event.
+    """Canonical normalized telemetry event (contract v1.1).
 
-    All fields except ``facts`` are primitive and indexable; ``facts`` is a
-    free-form mapping of detector-relevant details (command lines, IPs,
-    registry paths, ...). ``raw`` carries the original record for audit and
-    enrichment provenance (may be None for synthetic events).
+    One event structure every telemetry source must produce, so detection
+    never needs to understand dozens of raw formats. The core identity
+    fields are primitive and indexable; the canonical structured fields
+    (``event_type``, ``destination``, ``process``, ``network``, ``outcome``)
+    are the detection-facing surface; ``facts`` carries free-form
+    detector-relevant extras; ``raw`` preserves the original record for
+    audit and enrichment provenance (may be None for synthetic events).
     """
 
+    # --- identity -----------------------------------------------------------
     timestamp: datetime
     host: str
     user: str
@@ -38,6 +42,15 @@ class EVENT:
     org: str = ""
     raw: Any = None
     integrity: str = "complete"
+
+    # --- canonical structured fields (contract v1.1) ------------------------
+    event_id: str = ""
+    event_type: str = ""
+    destination: str = ""
+    process: dict[str, Any] = field(default_factory=dict)
+    network: dict[str, Any] = field(default_factory=dict)
+    outcome: str = ""
+    schema_version: str = "1.1"
 
     def fingerprint(self) -> str:
         """Deterministic dedup key: (source, host, action, event-time, facts).
@@ -69,4 +82,11 @@ class EVENT:
             "org": self.org,
             "integrity": self.integrity,
             "fingerprint": self.fingerprint(),
+            "event_id": self.event_id,
+            "event_type": self.event_type,
+            "destination": self.destination,
+            "process": self.process,
+            "network": self.network,
+            "outcome": self.outcome,
+            "schema_version": self.schema_version,
         }

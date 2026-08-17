@@ -51,6 +51,75 @@ def test_normalize_generic():
     assert event.integrity == "complete"
 
 
+def test_canonical_structured_fields_generic():
+    event = normalize(
+        {
+            "timestamp": NOW.isoformat(),
+            "host": "web-01",
+            "user": "-",
+            "source": "web",
+            "action": "request",
+            "facts": {"method": "GET"},
+            "event_id": "req-1",
+            "event_type": "network",
+            "destination": "10.0.0.9",
+            "process": {"name": "nginx.exe"},
+            "network": {"src_ip": "10.0.0.5", "dst_port": 443},
+            "outcome": "success",
+        }
+    )
+    assert event.event_id == "req-1"
+    assert event.event_type == "network"
+    assert event.destination == "10.0.0.9"
+    assert event.process["name"] == "nginx.exe"
+    assert event.network["dst_port"] == 443
+    assert event.outcome == "success"
+    assert event.schema_version == "1.1"
+
+
+def test_canonical_structured_fields_windows():
+    event = normalize(
+        {
+            "event_id": 4624,
+            "computer": "ws-02",
+            "event_data": {
+                "target_user_name": "bob",
+                "ip_address": "198.51.100.9",
+                "workstation_name": "ws-02",
+            },
+            "time_created": NOW.isoformat(),
+        }
+    )
+    assert event.event_id == "4624"
+    assert event.event_type == "authentication"
+    assert event.destination == "ws-02"
+    assert event.network == {"src_ip": "198.51.100.9"}
+    assert event.outcome == "success"
+    assert event.facts["source_ip"] == "198.51.100.9"
+
+
+def test_canonical_fields_persisted_and_read_back(db):
+    ingest(
+        db,
+        [
+            {
+                "event_id": 4688,
+                "computer": "ws-03",
+                "event_data": {
+                    "process_name": "powershell.exe",
+                    "new_process_name": "powershell.exe",
+                },
+                "time_created": NOW.isoformat(),
+            }
+        ],
+    )
+    row = db.scalars(select(TelemetryEvent)).one()
+    assert row.event_id == "4688"
+    assert row.event_type == "process"
+    assert row.process == {"name": "powershell.exe"}
+    assert row.outcome == ""
+
+
 def test_normalize_windows_event_shape():
     raw = {
         "event_id": 4625,

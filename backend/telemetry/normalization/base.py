@@ -30,11 +30,14 @@ class GenericNormalizer:
 
         {"timestamp": iso, "host": "...", "user": "...",
          "source": "windows/sysmon/network/...", "action": "...",
-         "facts": {...}, "org": ""}
+         "facts": {...}, "org": "",
+         "event_id": "...", "event_type": "...", "destination": "...",
+         "process": {...}, "network": {...}, "outcome": "..."}
 
-    ``facts`` is optional; missing/unknown fields never fail ingestion.
-    Records without a parseable timestamp use the batch ``fallback_ts`` so
-    fingerprints stay deterministic (idempotent replay).
+    Structured fields are passed through when present; ``facts`` is
+    optional; missing/unknown fields never fail ingestion. Records without
+    a parseable timestamp use the batch ``fallback_ts`` so fingerprints
+    stay deterministic (idempotent replay).
     """
 
     def supports(self, raw: dict[str, Any]) -> bool:
@@ -60,6 +63,12 @@ class GenericNormalizer:
             org=str(raw.get("org", "")),
             raw=raw,
             integrity=raw.get("data_integrity", "complete"),
+            event_id=str(raw.get("event_id", "")),
+            event_type=str(raw.get("event_type", "")),
+            destination=str(raw.get("destination", "")),
+            process=dict(raw.get("process") or {}),
+            network=dict(raw.get("network") or {}),
+            outcome=str(raw.get("outcome", "")),
         )
 
 
@@ -70,6 +79,11 @@ class WindowsEventNormalizer:
 
         {"event_id": 4625, "computer": "...", "subject_user_name": "...",
          "message": "...", "event_data": {...}}
+
+    Populates the canonical structured fields: ``event_type``
+    (authentication / process / other), ``destination`` (target host or IP),
+    ``network`` (source IP), ``outcome`` (success/failure) and ``process``
+    where the record carries a process name.
     """
 
     _LOGON_EVENTS = {4624, 4625}
@@ -98,10 +112,23 @@ class WindowsEventNormalizer:
                 "target_user_name": data.get("target_user_name"),
                 "workstation": data.get("workstation_name"),
             }
+            event_type = "authentication"
+            destination = str(data.get("workstation_name") or "")
+            network = {"src_ip": data.get("ip_address")} if data.get("ip_address") else {}
+            outcome = "success" if eid == 4624 else "failure"
         else:
             action = f"event_{eid}"
             user = str(raw.get("subject_user_name") or raw.get("user") or "-")
             facts = {k: v for k, v in data.items() if v is not None}
+            event_type = "process" if eid == 4688 else "event"
+            destination = str(data.get("workstation_name") or "")
+            network = {"src_ip": data.get("ip_address")} if data.get("ip_address") else {}
+            outcome = str(raw.get("outcome") or "")
+        process = {}
+        if eid == 4688:
+            process = {"name": data.get("process_name") or data.get("new_process_name")}
+        elif data.get("process_name"):
+            process = {"name": data.get("process_name")}
         return EVENT(
             timestamp=ts,
             host=str(raw.get("computer") or raw.get("host") or "-"),
@@ -112,6 +139,12 @@ class WindowsEventNormalizer:
             org=str(raw.get("org", "")),
             raw=raw,
             integrity=raw.get("data_integrity", "complete"),
+            event_id=str(eid),
+            event_type=event_type,
+            destination=destination,
+            process=process,
+            network=network,
+            outcome=outcome,
         )
 
 

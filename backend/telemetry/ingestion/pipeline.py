@@ -117,6 +117,13 @@ def ingest(
                 org=event.org,
                 integrity=event.integrity,
                 raw_json=event.raw if isinstance(event.raw, dict) else None,
+                event_id=event.event_id,
+                event_type=event.event_type,
+                destination=event.destination,
+                process=event.process,
+                network=event.network,
+                outcome=event.outcome,
+                schema_version=event.schema_version,
             )
         )
     if fresh:
