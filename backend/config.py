@@ -1157,6 +1157,22 @@ GRAPH_MAX_NODES = int(os.environ.get("BARAQ_GRAPH_MAX_NODES", "250"))
 #: cause of entity-graph lag on busy fleets.
 GRAPH_MAX_EDGES = int(os.environ.get("BARAQ_GRAPH_MAX_EDGES", "300"))
 
+# --------------------------------------------------------------------------
+# SOAR safety (Phase 0.12)
+# --------------------------------------------------------------------------
+# During the v2 rebuild, automatic destructive response actions are DISABLED
+# by default. When disabled, playbook/action execution records the action as
+# SIMULATED and performs no real side effect. Set to "1" to re-enable only
+# after the new detection engine is validated end-to-end.
+SOAR_DESTRUCTIVE_ACTIONS_ENABLED = (
+    os.environ.get("BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED", "0").lower()
+    in ("1", "true", "yes", "on")
+)
+#: Actions classified as destructive / high-impact. Gated by the flag above.
+DESTRUCTIVE_ACTIONS = frozenset(
+    {"block_ip", "kill_process", "quarantine", "isolate", "disable_account"}
+)
+
 # Run the production gate last: it references many of the flags above and
 # must only fire after every constant is bound.
 _assert_production_safe()
