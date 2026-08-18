@@ -54,6 +54,8 @@ def test_evaluate_endpoint_persists_detection(db):
 
         detail = c.get(f"/api/detections/{detection['detection_id']}")
         assert detail.json()["detection"]["detector_id"] == "D001"
+        assert "Why detected" in detail.json()["explain"]
+        assert "External Remote RDP Logon" in detail.json()["explain"]
 
         unknown = c.get("/api/detections/D001-zzzzzzzzzzzz")
         assert unknown.json()["status"] == "error"
@@ -79,6 +81,7 @@ def test_evaluate_replay_is_idempotent(db):
             == second.json()["detections"][0]["detection_id"]
         )
         assert c.get("/api/detections").json()["total"] == 1
+        assert "explain" in first.json()["detections"][0]
 
 
 def test_evaluate_benign_record_no_detection(db):

@@ -16,7 +16,9 @@ from sqlalchemy.orm import Session
 from backend.config import TELEMETRY_V2_ENABLED
 from backend.database.connection import get_db
 from backend.detection.context import DetectionContext
+from backend.detection.contract import DETECTION
 from backend.detection.engine import persist, run_detection
+from backend.detection.evidence import Evidence
 from backend.detection.models import DetectionRecord
 from backend.detection.registry import default_registry
 from backend.security import require_auth
@@ -27,6 +29,36 @@ router = APIRouter(
     tags=["detections-v2"],
     dependencies=[Depends(require_auth)],
 )
+
+
+def _explain_block(row: DetectionRecord) -> str:
+    """Render the analyst-readable explainability block (contract 2.11)."""
+    return DETECTION(
+        detector_id=row.detector_id,
+        detector_version=row.detector_version,
+        detection_id=row.detection_id,
+        event_id=row.event_id,
+        event_ids=tuple(row.event_ids or ()),
+        timestamp=row.timestamp,
+        first_seen=row.first_seen,
+        last_seen=row.last_seen,
+        event_type="",  # not stored on DetectionRecord (contract-only field)
+        host_id=row.host_id,
+        host_name=row.host_name,
+        user_id=row.user_id,
+        username=row.username,
+        source_ip=row.source_ip,
+        destination_ip=row.destination_ip,
+        title=row.title,
+        description=row.description,
+        severity=row.severity,
+        confidence=row.confidence,
+        mitre_tactic=row.mitre_tactic,
+        mitre_technique=row.mitre_technique,
+        evidence=tuple(Evidence(e["field"], e["value"], e["reason"]) for e in (row.evidence or [])),
+        observables=tuple(dict(o) for o in (row.observables or [])),
+        status=row.status,
+    ).to_explain()
 
 
 @router.get("")
@@ -96,8 +128,8 @@ def evaluate_telemetry(
         if event is None:
             continue
         for detection in run_detection(event, context):
-            persist(db, detection)
-            findings.append(detection.to_dict())
+            row = persist(db, detection)
+            findings.append({**detection.to_dict(), "explain": _explain_block(row)})
     return {"status": "ok", "detections": findings}
 
 
@@ -110,4 +142,8 @@ def get_detection(detection_id: str, db: Session = Depends(get_db)):
     ).first()
     if row is None:
         return {"status": "error", "detail": f"unknown detection {detection_id}"}
-    return {"status": "ok", "detection": row.to_dict()}
+    return {
+        "status": "ok",
+        "detection": row.to_dict(),
+        "explain": _explain_block(row),
+    }
