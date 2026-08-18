@@ -1237,6 +1237,63 @@ ALERT_MIN_LABELED_FOR_FPR = 10
 #: bounded, auditable horizon.
 ALERT_SUPPRESSION_MAX_DAYS = int(os.environ.get("BARAQ_ALERT_SUPPRESSION_MAX_DAYS", "90"))
 
+# --------------------------------------------------------------------------
+# v2 behavioral aggregation (Phase 4)
+# --------------------------------------------------------------------------
+# Same lifecycle as the v2 telemetry/detection/alert surfaces: inert unless
+# explicitly enabled, and always inert on the production database.
+BEHAVIOR_GROUPS_ENABLED = (
+    os.environ.get("BARAQ_BEHAVIOR_GROUPS", "0").lower()
+    in ("1", "true", "yes", "on")
+)
+if IS_PRODUCTION or _DB_NAME == PRODUCTION_DB_NAME:
+    BEHAVIOR_GROUPS_ENABLED = False
+
+#: Detector -> behavior family (spec 4.9, 4.49): grouping is behavioral, not
+#: title- or MITRE-based. D001 (external RDP) and D002 (brute force) share
+#: the authentication family - the spec's own example groups External RDP +
+#: Failed Logon + Successful Logon into one "Remote Authentication Activity"
+#: group. D003/D004 are execution, D005 is ransomware-like encryption.
+#: Unknown detectors fail closed into their own "unknown" family.
+DETECTOR_BEHAVIOR_FAMILIES = {
+    "D001": "authentication",
+    "D002": "authentication",
+    "D003": "execution",
+    "D004": "execution",
+    "D005": "encryption",
+}
+BEHAVIOR_FAMILY_DEFAULT = "unknown"
+
+#: Aggregation window per behavior family in minutes (spec 4.13): initial
+#: defaults - standard 30, high-risk behavior 15, ransomware-like 10,
+#: authentication 15. Configurable, never hardcoded in the grouping engine.
+AGGREGATION_WINDOWS_MINUTES = {
+    "authentication": 15,
+    "execution": 30,
+    "encryption": 10,
+    "unknown": 30,
+}
+AGGREGATION_WINDOW_DEFAULT_MINUTES = 30
+
+#: Group inactivity lifecycle (spec 4.15): a group becomes QUIET this many
+#: minutes after its last alert, and CLOSED after the close timeout.
+AGGREGATION_QUIET_AFTER_MINUTES = 30
+AGGREGATION_CLOSE_AFTER_MINUTES = 60
+
+#: Minimum contextual relationships required to join a group (spec 4.19):
+#: two. Fingerprint equality guarantees host + user + source + family
+#: shared by construction, which always exceeds this floor.
+AGGREGATION_MIN_RELATIONSHIPS = 2
+
+#: Membership score weights (spec 4.18): host +0.40, user +0.25, source
+#: +0.20, time proximity +0.15 = 1.00. A grouping score, never a risk score.
+AGGREGATION_MEMBERSHIP_WEIGHTS = {
+    "host": 0.40,
+    "user": 0.25,
+    "source": 0.20,
+    "time": 0.15,
+}
+
 # Run the production gate last: it references many of the flags above and
 # must only fire after every constant is bound.
 _assert_production_safe()

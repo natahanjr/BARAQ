@@ -20,6 +20,7 @@ from backend.api import (
     assistant,
     auth,
     automation,
+    behavior_groups,
     compliance,
     dashboard,
     dataset,
@@ -746,6 +747,7 @@ for router in (
     detections.router,
     detections.detectors_router,
     alerting.router,
+    behavior_groups.router,
 ):
     app.include_router(router)
 
