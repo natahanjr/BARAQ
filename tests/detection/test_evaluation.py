@@ -30,9 +30,10 @@ from tests.detection.evaluation_data import SCENARIOS, expected_detector_ids
 from tests.detection.helpers import stored_events
 
 
-def _run_scenario(db, scenario: dict) -> tuple[set[str], float]:
-    """Replay a scenario end-to-end; return detector ids that fired and the
-    wall-clock replay time in seconds.
+def _run_scenario(db, scenario: dict) -> tuple[dict[str, tuple[str, str]], float]:
+    """Replay a scenario end-to-end; return detector id -> (severity, mitre)
+    for every detection that fired, plus the wall-clock replay time in
+    seconds.
 
     Arrival-order simulation: ingest stores enriched events, then each
     stored event is evaluated (with context) exactly as the live pipeline
@@ -45,13 +46,13 @@ def _run_scenario(db, scenario: dict) -> tuple[set[str], float]:
     start = time.perf_counter()
     ingest(db, scenario["records"])
     context = DetectionContext(db)
-    fired: set[str] = set()
+    fired: dict[str, tuple[str, str]] = {}
     for event in stored_events(db):
         if event.fingerprint() in before:
             continue
         records = run_and_persist(db, [event], context)
         for record in records:
-            fired.add(record.detector_id)
+            fired.setdefault(record.detector_id, (record.severity, record.mitre_technique or ""))
     latency_s = time.perf_counter() - start
     return fired, latency_s
 
@@ -62,17 +63,18 @@ def evaluate_scenarios(db) -> dict:
     latency_ms: list[float] = []
     metrics = {"TP": 0, "FP": 0, "FN": 0, "TN": 0}
     for scenario in SCENARIOS:
-        fired, latency_s = _run_scenario(db, scenario)
+        fired_map, latency_s = _run_scenario(db, scenario)
+        fired_ids = set(fired_map)
         expected = expected_detector_ids(scenario)
         label = scenario["label"]
 
-        missing = expected - fired
-        unexpected = fired - expected
+        missing = expected - fired_ids
+        unexpected = fired_ids - expected
         if label == "TP" and not missing and not unexpected:
             outcome = "TP"
-        elif label == "TN" and not fired:
+        elif label == "TN" and not fired_ids:
             outcome = "TN"
-        elif label == "TN" and fired:
+        elif label == "TN" and fired_ids:
             outcome = "FP"
         elif label == "TP" and missing and not unexpected:
             outcome = "FN"
@@ -86,8 +88,12 @@ def evaluate_scenarios(db) -> dict:
                 "name": scenario["name"],
                 "label": label,
                 "outcome": outcome,
-                "fired": sorted(fired),
+                "fired": sorted(fired_ids),
                 "expected": sorted(expected),
+                "detections": {
+                    did: {"severity": sev, "mitre": mitre}
+                    for did, (sev, mitre) in fired_map.items()
+                },
                 "latency_ms": round(latency_s * 1000.0, 2),
             }
         )
@@ -126,6 +132,31 @@ def test_all_scenarios_match_labels(db):
             f"{result['id']} {result['name']}: label={result['label']} "
             f"outcome={result['outcome']} fired={result['fired']}"
         )
+
+
+def test_expected_severity_and_mitre_match(db):
+    """Every expected detector must fire with the labeled severity + MITRE."""
+    report = evaluate_scenarios(db)
+    for result in report["results"]:
+        for exp in _expected_entries(result["id"]):
+            det = result["detections"].get(exp["detector_id"])
+            assert det is not None, (
+                f"{result['id']}: {exp['detector_id']} did not fire"
+            )
+            assert det["severity"] == exp["severity"], (
+                f"{result['id']} {exp['detector_id']}: severity "
+                f"{det['severity']} != {exp['severity']}"
+            )
+            assert det["mitre"] == exp["expected_mitre"], (
+                f"{result['id']} {exp['detector_id']}: mitre "
+                f"{det['mitre']} != {exp['expected_mitre']}"
+            )
+
+
+def _expected_entries(scenario_id: str) -> list[dict]:
+    return next(
+        s["expected"] for s in SCENARIOS if s["id"] == scenario_id
+    )
 
 
 def test_metrics_perfect_on_benchmark(db):

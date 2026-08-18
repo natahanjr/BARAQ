@@ -743,6 +743,7 @@ for router in (
     dataset.router,
     telemetry.router,
     detections.router,
+    detections.detectors_router,
 ):
     app.include_router(router)
 

@@ -30,6 +30,15 @@ router = APIRouter(
     dependencies=[Depends(require_auth)],
 )
 
+# Spec (2.10) shows the detector catalog at /api/detectors; the canonical
+# routes below live at /api/detections/detectors. Both surfaces are served
+# from the same handlers.
+detectors_router = APIRouter(
+    prefix="/api/detectors",
+    tags=["detectors-v2"],
+    dependencies=[Depends(require_auth)],
+)
+
 
 def _explain_block(row: DetectionRecord) -> str:
     """Render the analyst-readable explainability block (contract 2.11)."""
@@ -89,6 +98,7 @@ def list_detections(
 
 
 @router.get("/detectors")
+@detectors_router.get("")
 def list_detectors():
     if not TELEMETRY_V2_ENABLED:
         return {"status": "disabled", "detectors": []}
@@ -99,6 +109,7 @@ def list_detectors():
 
 
 @router.get("/detectors/{detector_id}")
+@detectors_router.get("/{detector_id}")
 def get_detector(detector_id: str):
     if not TELEMETRY_V2_ENABLED:
         return {"status": "disabled", "detector": None}
