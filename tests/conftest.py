@@ -22,6 +22,7 @@ print(f"[conftest] test DB URL -> {os.environ['BARAQ_DATABASE_URL']}")
 # database (never enabled for the production DB name - config gate).
 os.environ["BARAQ_TELEMETRY_V2"] = "1"
 os.environ["BARAQ_ALERTS_V2"] = "1"
+os.environ["BARAQ_BEHAVIOR_GROUPS"] = "1"
 os.environ["BARAQ_INTERVAL"] = "60"
 # Isolate ML model persistence from the production database folder.
 _test_tmp = os.path.join(tempfile.gettempdir(), "baraq_test_meta")
