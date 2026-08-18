@@ -22,6 +22,7 @@ from backend.api import (
     compliance,
     dashboard,
     dataset,
+    detections,
     endpoints,
     evaluation,
     events,
@@ -741,6 +742,7 @@ for router in (
     saved.router,
     dataset.router,
     telemetry.router,
+    detections.router,
 ):
     app.include_router(router)
 
