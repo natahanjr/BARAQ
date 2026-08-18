@@ -10,6 +10,7 @@ production scoring. The only persistence a detection ever has is the
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.engine import make_url
@@ -93,6 +94,7 @@ def persist(db: Session, detection: DETECTION) -> DetectionRecord:
         existing.evidence = [e.to_dict() for e in detection.evidence]
         existing.observables = [dict(o) for o in detection.observables]
         existing.event_ids = sorted(set(existing.event_ids) | set(detection.event_ids))
+        existing.updated_at = datetime.now(timezone.utc)
         if detection.first_seen < existing.first_seen:
             existing.first_seen = detection.first_seen
         if detection.last_seen > existing.last_seen:

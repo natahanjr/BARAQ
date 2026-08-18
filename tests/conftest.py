@@ -72,19 +72,24 @@ def _init_database():
     yield
 
 
-def _reset_database():
-    """Truncate every table (identity restart) from a fresh session."""
+def _reset_database(terminate_stragglers: bool = False):
+    """Truncate every table (identity restart) from a fresh session.
+
+    ``terminate_stragglers`` kills idle-in-transaction sessions first - used
+    only as a fallback when the TRUNCATE stalls on a leaked connection.
+    """
     session = SessionLocal()
     try:
         session.execute(text("SET LOCAL lock_timeout = '30s'"))
-        session.execute(
-            text(
-                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                "WHERE datname = current_database() "
-                "AND pid <> pg_backend_pid() AND state = 'idle in transaction'"
+        if terminate_stragglers:
+            session.execute(
+                text(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = current_database() "
+                    "AND pid <> pg_backend_pid() AND state = 'idle in transaction'"
+                )
             )
-        )
-        session.commit()
+            session.commit()
         tables = ", ".join(f'"{t}"' for t in _table_names())
         session.execute(text(f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE"))
         session.commit()
@@ -97,21 +102,18 @@ def _clean_database():
     """Reset every table before each test for full isolation.
 
     All tables are truncated in ONE statement (a single lock-acquisition
-    order). Stale sessions from previous tests are terminated first so an
-    orphaned "idle in transaction" connection can never deadlock or starve
-    the TRUNCATE; a short lock timeout surfaces remaining stragglers loudly.
-    A connection killed by the terminate (or a lock timeout) must not fail
-    this setup: retry once from a fresh pool before surfacing.
+    order). Pooled connections left in an open transaction by the previous
+    test are closed via ``engine.dispose()`` first; if the TRUNCATE still
+    stalls on a leaked session, idle-in-transaction stragglers are
+    terminated and the truncate retried. The happy path never kills a
+    connection - killing is the loud fallback, never the norm.
     """
-    # Close any pooled connections left in an open transaction by the previous
-    # test (e.g. a session that was never closed): otherwise the TRUNCATE below
-    # blocks forever waiting for the ACCESS SHARE lock they still hold.
     engine.dispose()
     try:
         _reset_database()
-    except Exception:  # noqa: BLE001 - transient straggler; retry once
+    except Exception:  # noqa: BLE001 - leaked straggler; terminate + retry once
         engine.dispose()
-        _reset_database()
+        _reset_database(terminate_stragglers=True)
     yield
 
 
