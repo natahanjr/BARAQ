@@ -130,7 +130,7 @@ SC_006_RANSOMWARE_BEHAVIOR = {
     "id": "SC-006",
     "name": "20 file modifications in 5 minutes on one host",
     "label": "TP",
-    "expected": [{"detector_id": "D005", "severity": "high"}],
+    "expected": [{"detector_id": "D005", "severity": "medium"}],
     "records": [
         {
             "timestamp": _ts(i * 0.2),

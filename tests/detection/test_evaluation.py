@@ -10,10 +10,17 @@ Scenario-level metrics (one decision per scenario):
     FN  expected detector missing on a malicious scenario
     TN  no detection on a benign scenario
 
+Detection latency (``latency_ms``) is the wall-clock time of the full
+in-process replay (ingest -> detect -> persist) for each scenario. It is a
+dev-machine methodology artifact, NOT a production latency claim - see
+docs/phase0/METRICS_REGISTRY.md (p2.det.latency_ms).
+
 The benchmark is small (n = 8) and fully human-labeled; see
 docs/phase2/PHASE2_ACCEPTANCE.md for the methodology statement.
 """
 from __future__ import annotations
+
+import time
 
 from backend.detection.context import DetectionContext
 from backend.detection.engine import run_and_persist
@@ -23,8 +30,9 @@ from tests.detection.evaluation_data import SCENARIOS, expected_detector_ids
 from tests.detection.helpers import stored_events
 
 
-def _run_scenario(db, scenario: dict) -> set[str]:
-    """Replay a scenario end-to-end; return the detector ids that fired.
+def _run_scenario(db, scenario: dict) -> tuple[set[str], float]:
+    """Replay a scenario end-to-end; return detector ids that fired and the
+    wall-clock replay time in seconds.
 
     Arrival-order simulation: ingest stores enriched events, then each
     stored event is evaluated (with context) exactly as the live pipeline
@@ -34,6 +42,7 @@ def _run_scenario(db, scenario: dict) -> set[str]:
     # earlier scenarios' stored events would otherwise be re-evaluated and
     # pollute this scenario's decision (cross-scenario contamination).
     before = {e.fingerprint() for e in stored_events(db)}
+    start = time.perf_counter()
     ingest(db, scenario["records"])
     context = DetectionContext(db)
     fired: set[str] = set()
@@ -43,15 +52,17 @@ def _run_scenario(db, scenario: dict) -> set[str]:
         records = run_and_persist(db, [event], context)
         for record in records:
             fired.add(record.detector_id)
-    return fired
+    latency_s = time.perf_counter() - start
+    return fired, latency_s
 
 
 def evaluate_scenarios(db) -> dict:
     """Run all scenarios; return per-scenario results + aggregate metrics."""
     results = []
+    latency_ms: list[float] = []
     metrics = {"TP": 0, "FP": 0, "FN": 0, "TN": 0}
     for scenario in SCENARIOS:
-        fired = _run_scenario(db, scenario)
+        fired, latency_s = _run_scenario(db, scenario)
         expected = expected_detector_ids(scenario)
         label = scenario["label"]
 
@@ -68,6 +79,7 @@ def evaluate_scenarios(db) -> dict:
         else:
             outcome = "FN"
         metrics[outcome] += 1
+        latency_ms.append(round(latency_s * 1000.0, 2))
         results.append(
             {
                 "id": scenario["id"],
@@ -76,6 +88,7 @@ def evaluate_scenarios(db) -> dict:
                 "outcome": outcome,
                 "fired": sorted(fired),
                 "expected": sorted(expected),
+                "latency_ms": round(latency_s * 1000.0, 2),
             }
         )
 
@@ -84,6 +97,9 @@ def evaluate_scenarios(db) -> dict:
     recall = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
     fpr = fp / (fp + tn) if fp + tn else 0.0
+    sorted_ms = sorted(latency_ms)
+    p50 = sorted_ms[len(sorted_ms) // 2]
+    p95 = sorted_ms[min(len(sorted_ms) - 1, int(0.95 * len(sorted_ms)))]
     return {
         "results": results,
         "metrics": {
@@ -93,6 +109,12 @@ def evaluate_scenarios(db) -> dict:
             "f1": round(f1, 4),
             "fpr": round(fpr, 4),
             "n_scenarios": len(SCENARIOS),
+            "latency_ms": {
+                "p50": p50,
+                "p95": p95,
+                "max": max(latency_ms),
+                "mean": round(sum(latency_ms) / len(latency_ms), 2),
+            },
         },
     }
 
@@ -119,6 +141,22 @@ def test_metrics_perfect_on_benchmark(db):
     assert metrics["f1"] == 1.0
     assert metrics["fpr"] == 0.0
     assert metrics["n_scenarios"] == 8
+
+
+def test_latency_measured_and_sane(db):
+    """Latency is recorded per scenario and reported as p50/p95/max/mean.
+
+    Only sanity checks - a dev-machine replay metric, never a production
+    latency claim (see METRICS_REGISTRY.md p2.det.latency_ms)."""
+    report = evaluate_scenarios(db)
+    latency = report["metrics"]["latency_ms"]
+    assert all(result["latency_ms"] > 0 for result in report["results"])
+    assert latency["p50"] > 0
+    assert latency["p95"] > 0
+    assert latency["max"] > 0
+    assert latency["mean"] > 0
+    assert latency["p50"] <= latency["p95"] <= latency["max"]
+    assert latency["max"] < 60_000  # generous sanity ceiling for the replay
 
 
 def test_evaluation_writes_only_detections(db):

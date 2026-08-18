@@ -23,9 +23,24 @@ def test_20_file_mods_detected(db):
     seeded = [file_modify(i * 0.2) for i in range(1, 20)]
     detection = evaluate(db, file_modify(0), seeded)
     assert detection is not None
-    assert detection.severity == "high"
+    assert detection.severity == "medium"
     assert detection.mitre_technique == "T1486"
     assert detection.host_name == "workstation-42"
+
+
+def test_50_plus_file_mods_high_severity(db):
+    seeded = [file_modify(i * 0.05) for i in range(1, 60)]
+    detection = evaluate(db, file_modify(0), seeded)
+    assert detection is not None
+    assert detection.severity == "high"
+
+
+def test_shadow_delete_escalates_severity(db):
+    seeded = [file_modify(i * 0.2) for i in range(1, 20)]
+    seeded += [shadow_delete(2)]
+    detection = evaluate(db, file_modify(0), seeded)
+    assert detection is not None
+    assert detection.severity == "high"
 
 
 def test_shadow_delete_strengthens_confidence(db):

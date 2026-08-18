@@ -47,7 +47,8 @@ class RansomwareBehaviorDetector(Detector):
     description = (
         f"Behavioral mass file modification: {FILE_THRESHOLD}+ file "
         f"modifications on one host within {WINDOW_MINUTES} minutes. "
-        "Shadow copy deletion strengthens confidence."
+        "Shadow copy deletion or a very high modification rate escalates "
+        "severity to high."
     )
     enabled = True
     supported_event_types = ()  # file events may arrive under any event_type
@@ -76,6 +77,10 @@ class RansomwareBehaviorDetector(Detector):
             confidence += 0.15
         if shadow:
             confidence += 0.15
+
+        severity = "medium"
+        if count >= HIGH_RATE_COUNT or shadow:
+            severity = "high"
 
         processes = Counter(
             str((e.process or {}).get("name") or "-") for e in file_events
@@ -109,7 +114,7 @@ class RansomwareBehaviorDetector(Detector):
                 f"{WINDOW_MINUTES} minutes"
                 + ("; shadow copy deletion observed" if shadow else "")
             ),
-            severity="high",
+            severity=severity,
             confidence=confidence,
             mitre_tactic="Impact",
             mitre_technique="T1486",

@@ -74,9 +74,15 @@ metric:        p2.det.precision        definition: TP/(TP+FP) over labeled scena
 metric:        p2.det.recall           definition: TP/(TP+FN) over labeled scenarios
 metric:        p2.det.f1               definition: 2*P*R/(P+R)
 metric:        p2.det.fpr              definition: FP/(FP+TN)
+metric:        p2.det.latency_ms       definition: wall-clock time of the in-process
+                                          scenario replay (ingest -> detect ->
+                                          persist), reported as p50/p95/max/mean
+                                          over the 8 scenarios. Dev-machine
+                                          artifact - NOT a production latency
+                                          claim (no SLO, informational only)
 dataset:       tests/detection/evaluation_data.py (SC-001..SC-008, human-labeled, frozen)
 time window:   replay at test time (deterministic timestamps 2026-08-17)
-threshold:     precision=recall=f1=1.0, fpr=0.0 (regression gate)
+threshold:     precision=recall=f1=1.0, fpr=0.0 (regression gate); latency sanity-only
 calculation:   one decision per scenario; TP/TN/FP/FN from fired detector set
 ```
 
