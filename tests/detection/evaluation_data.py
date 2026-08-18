@@ -54,7 +54,7 @@ SC_002_EXTERNAL_RDP = {
     "id": "SC-002",
     "name": "external RDP logon (logon type 10, public IP)",
     "label": "TP",
-    "expected": [{"detector_id": "D001", "severity": "high"}],
+    "expected": [{"detector_id": "D001", "severity": "high", "expected_mitre": "T1133"}],
     "records": [
         {
             "timestamp": _ts(1),
@@ -72,7 +72,7 @@ SC_003_BRUTE_FORCE = {
     "id": "SC-003",
     "name": "10 failed logons for one account in 15 minutes",
     "label": "TP",
-    "expected": [{"detector_id": "D002", "severity": "medium"}],
+    "expected": [{"detector_id": "D002", "severity": "medium", "expected_mitre": "T1110"}],
     "records": [
         {
             "timestamp": _ts(i * 0.5),
@@ -91,7 +91,7 @@ SC_004_SUSPICIOUS_POWERSHELL = {
     "id": "SC-004",
     "name": "encoded PowerShell command from Temp",
     "label": "TP",
-    "expected": [{"detector_id": "D003", "severity": "high"}],
+    "expected": [{"detector_id": "D003", "severity": "high", "expected_mitre": "T1059.001"}],
     "records": [
         {
             "timestamp": _ts(1),
@@ -112,7 +112,7 @@ SC_005_PYTHON_WRITABLE_PATH = {
     "id": "SC-005",
     "name": "python from AppData Local Temp",
     "label": "TP",
-    "expected": [{"detector_id": "D004", "severity": "medium"}],
+    "expected": [{"detector_id": "D004", "severity": "medium", "expected_mitre": "T1059.006"}],
     "records": [
         {
             "timestamp": _ts(1),
@@ -130,7 +130,7 @@ SC_006_RANSOMWARE_BEHAVIOR = {
     "id": "SC-006",
     "name": "20 file modifications in 5 minutes on one host",
     "label": "TP",
-    "expected": [{"detector_id": "D005", "severity": "medium"}],
+    "expected": [{"detector_id": "D005", "severity": "medium", "expected_mitre": "T1486"}],
     "records": [
         {
             "timestamp": _ts(i * 0.2),
