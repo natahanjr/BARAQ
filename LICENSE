@@ -125,12 +125,22 @@ survive termination.
 
 ## 11. Governing Law and Jurisdiction
 
-This Agreement is governed by and construed in accordance with the laws of
-the **Federal Democratic Republic of Ethiopia** (FDRE), without regard to its
-conflict-of-law principles. Any legal action, suit, or dispute arising out
-of or relating to this Agreement or the Software shall be subject to the
-exclusive jurisdiction of the competent **Federal Courts in Addis Ababa,
-Ethiopia**.
+This Agreement is intended to be enforceable internationally. Consistent
+with the permissive principles of the MIT License and the Apache License 2.0,
+no single national court is designated as the exclusive forum.
+
+- **Governing law**: Each party's rights and obligations shall be interpreted
+  under the laws of the jurisdiction in which the Licensee is domiciled or
+  principally operates, without regard to conflict-of-law rules.
+- **Dispute resolution**: The parties shall first attempt to resolve any
+  dispute by good-faith negotiation. If unresolved within 30 days, either
+  party may pursue relief in any court of competent jurisdiction.
+- **Compliance**: The Licensee is solely responsible for ensuring that its
+  use of the Software complies with all applicable local, national, and
+  international laws in its jurisdiction.
+- **No choice-of-forum restriction**: Nothing in this Agreement prevents
+  either party from seeking injunctive or equitable relief in any
+  jurisdiction to protect intellectual-property rights.
 
 ## 12. General
 
