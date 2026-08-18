@@ -1,13 +1,11 @@
 # BARAQ Commercial Software License Agreement
 
-Copyright (c) 2026 [Your Full Legal Name / Company Name]
+Copyright (c) 2026 Natahan N.
 All rights reserved.
 
 This is a **proprietary commercial license**. You may not redistribute,
 modify, or sublicense BARAQ under any open-source license without written
-permission from the Licensor. THIS IS A LEGAL DOCUMENT — review it with a
-lawyer before distributing the software commercially. Text in [brackets]
-must be completed by the Licensor.
+permission from the Licensor. THIS IS A LEGAL DOCUMENT.
 
 ---
 
@@ -17,8 +15,8 @@ must be completed by the Licensor.
   agent, the bundled PostgreSQL runtime, the web console, associated
   configuration files, and the accompanying documentation, version 1.0.x,
   as distributed by the Licensor.
-- **"Licensor"** means [Your Full Legal Name / Company Name], [country,
-  registration details if any].
+- **"Licensor"** means Natahan N, residing at Entoto St, 4 Kilo, Addis Ababa
+  1000, Ethiopia. Contact: natahanjr@gmail.com.
 - **"Licensee"** means the person or entity that installs or uses the
   Software under this Agreement.
 - **"License Key"** means the cryptographically signed key issued by the
@@ -54,11 +52,12 @@ The Licensee may NOT:
 3. rent, lease, loan, sublicense, sell, or otherwise transfer the Software
    or any License Key to a third party;
 4. use the Software to provide managed security services to third parties
-   ("MSSP") without a separate written agreement;
+  ("MSSP") without a separate written agreement;
 5. attempt to bypass, disable, or circumvent the licensing mechanism,
    trial limits, seat limits, or any security control of the Software;
 6. use the Software in any way that violates applicable law, including but
-   not limited to laws on interception, surveillance, and export control.
+   not limited to laws on interception, surveillance, computer crime, and
+   export control under Ethiopian law.
 
 ## 4. Trial and Evaluation
 
@@ -98,21 +97,23 @@ CAUSES OF ACTION, WHETHER IN CONTRACT, TORT, OR STATUTE.
 
 ## 8. Export and Sanctions Compliance
 
-The Software may be subject to export-control laws and regulations,
-including but not limited to the [Wassenaar Arrangement] and the laws of
-[your jurisdiction]. The Licensee agrees to comply with all applicable
-export-control and sanctions laws and shall not use, export, or re-export
-the Software to any country, person, or entity subject to applicable
-sanctions.
+The Software is subject to the export-control, cyber-security, and trade
+laws of the Federal Democratic Republic of Ethiopia, as well as applicable
+international sanctions. The Licensee agrees to comply with all applicable
+export-control and sanctions regulations and shall not use, export, or
+re-export the Software in violation of Ethiopian law or applicable
+international restrictions.
 
 ## 9. Data Protection
 
 Where the Software processes personal data (including host telemetry that
 may identify individuals), the Licensee is the data controller and shall
-comply with applicable data-protection laws, including the GDPR where
-applicable. See `documentation/GDPR_PROCESSING.md` for processing
-characteristics. The Licensor processes personal data only as a processor
-in the context of support and licensing, and only to the extent necessary.
+comply with applicable data-protection regulations, including the
+laws and directives of the Federal Democratic Republic of Ethiopia, and
+the GDPR where applicable to foreign subjects. See
+`documentation/GDPR_PROCESSING.md` for processing characteristics. The
+Licensor processes personal data only as a processor in the context of
+support and licensing, and only to the extent strictly necessary.
 
 ## 10. Term and Termination
 
@@ -124,19 +125,23 @@ survive termination.
 
 ## 11. Governing Law and Jurisdiction
 
-This Agreement is governed by the laws of [your jurisdiction], without
-regard to conflict-of-law rules. Any dispute shall be subject to the
-exclusive jurisdiction of the courts of [city, country].
+This Agreement is governed by and construed in accordance with the laws of
+the **Federal Democratic Republic of Ethiopia** (FDRE), without regard to its
+conflict-of-law principles. Any legal action, suit, or dispute arising out
+of or relating to this Agreement or the Software shall be subject to the
+exclusive jurisdiction of the competent **Federal Courts in Addis Ababa,
+Ethiopia**.
 
 ## 12. General
 
-- This Agreement is the entire agreement between the parties regarding the
-  Software.
+- This Agreement constitutes the entire agreement between the parties regarding
+  the Software.
 - Failure to enforce any provision is not a waiver.
-- If any provision is unenforceable, the remainder remains in effect.
-- The Licensee may not assign this Agreement without written consent.
+- If any provision is held invalid or unenforceable under Ethiopian law, the
+  remainder of this Agreement shall remain in full force and effect.
+- The Licensee may not assign or transfer this Agreement without the prior
+  written consent of the Licensor.
 
 ---
 
-*Licensor: [Name] · Contact: [email] · Address: [address] · Version 1.0
-(2026-08-13)*
+*Licensor: Natahan N · Contact: natahanjr@gmail.com · Address: Entoto St, 4 Kilo, Addis Ababa 1000, Ethiopia · Version 1.0 (2026-08-18)*
