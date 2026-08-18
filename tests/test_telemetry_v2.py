@@ -242,6 +242,9 @@ def test_config_gate_disables_v2_on_production_db_name(monkeypatch):
     monkeypatch.setenv("BARAQ_ENV", "development")
     monkeypatch.setattr(config, "DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel")
     monkeypatch.setattr(config, "TELEMETRY_V2_ENABLED", False)
+    # The API module holds an import-time copy of the flag: mirror the
+    # patched config value so the guard surface reflects this test state.
+    monkeypatch.setattr(telemetry_api, "TELEMETRY_V2_ENABLED", False)
     # The API is the guard surface: with production DB configured, the
     # endpoint must report disabled regardless of the env flag.
     with TestClient(app, headers={"X-API-Key": "baraq-dev-admin"}) as client:

@@ -18,6 +18,9 @@ os.environ["BARAQ_DATABASE_URL"] = os.environ.get(
     "postgresql+psycopg://postgres@127.0.0.1:55432/baraq_test",
 )
 print(f"[conftest] test DB URL -> {os.environ['BARAQ_DATABASE_URL']}")
+# The v2 telemetry/detection stack is fully enabled in the isolated test
+# database (never enabled for the production DB name - config gate).
+os.environ["BARAQ_TELEMETRY_V2"] = "1"
 os.environ["BARAQ_INTERVAL"] = "60"
 # Isolate ML model persistence from the production database folder.
 _test_tmp = os.path.join(tempfile.gettempdir(), "baraq_test_meta")
@@ -69,20 +72,46 @@ def _init_database():
     yield
 
 
+def _reset_database():
+    """Truncate every table (identity restart) from a fresh session."""
+    session = SessionLocal()
+    try:
+        session.execute(text("SET LOCAL lock_timeout = '30s'"))
+        session.execute(
+            text(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = current_database() "
+                "AND pid <> pg_backend_pid() AND state = 'idle in transaction'"
+            )
+        )
+        session.commit()
+        tables = ", ".join(f'"{t}"' for t in _table_names())
+        session.execute(text(f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE"))
+        session.commit()
+    finally:
+        session.close()
+
+
 @pytest.fixture(autouse=True)
 def _clean_database():
-    """Reset every table before each test for full isolation."""
+    """Reset every table before each test for full isolation.
+
+    All tables are truncated in ONE statement (a single lock-acquisition
+    order). Stale sessions from previous tests are terminated first so an
+    orphaned "idle in transaction" connection can never deadlock or starve
+    the TRUNCATE; a short lock timeout surfaces remaining stragglers loudly.
+    A connection killed by the terminate (or a lock timeout) must not fail
+    this setup: retry once from a fresh pool before surfacing.
+    """
     # Close any pooled connections left in an open transaction by the previous
     # test (e.g. a session that was never closed): otherwise the TRUNCATE below
     # blocks forever waiting for the ACCESS SHARE lock they still hold.
     engine.dispose()
-    session = SessionLocal()
     try:
-        for table in _table_names():
-            session.execute(text(f'TRUNCATE TABLE "{table}" RESTART IDENTITY CASCADE'))
-        session.commit()
-    finally:
-        session.close()
+        _reset_database()
+    except Exception:  # noqa: BLE001 - transient straggler; retry once
+        engine.dispose()
+        _reset_database()
     yield
 
 

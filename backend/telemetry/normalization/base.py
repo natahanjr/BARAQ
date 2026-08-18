@@ -14,6 +14,53 @@ from backend.telemetry.contract import EVENT
 
 _REQUIRED = ("timestamp", "host", "user", "source", "action")
 
+#: Canonical event_type derivation for records that do not carry one
+#: (Phase 2: the detection surface needs a canonical event_type; the
+#: fingerprint never includes event_type, so this is additive and does not
+#: change dedup or replay semantics).
+_EVENT_TYPE_BY_ACTION: tuple[tuple[str, str], ...] = (
+    ("authentication", "logon"),
+    ("authentication", "logon_failed"),
+    ("authentication", "logoff"),
+    ("authentication", "logon_success"),
+    ("authentication", "auth"),
+    ("authentication", "authenticate"),
+    ("authentication", "logout"),
+    ("process", "create_process"),
+    ("process", "process_created"),
+    ("process", "process_start"),
+    ("process", "process_stop"),
+    ("process", "process_exit"),
+    ("file", "file_modify"),
+    ("file", "file_write"),
+    ("file", "file_create"),
+    ("file", "file_rename"),
+    ("file", "file_delete"),
+    ("file", "shadow_delete"),
+    ("file", "shadow_copy"),
+    ("network", "connect"),
+    ("network", "disconnect"),
+    ("network", "connection"),
+    ("network", "listen"),
+)
+
+
+def _derive_event_type(action: str) -> str:
+    """Canonical event_type for a generic record missing one, or ""."""
+    if not action:
+        return ""
+    lowered = action.lower()
+    if lowered.startswith("process_"):
+        return "process"
+    if lowered.startswith("file_"):
+        return "file"
+    if lowered.startswith("network_"):
+        return "network"
+    for event_type, candidate in _EVENT_TYPE_BY_ACTION:
+        if candidate == lowered:
+            return event_type
+    return ""
+
 
 class Normalizer(Protocol):
     """Anything that turns one raw record into an EVENT."""
@@ -64,7 +111,7 @@ class GenericNormalizer:
             raw=raw,
             integrity=raw.get("data_integrity", "complete"),
             event_id=str(raw.get("event_id", "")),
-            event_type=str(raw.get("event_type", "")),
+            event_type=str(raw.get("event_type", "")) or _derive_event_type(str(raw.get("action", ""))),
             destination=str(raw.get("destination", "")),
             process=dict(raw.get("process") or {}),
             network=dict(raw.get("network") or {}),

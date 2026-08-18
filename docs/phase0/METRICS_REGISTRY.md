@@ -61,3 +61,26 @@ ml.anomalies_per_event 0.0 (harness day: 27 anomalies / 120 events)
   `ci_accuracy_*`, `ci_precision_*`, `ci_recall_*`, `total_samples`,
   `attack_samples`, `baseline_samples`, `rounds`).
 - Any dashboard metric without a registry entry fails a v2 CI check.
+
+## Phase 2: detection benchmark metrics (added 2026-08-18)
+
+Phase 2 introduces a small, fully human-labeled benchmark as a regression
+gate for the v2 detection engine — explicitly **not** a statistical claim
+about detection quality at scale. Metrics are computed per scenario
+(one decision per scenario) in `tests/detection/test_evaluation.py`.
+
+```text
+metric:        p2.det.precision        definition: TP/(TP+FP) over labeled scenarios
+metric:        p2.det.recall           definition: TP/(TP+FN) over labeled scenarios
+metric:        p2.det.f1               definition: 2*P*R/(P+R)
+metric:        p2.det.fpr              definition: FP/(FP+TN)
+dataset:       tests/detection/evaluation_data.py (SC-001..SC-008, human-labeled, frozen)
+time window:   replay at test time (deterministic timestamps 2026-08-17)
+threshold:     precision=recall=f1=1.0, fpr=0.0 (regression gate)
+calculation:   one decision per scenario; TP/TN/FP/FN from fired detector set
+```
+
+Current values (2026-08-18, test run): TP=5, TN=3, FP=0, FN=0,
+precision=1.0, recall=1.0, f1=1.0, fpr=0.0, n=8. These numbers may only
+be reported together with this dataset line; they say nothing about
+real-world performance.
