@@ -43,6 +43,7 @@ def test_rule_stored_with_scope(db):
         expires_at=T0 + timedelta(hours=2),
         scope={"detector_id": "D001", "host": "workstation-42"},
         created_by="analyst@example",
+        now=T0,
     )
     db.commit()
     rows = stored_suppressions(db)
@@ -93,10 +94,10 @@ def test_matches_detector_scope(db):
 
 def test_is_suppressed_only_active_rules(db):
     create_rule(db, policy_id="SUP-1", reason="active rule",
-                expires_at=T0 + timedelta(hours=1),
+                expires_at=T0 + timedelta(hours=1), now=T0,
                 scope={"detector_id": "D001", "host": "workstation-42"})
     expired = create_rule(db, policy_id="SUP-2", reason="expired rule",
-                          expires_at=T0 + timedelta(hours=1))
+                          expires_at=T0 + timedelta(hours=1), now=T0)
     expired.expires_at = T0 - timedelta(minutes=1)
     db.commit()
     assert is_suppressed(db, _d(host="workstation-42"), now=T0).policy_id == "SUP-1"

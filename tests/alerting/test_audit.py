@@ -9,7 +9,9 @@ from tests.alerting.helpers import detection, stored_audit
 
 
 def _alert(db) -> AlertRecord:
-    return process_detection(db, detection())
+    from tests.alerting.helpers import T0
+
+    return process_detection(db, detection(), now=T0)
 
 
 def test_created_event_on_creation(db):
@@ -24,8 +26,10 @@ def test_created_event_on_creation(db):
 
 
 def test_occurrence_event_on_merge(db):
+    from tests.alerting.helpers import T0
+
     _alert(db)
-    process_detection(db, detection(minutes_ago=0.1))
+    process_detection(db, detection(minutes_ago=0.1), now=T0)
     events = stored_audit(db)
     assert [e.action for e in events] == ["CREATED", "OCCURRENCE"]
     assert events[1].actor == "system"
@@ -53,8 +57,10 @@ def test_manual_audit_records(db):
 
 
 def test_for_alert_scoped(db):
+    from tests.alerting.helpers import T0
+
     a = _alert(db)
-    process_detection(db, detection(minutes_ago=0.1))
+    process_detection(db, detection(minutes_ago=0.1), now=T0)
     events = audit.for_alert(db, a.alert_id)
     assert len(events) == 2
     assert all(e.alert_id == a.alert_id for e in events)
@@ -69,9 +75,10 @@ def test_suppressed_detection_is_audited(db):
 
     create_rule(db, policy_id="SUP-1", reason="approved maintenance",
                 expires_at=T0 + timedelta(hours=1),
-                scope={"detector_id": "D001", "host": "workstation-42"})
+                scope={"detector_id": "D001", "host": "workstation-42"},
+                now=T0)
     db.commit()
-    process_detection(db, detection())
+    process_detection(db, detection(), now=T0)
     events = stored_audit(db)
     assert events[0].action == "SUPPRESSED"
     assert events[0].details["policy_id"] == "SUP-1"

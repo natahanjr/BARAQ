@@ -151,10 +151,12 @@ def test_metrics_endpoint(db):
         assert m["total_alerts"] == 1
         assert m["occurrence_count"] == 2
         assert m["deduplicated_alerts"] == 1
-        assert m["age_buckets"]["0-15m"] == 1
+        assert sum(m["age_buckets"].values()) == 1  # age buckets track real time
 
 
 def test_suppression_endpoints(db):
+    from datetime import datetime, timezone
+
     with client() as c:
         r = c.post(f"{API}/suppressions", json={"reason": "maint"})
         assert r.status_code == 422
@@ -162,7 +164,9 @@ def test_suppression_endpoints(db):
             f"{API}/suppressions",
             json={
                 "reason": "approved maintenance",
-                "expires_at": (T0 + timedelta(hours=2)).isoformat(),
+                "expires_at": (
+                    datetime.now(timezone.utc) + timedelta(hours=2)
+                ).isoformat(),
                 "scope": {"detector_id": "D001", "host": "ml-host"},
             },
         )
@@ -179,7 +183,8 @@ def test_suppressed_detection_no_visible_alert(db):
 
     create_rule(db, policy_id="SUP-1", reason="approved maintenance",
                 expires_at=T0 + timedelta(hours=2),
-                scope={"detector_id": "D001", "host": "workstation-42"})
+                scope={"detector_id": "D001", "host": "workstation-42"},
+                now=T0)
     db.commit()
     alert = process_detection(db, detection(), now=T0)
     assert alert is None

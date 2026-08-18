@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     DateTime,
     Float,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -59,7 +60,9 @@ class BehaviorGroupRecord(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     #: Public id, e.g. BG-000001. Independent of the fingerprint.
-    behavior_group_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    behavior_group_id: Mapped[str] = mapped_column(
+        String(32), unique=True, index=True
+    )
     #: Deterministic grouping key (spec 4.7). Uniqueness is partial: only one
     #: LIVE group may hold a fingerprint at a time - closed groups release it
     #: so the next matching episode creates a NEW group (spec 4.16).
@@ -129,8 +132,19 @@ class BehaviorGroupMember(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    behavior_group_id: Mapped[str] = mapped_column(String(32), index=True)
-    alert_id: Mapped[str] = mapped_column(String(32), index=True)
+    #: Referential integrity (spec 4.46): a membership row can only point at
+    #: an existing group and an existing alert; destructive deletion is
+    #: blocked (no ON DELETE), soft audit trails are the only removal path.
+    behavior_group_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("behavior_groups.behavior_group_id"),
+        index=True,
+    )
+    alert_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("v2_alerts.alert_id"),
+        index=True,
+    )
     #: Why this alert belongs here, e.g. "same host + same user + same
     #: source + same behavior family + within 15-minute window".
     membership_reason: Mapped[str] = mapped_column(Text, default="")
@@ -149,8 +163,16 @@ class BehaviorGroupEvidence(Base):
     __tablename__ = "behavior_group_evidence"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    behavior_group_id: Mapped[str] = mapped_column(String(32), index=True)
-    alert_id: Mapped[str] = mapped_column(String(32), index=True)
+    behavior_group_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("behavior_groups.behavior_group_id"),
+        index=True,
+    )
+    alert_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("v2_alerts.alert_id"),
+        index=True,
+    )
     field: Mapped[str] = mapped_column(String(128), default="")
     value: Mapped[str] = mapped_column(Text, default="")
     reason: Mapped[str] = mapped_column(String(256), default="")
@@ -163,7 +185,11 @@ class BehaviorGroupAuditEvent(Base):
     __tablename__ = "behavior_group_audit_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    behavior_group_id: Mapped[str] = mapped_column(String(32), index=True)
+    behavior_group_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("behavior_groups.behavior_group_id"),
+        index=True,
+    )
     action: Mapped[str] = mapped_column(String(32), index=True)
     actor: Mapped[str] = mapped_column(String(128), default="system")
     details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
