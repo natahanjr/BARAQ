@@ -1199,6 +1199,44 @@ _DB_NAME = _make_url(DATABASE_URL).database or ""
 if IS_PRODUCTION or _DB_NAME == PRODUCTION_DB_NAME:
     TELEMETRY_V2_ENABLED = False
 
+# --------------------------------------------------------------------------
+# v2 alert management (Phase 3)
+# --------------------------------------------------------------------------
+# Same lifecycle as the v2 telemetry/detection surfaces: inert unless
+# explicitly enabled, and always inert on the production database.
+ALERTS_V2_ENABLED = (
+    os.environ.get("BARAQ_ALERTS_V2", "0").lower()
+    in ("1", "true", "yes", "on")
+)
+if IS_PRODUCTION or _DB_NAME == PRODUCTION_DB_NAME:
+    ALERTS_V2_ENABLED = False
+
+#: Dedup window per detector (spec 3.9): a new detection merges into an
+#: existing alert when its fingerprint matches and the alert's last_seen is
+#: within this many minutes. Initial defaults, stored in configuration.
+ALERT_DEDUP_WINDOW_MINUTES = {
+    "D001": 15,
+    "D002": 15,
+    "D003": 10,
+    "D004": 10,
+    "D005": 5,
+}
+ALERT_DEDUP_WINDOW_DEFAULT_MINUTES = 10
+
+#: Severity-based SLA definitions (spec 3.24): initial operational defaults,
+#: not universal SOC standards. Age buckets only become "overdue" once an
+#: explicit SLA policy is consumed by the UI.
+ALERT_SLA_MINUTES = {"critical": 15, "high": 30, "medium": 120, "low": 480}
+
+#: Minimum number of labeled alerts before a false-positive rate is reported
+#: (spec 3.15): never present FPR from zero or tiny feedback samples.
+ALERT_MIN_LABELED_FOR_FPR = 10
+
+#: Maximum lifetime of a suppression rule in days (spec 3.25/3.26): permanent
+#: silent suppression is not allowed - every rule must expire within a
+#: bounded, auditable horizon.
+ALERT_SUPPRESSION_MAX_DAYS = int(os.environ.get("BARAQ_ALERT_SUPPRESSION_MAX_DAYS", "90"))
+
 # Run the production gate last: it references many of the flags above and
 # must only fire after every constant is bound.
 _assert_production_safe()

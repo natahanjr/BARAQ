@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 
 from backend.api import (
+    alerting,
     alerts,
     assistant,
     auth,
@@ -744,6 +745,7 @@ for router in (
     telemetry.router,
     detections.router,
     detections.detectors_router,
+    alerting.router,
 ):
     app.include_router(router)
 
