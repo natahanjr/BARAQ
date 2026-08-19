@@ -22,6 +22,7 @@ from backend.api import (
     automation,
     behavior_groups,
     compliance,
+    correlations,
     dashboard,
     dataset,
     detections,
@@ -748,6 +749,7 @@ for router in (
     detections.detectors_router,
     alerting.router,
     behavior_groups.router,
+    correlations.router,
 ):
     app.include_router(router)
 

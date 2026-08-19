@@ -1294,6 +1294,67 @@ AGGREGATION_MEMBERSHIP_WEIGHTS = {
     "time": 0.15,
 }
 
+# --------------------------------------------------------------------------
+# v2 behavioral correlation (Phase 5)
+# --------------------------------------------------------------------------
+# Same lifecycle as every other v2 surface: inert unless explicitly enabled,
+# always inert on the production database.
+CORRELATION_ENABLED = (
+    os.environ.get("BARAQ_CORRELATION", "0").lower()
+    in ("1", "true", "yes", "on")
+)
+if IS_PRODUCTION or _DB_NAME == PRODUCTION_DB_NAME:
+    CORRELATION_ENABLED = False
+
+#: Correlation windows in minutes (spec 5.9): configurable, never hardcoded
+#: in the rules. A finding is only built when every consecutive member pair
+#: falls inside the sequence window.
+CORRELATION_WINDOWS_MINUTES = {
+    "authentication_to_execution": 30,
+    "execution_to_privilege": 60,
+    "host_to_host_lateral_movement": 60,
+    "multi_stage": 120,
+}
+CORRELATION_WINDOW_DEFAULT_MINUTES = 120
+
+#: Correlation lifecycle (spec 5.31): QUIET after this many minutes without
+#: a new member group, CLOSED after the close timeout.
+CORRELATION_QUIET_AFTER_MINUTES = 120
+CORRELATION_CLOSE_AFTER_MINUTES = 240
+
+#: Minimum contextual relationships required to build an edge between two
+#: groups (spec 5.22): two - e.g. same host + temporal proximity. A single
+#: weak attribute (same MITRE, same host, same source alone) never suffices.
+CORRELATION_MIN_RELATIONSHIPS = 2
+
+#: Edge strength weights (spec 5.21): deterministic correlation strength,
+#: never a risk score. A pair of groups may share several factors; the edge
+#: strength is the sum of the factors it actually shares, capped at 1.000.
+CORRELATION_EDGE_WEIGHTS = {
+    "host": 0.30,
+    "user": 0.25,
+    "source": 0.20,
+    "time": 0.15,
+    "technique": 0.10,
+}
+
+#: Confidence formula (spec 5.23): 0.40 + 0.10*(shared factors - 2) + 0.10
+#: when a tactic progression exists + 0.05 when the sequence spans >= 3
+#: groups, clamped to [0.20, 0.90]. Deterministic, bounded, never summed
+#: from group confidences (spec 5.24).
+CORRELATION_CONFIDENCE_BASE = 0.40
+CORRELATION_CONFIDENCE_PER_FACTOR = 0.10
+CORRELATION_CONFIDENCE_PROGRESSION_BONUS = 0.10
+CORRELATION_CONFIDENCE_SEQUENCE_BONUS = 0.05
+CORRELATION_CONFIDENCE_LATERAL_BONUS = 0.03
+CORRELATION_CONFIDENCE_MIN = 0.20
+CORRELATION_CONFIDENCE_MAX = 0.90
+
+#: Performance guard (spec 5.75): candidate generation is partitioned by
+#: entity + time (no O(n^2) sweep). A candidate pair is only examined when
+#: the groups share at least one of these indexed keys.
+CORRELATION_ENTITY_KEYS = ("host", "user", "source")
+
 # Run the production gate last: it references many of the flags above and
 # must only fire after every constant is bound.
 _assert_production_safe()

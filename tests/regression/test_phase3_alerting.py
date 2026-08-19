@@ -90,6 +90,7 @@ def test_alert_008_suppressed_known_benign_no_visible_alert(db):
         reason="Approved administrative RDP source (maintenance window)",
         expires_at=T0 + timedelta(hours=6),
         scope={"detector_id": "D001", "source_ip": "185.0.0.0/8"},
+        now=T0,
     )
     db.commit()
     alerts = _scenario(db, [detection(source_ip="185.10.0.5")])
