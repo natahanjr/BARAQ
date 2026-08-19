@@ -69,7 +69,7 @@ def fabricate_alerts(db, specs: list[dict]) -> list[AlertRecord]:
             user_id="",
             username=spec.get("user", "alice"),
             source_ip=spec.get("source_ip", "203.0.113.5"),
-            destination_ip="",
+            destination_ip=spec.get("destination_ip", ""),
             mitre_tactic=spec.get("mitre_tactic", "Initial Access"),
             mitre_technique=spec.get("mitre", "T1133"),
             evidence=spec.get("evidence", None),
