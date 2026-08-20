@@ -36,6 +36,12 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         python -m pip install -r requirements.txt -r requirements-dev.txt
+    - name: Remove Python bytecode caches
+      shell: bash
+      run: |
+        # remove __pycache__ dirs and .pyc files (works in bash on the Windows runner)
+        find . -type d -name "__pycache__" -exec rm -rf {} + || true
+        find . -name "*.pyc" -delete || true
     - name: Lint with flake8 (syntax errors only)
       run: |
         python -m pip install flake8
@@ -48,6 +54,7 @@ jobs:
       shell: bash
       run: |
         python -m pytest tests/ -q \
+          --import-mode=importlib \
           --ignore=tests/test_agent_commands.py \
           --ignore=tests/test_api.py \
           --ignore=tests/test_auth.py \
