@@ -23,11 +23,13 @@ def dt(minutes_ago: float = 0.0) -> datetime:
     return GROUP_T0 - timedelta(minutes=minutes_ago)
 
 
-def make_alerts(db, specs: list[dict]) -> list[AlertRecord]:
+def make_alerts(db, specs: list[dict], now: datetime | None = None) -> list[AlertRecord]:
     """Seed v2 alerts through the Phase 3 pipeline, then return them."""
+    if now is None:
+        now = GROUP_T0
     created = []
     for spec in specs:
-        alert = process_detection(db, detection(**spec))
+        alert = process_detection(db, detection(**spec), now=now)
         if alert is not None:
             created.append(alert)
     return list(

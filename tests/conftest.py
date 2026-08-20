@@ -15,7 +15,7 @@ import tempfile
 
 os.environ["BARAQ_DATABASE_URL"] = os.environ.get(
     "BARAQ_TEST_DATABASE_URL",
-    "postgresql+psycopg://postgres@127.0.0.1:55432/baraq_test",
+    "postgresql+psycopg://postgres:password@127.0.0.1:5432/baraq_test",
 )
 print(f"[conftest] test DB URL -> {os.environ['BARAQ_DATABASE_URL']}")
 # The v2 telemetry/detection stack is fully enabled in the isolated test
@@ -24,6 +24,7 @@ os.environ["BARAQ_TELEMETRY_V2"] = "1"
 os.environ["BARAQ_ALERTS_V2"] = "1"
 os.environ["BARAQ_BEHAVIOR_GROUPS"] = "1"
 os.environ["BARAQ_CORRELATION"] = "1"
+os.environ["BARAQ_RISK"] = "1"
 os.environ["BARAQ_INTERVAL"] = "60"
 # Isolate ML model persistence from the production database folder.
 _test_tmp = os.path.join(tempfile.gettempdir(), "baraq_test_meta")
