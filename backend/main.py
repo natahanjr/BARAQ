@@ -32,12 +32,14 @@ from backend.api import (
     graph,
     hunting,
     incidents,
+    incidents_v2,
     intel,
     integrations,
     investigation,
     rba,
     reports,
     realtime,
+    risk,
     saved,
     search,
     system,
@@ -732,6 +734,7 @@ for router in (
     system.router,
     endpoints.router,
     incidents.router,
+    incidents_v2.router,
     intel.router,
     integrations.router,
     hunting.router,
@@ -750,6 +753,7 @@ for router in (
     alerting.router,
     behavior_groups.router,
     correlations.router,
+    risk.router,
 ):
     app.include_router(router)
 

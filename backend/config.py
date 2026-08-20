@@ -1355,6 +1355,104 @@ CORRELATION_CONFIDENCE_MAX = 0.90
 #: the groups share at least one of these indexed keys.
 CORRELATION_ENTITY_KEYS = ("host", "user", "source")
 
+# --------------------------------------------------------------------------
+# v2 entity risk intelligence (Phase 6)
+# --------------------------------------------------------------------------
+# Same lifecycle as every other v2 surface: inert unless explicitly enabled,
+# always inert on the production database.
+RISK_ENABLED = (
+    os.environ.get("BARAQ_RISK", "0").lower()
+    in ("1", "true", "yes", "on")
+)
+if IS_PRODUCTION or _DB_NAME == PRODUCTION_DB_NAME:
+    RISK_ENABLED = False
+
+#: Risk model version (spec 6.39): any change to weights/thresholds/decay
+#: bumps this so historical calculations stay attributable.
+RISK_MODEL_VERSION = "1.0.0"
+
+#: Score -> severity thresholds (spec 6.8): deterministic, configurable.
+#: Every score-to-severity transition goes through this map only.
+RISK_THRESHOLDS = {
+    "minimal": 0,
+    "low": 20,
+    "medium": 40,
+    "high": 60,
+    "critical": 80,
+}
+
+#: Factor base weights (spec 6.11, 6.40): one factor per source with
+#: provenance; repetition scales repeated identical sources via the curve.
+RISK_FACTOR_WEIGHTS = {
+    "RF001_EXTERNAL_ACCESS": 12,
+    "RF002_CREDENTIAL_ACCESS": 14,
+    "RF003_LATERAL_MOVEMENT": 18,
+    "RF004_PRIVILEGE_ACTIVITY": 10,
+    "RF005_EXECUTION": 8,
+    "RF006_MULTI_STAGE_CORRELATION": 10,
+    "RF007_REPETITION": 0,
+    "RF008_RECENCY": 8,
+    "RF009_ALERT_SEVERITY": 6,
+    "RF010_BEHAVIOR_GROUP": 10,
+    "RF011_PERSISTENCE": 10,
+    "RF012_DEFENSE_EVASION": 8,
+    "RF013_ENTITY_SPREAD": 8,
+    "RF014_SOURCE_REPUTATION": 0,
+}
+
+#: Per-alert severity tier contribution (RF009), applied once per entity per
+#: tier - never per alert (anti risk explosion, spec 6.12).
+RISK_ALERT_SEVERITY_CONTRIBUTIONS = {
+    "critical": 8,
+    "high": 6,
+    "medium": 3,
+    "low": 1,
+}
+
+#: Maximum any single factor may contribute (spec 6.11).
+RISK_MAX_FACTOR_CONTRIBUTION = 25
+
+#: Repetition curve (spec 6.13): first occurrence of identical evidence
+#: contributes its full factor weight; each subsequent occurrence adds a
+#: diminishing amount (15, 8, 4, 2, ...). Configurable.
+RISK_REPETITION_CURVE = (15.0, 8.0, 4.0, 2.0)
+
+#: Deterministic exponential decay (spec 6.19): effective contribution =
+#: value * 0.5^(age_hours / half_life).
+RISK_DECAY_HALF_LIFE_HOURS = 24
+
+#: Recency bonus (RF008): applied once per entity when its most recent
+#: evidence is younger than this window.
+RISK_RECENCY_BONUS_HOURS = 1
+
+#: State is STALE when the last calculation is older than this (spec 6.76).
+RISK_STALE_AFTER_MINUTES = 60
+
+#: Trend (spec 6.24): RISING/FALLING when the latest snapshot differs from
+#: the previous by at least this many points; descriptive only.
+RISK_TREND_DELTA = 3
+RISK_TREND_WINDOW_MINUTES = 90
+
+#: Contextual propagation (spec 6.27): bounded per relationship, with
+#: evidence, never risk copying. Contribution expires after the window.
+RISK_PROPAGATION_WEIGHTS = {
+    "user_to_host": 8,
+    "host_to_user": 8,
+    "source_to_host": 6,
+    "user_to_source": 6,
+    "host_to_source": 6,
+}
+RISK_PROPAGATION_EXPIRES_HOURS = 72
+
+#: Factor lifetime: factors expire (contribution = 0) after this many hours
+#: unless refreshed by new evidence (spec 6.21). Audit history remains.
+RISK_FACTOR_EXPIRES_HOURS = 168
+
+#: Risk confidence (spec 6.4): share of the current score resting on DIRECT
+#: evidence vs contextual propagation; 1.0 when no context exists.
+RISK_CONFIDENCE_MIN = 0.0
+RISK_CONFIDENCE_MAX = 1.0
+
 # Run the production gate last: it references many of the flags above and
 # must only fire after every constant is bound.
 _assert_production_safe()

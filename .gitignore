@@ -20,6 +20,10 @@ database/model_meta.json
 database/model.bundle.joblib
 database/realtime_policy_state.json
 database/campaigns/
+pg/
+pgsql/
+postgres*.zip
+postgres*.log
 
 # Generated artifacts
 /reports/
