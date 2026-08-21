@@ -55,7 +55,14 @@ def annotate_alert_intel(db, alert, offline: bool = True) -> dict | None:
             "offline": bool(offline),
         }
         alert.intel_json = json.dumps(payload, default=str)
-        db.flush()
+        try:
+            db.flush()
+        except Exception:
+            # Identity-map conflicts (e.g. the alert was reloaded by _maybe_create_incident's
+            # chain reconstruction) can make the UPDATE stale.  Expire the object
+            # so the next flush re-loads it from the DB and retries the UPDATE.
+            db.expire(alert)
+            db.flush()
         return payload
     except Exception:  # noqa: BLE001 - intel must never wedge detection
         logger.exception("Detection-time intel annotation failed for alert #%s",
