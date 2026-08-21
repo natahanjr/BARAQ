@@ -1,18 +1,57 @@
-# BARAQ
+<!-- Banner -->
+<p align="center">
+  <a href="https://github.com/natahanjr/BARAQ">
+    <img src="https://cdn.corenexis.com/f/djZL1dyyZwu.png" alt="BARAQ — Banner" width="100%" />
+  </a>
+</p>
 
-> **An intelligent, lightweight SOC platform for real-time Windows endpoint threat detection and incident analysis.**
+<!-- Typing badge -->
+<p align="center">
+  <a href="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=20&duration=4000&pause=800&color=EF4444&center=true&vCenter=true&width=600&lines=DETECTION+%7C+ANALYSIS+%7C+CONTAINMENT+ERADICATION+%7C+RECOVERY+%7C+LESSONS+LEARNED">
+    <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=20&duration=4000&pause=800&color=EF4444&center=true&vCenter=true&width=600&lines=DETECTION+%7C+ANALYSIS+%7C+CONTAINMENT+ERADICATION+%7C+RECOVERY+%7C+LESSONS+LEARNED" alt="Incident Response Lifecycle" />
+  </a>
+</p>
 
-[![Python Package](https://github.com/natahanjr/BARAQ/actions/workflows/python-package.yml/badge.svg)](https://github.com/natahanjr/BARAQ/actions/workflows/python-package.yml)
-[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/React%2018-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![MITRE ATT&CK](https://img.shields.io/badge/MITRE%20ATT%26CK-mapped-red)](https://attack.mitre.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+<!-- Hero / Network diagram -->
+<p align="center">
+  <a href="https://github.com/natahanjr/BARAQ">
+    <img src="docs/screenshots/dashboard.png" alt="BARAQ — SOC Dashboard" width="800" />
+  </a>
+</p>
 
-**No cloud. No heavy infrastructure. One laptop is enough.**
+<h1 align="center">BARAQ</h1>
 
-BARAQ turns a Windows endpoint into a working Security Operations Center: it collects real Windows telemetry, detects attacks with a **hybrid rule-based + machine-learning engine**, maps every finding to **MITRE ATT&CK**, scores risk in real time, and gives analysts a professional SOC dashboard with investigation, SOAR automation, threat intelligence and reporting — all self-hosted, with full agent→server fleet support.
+<p align="center">
+  <a href="https://github.com/natahanjr/BARAQ/actions/workflows/python-package.yml">
+    <img src="https://github.com/natahanjr/BARAQ/actions/workflows/python-package.yml/badge.svg" alt="Python Package" />
+  </a>
+  <a href="https://www.python.org/">
+    <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python" />
+  </a>
+  <a href="https://fastapi.tiangoli.com/">
+    <img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
+  </a>
+  <a href="https://react.dev/">
+    <img src="https://img.shields.io/badge/React%2018-61DAFB?logo=react&logoColor=black" alt="React" />
+  </a>
+  <a href="https://www.postgresql.org/">
+    <img src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  </a>
+  <a href="https://attack.mitre.org/">
+    <img src="https://img.shields.io/badge/MITRE%20ATT%26CK-mapped-red" alt="MITRE ATT&CK" />
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" />
+  </a>
+</p>
+
+<p align="center">
+  <strong>No cloud. No heavy infrastructure. One laptop is enough.</strong>
+</p>
+
+<p align="center">
+  BARAQ turns a Windows endpoint into a working Security Operations Center: it collects real Windows telemetry, detects attacks with a <strong>hybrid rule-based + machine-learning engine</strong>, maps every finding to <strong>MITRE ATT&CK</strong>, scores risk in real time, and gives analysts a professional SOC dashboard with investigation, SOAR automation, threat intelligence and reporting — all self-hosted, with full agent→server fleet support.
+</p>
 
 ## Screenshots
 
