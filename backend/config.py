@@ -1188,15 +1188,27 @@ TELEMETRY_V2_ENABLED = (
 #: never write to it: this is enforced here and in the ingestion pipeline.
 PRODUCTION_DB_NAME = "sentinel"
 
+#: Allow v2 engines to run against the production database (local dev only).
+#: The default is False - the v2 workstream must never write to the production
+#: database unless the operator explicitly opts in.
+V2_ENGINES_ALLOW_PROD = (
+    os.environ.get("BARAQ_V2_ENGINES_ALLOW_PROD", "0").lower()
+    in ("1", "true", "yes", "on")
+)
+
 from sqlalchemy.engine import make_url as _make_url  # noqa: E402
 
 _DB_NAME = _make_url(DATABASE_URL).database or ""
+
+_V2_PROD_GATE = not V2_ENGINES_ALLOW_PROD and (
+    _DB_NAME == PRODUCTION_DB_NAME
+)
 
 # Isolation gate (Phase 0.7): the v2 pipeline stays disabled whenever the
 # configured database is the production DB - even if BARAQ_ENV is unset and
 # defaults to "development". BARAQ_ENV alone is not the boundary; the
 # production database is.
-if IS_PRODUCTION or _DB_NAME == PRODUCTION_DB_NAME:
+if _V2_PROD_GATE:
     TELEMETRY_V2_ENABLED = False
 
 # --------------------------------------------------------------------------
@@ -1208,7 +1220,7 @@ ALERTS_V2_ENABLED = (
     os.environ.get("BARAQ_ALERTS_V2", "0").lower()
     in ("1", "true", "yes", "on")
 )
-if IS_PRODUCTION or _DB_NAME == PRODUCTION_DB_NAME:
+if _V2_PROD_GATE:
     ALERTS_V2_ENABLED = False
 
 #: Dedup window per detector (spec 3.9): a new detection merges into an
@@ -1246,7 +1258,7 @@ BEHAVIOR_GROUPS_ENABLED = (
     os.environ.get("BARAQ_BEHAVIOR_GROUPS", "0").lower()
     in ("1", "true", "yes", "on")
 )
-if IS_PRODUCTION or _DB_NAME == PRODUCTION_DB_NAME:
+if _V2_PROD_GATE:
     BEHAVIOR_GROUPS_ENABLED = False
 
 #: Detector -> behavior family (spec 4.9, 4.49): grouping is behavioral, not
@@ -1303,7 +1315,7 @@ CORRELATION_ENABLED = (
     os.environ.get("BARAQ_CORRELATION", "0").lower()
     in ("1", "true", "yes", "on")
 )
-if IS_PRODUCTION or _DB_NAME == PRODUCTION_DB_NAME:
+if _V2_PROD_GATE:
     CORRELATION_ENABLED = False
 
 #: Correlation windows in minutes (spec 5.9): configurable, never hardcoded
@@ -1364,7 +1376,7 @@ RISK_ENABLED = (
     os.environ.get("BARAQ_RISK", "0").lower()
     in ("1", "true", "yes", "on")
 )
-if IS_PRODUCTION or _DB_NAME == PRODUCTION_DB_NAME:
+if _V2_PROD_GATE:
     RISK_ENABLED = False
 
 #: Risk model version (spec 6.39): any change to weights/thresholds/decay

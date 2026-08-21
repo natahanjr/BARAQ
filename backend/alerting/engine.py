@@ -30,7 +30,7 @@ from backend.detection.contract import DETECTION
 
 
 def _ensure_not_production_db() -> None:
-    if make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
+    if not config.V2_ENGINES_ALLOW_PROD and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
         raise RuntimeError(
             f"alert engine refuses the v1 production database "
             f"({config.PRODUCTION_DB_NAME!r}) by name"

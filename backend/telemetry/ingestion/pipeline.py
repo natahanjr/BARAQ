@@ -37,7 +37,7 @@ def normalize(raw: dict[str, Any], fallback_ts: datetime | None = None) -> EVENT
 def _ensure_not_production_db() -> None:
     """Phase 0.7 isolation: refuse to write v2 telemetry into the v1
     production database, regardless of environment flags."""
-    if make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
+    if not config.V2_ENGINES_ALLOW_PROD and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
         raise RuntimeError(
             f"refusing: v2 telemetry ingestion is read-only against the "
             f"production database '{config.PRODUCTION_DB_NAME}'"

@@ -9,7 +9,7 @@ jobs:
       BARAQ_TEST_DATABASE_URL: postgresql+psycopg://postgres@127.0.0.1:5432/baraq_test
       BARAQ_TEST_ADMIN_URL: postgresql+psycopg://postgres@127.0.0.1:5432/postgres
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Start PostgreSQL
       shell: pwsh
       run: |
@@ -29,7 +29,7 @@ jobs:
         if (-not $ok) { "last psql output: $err"; netstat -ano | Select-String ":5432"; throw "PostgreSQL did not come up" }
         & $psql -U postgres -h 127.0.0.1 -p 5432 -c "CREATE DATABASE baraq_test;"
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.12'
     - name: Install dependencies
@@ -79,17 +79,17 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v5
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true

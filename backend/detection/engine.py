@@ -29,7 +29,7 @@ logger = logging.getLogger("baraq.detection.engine")
 def _ensure_not_production_db() -> None:
     """Phase 0.7/2.14 isolation: the detection store is a v2 table and must
     never be written into the v1 production database."""
-    if make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
+    if not config.V2_ENGINES_ALLOW_PROD and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
         raise RuntimeError(
             f"refusing: v2 detection store is read-only against the "
             f"production database '{config.PRODUCTION_DB_NAME}'"

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import threading
 from contextlib import asynccontextmanager
@@ -51,6 +53,7 @@ from backend.config import (
     ADMIN_USERNAME,
     API_KEYS,
     AUTH_ENABLED,
+    BEHAVIOR_GROUPS_ENABLED,
     CORS_ORIGINS,
     DEFAULT_ADMIN_PASSWORD,
     HSTS_MAX_AGE,
@@ -60,6 +63,7 @@ from backend.config import (
     SECURITY_HEADERS,
     BARAQ_ENV,
     SINGLE_INSTANCE,
+    V2_ENGINES_ALLOW_PROD,
 )
 from backend.audit import client_ip
 from backend.database.connection import SessionLocal, get_db, init_db
@@ -172,6 +176,70 @@ def _scheduler_loop(interval_seconds: int = 15):
                 except Exception:  # noqa: BLE001
                     logger.exception("Dataset sweep failed")
 
+                # Phase 4: aggregate new alerts into behavior groups (v2 alerts).
+                phase4_groups: list = []
+                if BEHAVIOR_GROUPS_ENABLED and created:
+                    try:
+                        from backend.alerting.models import AlertRecord
+                        from backend.aggregation.engine import process_alerts
+                        v2_alerts: list[AlertRecord] = []
+                        for v1_alert in created:
+                            fp_payload = {
+                                "detector_id": v1_alert.rule or "",
+                                "host_id": "",
+                                "host_name": (v1_alert.host or "").strip().lower() or "none",
+                                "user_id": "",
+                                "username": "",
+                                "source_ip": "",
+                                "mitre_technique": v1_alert.mitre_id or "",
+                            }
+                            fp_blob = json.dumps(fp_payload, sort_keys=True, separators=(",", ":"))
+                            alert_fp = hashlib.sha256(fp_blob.encode("utf-8")).hexdigest()
+                            evidence_list = None
+                            if v1_alert.evidence:
+                                evidence_list = [{"type": "text", "data": v1_alert.evidence}]
+                            record = AlertRecord(
+                                alert_id="",
+                                alert_fingerprint=alert_fp,
+                                detector_id=v1_alert.rule or "",
+                                detector_version="1.0.0",
+                                title=v1_alert.name or "",
+                                description=v1_alert.description or "",
+                                severity=v1_alert.severity or "medium",
+                                confidence=float(v1_alert.confidence or 0.0),
+                                status=(v1_alert.status or "open").upper(),
+                                first_seen=v1_alert.created_at,
+                                last_seen=v1_alert.updated_at,
+                                occurrence_count=max(1, int(v1_alert.trigger_count or 1)),
+                                host_id="",
+                                host_name=v1_alert.host or "",
+                                user_id="",
+                                username="",
+                                source_ip="",
+                                destination_ip="",
+                                mitre_tactic=v1_alert.mitre_tactic or "",
+                                mitre_technique=v1_alert.mitre_id or "",
+                                evidence=evidence_list,
+                                observables=[],
+                                detection_ids=[],
+                                created_at=v1_alert.created_at,
+                                updated_at=v1_alert.updated_at,
+                            )
+                            db.add(record)
+                            db.flush()
+                            record.alert_id = f"ALR-{record.id:06d}"
+                            db.flush()
+                            v2_alerts.append(record)
+                        db.commit()
+                        phase4_groups = process_alerts(db, v2_alerts)
+                        if phase4_groups:
+                            logger.info(
+                                "Scheduler cycle: %d behavior group(s) updated",
+                                len(phase4_groups),
+                            )
+                    except Exception:  # noqa: BLE001 - aggregation must not wedge detection
+                        logger.exception("Phase 4 aggregation failed")
+                counter += 1
                 if counter % 240 == 0:  # every ~1 hour: dataset auto-export check
                     try:
                         from backend.dataset.scheduler import dataset_maybe_export
@@ -234,9 +302,30 @@ def _scheduler_loop(interval_seconds: int = 15):
                                     pass
                 except Exception:  # noqa: BLE001 - RBA must not wedge the loop
                     logger.exception("Entity RBA cycle failed")
-                
-                
-# against the baselines; on "drift" retrain so the baseline
+
+                # Phase 7: create/update incidents from groups, correlations and risks.
+                if phase4_groups or notables:
+                    try:
+                        from backend.incidents.engine import create_incident
+                        findings: list[dict] = []
+                        risks: list[dict] = [n.to_dict() for n in notables] if notables else []
+                        alerts: list[dict] = [a.to_dict() for a in created]
+                        result = create_incident(
+                            db,
+                            groups=[g.to_dict() for g in phase4_groups],
+                            findings=findings,
+                            risks=risks,
+                            alerts=alerts,
+                            actor="system",
+                        )
+                        if result.get("incident_created"):
+                            logger.info(
+                                "Phase 7 incident created: %s",
+                                result.get("incident_id"),
+                            )
+                    except Exception:  # noqa: BLE001 - incidents must not wedge the loop
+                        logger.exception("Phase 7 incident creation failed")
+                # against the baselines; on "drift" retrain so the baseline
                     # follows the environment. Retrains always use the FULL
                     # collected history (hours=None) - the model must reflect
                     # every event gathered, not a sample window.

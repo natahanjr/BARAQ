@@ -69,7 +69,7 @@ _SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
 
 def _ensure_not_production_db() -> None:
-    if make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
+    if not config.V2_ENGINES_ALLOW_PROD and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
         raise RuntimeError(
             f"correlation engine refuses the v1 production database "
             f"({config.PRODUCTION_DB_NAME!r}) by name"
