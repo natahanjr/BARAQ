@@ -490,7 +490,7 @@ class AlertingService:
                         alert.id,
                     )
             except Exception:  # noqa: BLE001 - intel must never wedge detection
-                logger.exception("Detection-time intel annotation failed for alert #%s", alert.id)
+                logger.exception("Detection-time intel annotation failed for alert #%s", getattr(alert, "id", "?"))
 
             # SOAR automation: fire matching playbooks against new alerts
             # (declared triggers -> ordered actions, see backend.automation).
