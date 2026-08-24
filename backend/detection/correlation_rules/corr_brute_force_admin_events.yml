@@ -1,0 +1,27 @@
+name: brute_force_admin_escalation_events
+description: >
+  A true multi-source correlation: raw failed-logon telemetry (event 4625)
+  on the same host, followed by an admin-privilege alert on that host.
+  Joins the event stream with the alert stream purely in YAML.
+enabled: true
+severity: high
+confidence: 0.85
+mitre_id: T1078
+recommendation: >
+  The host saw a brute-force storm in telemetry before an admin escalation
+  alert fired. Treat the account as compromised, force a password reset,
+  and hunt for lateral movement from that host.
+window_minutes: 30
+group_by: host
+match: all
+stages:
+  - label: Brute Force (telemetry)
+    source: events
+    events:
+      event_ids: [4625]
+      min_count: 5
+      min_risk: Medium
+  - label: Admin Escalation
+    source: alerts
+    rules: [admin_tampering, privilege_escalation, uac_bypass, token_manip]
+    tactics: [Privilege Escalation]

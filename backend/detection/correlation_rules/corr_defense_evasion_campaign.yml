@@ -1,0 +1,20 @@
+name: defense_evasion_campaign
+description: Defender tampering, audit/event-log clearing and firewall changes within a short window on one host is the classic pre-attack cleanup sequence.
+enabled: true
+severity: high
+confidence: 0.85
+mitre_id: T1562
+recommendation: Treat as active defense evasion. Verify AV health, restore audit policies and inspect the host for the malware that triggered the cleanup.
+window_minutes: 30
+group_by: host
+match: any
+stages:
+  - label: Security Product Tampering
+    rules: [disable_defender, amsi_bypass]
+    tactics: [Defense Evasion]
+  - label: Log Cleared
+    rules: [log_clearing]
+    tactics: [Defense Evasion]
+  - label: Firewall Disabled
+    rules: [disable_firewall]
+    tactics: [Defense Evasion]

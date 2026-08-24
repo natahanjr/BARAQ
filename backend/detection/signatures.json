@@ -1,0 +1,30 @@
+{
+  "note": "Local malware/file-hash signature list used by the live MalwareFileRule (T1105). Add SHA-256 hashes of files observed on the endpoint. The 'paths' section matches process image paths / file names and speed up detection without hash lookups.",
+  "hashes": {
+    "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f": "known-bad-sample"
+  },
+  "paths": [
+    "Windows\\Temp\\",
+    "Users\\Public\\",
+    "\\AppData\\Roaming\\",
+    "\\ProgramData\\"
+  ],
+  "malware_names": [
+    "meterpreter",
+    "cobaltstrike",
+    "beacon",
+    "mimikatz",
+    "invoke-mimikatz",
+    "psexec",
+    "nc.exe",
+    "ncat",
+    "procdump",
+    "cryptominer",
+    "xmrig",
+    "kybr",
+    "bloodhoundsharp"
+  ],
+  "archive_tools": [
+    "7z.exe", "7za.exe", "rar.exe", "winrar.exe", "zip.exe"
+  ]
+}

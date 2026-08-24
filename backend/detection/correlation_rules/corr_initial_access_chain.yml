@@ -1,0 +1,17 @@
+name: initial_access_execution_chain
+description: A phishing-delivered lure followed by script-based execution on the same host - the classic initial-access-to-code-execution chain.
+enabled: true
+severity: critical
+confidence: 0.9
+mitre_id: T1566
+recommendation: The host executed attacker tooling after a phishing event. Isolate it, hunt for follow-on C2 in the entity graph and review mail flow for the lure.
+window_minutes: 120
+group_by: host
+match: all
+stages:
+  - label: Phishing Lure
+    rules: [email_phishing]
+    tactics: [Initial Access]
+  - label: Script Execution
+    rules: [suspicious_powershell, cmd_script_execution, msbuild_execution, wmi_execution, lolbin_execution, python_execution]
+    tactics: [Execution]

@@ -1,0 +1,17 @@
+name: defense_evasion_impact_chain
+description: Defense tampering followed by destructive or recovery-inhibiting actions - the cleanup-and-impact sequence of ransomware operators.
+enabled: true
+severity: critical
+confidence: 0.9
+mitre_id: T1486
+recommendation: Treat as an active ransomware engagement. Disconnect the host, verify backups, restore audit/AV policy and contain the blast radius.
+window_minutes: 90
+group_by: host
+match: all
+stages:
+  - label: Defense Evasion
+    rules: [disable_defender, amsi_bypass, disable_audit, disable_firewall, log_clearing, ifeo_debugger]
+    tactics: [Defense Evasion]
+  - label: Impact
+    rules: [ransomware_impact, recovery_inhibit, safeboot_tamper, hidden_artifact]
+    tactics: [Impact]
