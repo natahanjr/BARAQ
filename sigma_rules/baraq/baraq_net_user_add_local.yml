@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Net.exe User Add"
+id: baraq-4688-net-user-add
+status: experimental
+level: high
+description: "A local user or group was added via net.exe - a standard persistence step."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: \net.exe
+        CommandLine:contains: [" user ", " /add ", " localgroup ", "administrators ", " /add"]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - "Break-glass account creation"
+tags:
+    - attack.persistence
+    - attack.t1136.001

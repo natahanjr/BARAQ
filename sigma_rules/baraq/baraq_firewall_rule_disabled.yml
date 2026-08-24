@@ -1,0 +1,23 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Firewall Rule Disabled"
+id: baraq-4953-4957-firewall-disable
+status: experimental
+level: medium
+description: "A firewall rule was blocked or disabled - removing host egress restrictions aids data theft."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        RuleName:contains: \
+    condition: selection_sel
+fields:
+    - RuleName
+    - LocalPort
+    - Profile
+falsepositives:
+    - Firewall consolidation projects
+tags:
+    - attack.defense_evasion
+    - attack.t1562.004

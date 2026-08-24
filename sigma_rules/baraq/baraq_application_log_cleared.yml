@@ -1,0 +1,22 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Event Log Cleared (Non-Security)"
+id: baraq-104-applog-cleared
+status: experimental
+level: medium
+description: An application or system log was cleared by a user request.
+logsource:
+    product: windows
+    service: application
+detection:
+    selection_sel:
+        Channel:contains: [Application, System]
+    condition: selection_sel
+fields:
+    - Channel
+    - Computer
+falsepositives:
+    - Log rotation utilities
+tags:
+    - attack.defense_evasion
+    - attack.t1070.001

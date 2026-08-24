@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - RunOnce/Startup Approved Program"
+id: baraq-4657-startup-keys
+status: experimental
+level: medium
+description: "A RunOnce or StartupApproved value was created - runs a binary once at next logon."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectName:contains: [\RunOnce\, \StartupApproved\Run\]
+        OperationType:startswith: "%%1904"
+    condition: selection_sel
+fields:
+    - ObjectName
+    - ProcessName
+    - SubjectUserName
+falsepositives:
+    - Installer autostart entries
+tags:
+    - attack.persistence
+    - attack.t1547.001

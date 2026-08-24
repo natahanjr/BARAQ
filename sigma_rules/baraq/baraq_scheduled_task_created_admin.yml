@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Scheduled Task Created by Privileged Account"
+id: baraq-4698-task-admin
+status: experimental
+level: high
+description: "A privileged account registered a task executing script content - review the payload."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        SubjectUserName: [Administrator, Domain Admins, SYSTEM]
+        TaskContent:contains: [powershell, cmd /c, mshta, regsvr32, rundll32, certutil, "-enc"]
+    condition: selection_sel
+fields:
+    - TaskName
+    - TaskContent
+    - SubjectUserName
+falsepositives:
+    - Devops task automation
+tags:
+    - attack.persistence
+    - attack.t1053.005

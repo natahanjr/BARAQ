@@ -1,0 +1,23 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - AppLocker Blocked Execution"
+id: baraq-8003-applocker
+status: experimental
+level: medium
+description: "AppLocker prevented the execution of an application - inspect the blocked binary."
+logsource:
+    product: windows
+    service: applocker
+detection:
+    selection_sel:
+        CommandLine:contains: \
+    condition: selection_sel
+fields:
+    - CommandLine
+    - FilePath
+    - User
+falsepositives:
+    - Restricted build agents
+tags:
+    - attack.defense_evasion
+    - attack.t1036

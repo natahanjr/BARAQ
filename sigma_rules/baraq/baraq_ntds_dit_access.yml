@@ -1,0 +1,26 @@
+title: "BARAQ - NTDS.dit Access"
+id: baraq-4688-ntds-dit
+status: experimental
+level: critical
+description: "A process accessing NTDS.dit (the Active Directory database) - direct DCSync/ntdsutil-style offline credential extraction."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        EventID: 4688
+        CommandLine|contains:
+            - "ntds.dit"
+            - "ntdsutil"
+            - "dsamain"
+            - "esentutl"
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - "Authorized AD maintenance by domain administrators"
+tags:
+    - attack.credential_access
+    - attack.t1003.003

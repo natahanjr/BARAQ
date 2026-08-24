@@ -1,0 +1,22 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Security Log Cleared"
+id: baraq-1102-cleared
+status: experimental
+level: high
+description: "The security event log was cleared - a classic anti-forensics step."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        SubjectUserName:contains: \
+    condition: selection_sel
+fields:
+    - SubjectUserName
+    - Computer
+falsepositives:
+    - Compliance scripts rotating the log
+tags:
+    - attack.defense_evasion
+    - attack.t1070.001

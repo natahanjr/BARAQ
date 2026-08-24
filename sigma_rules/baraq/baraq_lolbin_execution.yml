@@ -1,0 +1,32 @@
+title: BARAQ - LOLBin Execution (certutil, wmic, regsvr32, mshta, rundll32)
+id: baraq-4688-lolbin-execution
+status: experimental
+level: medium
+logsource:
+    product: windows
+    category: process_creation
+detection:
+    selection:
+        EventID: 4688
+        Image|endswith:
+            - certutil.exe
+            - wmic.exe
+            - regsvr32.exe
+            - mshta.exe
+            - rundll32.exe
+            - bitsadmin.exe
+            - forfiles.exe
+            - cscript.exe
+            - wscript.exe
+    condition: selection
+falsepositives:
+    - Admin scripts using native Windows utilities
+fields:
+    - EventID
+    - Image
+    - ParentImage
+tags:
+    - attack.execution
+    - attack.t1059
+    - attack.defense_evasion
+    - attack.t1218

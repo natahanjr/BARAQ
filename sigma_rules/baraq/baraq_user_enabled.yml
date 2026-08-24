@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - User Account Enabled"
+id: baraq-4722-user-enabled
+status: experimental
+level: low
+description: A user account was enabled. Verify the requester is authorized.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        TargetUserName:endswith: "@"
+    selection_filter:
+        TargetUserName:endswith: $
+    condition: selection_sel and not selection_filter
+fields:
+    - TargetUserName
+    - SubjectUserName
+    - TargetSid
+falsepositives:
+    - Helpdesk unlock activity
+tags:
+    - attack.persistence
+    - attack.t1098

@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Remote Command Execution via CMD"
+id: baraq-4688-cmd-remote
+status: experimental
+level: high
+description: "A command shell invoked another host from the command line - often remote-execution tool activity."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: \cmd.exe
+        CommandLine:contains: ["/c ", "/k ", \\]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - CreatorProcessName
+falsepositives:
+    - Remote management platforms
+tags:
+    - attack.lateral_movement
+    - attack.t1219

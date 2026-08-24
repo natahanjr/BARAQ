@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - WMI Process Call Create"
+id: baraq-4688-wmic-pcc
+status: experimental
+level: medium
+description: "WMI used to create a process, potentially on a remote node."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: \wmic.exe
+        CommandLine:contains: [process call create, "/node:", process where]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - Remote management tooling
+tags:
+    - attack.execution
+    - attack.t1047

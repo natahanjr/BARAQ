@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Office Spawns PowerShell"
+id: baraq-4688-office-ps
+status: experimental
+level: high
+description: "Office spawned PowerShell - a dominant macro-based attack chain."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: [\powershell.exe, \pwsh.exe]
+        CreatorProcessName:endswith: [\WINWORD.EXE, \EXCEL.EXE, \POWERPNT.EXE, \OUTLOOK.EXE]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - CreatorProcessName
+falsepositives:
+    - Office VBA automation deployed internally
+tags:
+    - attack.execution
+    - attack.t1204.002

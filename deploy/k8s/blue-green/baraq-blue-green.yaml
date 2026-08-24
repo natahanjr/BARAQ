@@ -1,0 +1,98 @@
+# BARAQ - blue-green deployment manifests (roadmap 5.1).
+#
+# Two identical API Deployments (blue / green) sit behind one Service whose
+# selector points at the ACTIVE release via the `release` label. A release
+# is validated (rollout status + readiness) before the switch, and the
+# previous release is only scaled down after the new one is serving.
+#
+#   kubectl apply -f deploy/k8s/blue-green/
+#   .\scripts\blue_green_switch.ps1 -Target green     # deploy new build
+#   .\scripts\blue_green_switch.ps1 -Target blue      # instant rollback
+#
+# The scheduler stays single-instance (distributed lock); only the API tier
+# is blue-green.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baraq-api-blue
+  labels: { app: baraq, tier: api, release: blue }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: baraq, tier: api, release: blue }
+  template:
+    metadata:
+      labels: { app: baraq, tier: api, release: blue }
+    spec:
+      containers:
+        - name: api
+          image: baraq/soc:latest
+          imagePullPolicy: IfNotPresent
+          args: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+          ports:
+            - { containerPort: 8000, name: http }
+          envFrom:
+            - configMapRef: { name: baraq-config }
+          env:
+            - { name: BARAQ_ROLE, value: "api" }
+          readinessProbe:
+            httpGet: { path: /api/system/status, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/system/status, port: http }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 250m, memory: 256Mi }
+            limits: { cpu: "2", memory: 2Gi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baraq-api-green
+  labels: { app: baraq, tier: api, release: green }
+spec:
+  replicas: 0
+  selector:
+    matchLabels: { app: baraq, tier: api, release: green }
+  template:
+    metadata:
+      labels: { app: baraq, tier: api, release: green }
+    spec:
+      containers:
+        - name: api
+          image: baraq/soc:latest
+          imagePullPolicy: IfNotPresent
+          args: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+          ports:
+            - { containerPort: 8000, name: http }
+          envFrom:
+            - configMapRef: { name: baraq-config }
+          env:
+            - { name: BARAQ_ROLE, value: "api" }
+          readinessProbe:
+            httpGet: { path: /api/system/status, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/system/status, port: http }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 250m, memory: 256Mi }
+            limits: { cpu: "2", memory: 2Gi }
+---
+# The Service routes to whichever release is active. The switch script flips
+# this selector; a failed rollout never changes it, so the old release keeps
+# serving until the new one is verified.
+apiVersion: v1
+kind: Service
+metadata:
+  name: baraq-api
+  labels: { app: baraq, tier: api }
+spec:
+  selector: { app: baraq, tier: api, release: blue }
+  ports:
+    - { port: 8000, targetPort: http, name: http }

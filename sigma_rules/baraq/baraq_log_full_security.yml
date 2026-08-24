@@ -1,0 +1,23 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Security Log Nearly Full"
+id: baraq-6008-6028-log-full
+status: experimental
+level: low
+description: "The security log is full or nearing capacity - events may be dropped."
+logsource:
+    product: windows
+    service: system
+detection:
+    selection_sel:
+        Channel:contains: Security
+        SessionID:contains: [1, 2]
+    condition: selection_sel
+fields:
+    - Channel
+    - Computer
+falsepositives:
+    - "High-volume environments with small logs"
+tags:
+    - attack.defense_evasion
+    - attack.t1070.001

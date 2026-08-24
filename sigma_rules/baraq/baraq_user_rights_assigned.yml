@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - User Right Assigned"
+id: baraq-4704-user-right-assigned
+status: experimental
+level: medium
+description: A user right was assigned. Sensitive rights should only be granted to service accounts.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        EventID: 4704
+    selection_sel_priv:
+        Privileges:contains: [SeDebugPrivilege, SeBackupPrivilege, SeRestorePrivilege, SeTakeOwnershipPrivilege, SeTcbPrivilege, SeLoadDriverPrivilege]
+    condition: selection_sel or selection_sel_priv
+fields:
+    - Privileges
+    - SubjectUserName
+    - TargetUserName
+falsepositives:
+    - "Central user-rights management"
+tags:
+    - attack.privilege_escalation
+    - attack.t1078

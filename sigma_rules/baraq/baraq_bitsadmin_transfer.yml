@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Bitsadmin Malicious Transfer"
+id: baraq-4688-bitsadmin
+status: experimental
+level: high
+description: "Bitsadmin used to stage a remote file - a common download/execution primitive."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: \bitsadmin.exe
+        CommandLine:contains: ["/transfer ", /addfile, "http://", "https://"]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - Windows Update automation using BITS
+tags:
+    - attack.defense_evasion
+    - attack.t1197

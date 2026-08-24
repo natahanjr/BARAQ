@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - SAM Hive Access"
+id: baraq-4663-sam
+status: experimental
+level: high
+description: "A process opened the SAM hive - used to dump local account hashes."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectName:contains: \config\sam
+        ProcessName:not_contains: \lsass.exe
+        AccessMask:contains: RX
+    condition: selection_sel
+fields:
+    - ObjectName
+    - ProcessName
+    - SubjectUserName
+falsepositives:
+    - "Hash-dump tooling in sanctioned tests"
+tags:
+    - attack.credential_access
+    - attack.t1003.002

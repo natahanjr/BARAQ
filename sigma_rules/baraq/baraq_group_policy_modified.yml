@@ -1,0 +1,27 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Group Policy Object Modified"
+id: baraq-5136-5137-gpo
+status: experimental
+level: medium
+description: "A Group Policy Object was modified - GPO hijacking is a domain-wide persistence vector."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectClass:contains: groupPolicyContainer
+        SubjectUserName:endswith: "@"
+    selection_filter:
+        SubjectUserName: [SYSTEM, NETWORK SERVICE]
+    condition: selection_sel and not selection_filter
+fields:
+    - ObjectDN
+    - ObjectClass
+    - SubjectUserName
+    - AttributeValue
+falsepositives:
+    - GPO administration team
+tags:
+    - attack.privilege_escalation
+    - attack.t1484.001

@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Regsvr32 Executing Remote COM"
+id: baraq-4688-regsvr32-http
+status: experimental
+level: high
+description: "Regsvr32 invoked with remote scriptlet URLs - the Squiblydoo technique."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: \regsvr32.exe
+        CommandLine:contains: ["/s /i:", "-s -i:", "http://", "https://"]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - Legacy scriptlet registration
+tags:
+    - attack.defense_evasion
+    - attack.t1218.010

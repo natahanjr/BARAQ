@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Winlogon Userinit Modified"
+id: baraq-4657-winlogon-userinit
+status: experimental
+level: high
+description: "Winlogon Userinit or Shell value changed - executes a binary at every interactive logon."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ObjectName:contains: \Windows NT\CurrentVersion\Winlogon
+        ObjectValueName: [Userinit, Shell]
+        OperationType:startswith: "%%1904"
+    condition: selection_sel
+fields:
+    - ObjectName
+    - ObjectValueName
+    - ProcessName
+falsepositives:
+    - Citrix/SSO agents updating Winlogon
+tags:
+    - attack.persistence
+    - attack.t1547.004

@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Account Lockout After Repeated Failures"
+id: baraq-4740-after-4625
+status: experimental
+level: low
+description: Account lockout observed after repeated authentication failures.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        TargetUserName:endswith: "@"
+        WorkstationName:contains: \
+    condition: selection_sel
+fields:
+    - TargetUserName
+    - WorkstationName
+    - SubjectUserName
+falsepositives:
+    - Forgotten passwords
+tags:
+    - attack.credential_access
+    - attack.t1110

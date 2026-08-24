@@ -1,0 +1,102 @@
+# BARAQ - Kubernetes deployment (roadmap 3.1 multi-node / zero-downtime).
+#
+# Topology:
+#   * api         - 2+ stateless API replicas (BARAQ_ROLE=api, no scheduler).
+#   * scheduler   - 1 replica running the standalone scheduler service;
+#                   only ONE holds the distributed lock (Redis if
+#                   BARAQ_REDIS_URL is set, else the Postgres advisory lock),
+#                   so failover is automatic with zero-duplicate collection.
+#   * postgres    - primary database (StatefulSet, external or operator).
+#
+# Rolling updates use maxUnavailable=0 / maxSurge=1 and readiness probes, so
+# a deploy never drops in-flight requests (zero-downtime).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baraq-api
+  labels: { app: baraq, tier: api }
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels: { app: baraq, tier: api }
+  template:
+    metadata:
+      labels: { app: baraq, tier: api }
+    spec:
+      containers:
+        - name: api
+          image: baraq/soc:latest
+          imagePullPolicy: IfNotPresent
+          args: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+          ports:
+            - { containerPort: 8000, name: http }
+          envFrom:
+            - configMapRef: { name: baraq-config }
+          env:
+            - { name: BARAQ_ROLE, value: "api" }
+          readinessProbe:
+            httpGet: { path: /api/system/status, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/system/status, port: http }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 250m, memory: 256Mi }
+            limits: { cpu: "2", memory: 2Gi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baraq-scheduler
+  labels: { app: baraq, tier: scheduler }
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: baraq, tier: scheduler }
+  template:
+    metadata:
+      labels: { app: baraq, tier: scheduler }
+    spec:
+      containers:
+        - name: scheduler
+          image: baraq/soc:latest
+          imagePullPolicy: IfNotPresent
+          args: ["python", "-m", "backend.scheduler_service"]
+          envFrom:
+            - configMapRef: { name: baraq-config }
+          env:
+            - { name: BARAQ_ROLE, value: "scheduler" }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "4", memory: 4Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: baraq-api
+  labels: { app: baraq, tier: api }
+spec:
+  selector: { app: baraq, tier: api }
+  ports:
+    - { port: 8000, targetPort: http, name: http }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: baraq-config
+data:
+  BARAQ_DATABASE_URL: "postgresql+psycopg://baraq:CHANGE_ME@postgres:5432/baraq"
+  BARAQ_READONLY_DATABASE_URL: "postgresql+psycopg://baraq:CHANGE_ME@postgres-replica:5432/baraq"
+  BARAQ_REDIS_URL: "redis://redis:6379/0"
+  BARAQ_INTERVAL: "15"
+  BARAQ_TLS: "0"
+  BARAQ_ALLOW_PLAINTEXT_PROD: "0"
+  BARAQ_SCHEDULER_ENABLED: "1"
+  BARAQ_AGENT_KEYS: "{}"

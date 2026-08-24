@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - TGT with Forwardable Renewable Flags"
+id: baraq-4768-forwarded-flags
+status: experimental
+level: medium
+description: "A TGT was issued with unusual forwardable flags - consistent with forged-ticket tooling."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        TicketOptions:contains: 0x40810000
+        TargetUserName:endswith: "@"
+    condition: selection_sel
+fields:
+    - TargetUserName
+    - IpAddress
+    - TicketOptions
+falsepositives:
+    - "Delegation-enabled workstations"
+tags:
+    - attack.credential_access
+    - attack.t1558.001

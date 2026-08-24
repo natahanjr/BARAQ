@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Office Spawns Command Shell"
+id: baraq-4688-office-cmd
+status: experimental
+level: high
+description: "An Office product spawned a script host or shell - a common macro/maldoc execution chain."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: [\cmd.exe, \powershell.exe, \pwsh.exe, \wscript.exe, \cscript.exe, \mshta.exe]
+        CreatorProcessName:endswith: [\WINWORD.EXE, \EXCEL.EXE, \POWERPNT.EXE, \OUTLOOK.EXE]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - CreatorProcessName
+falsepositives:
+    - "Legacy document add-ins"
+tags:
+    - attack.execution
+    - attack.t1204.002

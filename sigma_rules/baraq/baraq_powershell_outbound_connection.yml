@@ -1,0 +1,26 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - PowerShell Outbound Connection"
+id: baraq-5156-ps-egress
+status: experimental
+level: medium
+description: "PowerShell initiated an outbound network connection to a non-private destination."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        Application:endswith: [\powershell.exe, \pwsh.exe]
+        Direction: "%%14593"
+    selection_filter_priv:
+        DestinationAddress:cidr: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8]
+    condition: selection_sel and not selection_filter_priv
+fields:
+    - Application
+    - DestinationAddress
+    - DestinationPort
+falsepositives:
+    - Scripting hosts reaching cloud APIs
+tags:
+    - attack.command_and_control
+    - attack.t1071

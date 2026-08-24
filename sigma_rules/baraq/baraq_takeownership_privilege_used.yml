@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - SeTakeOwnershipPrivilege Usage"
+id: baraq-4673-seTakeOwnership
+status: experimental
+level: medium
+description: "A process used SeTakeOwnershipPrivilege, often to bypass ACLs on protected files."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        PrivilegeList:contains: SeTakeOwnershipPrivilege
+        SubjectUserName:contains: \
+    condition: selection_sel
+fields:
+    - PrivilegeList
+    - ProcessName
+    - SubjectUserName
+falsepositives:
+    - Forensics tooling
+tags:
+    - attack.privilege_escalation
+    - attack.t1222

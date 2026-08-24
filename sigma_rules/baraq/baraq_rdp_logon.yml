@@ -1,0 +1,28 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - RDP Interactive Logon"
+id: baraq-4624-rdp
+status: experimental
+level: medium
+description: "An interactive RDP logon (type 10). Correlate with approved remote-access tickets."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        LogonType: 10
+        AccountName:endswith: "@"
+        LogonProcessName:contains: NtLmSsp
+    selection_filter:
+        IpAddress: 127.0.0.1
+    condition: selection_sel and not selection_filter
+fields:
+    - AccountName
+    - IpAddress
+    - WorkstationName
+    - LogonType
+falsepositives:
+    - Legitimate remote administration
+tags:
+    - attack.lateral_movement
+    - attack.t1021.001

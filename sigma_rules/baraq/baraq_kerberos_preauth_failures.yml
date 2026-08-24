@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Kerberos Pre-Authentication Failures"
+id: baraq-4771-preauth
+status: experimental
+level: medium
+description: "Repeated Kerberos pre-authentication failures against the same account."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        FailureCode: 0x18
+        TargetUserName:endswith: "@"
+    condition: selection_sel | count() by TargetUserName > 5
+fields:
+    - TargetUserName
+    - IpAddress
+    - WorkstationName
+    - FailureCode
+falsepositives:
+    - "Expired passwords, clock skew"
+tags:
+    - attack.credential_access
+    - attack.t1110

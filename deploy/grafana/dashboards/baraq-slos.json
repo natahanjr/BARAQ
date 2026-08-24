@@ -1,0 +1,160 @@
+{
+  "title": "BARAQ Service-Level Objectives",
+  "uid": "baraq-slos",
+  "version": 1,
+  "editable": false,
+  "time": { "from": "now-30d", "to": "now" },
+  "refresh": "5m",
+  "schemaVersion": 39,
+  "tags": ["baraq", "slo"],
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "SLO health vs target",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1.1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 0.9 },
+              { "color": "green", "value": 0.99 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "baraq_slo_health{name=~\"availability|freshness|alert_volume\"}",
+          "legendFormat": "health {{name}}"
+        },
+        {
+          "refId": "B",
+          "expr": "baraq_slo_target",
+          "legendFormat": "target {{name}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Error budget burn (1 - health)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.01 },
+              { "color": "red", "value": 0.1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - baraq_slo_health",
+          "legendFormat": "burn {{name}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Platform uptime",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "baraq_uptime_seconds",
+          "legendFormat": "uptime"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Open alerts (burn driver)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 10 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "baraq_open_alerts",
+          "legendFormat": "open {{org}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Security score",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 40 },
+              { "color": "green", "value": 70 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "baraq_security_score",
+          "legendFormat": "score"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "ML streams ready",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 8 },
+      "fieldConfig": { "defaults": { "min": 0, "max": 3 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "baraq_ml_streams_ready",
+          "legendFormat": "streams"
+        }
+      ]
+    }
+  ]
+}

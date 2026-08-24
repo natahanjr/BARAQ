@@ -1,0 +1,22 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Service Crash Loop Detected"
+id: baraq-7031-7034-crash
+status: experimental
+level: medium
+description: "A service crashed repeatedly - may indicate tampering with service binaries."
+logsource:
+    product: windows
+    service: system
+detection:
+    selection_sel:
+        ServiceName:contains: \
+    condition: selection_sel | count() by ServiceName > 3
+fields:
+    - ServiceName
+    - Computer
+falsepositives:
+    - "Unstable third-party services"
+tags:
+    - attack.impact
+    - attack.t1489

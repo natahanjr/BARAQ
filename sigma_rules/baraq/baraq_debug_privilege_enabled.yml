@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - SeDebugPrivilege Enabled on Token"
+id: baraq-4703-seDebug-enabled
+status: experimental
+level: high
+description: "A script host enabled SeDebugPrivilege - a common precursor to lsass memory dumping."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        EnabledPrivilegeList:contains: SeDebugPrivilege
+        ProcessName:endswith: [\cmd.exe, \powershell.exe, \pwsh.exe, \rundll32.exe, \regsvr32.exe]
+    condition: selection_sel
+fields:
+    - EnabledPrivilegeList
+    - ProcessName
+    - SubjectUserName
+falsepositives:
+    - EDR/AV agents adjusting their own token
+tags:
+    - attack.credential_access
+    - attack.t1003.001

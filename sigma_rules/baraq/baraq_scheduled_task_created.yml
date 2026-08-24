@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Scheduled Task Created"
+id: baraq-4698-task-created
+status: experimental
+level: medium
+description: "A scheduled task was created - a persistent execution primitive."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        SubjectUserName:contains: \
+    selection_filter:
+        TaskName:contains: [Microsoft, \aumid, \OneDrive, \Adobe]
+    condition: selection_sel and not selection_filter
+fields:
+    - TaskName
+    - TaskContent
+    - SubjectUserName
+falsepositives:
+    - Patch management task creation
+tags:
+    - attack.persistence
+    - attack.t1053.005

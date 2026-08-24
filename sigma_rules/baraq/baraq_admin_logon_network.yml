@@ -1,0 +1,29 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Domain Admin Network Logon"
+id: baraq-4624-da-logon
+status: experimental
+level: high
+description: Network logon (type 3) using a domain admin or service account. Validate the source host.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        LogonType: 3
+        AccountName:contains: ["*adm*", "*svc*"]
+        AccountName:endswith: "@"
+    selection_filter:
+        SubjectUserSid: "S-1-5-18"
+    condition: selection_sel and not selection_filter
+fields:
+    - AccountName
+    - IpAddress
+    - IpPort
+    - WorkstationName
+    - LogonType
+falsepositives:
+    - Service accounts authenticating to file servers
+tags:
+    - attack.credential_access
+    - attack.t1078.002

@@ -1,0 +1,27 @@
+title: "BARAQ - Remote Access Tool Install"
+id: baraq-4688-remote-access-tool
+status: experimental
+level: high
+description: "Installation or launch of unattended remote-access software (AnyDesk, TeamViewer, RustDesk) - attacker-controlled support channels."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        EventID: 4688
+        CommandLine|contains:
+            - "anydesk"
+            - "teamviewer"
+            - "rustdesk"
+            - "remoteutilities"
+            - "screenconnect"
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - "IT helpdesk tooling on managed endpoints"
+tags:
+    - attack.command_and_control
+    - attack.t1219

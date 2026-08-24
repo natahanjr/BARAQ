@@ -1,0 +1,26 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Local Administrator Interactive Logon"
+id: baraq-4624-local-admin
+status: experimental
+level: medium
+description: Interactive logon using the local Administrator account.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        LogonType: 2
+        AccountName: Administrator
+        LogonProcessName:contains: NtLmSsp
+    condition: selection_sel
+fields:
+    - AccountName
+    - Computer
+    - WorkstationName
+    - LogonType
+falsepositives:
+    - "Break-glass usage"
+tags:
+    - attack.lateral_movement
+    - attack.t1078

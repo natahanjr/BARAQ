@@ -1,0 +1,110 @@
+# Prometheus + Grafana observability stack for BARAQ.
+#
+# BARAQ itself stays on the host (it is Windows-native: Sysmon
+# collectors, toast notifications, DPAPI vault); these containers only:
+#   - scrape /api/system/metrics (authenticated with an API key), and
+#   - serve Grafana dashboards fed by that Prometheus instance.
+#
+# Start:
+#   docker compose up -d
+#   open http://localhost:3000   (Grafana)
+#   prometheus: http://localhost:9090
+#
+# An optional Linux API container (roadmap 5.1) runs the stateless
+# BARAQ_ROLE=api image for CI-CD / blue-green canary testing:
+#   docker compose --profile api up -d --build
+#   http://localhost:8000/api/system/status
+#
+# Production requirements (enforced via compose profile "secure"):
+#   GRAFANA_ADMIN_PASSWORD=<strong password>     (default "admin" is refused)
+#   GRAFANA_ROOT_URL=https://grafana.example.org
+#   PROMETHEUS_SCRAPE_KEY=<baraq API key>     (default dev key is refused)
+# Start the hardened stack:
+#   docker compose --profile secure up -d
+#
+# ${VAR:-default} spans are filled from your .env file (or the shell) by
+# docker compose itself; defaults match the development setup.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: baraq/soc:local
+    container_name: baraq-api
+    restart: unless-stopped
+    profiles: ["api"]
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      BARAQ_ROLE: api
+      BARAQ_AUTH_ENABLED: "1"
+      BARAQ_API_KEYS: ${BARAQ_API_KEYS:-{"baraq-dev-admin":"admin"}}
+      BARAQ_DATABASE_URL: ${BARAQ_DATABASE_URL:-postgresql+psycopg://baraq:CHANGE_ME@host.docker.internal:55432/baraq}
+      BARAQ_INTERVAL: "15"
+      BARAQ_TLS: "0"
+      BARAQ_ALLOW_PLAINTEXT_PROD: "0"
+      BARAQ_SCHEDULER_ENABLED: "0"
+      BARAQ_SKIP_SECRET_GEN: "1"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${BARAQ_API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/system/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  prometheus:
+    image: prom/prometheus:v3.3.1
+    container_name: baraq-prometheus
+    restart: unless-stopped
+    profiles: ["secure"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/.scrape-key:/etc/prometheus/.scrape-key:ro
+      - baraq-prometheus-data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:11.6.1
+    container_name: baraq-grafana
+    restart: unless-stopped
+    profiles: ["secure"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set (no default "admin" in production)}
+      GF_SECURITY_DISABLE_INITIAL_ADMIN_PASSWORD_HINT: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:?GRAFANA_ROOT_URL must be set}"
+      # Provision the Prometheus datasource automatically.
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    volumes:
+      - ./deploy/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./deploy/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - baraq-grafana-data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+volumes:
+  baraq-prometheus-data:
+  baraq-grafana-data:

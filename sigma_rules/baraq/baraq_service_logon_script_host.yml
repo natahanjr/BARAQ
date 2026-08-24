@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Script Host Logged On as Service"
+id: baraq-4624-service-logontype5
+status: experimental
+level: medium
+description: A script host was granted a service logon (type 5). Review the service binary path.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        LogonType: 5
+        AccountName:endswith: "@"
+        ProcessName:endswith: [\powershell.exe, \pwsh.exe, \wscript.exe]
+    condition: selection_sel
+fields:
+    - AccountName
+    - ProcessName
+    - Computer
+falsepositives:
+    - Script runs under supervised service accounts
+tags:
+    - attack.persistence
+    - attack.t1543.003

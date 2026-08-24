@@ -1,0 +1,25 @@
+title: "BARAQ - Recovery Mode Disabled"
+id: baraq-4688-bcdedit-recovery
+status: experimental
+level: critical
+description: "bcdedit disabling Windows recovery mode - a recovery-inhibition step commonly paired with shadow-copy deletion during impact."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        EventID: 4688
+        CommandLine|contains:
+            - "bcdedit /set recoveryenabled no"
+            - "recoveryenabled No"
+            - "bcdedit /set bootstatuspolicy ignoreallfailures"
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - "Boot-repair automation on controlled fleets"
+tags:
+    - attack.impact
+    - attack.t1490

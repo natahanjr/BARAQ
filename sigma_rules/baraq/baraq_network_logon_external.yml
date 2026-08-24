@@ -1,0 +1,28 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Network Logon from External Address"
+id: baraq-4624-external-ip
+status: experimental
+level: medium
+description: "A type-3 logon originated outside the private RFC1918 ranges. Review the source IP."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        LogonType: 3
+        AccountName:endswith: "@"
+    selection_filter_priv:
+        IpAddress:cidr: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 127.0.0.0/8]
+        IpAddress: "-"
+    condition: selection_sel and not selection_filter_priv
+fields:
+    - AccountName
+    - IpAddress
+    - IpPort
+    - LogonGuid
+falsepositives:
+    - "VPN and site-to-site sources (adjust ranges)"
+tags:
+    - attack.lateral_movement
+    - attack.t1021.002

@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Rundll32 Executing Remote JavaScript"
+id: baraq-4688-rundll32-url
+status: experimental
+level: high
+description: "Rundll32 referenced a URL or javascript: - used to load payloads without writing files."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        NewProcessName:endswith: \rundll32.exe
+        CommandLine:contains: ["javascript:", "http://", "https://", url.dll]
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - Internal shortcuts invoking url.dll
+tags:
+    - attack.defense_evasion
+    - attack.t1218.011

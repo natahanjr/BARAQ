@@ -1,0 +1,23 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Service Start Type Changed"
+id: baraq-7040-start-type
+status: experimental
+level: medium
+description: "The start type of a non-Microsoft service was changed - disabling can remove security safeguards."
+logsource:
+    product: windows
+    service: system
+detection:
+    selection_sel:
+        ServiceStartType:contains: [disabled, demand]
+        ServiceName:not_contains: [Windows Update, Defender, Microsoft]
+    condition: selection_sel
+fields:
+    - ServiceName
+    - ServiceStartType
+falsepositives:
+    - "Hardening scripts, IT changes"
+tags:
+    - attack.defense_evasion
+    - attack.t1489

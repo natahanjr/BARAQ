@@ -1,0 +1,21 @@
+title: BARAQ - Failed Logon Brute Force (aggregation)
+id: baraq-4625-brute-force
+status: experimental
+level: high
+logsource:
+    product: windows
+    service: security
+detection:
+    selection:
+        EventID: 4625
+    condition: selection | count() by account_name > 5
+falsepositives:
+    - Users with expired passwords or mistyped credentials
+fields:
+    - EventID
+    - account_name
+    - channel
+tags:
+    - attack.credential_access
+    - attack.t1110
+    - attack.t1110.003

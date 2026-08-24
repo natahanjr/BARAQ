@@ -1,0 +1,26 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Kerberoasting (RC4 Service Ticket)"
+id: baraq-4769-rc4-ticket
+status: experimental
+level: high
+description: "A service ticket was requested using RC4 encryption - the fingerprint of Kerberoasting."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        ServiceName:endswith: $
+        EncryptionType: 0x17
+        AccountName:contains: \
+    condition: selection_sel
+fields:
+    - AccountName
+    - ServiceName
+    - ClientAddress
+    - EncryptionType
+falsepositives:
+    - Legacy RC4 service auth
+tags:
+    - attack.credential_access
+    - attack.t1558.003

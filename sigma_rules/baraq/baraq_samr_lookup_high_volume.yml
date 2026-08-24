@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - SAMR Lookup Burst"
+id: baraq-4799-samr-lookup
+status: experimental
+level: medium
+description: "Frequent enumeration of the local Administrators group - consistent with host recon."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        GroupName: Administrators
+        SubjectUserName:contains: \
+    condition: selection_sel | count() by SubjectUserName > 10
+fields:
+    - GroupName
+    - SubjectUserName
+    - Computer
+falsepositives:
+    - Endpoint agents polling group membership
+tags:
+    - attack.discovery
+    - attack.t1069.001

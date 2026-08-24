@@ -1,0 +1,24 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - TGT for Disabled Account"
+id: baraq-4768-disabled-tgt
+status: experimental
+level: medium
+description: "A TGT was requested for a disabled account - often indicates reuse of stale credentials."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        TargetUserName:endswith: "@"
+        UserAccountControl:contains: disabled
+    condition: selection_sel
+fields:
+    - TargetUserName
+    - IpAddress
+    - UserAccountControl
+falsepositives:
+    - Kerberos RODC cache artifacts
+tags:
+    - attack.credential_access
+    - attack.t1078

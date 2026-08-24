@@ -1,0 +1,22 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Defender Real-Time Protection Disabled"
+id: baraq-5001-rtp-off
+status: experimental
+level: high
+description: "Real-time protection was disabled - frequently a precursor to destructive payloads."
+logsource:
+    product: windows
+    service: windefend
+detection:
+    selection_sel:
+        Product Name:contains: "|"
+    condition: selection_sel
+fields:
+    - Product Name
+    - Computer
+falsepositives:
+    - AV migration projects
+tags:
+    - attack.defense_evasion
+    - attack.t1562.001

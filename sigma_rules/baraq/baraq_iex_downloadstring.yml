@@ -1,0 +1,26 @@
+title: "BARAQ - IEX DownloadString Payload"
+id: baraq-4104-iex-downloadstring
+status: experimental
+level: high
+description: "PowerShell downloading and immediately executing a remote script via IEX (New-Object Net.WebClient).DownloadString - a classic in-memory loader."
+logsource:
+    product: windows
+    service: powershell
+detection:
+    selection_sel:
+        EventID: 4104
+        ScriptBlockText|contains:
+            - "DownloadString"
+            - "Invoke-Expression"
+            - "iex("
+            - "IEX("
+    condition: selection_sel
+fields:
+    - ScriptBlockText
+    - User
+falsepositives:
+    - "Admins bootstrapping legit PowerShell modules from internal feeds"
+tags:
+    - attack.execution
+    - attack.t1059.001
+    - attack.t1105

@@ -1,0 +1,25 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Connection to High Risk Port"
+id: baraq-5156-uncommon-port
+status: experimental
+level: medium
+description: An outbound connection was made to a port commonly associated with tunneling and malware.
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        Direction: "%%14593"
+        DestinationPort: [4444, 5555, 6667, 9001, 31337, 12345, 8081, 9999]
+    condition: selection_sel
+fields:
+    - Application
+    - DestinationAddress
+    - DestinationPort
+    - SourceAddress
+falsepositives:
+    - Internal services on uncommon ports
+tags:
+    - attack.command_and_control
+    - attack.t1571

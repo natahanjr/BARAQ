@@ -1,0 +1,32 @@
+title: BARAQ - Suspicious Service Installation
+id: baraq-7045-suspicious-service
+status: experimental
+level: high
+logsource:
+    product: windows
+    service: system
+detection:
+    selection:
+        EventID: 7045
+        message|contains:
+            - powershell
+            - mimikatz
+            - psexec
+            - netcat
+            - nc.exe
+            - registry
+            - 'cmd /c'
+            - 'c:\users\public'
+            - 'c:\programdata'
+            - 'c:\temp'
+    condition: selection
+falsepositives:
+    - Legitimate software installers creating helper services
+fields:
+    - EventID
+    - message
+tags:
+    - attack.persistence
+    - attack.t1543.003
+    - attack.execution
+    - attack.t1569.002

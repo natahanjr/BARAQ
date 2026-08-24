@@ -1,0 +1,25 @@
+title: "BARAQ - VSS Shadow Copies Deleted"
+id: baraq-4688-vssadmin-shadows
+status: experimental
+level: critical
+description: "vssadmin deleting volume shadow copies - the backup-destruction step of ransomware and wiper operations."
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_sel:
+        EventID: 4688
+        CommandLine|contains:
+            - "vssadmin delete shadows"
+            - "delete shadows /all"
+            - "wmic shadowcopy delete"
+    condition: selection_sel
+fields:
+    - NewProcessName
+    - CommandLine
+    - SubjectUserName
+falsepositives:
+    - "Planned shadow-copy rotation by storage admins"
+tags:
+    - attack.impact
+    - attack.t1490

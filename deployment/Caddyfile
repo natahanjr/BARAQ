@@ -1,0 +1,34 @@
+# Caddy reverse-proxy for BARAQ (recommended for external/LAN exposure)
+#
+# Caddy obtains a real certificate from Let's Encrypt automatically and
+# terminates TLS in front of the plain-HTTP BARAQ API (which stays on
+# localhost). Install Caddy, drop this file at C:\caddy\Caddyfile, then run:
+#   caddy run  (or: caddy start)
+#
+# The SOC itself never listens on the open network in this setup - only the
+# proxy does, so TLS is handled by a hardened, patched component.
+
+soc.example.com {
+	# Real Let's Encrypt certificate for your domain (no open firewall 80/443 needed
+	# on the SOC box itself; Caddy handles ACME on the proxy).
+	reverse_proxy 127.0.0.1:8001
+
+	encode gzip
+
+	# Uploads of agent batches are normal; keep a sane cap.
+	request_body {
+		max_size 50MB
+	}
+
+	header {
+		# Harden responses that go back to browsers/analysts.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+	}
+}
+
+# ---- optional: internal/LAN deployment with the bundled self-signed cert ----
+# If you do not have a domain, serve TLS directly from the SOC instead:
+#   start.bat secure lan    (self-signed cert on port 8443)

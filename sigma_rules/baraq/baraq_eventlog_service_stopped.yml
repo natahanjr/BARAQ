@@ -1,0 +1,21 @@
+# BARAQ custom detection rule - Windows Security/System telemetry.
+# Generated rule set; tune logsource filters to your environment.
+title: "BARAQ - Windows Event Log Service Stopped"
+id: baraq-1100-eventlog-stop
+status: experimental
+level: medium
+description: "The Event Log service stopped - no future events will be recorded."
+logsource:
+    product: windows
+    service: system
+detection:
+    selection_sel:
+        Channel:contains: "Microsoft-Windows-Eventlog"
+    condition: selection_sel
+fields:
+    - Computer
+falsepositives:
+    - Maintenance windows
+tags:
+    - attack.defense_evasion
+    - attack.t1070.001
