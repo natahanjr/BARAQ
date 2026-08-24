@@ -1,0 +1,835 @@
+{
+  "framework": "MITRE ATT&CK",
+  "version": "v15.1",
+  "note": "Curated Enterprise technique subset used by BARAQ detection rules.",
+  "techniques": [
+    {
+      "id": "T1110",
+      "name": "Brute Force",
+      "tactic": "Credential Access",
+      "description": "Adversaries may use brute-force techniques to gain access to accounts when passwords are unknown or when password hashes are obtained. BARAQ flags repeated authentication failures from the same account or source within a short window.",
+      "data_sources": "Windows Security Event Log 4625, 4624; Active Directory logon events",
+      "detection": "Monitor for many failed logons (4625) to the same account within a short time interval, especially from the same source IP. Watch for outlier volume of login failures.",
+      "recommendation": "Block the offending source IP, enforce account lockout policies, enable multi-factor authentication, and review the affected account for further compromise."
+    },
+    {
+      "id": "T1059.001",
+      "name": "PowerShell",
+      "tactic": "Execution",
+      "description": "Adversaries may abuse PowerShell to execute arbitrary commands. BARAQ monitors script block logging (Event 4104) for encoded commands, download-cradles and hidden execution flags.",
+      "data_sources": "PowerShell Operational Event 4104 (script block logging), 4103 (module logging), Sysmon Event 1",
+      "detection": "Enable PowerShell script block and module logging. Flag -EncodedCommand, Invoke-Expression, IEX, Net.WebClient, download strings and hidden/NoProfile execution.",
+      "recommendation": "Investigate the executed command, inspect the parent process, isolate the host, and restrict PowerShell to Constrained Language Mode with signed execution policy."
+    },
+    {
+      "id": "T1068",
+      "name": "Exploitation for Privilege Escalation",
+      "tactic": "Privilege Escalation",
+      "description": "Adversaries may exploit a vulnerability to gain higher privileges. BARAQ flags creation of new accounts and membership changes that elevate privileges to administrative groups (Events 4720, 4732, 4728).",
+      "data_sources": "Windows Security Event Log 4720, 4728, 4732, 4672",
+      "detection": "Monitor account creation (4720) and privileged group membership additions (4732/4728) for unexpected accounts or out-of-band changes.",
+      "recommendation": "Disable or remove the unauthorized account, verify the change request, reset passwords, and audit administrative membership regularly."
+    },
+    {
+      "id": "T1547",
+      "name": "Boot or Logon Autostart Execution",
+      "tactic": "Persistence",
+      "description": "Adversaries may configure system settings to automatically run programs at boot or logon, maintaining persistence. BARAQ monitors new services (7045), scheduled tasks (4698) and Run registry keys.",
+      "data_sources": "System Event Log 7045; Security Event Log 4698; Sysmon Event 1, 12, 13",
+      "detection": "Watch for new services or scheduled tasks with suspicious binaries in temp/appdata folders, or registry Run-key writes by non-approved processes.",
+      "recommendation": "Remove the persistence entry, terminate the malicious process, restore from clean state and harden startup locations with allow-lists."
+    },
+    {
+      "id": "T1046",
+      "name": "Network Service Discovery",
+      "tactic": "Discovery",
+      "description": "Adversaries may scan for network services to map the environment. BARAQ detects port-scanning behaviour such as many distinct ports probed from a single source in a short window.",
+      "data_sources": "Netflow; endpoint connection telemetry (Sysmon Event 3, psutil connection table)",
+      "detection": "Monitor outbound connection attempts: an elevated number of distinct remote ports / failed (SYN) states to one or many hosts from a single process or host.",
+      "recommendation": "Block the scanning source at the firewall, inspect the initiating process, and hunt for follow-on activity."
+    },
+    {
+      "id": "T1136.001",
+      "name": "Local Account",
+      "tactic": "Persistence",
+      "description": "Adversaries may create a local account to maintain access. Local accounts may persist across reboots and grant elevated privileges.",
+      "data_sources": "Windows Security Event Log 4720, 4722",
+      "detection": "Monitor for new local account creation, especially accounts not matching the organization's naming policy.",
+      "recommendation": "Delete the rogue account and review the creation source."
+    },
+    {
+      "id": "T1078",
+      "name": "Valid Accounts",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries may obtain and abuse credentials of existing accounts to gain initial access, persistence or evasion.",
+      "data_sources": "Windows Security Event Log 4624, 4625",
+      "detection": "Monitor unusual logon patterns: off-hours logons, new accounts logging in, or accounts with never-reset passwords.",
+      "recommendation": "Enforce MFA, reset the credential, and review sessions for lateral movement."
+    },
+    {
+      "id": "T1059",
+      "name": "Command and Scripting Interpreter",
+      "tactic": "Execution",
+      "description": "Adversaries may abuse command and script interpreters (cmd, PowerShell, WMI, script hosts) to execute code.",
+      "data_sources": "Process creation telemetry; script block logs",
+      "detection": "Monitor suspicious parent-child process chains involving scripting interpreters.",
+      "recommendation": "Restrict scripting interpreters, validate the invocation, and investigate the parent process."
+    },
+    {
+      "id": "T1021",
+      "name": "Remote Services",
+      "tactic": "Lateral Movement",
+      "description": "Adversaries may use valid accounts to interact with remote services such as SMB/Windows Admin Shares to move laterally within an environment. BARAQ detects SMB (port 445) connections to multiple internal hosts, cross-host failed logons and cross-host privilege events.",
+      "data_sources": "Windows Security Event Log 4624, 4625, 4672; endpoint connection telemetry (Sysmon Event 3; psutil table)",
+      "detection": "Monitor SMB connections (445) to multiple hosts from a single host, repeated failed logons across hosts, and privileged logons across distinct hosts within a short window.",
+      "recommendation": "Isolate the source host, review account usage, rotate credentials, and block admin share access (IPC$/C$) at the perimeter."
+    },
+    {
+      "id": "T1074",
+      "name": "Data Staged",
+      "tactic": "Collection",
+      "description": "Adversaries may stage collected data in a central location or in temporary directories prior to exfiltration. BARAQ flags archive-tool execution against data locations and rapid file aggregation in temp directories.",
+      "data_sources": "Process creation telemetry (4688); PowerShell script block logs (4104); file system telemetry",
+      "detection": "Monitor for compression/archiving tools (7z, rar, zip) targeting documents/downloads/desktop, and bursts of file activity in temp directories.",
+      "recommendation": "Review the affected user and process, preserve file-system evidence, block suspicious outbound transfers, and investigate data access history."
+    },
+    {
+      "id": "T1105",
+      "name": "Ingress Tool Transfer",
+      "tactic": "Command and Control",
+      "description": "Adversaries may transfer tools or other files from an external system into a compromised environment. BARAQ scores downloaded files against a local signature list of known-malicious hashes and paths.",
+      "data_sources": "File creation events; process image loads; downloaded file hashes",
+      "detection": "Compare file hashes and download paths against known-bad signature lists; flag recognizable malware names and unsigned dropped binaries in temp/public folders.",
+      "recommendation": "Quarantine the file, block the source, scan the endpoint, and review the initiating process and parent."
+    },
+    {
+      "id": "T1566",
+      "name": "Phishing",
+      "tactic": "Initial Access",
+      "description": "Adversaries may send phishing messages to gain access to victim systems. BARAQ inspects collected email/metadata for phishing indicators such as suspicious senders, urgent language, and malicious attachment types.",
+      "data_sources": "Email gateway/telemetry metadata",
+      "detection": "Heuristic scoring of headers/subjects/attachments against phishing indicators (impersonation, urgency, executable/RAR/zips attachments).",
+      "recommendation": "Block the sender domain, quarantine the message, and alert users who received the email."
+    },
+    {
+      "id": "T1071",
+      "name": "Application Layer Protocol",
+      "tactic": "Command and Control",
+      "description": "Adversaries may communicate using application-layer protocols (DNS, HTTP/S) to avoid detection. BARAQ monitors DNS queries for suspicious domains and HTTP payloads for secret-sized data transfers.",
+      "data_sources": "DNS query logs (Sysmon Event 22); HTTP/S request metadata; endpoint connection telemetry",
+      "detection": "Flag high-volume/large DNS responses, uncommon top-level domains and subdomains, and HTTP bodies with high-entropy or voluminous content.",
+      "recommendation": "Inspect the resolving process and target, block the domain/IP, and investigate the associated process chain."
+    },
+    {
+      "id": "T1091",
+      "name": "Replication Through Removable Media",
+      "tactic": "Lateral Movement",
+      "description": "Adversaries may move into systems by copying malware to removable media and executing it with autorun when the media is inserted into a victim system. BARAQ monitors new removable device insertion (Events 6416, 6420).",
+      "data_sources": "Windows Security Event Log 6416, 6420 (new external device)",
+      "detection": "Alert on insertion of new removable/USB storage devices, especially paired with executables or autorun activity.",
+      "recommendation": "Restrict USB write access / Autorun, review the device insertion context, and scan new media before mounting."
+    },
+    {
+      "id": "T1190",
+      "name": "Exploit Public-Facing Application",
+      "tactic": "Initial Access",
+      "description": "Adversaries may exploit a publicly accessible application or known-vulnerable software running on the endpoint to gain initial access. BARAQ flags installed products matching known CVEs via the vulnerability scanner.",
+      "data_sources": "Installed-software inventory (registry uninstall keys); CVE database match",
+      "detection": "Match installed product names/versions against the curated CVE database; alert on CVSS-critical findings and re-check after patch cycles.",
+      "recommendation": "Patch or update the affected software immediately, verify whether the vulnerability has been exploited, and apply compensating controls (segmentation, WAF) until the patch is deployed."
+    },
+    {
+      "id": "T1003.001",
+      "name": "LSASS Memory",
+      "tactic": "Credential Access",
+      "description": "Adversaries may access the Local Security Authority Subsystem Service (LSASS) memory to steal credentials (e.g. with Mimikatz sekurlsa). BARAQ flags Sysmon Event 10 (Process Access) targeting lsass.exe from unexpected processes.",
+      "data_sources": "Sysmon Event 10 (Process Access); Process creation telemetry",
+      "detection": "Monitor access to lsass.exe: any handle opened with VM_READ/process-query access by a process outside the known-good set (svchost, winlogon, wininit, services, AV agents) is suspicious.",
+      "recommendation": "Kill the offending process, extract and rotate the compromised credentials, enable Credential Guard, and review logons made with the stolen hashes/tickets."
+    },
+    {
+      "id": "T1547.001",
+      "name": "Registry Run Keys / Startup Folder",
+      "tactic": "Persistence",
+      "description": "Adversaries may achieve persistence by adding a program to the HKCU/HKLM Run or RunOnce registry keys so it executes at logon. BARAQ flags Sysmon Event 13 (Registry Value Set) writing to Run/RunOnce keys.",
+      "data_sources": "Sysmon Event 13 (Registry Value Set); Security Event Log 4688",
+      "detection": "Monitor SetValue/CreateKey operations on Run, RunOnce, RunServices and StartupApproved keys; verify the binary being registered and its location.",
+      "recommendation": "Remove the registry value, delete the dropped binary, scan for additional persistence, and review the process that wrote the key."
+    },
+    {
+      "id": "T1053.005",
+      "name": "Scheduled Task",
+      "tactic": "Persistence",
+      "description": "Adversaries may abuse the Windows Task Scheduler to execute code at system startup or on user logon. BARAQ detects schtasks /create invocations whose task name or action path indicates abuse.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688); Security Event Log 4698, 4702",
+      "detection": "Flag schtasks.exe /create with action binaries in temp/public/appdata paths, system-masquerading task names, or onlogon/onstart/onboot triggers.",
+      "recommendation": "Delete the task, remove the dropped binary, disable remote task creation, and audit scheduled tasks across the fleet."
+    },
+    {
+      "id": "T1546.003",
+      "name": "Windows Management Instrumentation Event Subscription",
+      "tactic": "Persistence",
+      "description": "Adversaries may establish persistence by creating WMI event subscriptions (EventFilter + EventConsumer + FilterToConsumerBinding) that execute a payload when a defined event occurs. BARAQ detects WMI subscription tooling in command lines.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688); WMI activity (Event 5861)",
+      "detection": "Flag wmic/PowerShell invocations that create __EventFilter, CommandLineEventConsumer/ActiveScriptEventConsumer or _FilterToConsumerBinding objects under the root\\subscription namespace.",
+      "recommendation": "Enumerate and remove the malicious subscription (Get-WmiObject -Namespace root\\subscription), remove the payload, and restrict WMI access with WMI namespaces ACLs."
+    },
+    {
+      "id": "T1098",
+      "name": "Account Manipulation",
+      "tactic": "Persistence",
+      "description": "Adversaries may manipulate accounts to maintain or elevate access: resetting admin passwords, deleting accounts, or enabling disabled privileged accounts. BARAQ flags password-reset, deletion and enable/disable activity against admin-named accounts.",
+      "data_sources": "Windows Security Event Log 4724, 4726, 4725, 4722, 4738",
+      "detection": "Monitor password reset attempts (4724), account deletion (4726) and enable/disable (4725/4722) where the target account is privileged or admin-named.",
+      "recommendation": "Verify the change with the account owner, reset credentials if tampered, restore the account, and audit admin account change requests."
+    },
+    {
+      "id": "T1036",
+      "name": "Masquerading",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries may disguise malware as legitimate files, such as naming a payload svchost.exe and running it from a user-writable directory. BARAQ flags known system binaries executing from outside C:\\Windows.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688)",
+      "detection": "Watch for processes named after system binaries (svchost, lsass, csrss, winlogon, services) whose image path is not under C:\\Windows\\System32 or SysWOW64.",
+      "recommendation": "Terminate the masquerading process, delete the binary, scan the originating folder, and review the parent process chain."
+    },
+    {
+      "id": "T1564",
+      "name": "Hide Artifacts",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries may hide files or artifacts, e.g. by using NTFS alternate data streams (file:stream) or setting the hidden attribute. BARAQ flags ADS usage and attrib +h hiding in command lines.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688)",
+      "detection": "Flag command lines referencing colon-stream paths (filename:stream), attrib +h/+s calls, and redirection into hidden streams.",
+      "recommendation": "Extract and inspect the stream contents, scan for additional streams, and clean the dropped payload."
+    },
+    {
+      "id": "T1218",
+      "name": "System Binary Proxy Execution",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries may abuse trusted system binaries (rundll32, mshta, regsvr32, certutil, bitsadmin, installutil) to proxy the execution of malicious code and bypass allow-lists. BARAQ detects their abuse patterns in command lines.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688)",
+      "detection": "Flag LOLBin usage: rundll32 with javascript:/mshtml, mshta with remote .hta, regsvr32 /s /i:http, certutil -urlcache/-decode, bitsadmin /transfer, installutil/regasm/regsvc, cmstp, pcalua and hh.exe with remote content.",
+      "recommendation": "Investigate the invoked content, block the remote host, restrict execution of these binaries (Software Restriction / WDAC), and review the parent chain."
+    },
+    {
+      "id": "T1041",
+      "name": "Exfiltration Over C2 Channel",
+      "tactic": "Exfiltration",
+      "description": "Adversaries may exfiltrate stolen data over the existing command-and-control channel, often as bulk HTTP/S transfers. BARAQ flags per-process HTTP transfer volumes that are anomalous for the endpoint.",
+      "data_sources": "HTTP/S request metadata; endpoint connection telemetry",
+      "detection": "Monitor per-process HTTP upload/download byte totals and request counts; alert on multi-megabyte volumes or very high request rates within a short window.",
+      "recommendation": "Block the destination, inspect the process's memory and parent chain, identify what data left the host, and notify the incident response process."
+    },
+    {
+      "id": "T1070.001",
+      "name": "Clear Windows Event Logs",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries may clear or delete Windows event logs to hide their activity. BARAQ flags Security log clearing (Event 1102), System log clearing (Event 104) and deletion of .evtx log files (Sysmon Event 23).",
+      "data_sources": "Windows Security Event Log 1102, 104; Sysmon Event 23 (File Delete)",
+      "detection": "Alert on event log clear events (1102/104) and on file-delete events targeting .evtx files.",
+      "recommendation": "Restore logs from the SIEM/central collection, treat the host as compromised, and review the account that cleared the logs."
+    },
+    {
+      "id": "T1486",
+      "name": "Data Encrypted for Impact",
+      "tactic": "Impact",
+      "description": "Adversaries may encrypt data on target systems to interrupt availability of system and network resources, then demand ransom. BARAQ flags bulk file-rename/encryption command lines and ransom-note drops.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688); file system monitoring",
+      "detection": "Flag commands that bulk-rename or re-encrypt files with ransomware-style extensions (.locked/.crypt/.encrypted), delete originals, or write ransom notes (readme/decrypt/how_to files).",
+      "recommendation": "Isolate the host and volume immediately, retain forensic copies, restore from offline/immutable backups, and hunt for the initial access vector."
+    },
+    {
+      "id": "T1490",
+      "name": "Inhibit System Recovery",
+      "tactic": "Impact",
+      "description": "Adversaries may delete or disable system restoration and recovery features to prevent rollback following an attack. BARAQ flags shadow-copy deletion and boot-recovery tampering commands.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688)",
+      "detection": "Alert on vssadmin delete shadows, wmic shadowcopy delete, dism for image-cleanup, bcdedit recoveryenabled disabled and wevtutil cl invocations.",
+      "recommendation": "Treat as a precursor to destructive ransomware, isolate the host, and verify remaining backup/shadow-copy integrity."
+    },
+    {
+      "id": "T1555",
+      "name": "Credentials from Password Stores",
+      "tactic": "Credential Access",
+      "description": "Adversaries may search for and acquire credentials stored in Password Stores (Credential Manager, DPAPI-protected web stores, browser profiles) to authenticate and move laterally.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688)",
+      "detection": "Flag cmdkey /list, vaultcmd enumeration, Credential Manager access via rundll32 keymgr.dll, DPAPI master-key extraction (mimikatz dpapi), and browser credential-database reads (Login Data, cookies, logins.json).",
+      "recommendation": "Rotate the exposed credentials, enable Credential Guard and DPAPI user-protection, and investigate what account/lateral path was used."
+    },
+    {
+      "id": "T1197",
+      "name": "BITS Jobs",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries may abuse Windows BITS (Background Intelligent Transfer Service) to download, upload and execute malicious code while evading defensive tools, often with SetNotifyCmdLine for execution.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688); BITS event log",
+      "detection": "Flag bitsadmin /transfer, /create with notification command lines that point at executables, Start-BitsTransfer usage, and BITS downloads into user-writable or temp directories.",
+      "recommendation": "Delete the BITS job, kill the executed payload, block the download source, and review BITS job enumeration on the host."
+    },
+    {
+      "id": "T1547.009",
+      "name": "Shortcut Modification",
+      "tactic": "Persistence",
+      "description": "Adversaries may create or modify shortcut (.lnk) files in the user or global startup folders to execute payloads at logon.",
+      "data_sources": "Process creation telemetry (Sysmon Event 1, Security 4688); file system monitoring",
+      "detection": "Alert on command lines that create or modify .lnk files under the Startup folders or that inject remote/executable targets into shortcuts (WScript.Shell CreateShortcut, .TargetPath).",
+      "recommendation": "Remove the shortcut, delete the target payload, scan the startup folder, and harden it against write by non-privileged users."
+    },
+    {
+      "id": "T1558.003",
+      "name": "Steal or Forge Kerberos Tickets: Kerberoasting",
+      "tactic": "Credential Access",
+      "description": "An adversary requests service tickets (TGS) for Kerberos service accounts and cracks the offline hash of the ticket - the service-account password is often weak and never rotates.",
+      "data_sources": "Windows Security Event Log 4769 (Ticket Encryption Type 0x17 RC4), process creation telemetry (Rubeus, GetUserSPNs, Invoke-Kerberoast)",
+      "detection": "Flag 4769 events with RC4 ticket encryption (0x17) for SPN targets requested by non-computer accounts, and command lines invoking Rubeus kerberoast, GetUserSPNs or Invoke-Kerberoast.",
+      "recommendation": "Rotate the affected service-account password, require AES-256 Kerberos encryption (disable RC4), prefer group-managed service accounts (gMSA) with long auto-rotated passwords, and audit who requested the tickets."
+    },
+    {
+      "id": "T1558.004",
+      "name": "Steal or Forge Kerberos Tickets: AS-REP Roasting",
+      "tactic": "Credential Access",
+      "description": "Accounts with 'Do not require Kerberos pre-authentication' allow attackers to request their TGT and crack the response offline - no interaction with the account holder needed.",
+      "data_sources": "Windows Security Event Log 4768 (Ticket Options 0x40810000/0x40800000), process creation telemetry (Rubeus asreproast, GetNPUsers)",
+      "detection": "Flag 4768 AS-REQ events where pre-authentication is not required (Ticket Options containing 0x40810000 or 0x40800000) and command lines invoking Rubeus asreproast or GetNPUsers.",
+      "recommendation": "Disable the 'Do not require pre-authentication' setting on the affected account, rotate its password, and enforce pre-authentication for all user accounts."
+    },
+    {
+      "id": "T1003.006",
+      "name": "OS Credential Dumping: DCSync",
+      "tactic": "Credential Access",
+      "description": "An attacker impersonates a domain controller and uses directory replication (DRSUAPI) to sync password hashes for all domain accounts - total domain compromise.",
+      "data_sources": "Windows Security Event Log 4662 (DS-Replication-Get-Changes 0x100 / -All 0x200 access masks), process creation telemetry (secretsdump, mimikatz lsadump::dcsync)",
+      "detection": "Flag 4662 directory-service access events requesting replication rights (access mask 0x100/0x200/0x300) from non-DC accounts, and command lines invoking secretsdump or lsadump::dcsync.",
+      "recommendation": "Treat as critical domain compromise: reset all privileged and computer account credentials, rotate the krbtgt secret twice, rebuild affected hosts, and restrict replication rights to authorized DC accounts."
+    },
+    {
+      "id": "T1558.001",
+      "name": "Steal or Forge Kerberos Tickets: Golden Ticket",
+      "tactic": "Credential Access",
+      "description": "With the krbtgt hash, an attacker forges TGTs valid for any account for up to the ticket lifetime - stealthy, persistent domain-wide access that normal password resets do not revoke.",
+      "data_sources": "Windows Security Event Log 4768 (TGT requests for krbtgt, forged-account TGTs), process creation telemetry (Rubeus golden, mimikatz kerberos::golden)",
+      "detection": "Flag 4768 events requesting a TGT for the krbtgt account (never legitimate) and command lines invoking Rubeus golden or kerberos::golden.",
+      "recommendation": "Reset the krbtgt account password twice (with replication wait between resets), invalidate all tickets, and treat the domain as compromised - hunt for persistence and re-audit credentials."
+    },
+    {
+      "id": "T1550.002",
+      "name": "Use Alternate Authentication Material: Pass the Hash",
+      "tactic": "Lateral Movement",
+      "description": "An adversary reuses a captured NT hash to authenticate over NTLM without knowing the plaintext password (mimikatz sekurlsa::pth, psexec -hashes, evil-winrm).",
+      "data_sources": "Windows Security Event Log 4624 (Logon Type 3 with NTLM package), process creation telemetry (sekurlsa::pth, psexec -hashes)",
+      "detection": "Flag NTLM network logons (4624, type 3, NTLM authentication package) with privileged accounts from remote hosts, and command lines invoking sekurlsa::pth or -hashes tooling.",
+      "recommendation": "Enable Credential Guard, enforce Kerberos instead of NTLM where possible, restrict local admin use, rotate affected credentials, and segment the network."
+    },
+    {
+      "id": "T1550.003",
+      "name": "Use Alternate Authentication Material: Pass the Ticket",
+      "tactic": "Lateral Movement",
+      "description": "An attacker injects a stolen Kerberos ticket into a new logon session (mimikatz kerberos::ptt, Rubeus ptt) to move laterally as the impersonated user.",
+      "data_sources": "Windows Security Event Log 4624 (Logon Types 9/10 with Kerberos package), process creation telemetry (kerberos::ptt, Rubeus ptt/asktgt /ptt)",
+      "detection": "Flag 4624 logons of type 9 (NewCredentials) or 10 (RemoteInteractive) using the Kerberos package from a single user, and command lines invoking kerberos::ptt or Rubeus ptt.",
+      "recommendation": "Rotate the impersonated account's credentials, enforce AES Kerberos encryption, enable Credential Guard, and review the originating session for ticket-theft tools."
+    },
+    {
+      "id": "T1087",
+      "name": "Account Discovery",
+      "tactic": "Discovery",
+      "description": "Adversaries enumerate users, groups, and domain structure to map targets - BloodHound/SharpHound collection is the most common automated variant.",
+      "data_sources": "Process creation telemetry (SharpHound, bloodhound-python, Invoke-BloodHound), Windows Security Event Log 4720/4798/4799 bulk enumeration",
+      "detection": "Flag execution of SharpHound/BloodHound collection tooling and command-line flags such as --collectionmethod, and correlate with bulk LDAP enumeration against domain controllers.",
+      "recommendation": "Investigate the origin host and account, review LDAP query volume on domain controllers, and restrict access to Active Directory enumeration tools."
+    },
+    {
+      "id": "T1484.001",
+      "name": "Domain or Tenant Policy Modification: Group Policy Modification",
+      "tactic": "Privilege Escalation",
+      "description": "An attacker with GPO edit rights modifies Group Policy Objects to deploy scripts, add local admins, or schedule malicious tasks domain-wide (SharpGPOAbuse, Set-GPLink).",
+      "data_sources": "Windows Security Event Log 5136 (DS object modified on CN=Policies), process creation telemetry (SharpGPOAbuse, Set-GPLink, Invoke-GPOUpdate)",
+      "detection": "Flag 5136 modifications to GPO containers (CN=Policies) and command lines invoking SharpGPOAbuse, New/Set-GPLink or Invoke-GPOUpdate.",
+      "recommendation": "Audit who holds GPO-edit rights, restore the modified GPO from backup, check linked scripts/scheduled tasks, and review the privileged group membership that allowed the change."
+    },
+    {
+      "id": "T1574.002",
+      "name": "Hijack Execution Flow: DLL Side-Loading",
+      "tactic": "Defense Evasion",
+      "description": "A legitimate trusted process loads a malicious DLL placed in its search path (user-writable folders), bypassing application allow-lists while running under a trusted signature.",
+      "data_sources": "Sysmon Event 7 (Image Loaded: module not in System32), process creation telemetry",
+      "detection": "Flag Sysmon image-load events where a System32 process loads a module from a user-writable path (Temp, AppData, Public, Downloads).",
+      "recommendation": "Remove the malicious DLL, apply application whitelisting/SRU, enforce DLL load-order hardening and signature verification, and hunt for the payload that dropped the DLL."
+    },
+    {
+      "id": "T1055",
+      "name": "Process Injection",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries inject malicious code into a running process to hide execution and evade detection - CreateRemoteThread (Sysmon 8) and lsass process-access are the classic signals.",
+      "data_sources": "Sysmon Event 8 (CreateRemoteThread), Event 10 (ProcessAccess with injection permission masks)",
+      "detection": "Flag CreateRemoteThread events (Sysmon 8), especially into lsass or other privileged processes, and ProcessAccess events with PROCESS_VM_WRITE/PROCESS_VM_OPERATION permissions.",
+      "recommendation": "Identify the injecting parent process and payload, isolate the host, enable Credential Guard and Protected Process Light for LSASS, and review the origin of the injected thread."
+    },
+    {
+      "id": "T1134",
+      "name": "Access Token Manipulation",
+      "tactic": "Privilege Escalation",
+      "description": "An adversary impersonates or steals another user's access token (mimikatz token::elevate, TokenManipulation) to escalate privileges without a new logon.",
+      "data_sources": "Process creation telemetry (token::elevate, Invoke-TokenManipulation, SeDebugPrivilege enable), Windows Security Event Log 4702 if audit enabled",
+      "detection": "Flag command lines invoking mimikatz token:: commands or PowerShell token-manipulation modules, and SeDebugPrivilege token adjustments by non-system processes.",
+      "recommendation": "Kill the token-stealing process, revoke SeDebugPrivilege for unnecessary accounts, enable Credential Guard, and review the token's original owner for compromise."
+    },
+    {
+      "id": "T1558.002",
+      "name": "Steal or Forge Kerberos Tickets: Silver Ticket",
+      "tactic": "Credential Access",
+      "description": "With the hash of a single service account, an attacker forges service tickets (TGS) valid for that service - persistent access that survives user password resets.",
+      "data_sources": "Windows Security Event Log 4769 (RC4 TGS 0x17 requested by privileged accounts), process creation telemetry (Rubeus silver)",
+      "detection": "Flag 4769 events with RC4 ticket encryption requested by administrative accounts for SPN services, and command lines invoking Rubeus silver.",
+      "recommendation": "Rotate the forged service account's password twice (as a KRBTGT-style reset), audit 4769 RC4 usage, and enable AES-only Kerberos encryption."
+    },
+    {
+      "id": "T1562.001",
+      "name": "Impair Defenses: Disable or Modify Tools",
+      "tactic": "Defense Evasion",
+      "description": "Adversaries disable or tamper with security tooling: AMSI bypasses, Defender real-time protection toggles, and Safe Mode boot configuration to launch tools in a degraded-security state.",
+      "data_sources": "Process creation telemetry (bcdedit safeboot, Set-MpPreference, AMSI patch strings), Windows Event 7040 (service startup type changes)",
+      "detection": "Flag bcdedit/bootcfg Safe Mode configuration changes, Set-MpPreference disable switches, AMSI-bypass strings in PowerShell script blocks (4103/4104), and service configuration changes for security agents.",
+      "recommendation": "Reverse the boot or policy change, re-enable security agents, apply tamper protection, and treat the change as an active defense-evasion campaign requiring a full hunt."
+    },
+    {
+      "id": "T1567.002",
+      "name": "Exfiltration Over Web Service: Exfiltration to Cloud Storage",
+      "tactic": "Exfiltration",
+      "description": "An attacker uploads collected data to cloud storage (OneDrive, Google Drive, S3) using sync tools (rclone, aws s3, azcopy, gsutil) or the provider's own sync client.",
+      "data_sources": "Process creation telemetry (rclone copy/move/sync, aws s3 cp, azcopy copy, gsutil cp), network connections to cloud storage endpoints",
+      "detection": "Flag command lines invoking cloud sync/upload tooling targeting storage remotes, especially when combined with staging of sensitive files.",
+      "recommendation": "Block the cloud endpoint, review exfiltrated data scope, rotate credentials, and restrict cloud storage access from endpoint accounts via policy."
+    },
+    {
+      "id": "T1102.001",
+      "name": "Web Service: Dead Drop Resolver (Webhooks)",
+      "tactic": "Command and Control",
+      "description": "Adversaries abuse legitimate webhook endpoints (Slack, Teams, Discord, Telegram) as dead-drop C2: commands parked in one place, retrieved by the implant - traffic blends with legitimate SaaS use.",
+      "data_sources": "DNS queries to webhook provider domains (hooks.slack.com, webhook.office.com, discord.com), process creation telemetry with webhook URLs",
+      "detection": "Flag DNS queries or command lines referencing webhook endpoints (hooks.slack.com/services, webhookb2, /api/webhooks, api.telegram.org/bot.../sendMessage) from non-browser processes.",
+      "recommendation": "Investigate the process contacting the webhook, block the endpoint at the egress proxy, and review the SaaS workspace audit logs for the channel/thread used."
+    },
+    {
+      "id": "T1071.004",
+      "name": "Application Layer Protocol: DNS Tunneling",
+      "tactic": "Command and Control",
+      "description": "Adversaries encode data in DNS queries (long random subdomains) and responses (TXT payloads) to tunnel C2 or exfiltration through a protocol that is usually allowed outbound.",
+      "data_sources": "Sysmon Event 22 (DNS query) / DNS monitor: query length, label structure, per-process query volume to a single base domain",
+      "detection": "Flag DNS queries with very long labels (>30 chars), high per-process query volume (>=20 unique queries to one base domain in a window), or oversized DNS responses (>=400 B) suggesting TXT payloads.",
+      "recommendation": "Block the tunneling domain at the resolver, hunt for the client process, and review the DNS logs for the full tunnel window to bound the data exfiltrated."
+    },
+    {
+      "id": "T1553.004",
+      "name": "Subvert Trust Controls: Install Root Certificate",
+      "tactic": "Defense Evasion",
+      "description": "An adversary installs a rogue root CA certificate to make malicious code and TLS traffic appear trusted - browser and code-signing trust both collapse.",
+      "data_sources": "Process creation telemetry (certutil -addstore, Import-Certificate, New-SelfSignedCertificate), Sysmon Event 11 if registry/file tracked",
+      "detection": "Flag command lines adding certificates to the Root store (certutil -addstore/-importpfx, Import-Certificate to Root, certmgr /add) and creation of new self-signed certificates.",
+      "recommendation": "Remove the rogue certificate from the Root store, revoke trust, audit what was signed or intercepted since installation, and review the installing user's session."
+    },
+    {
+      "id": "T1566.001",
+      "name": "Phishing: Spearphishing Attachment",
+      "tactic": "Initial Access",
+      "description": "An email delivered an executable or macro-enabled document attachment as the initial infection vector.",
+      "data_sources": "Email gateway logs, attachment metadata",
+      "detection": "Flag messages carrying executable/script/macro attachment types and reputate the sender domain.",
+      "recommendation": "Quarantine the message, block the sender, disable macros for external content, and inspect recipients for follow-on execution."
+    },
+    {
+      "id": "T1566.002",
+      "name": "Phishing: Spearphishing Link",
+      "tactic": "Initial Access",
+      "description": "An email contained a URL shortener or raw-IP link to a phishing or credential-harvesting page.",
+      "data_sources": "Email gateway logs, URL reputation feeds",
+      "detection": "Detect shortener domains and raw-IP URLs inside message bodies and subjects.",
+      "recommendation": "Expand and reputate the link, block the destination, and warn recipients before clicking."
+    },
+    {
+      "id": "T1189",
+      "name": "Drive-by Compromise",
+      "tactic": "Initial Access",
+      "description": "A browser visited a malicious or compromised web page that delivered an exploit or payload.",
+      "data_sources": "HTTP proxy logs, browser process monitoring",
+      "detection": "Monitor browser requests to raw-IP URLs and suspicious TLDs.",
+      "recommendation": "Block the destination, review the referring page, and scan the host for injected processes or downloads."
+    },
+    {
+      "id": "T1059.003",
+      "name": "Command and Scripting Interpreter: Windows Command Shell",
+      "tactic": "Execution",
+      "description": "cmd.exe was used to execute scripts or encoded commands, often to hide activity from process auditing.",
+      "data_sources": "Process command lines, Sysmon Event 1",
+      "detection": "Monitor for cmd.exe invocations with encoded or nested script arguments.",
+      "recommendation": "Review the decoded command line, inspect the parent process, and enable CommandLine auditing."
+    },
+    {
+      "id": "T1047",
+      "name": "Windows Management Instrumentation",
+      "tactic": "Execution",
+      "description": "WMI was abused to execute processes locally or on remote hosts, often for lateral movement.",
+      "data_sources": "WMI activity logs, Sysmon Events 1/10",
+      "detection": "Monitor wmic process call create, Invoke-WmiMethod and Get-WmiObject -ComputerName usage.",
+      "recommendation": "Enable WMI audit events, verify remote targets, and restrict WMI access where possible."
+    },
+    {
+      "id": "T1053.002",
+      "name": "Scheduled Task/Job: At (Windows)",
+      "tactic": "Execution",
+      "description": "The legacy AT scheduler was used to queue jobs for later execution.",
+      "data_sources": "Security Event Log 4698, process command lines",
+      "detection": "Monitor at.exe usage creating jobs on older workstations.",
+      "recommendation": "Migrate AT jobs to Scheduled Tasks with restricted accounts and audit creation."
+    },
+    {
+      "id": "T1569.002",
+      "name": "System Services: Service Execution",
+      "tactic": "Execution",
+      "description": "Windows services were created or configured to execute arbitrary binaries.",
+      "data_sources": "Security Event Log 7045, process command lines",
+      "detection": "Monitor sc.exe create/config and Event 7045 service installations.",
+      "recommendation": "Review the service binary path, remove unauthorized services, and restrict creation."
+    },
+    {
+      "id": "T1127.001",
+      "name": "Trusted Developer Utilities Proxy Execution: MSBuild",
+      "tactic": "Execution",
+      "description": "MSBuild was used to execute inline C# payloads and bypass application allow-lists.",
+      "data_sources": "Process command lines, Sysmon Event 1",
+      "detection": "Monitor msbuild.exe invocations outside build pipelines.",
+      "recommendation": "Verify the project file, restrict MSBuild to CI pipelines, and review the parent chain."
+    },
+    {
+      "id": "T1059.006",
+      "name": "Command and Scripting Interpreter: Python",
+      "tactic": "Execution",
+      "description": "A Python interpreter was launched from a user-writable directory to run a dropped payload.",
+      "data_sources": "Process command lines, file monitoring",
+      "detection": "Detect python.exe from temp/public/appdata paths.",
+      "recommendation": "Inspect the script and interpreter, review the parent process, and scan the directory."
+    },
+    {
+      "id": "T1543.003",
+      "name": "Create or Modify System Process: Windows Service",
+      "tactic": "Persistence",
+      "description": "A service ImagePath or ServiceDll registry value was changed to re-launch attacker code at boot.",
+      "data_sources": "Registry monitoring (Sysmon 13), Security 7045",
+      "detection": "Monitor writes to Service ImagePath/ServiceDll values.",
+      "recommendation": "Restore the original value, remove the malicious service, and review the writing process."
+    },
+    {
+      "id": "T1546.010",
+      "name": "Event Triggered Execution: AppInit DLLs",
+      "tactic": "Persistence",
+      "description": "AppInit_DLLs registry values were modified to load malicious DLLs into every user-mode process.",
+      "data_sources": "Registry monitoring (Sysmon 13)",
+      "detection": "Monitor AppInit_DLLs value modifications.",
+      "recommendation": "Remove the DLL entry, delete the DLL, and enforce application whitelisting."
+    },
+    {
+      "id": "T1546.008",
+      "name": "Event Triggered Execution: Accessibility Features",
+      "tactic": "Persistence",
+      "description": "Accessibility binaries (sethc, utilman, ...) were replaced or hijacked for SYSTEM shells at the lock screen.",
+      "data_sources": "Registry monitoring, file integrity monitoring",
+      "detection": "Monitor file creates replacing accessibility binaries and IFEO Debugger values for them.",
+      "recommendation": "Restore the original binary, disable sticky-keys logon access, and review provenance."
+    },
+    {
+      "id": "T1546.012",
+      "name": "Event Triggered Execution: Image File Execution Options",
+      "tactic": "Persistence",
+      "description": "IFEO Debugger values redirect the execution of a target binary to an attacker-controlled one.",
+      "data_sources": "Registry monitoring (Sysmon 13)",
+      "detection": "Monitor writes to Image File Execution Options\\<binary>\\Debugger.",
+      "recommendation": "Remove the Debugger value and review the writing process chain."
+    },
+    {
+      "id": "T1546.007",
+      "name": "Event Triggered Execution: Netsh Helper DLL",
+      "tactic": "Persistence",
+      "description": "netsh was used to register a helper DLL that runs whenever netsh executes.",
+      "data_sources": "Process command lines, registry monitoring",
+      "detection": "Monitor netsh add helper commands.",
+      "recommendation": "Remove the helper registration, delete the DLL, and audit netsh helpers."
+    },
+    {
+      "id": "T1037.001",
+      "name": "Boot or Logon Initialization Scripts: Logon Script (Windows)",
+      "tactic": "Persistence",
+      "description": "Registry values controlling logon scripts (Userinit, Shell, Run policies) were modified.",
+      "data_sources": "Registry monitoring (Sysmon 13)",
+      "detection": "Monitor writes to Userinit, Winlogon Shell and logon-script keys.",
+      "recommendation": "Restore original values, remove the script, and audit logon script keys."
+    },
+    {
+      "id": "T1548.002",
+      "name": "Abuse Elevation Control Mechanism: Bypass User Account Control",
+      "tactic": "Privilege Escalation",
+      "description": "Auto-elevating binaries such as fodhelper or computerdefaults were abused to bypass UAC.",
+      "data_sources": "Process command lines, registry monitoring",
+      "detection": "Monitor invocation of auto-elevating binaries with bypass arguments.",
+      "recommendation": "Terminate the process, harden UAC to Always Notify, and review written registry keys."
+    },
+    {
+      "id": "T1134.001",
+      "name": "Access Token Manipulation: Token Impersonation/Theft",
+      "tactic": "Privilege Escalation",
+      "description": "SeDebugPrivilege or token-impersonation primitives were enabled to assume another user's identity.",
+      "data_sources": "Process command lines, Sysmon Events 1/10",
+      "detection": "Monitor SeDebugPrivilege enablement and privileged token access.",
+      "recommendation": "Restrict SeDebugPrivilege, review subsequent LSASS access, and rotate exposed credentials."
+    },
+    {
+      "id": "T1134.005",
+      "name": "Access Token Manipulation: Named Pipe Impersonation",
+      "tactic": "Privilege Escalation",
+      "description": "Processes impersonated privileged named pipes to steal tokens, a technique used by toolkits such as Impacket.",
+      "data_sources": "Process command lines, Sysmon Events 1/18",
+      "detection": "Monitor creation of/access to named pipes mirroring privileged services.",
+      "recommendation": "Identify the pipe-holding process, terminate it, and monitor for privileged actions."
+    },
+    {
+      "id": "T1574.009",
+      "name": "Hijack Execution Flow: Unquoted Service Paths",
+      "tactic": "Privilege Escalation",
+      "description": "A service was installed with an unquoted image path containing spaces, allowing DLL/EXE planting.",
+      "data_sources": "Security Event Log 7045",
+      "detection": "Flag service installations with unquoted paths containing spaces.",
+      "recommendation": "Quote the ImagePath, remove write permissions on intermediate directories, and scan them."
+    },
+    {
+      "id": "T1574.005",
+      "name": "Hijack Execution Flow: Executable Installer File Permissions Weakness",
+      "tactic": "Privilege Escalation",
+      "description": "AlwaysInstallElevated registry values allow MSI packages to run with SYSTEM privileges.",
+      "data_sources": "Registry monitoring (Sysmon 13)",
+      "detection": "Monitor AlwaysInstallElevated values in both HKLM and HKCU.",
+      "recommendation": "Remove the values, audit MSI installations, and harden installer policy."
+    },
+    {
+      "id": "T1562.004",
+      "name": "Impair Defenses: Disable or Modify System Firewall",
+      "tactic": "Defense Evasion",
+      "description": "The Windows Firewall was disabled for all profiles or its service was stopped.",
+      "data_sources": "Process command lines, service monitoring",
+      "detection": "Monitor netsh advfirewall set allprofiles state off and firewall service stops.",
+      "recommendation": "Re-enable the firewall, restart MpsSvc, and review recent rule changes."
+    },
+    {
+      "id": "T1562.002",
+      "name": "Impair Defenses: Disable Windows Event Logging",
+      "tactic": "Defense Evasion",
+      "description": "Audit policies were disabled or logs cleared to erase forensic evidence.",
+      "data_sources": "Process command lines, audit policy snapshots",
+      "detection": "Monitor auditpol /clear or disable and log clearing commands.",
+      "recommendation": "Re-enable audit policies, restore logs from collectors, and treat as active compromise."
+    },
+    {
+      "id": "T1564.001",
+      "name": "Hide Artifacts: Hidden Files and Directories",
+      "tactic": "Defense Evasion",
+      "description": "Files were marked hidden or system to conceal malware on disk.",
+      "data_sources": "Process command lines, file monitoring",
+      "detection": "Monitor attrib +h/+s and PowerShell attribute changes.",
+      "recommendation": "List hidden files, scan them, and review the initiating process."
+    },
+    {
+      "id": "T1003.003",
+      "name": "OS Credential Dumping: NTDS",
+      "tactic": "Credential Access",
+      "description": "The Active Directory database (NTDS.dit) was accessed to extract domain credentials.",
+      "data_sources": "Process command lines, Security 4663",
+      "detection": "Monitor ntdsutil, esentutl and shadow-copy access to ntds.dit.",
+      "recommendation": "Assume full domain compromise: reset KRBTGT twice, rotate admin/service passwords."
+    },
+    {
+      "id": "T1003.005",
+      "name": "OS Credential Dumping: Cached Domain Credentials",
+      "tactic": "Credential Access",
+      "description": "Cached logon credentials were enumerated or their cache limits modified.",
+      "data_sources": "Process command lines, registry monitoring",
+      "detection": "Monitor cached-credential queries and cache configuration changes.",
+      "recommendation": "Review cache settings, rotate affected passwords, and monitor for hash cracking."
+    },
+    {
+      "id": "T1005",
+      "name": "Data from Local System",
+      "tactic": "Collection",
+      "description": "Sensitive files on the local system were collected for exfiltration.",
+      "data_sources": "Process command lines, file monitoring",
+      "detection": "Monitor copying/reading of credential and document files.",
+      "recommendation": "Identify collected files, rotate exposed credentials, and watch for exfiltration."
+    },
+    {
+      "id": "T1021.001",
+      "name": "Remote Services: Remote Desktop Protocol",
+      "tactic": "Lateral Movement",
+      "description": "Remote interactive (RDP) sessions were established to other hosts.",
+      "data_sources": "Security Event Log 4624 (logon type 10)",
+      "detection": "Monitor logon type 10 events and RDP connections.",
+      "recommendation": "Validate sessions, restrict RDP to authorized users/hosts, and enable NLA."
+    },
+    {
+      "id": "T1021.002",
+      "name": "Remote Services: SMB/Windows Admin Shares",
+      "tactic": "Lateral Movement",
+      "description": "Administrative shares (C$, ADMIN$, IPC$) were mounted or copied to/from for lateral movement.",
+      "data_sources": "Process command lines, network connections",
+      "detection": "Monitor admin share access and SMB connections to port 445.",
+      "recommendation": "Disable admin shares where possible, review copied files, and isolate hosts."
+    },
+    {
+      "id": "T1021.004",
+      "name": "Remote Services: SSH",
+      "tactic": "Lateral Movement",
+      "description": "SSH was used to execute commands or open shells on remote hosts.",
+      "data_sources": "Process command lines, SSH audit logs",
+      "detection": "Monitor ssh/plink remote execution patterns.",
+      "recommendation": "Validate sessions, require key auth, and review target host logs."
+    },
+    {
+      "id": "T1021.006",
+      "name": "Remote Services: Windows Remote Management",
+      "tactic": "Lateral Movement",
+      "description": "WinRM or PowerShell Remoting was used to execute code on remote hosts.",
+      "data_sources": "Process command lines, network connections",
+      "detection": "Monitor winrs, Invoke-Command/Enter-PSSession and 5985/5986 connections.",
+      "recommendation": "Restrict WinRM listeners, enable transcripts, and validate sessions."
+    },
+    {
+      "id": "T1040",
+      "name": "Network Sniffing",
+      "tactic": "Credential Access",
+      "description": "Packet-capture tools were started to sniff cleartext credentials on the wire.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor Wireshark, tcpdump, pktmon and netsh trace usage.",
+      "recommendation": "Stop the capture, review sessions for cleartext credentials, and restrict tooling."
+    },
+    {
+      "id": "T1056.001",
+      "name": "Input Capture: Keylogging",
+      "tactic": "Credential Access",
+      "description": "Windows hooking APIs or keylogger utilities were used to capture keystrokes.",
+      "data_sources": "Process command lines, API monitoring",
+      "detection": "Monitor GetAsyncKeyState/SetWindowsHookEx usage and keylogger tool names.",
+      "recommendation": "Terminate the process, rotate credentials typed on the host, and review the parent chain."
+    },
+    {
+      "id": "T1082",
+      "name": "System Information Discovery",
+      "tactic": "Discovery",
+      "description": "System configuration was collected (systeminfo, hostname, ipconfig /all).",
+      "data_sources": "Process command lines",
+      "detection": "Monitor systeminfo and related enumeration commands.",
+      "recommendation": "Review the parent process chain; repeated breadth suggests reconnaissance."
+    },
+    {
+      "id": "T1083",
+      "name": "File and Directory Discovery",
+      "tactic": "Discovery",
+      "description": "Recursive directory listings were performed to locate sensitive files.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor recursive listing commands across user and system directories.",
+      "recommendation": "Review searched paths and initiating process; combined with staging this indicates collection."
+    },
+    {
+      "id": "T1090",
+      "name": "Proxy",
+      "tactic": "Command and Control",
+      "description": "Proxy or tunnelling tools created covert C2 or pivoting channels.",
+      "data_sources": "Process command lines, network connections",
+      "detection": "Monitor proxychains, chisel, frp, netsh portproxy and ssh -D usage.",
+      "recommendation": "Kill the tunnel, block the destination, and audit for additional pivots."
+    },
+    {
+      "id": "T1113",
+      "name": "Screen Capture",
+      "tactic": "Collection",
+      "description": "GDI screen-capture APIs or screenshot tools captured on-screen information.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor CopyFromScreen/PrintWindow and screenshot tooling.",
+      "recommendation": "Review captured images, restrict screen-capture tooling, and monitor for exfiltration."
+    },
+    {
+      "id": "T1115",
+      "name": "Clipboard Data",
+      "tactic": "Collection",
+      "description": "Clipboard contents were read or written to harvest copied credentials or data.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor Get-Clipboard/Set-Clipboard and clipboard access.",
+      "recommendation": "Clear clipboard history, review the capturing process, and rotate copied credentials."
+    },
+    {
+      "id": "T1135",
+      "name": "Network Share Discovery",
+      "tactic": "Discovery",
+      "description": "Network shares were enumerated to map file shares for lateral movement.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor net view/share and SMB share queries.",
+      "recommendation": "Audit share permissions, disable unnecessary admin shares, and monitor access."
+    },
+    {
+      "id": "T1482",
+      "name": "Domain Trust Discovery",
+      "tactic": "Discovery",
+      "description": "AD domain controllers, forests and trust relationships were enumerated.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor nltest, dsquery and Get-ADDomain usage.",
+      "recommendation": "Review the enumerating account, restrict nltest/dsquery, and watch for credential attacks."
+    },
+    {
+      "id": "T1518.001",
+      "name": "Software Discovery: Security Software Discovery",
+      "tactic": "Discovery",
+      "description": "Installed security products were enumerated to plan defense bypasses.",
+      "data_sources": "Process command lines",
+      "detection": "Monitor AV/firewall product queries (wmic AntivirusProduct, Get-MpComputerStatus).",
+      "recommendation": "Review the querying process and watch for attempts to disable discovered products."
+    },
+    {
+      "id": "T1560.001",
+      "name": "Archive Collected Data: Archive via Utility",
+      "tactic": "Collection",
+      "description": "Archives were created over sensitive user data for collection and exfiltration.",
+      "data_sources": "Process command lines, file monitoring",
+      "detection": "Monitor 7z/rar/zip archives over user data directories.",
+      "recommendation": "Inspect archive contents, check for matching exfiltration traffic, and review the process."
+    },
+    {
+      "id": "T1571",
+      "name": "Non-Standard Port",
+      "tactic": "Command and Control",
+      "description": "A non-browser process connected to an external host on a non-standard port - possible C2 or exfiltration.",
+      "data_sources": "Network connections",
+      "detection": "Monitor outbound connections to uncommon ports from non-browser processes.",
+      "recommendation": "Identify the initiating process, block the external host, and hunt for related infrastructure."
+    },
+    {
+      "id": "T1573",
+      "name": "Encrypted Channel",
+      "tactic": "Command and Control",
+      "description": "Encrypted covert channels (openssl s_client, ncat -e) tunnelled command traffic.",
+      "data_sources": "Process command lines, network connections",
+      "detection": "Monitor encrypted reverse-shell tooling invocations.",
+      "recommendation": "Terminate the channel, block the peer, and review the initiating processes."
+    },
+    {
+      "id": "T1048.003",
+      "name": "Exfiltration Over Alternative Protocol: Exfiltration Over Unencrypted Non-C2 Protocol",
+      "tactic": "Exfiltration",
+      "description": "Data was transferred out via FTP/SFTP/SCP, bypassing HTTP(S) egress inspection.",
+      "data_sources": "Process command lines, network connections",
+      "detection": "Monitor FTP/SFTP/SCP uploads of staged data.",
+      "recommendation": "Block the destination, review transferred volume, and hunt for matching data."
+    },
+    {
+      "id": "T1567",
+      "name": "Exfiltration Over Web Service",
+      "tactic": "Exfiltration",
+      "description": "Data was posted to public file-sharing or webhook services.",
+      "data_sources": "Process command lines, HTTP logs",
+      "detection": "Monitor curl/PowerShell posts to pastebin, transfer.sh, webhook.site and similar.",
+      "recommendation": "Block the destination, recover data where possible, and review the exfiltrating process."
+    }
+  ]
+}

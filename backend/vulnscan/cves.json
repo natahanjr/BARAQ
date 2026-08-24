@@ -1,0 +1,78 @@
+{
+  "framework": "BARAQ CVE Database",
+  "note": "Curated, locally-matched CVE subset for the vulnerability scanner. match is a case-insensitive substring of the installed product name; version_lt means the product is vulnerable below that version. Extend freely.",
+  "cves": [
+    {
+      "cve_id": "CVE-2021-44228",
+      "match": "Log4j",
+      "version_lt": "2.15.0",
+      "cvss": 10.0,
+      "severity": "critical",
+      "description": "Log4Shell - unauthenticated remote code execution in Apache Log4j JNDI lookup.",
+      "remediation": "Upgrade Apache Log4j to 2.17.1+ (or 2.15.0+); if Log4j is embedded, update the parent application."
+    },
+    {
+      "cve_id": "CVE-2023-44487",
+      "match": "HTTP/2 Rapid Reset",
+      "version_lt": "999.0",
+      "cvss": 7.5,
+      "severity": "high",
+      "description": "HTTP/2 Rapid Reset - protocol-level denial of service affecting HTTP/2 servers.",
+      "remediation": "Apply vendor patches and rate-limit / cap concurrent HTTP/2 streams on load balancers and servers."
+    },
+    {
+      "cve_id": "CVE-2021-34527",
+      "match": "PrintNightmare",
+      "version_lt": "999.0",
+      "cvss": 8.8,
+      "severity": "high",
+      "description": "PrintNightmare - Windows Print Spooler remote code execution.",
+      "remediation": "Install KB5005010+, disable the Print Spooler service where not required, restrict Point and Print."
+    },
+    {
+      "cve_id": "CVE-2017-0144",
+      "match": "EternalBlue",
+      "version_lt": "999.0",
+      "cvss": 8.8,
+      "severity": "high",
+      "description": "EternalBlue - SMBv1 remote code execution (WannaCry/NotPetya vector).",
+      "remediation": "Apply MS17-010 patch, disable SMBv1, segment SMB traffic."
+    },
+    {
+      "cve_id": "CVE-2019-0708",
+      "match": "BlueKeep",
+      "version_lt": "999.0",
+      "cvss": 9.8,
+      "severity": "critical",
+      "description": "BlueKeep - RDP remote code execution on unpatched Windows.",
+      "remediation": "Apply the 2019-05 security update, enable NLA, block RDP at the perimeter."
+    },
+    {
+      "cve_id": "CVE-2023-4863",
+      "match": "libwebp",
+      "version_lt": "1.3.2",
+      "cvss": 8.8,
+      "severity": "high",
+      "description": "Heap buffer overflow in WebP image processing (browser/application exposure).",
+      "remediation": "Update libwebp and any browsers/applications embedding it to 1.3.2+."
+    },
+    {
+      "cve_id": "CVE-2024-3094",
+      "match": "xz",
+      "version_lt": "5.6.0",
+      "cvss": 10.0,
+      "severity": "critical",
+      "description": "Backdoor (CVE-2024-3094) in XZ Utils 5.6.0/5.6.1 build tooling.",
+      "remediation": "Downgrade XZ Utils to 5.4.x or upgrade to a patched 5.6.1+ build."
+    },
+    {
+      "cve_id": "CVE-2021-26855",
+      "match": "Exchange",
+      "version_lt": "2019.10",
+      "cvss": 9.8,
+      "severity": "critical",
+      "description": "ProxyLogon - on-premises Exchange Server remote code execution chain.",
+      "remediation": "Apply the March 2021 Exchange Server cumulative update and run Microsoft's mitigation scripts."
+    }
+  ]
+}
