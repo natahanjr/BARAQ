@@ -104,11 +104,18 @@ def list_alerts(
         stmt = stmt.where(Alert.status == status.value)
     if severity:
         #: Accepts a single value or a comma list ("critical,high") so
-        #: dashboards can deep-link grouped views.
+        #: dashboards can deep-link grouped views. Unknown values are
+        #: rejected (422) instead of silently ignored - a typo'd filter
+        #: must never widen the query back to "everything".
         _valid = {"critical", "high", "medium", "low", "info"}
-        sevs = [s.strip() for s in severity.split(",") if s.strip() in _valid]
-        if sevs:
-            stmt = stmt.where(Alert.severity.in_(sevs))
+        tokens = [s.strip().lower() for s in severity.split(",") if s.strip()]
+        invalid = [t for t in tokens if t not in _valid]
+        if invalid:
+            raise HTTPException(
+                422, f"invalid severity value(s): {', '.join(invalid)}"
+            )
+        if tokens:
+            stmt = stmt.where(Alert.severity.in_(tokens))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(
         stmt.order_by(Alert.created_at.desc())
