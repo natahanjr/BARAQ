@@ -19,6 +19,7 @@ from sqlalchemy import select
 
 from backend.config import SIGMA_RULES_DIR
 from backend.database.models import NormalizedEvent
+from backend.detection.fp_filters import is_trusted_agent_activity
 from backend.detection.rules.base import BaseRule, DetectionResult
 from backend.detection.sigma.matcher import (
     PROCESS_FIELDS,
@@ -348,6 +349,16 @@ class SigmaRuleEngine(BaseRule):
                     cond = SigmaCondition(rule.condition)
                     compiled[rule.rule_id] = cond
                 if not cond.evaluate(rule.detection, fields):
+                    continue
+                # FP filter: events tied to trusted local automation tooling
+                # (e.g. a coding agent's own Temp directory) never alert,
+                # regardless of which Sigma rule they trip.
+                if is_trusted_agent_activity(event.message, *fields.values()):
+                    logger.info(
+                        "FP-suppressed (trusted agent path): rule '%s' on "
+                        "event %s",
+                        rule.title, event.id,
+                    )
                     continue
                 emitted[rule.rule_id] = emitted.get(rule.rule_id, 0) + 1
                 evidence = (
