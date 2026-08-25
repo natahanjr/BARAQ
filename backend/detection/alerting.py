@@ -143,13 +143,11 @@ class AlertingService:
         """Best-effort user dimension from evidence text (rules without links)."""
         import re
 
-        m = re.search(r"User '([^']+)'", evidence or "")
+        m = re.search(r"user '([^']+)'", evidence or "", re.IGNORECASE)
         if m:
             return m.group(1)
-        m = re.search(r"account '([^']+)'", evidence or "")
-        if m:
-            return m.group(1)
-        return "?"
+        m = re.search(r"account '([^']+)'", evidence or "", re.IGNORECASE)
+        return m.group(1) if m else "?"
 
     def _evidence_events(self, event_ids: list[int]) -> list[NormalizedEvent]:
         events = []
@@ -424,19 +422,26 @@ class AlertingService:
                         Alert.updated_at >= guard_cutoff,
                     )
                 ).all()
-                for cand in recently_closed:
-                    if self._signature_matches(cand, result, key):
-                        cand.trigger_count = (cand.trigger_count or 1) + 1
-                        cand.event_count = max(
-                            cand.event_count or 0, len(result.event_ids)
-                        )
-                        type(self).suppressed_fp_count += 1
-                        logger.info(
-                            "Reopen-guard: %s re-triggered but alert #%s stays "
-                            "closed (analyst decision, guard %sh)",
-                            result.rule, cand.id, FP_REOPEN_GUARD_HOURS,
-                        )
-                        continue
+                guard_match = next(
+                    (
+                        cand
+                        for cand in recently_closed
+                        if self._signature_matches(cand, result, key)
+                    ),
+                    None,
+                )
+                if guard_match is not None:
+                    guard_match.trigger_count = (guard_match.trigger_count or 1) + 1
+                    guard_match.event_count = max(
+                        guard_match.event_count or 0, len(result.event_ids)
+                    )
+                    type(self).suppressed_fp_count += 1
+                    logger.info(
+                        "Reopen-guard: %s re-triggered but alert #%s stays "
+                        "closed (analyst decision, guard %sh)",
+                        result.rule, guard_match.id, FP_REOPEN_GUARD_HOURS,
+                    )
+                    continue
             except Exception:  # noqa: BLE001 - guard must never wedge detection
                 logger.debug("reopen-guard check failed", exc_info=True)
 
@@ -683,6 +688,9 @@ class AlertingService:
         Rules without linked evidence (empty ``event_ids``) previously produced
         a new alert every cycle because the full evidence string changed. We
         match on rule + user so such findings refresh a single open alert.
+        Findings whose user dimension is unknown (``-``/``?``/missing) also
+        share one anchor per rule - an unknown user can never distinguish two
+        findings from each other.
         """
         try:
             user_part = key.split(":", 2)[2] if ":" in key else ""
@@ -690,7 +698,7 @@ class AlertingService:
             user_part = ""
         if alert.rule != result.rule:
             return False
-        if user_part and user_part != "?":
+        if user_part and user_part not in _UNKNOWN_USERS:
             return _alert_user(alert.evidence) == user_part
         return True  # rule-only anchor (no user signal): refresh a single open alert
 
@@ -856,11 +864,17 @@ class AlertingService:
 def _alert_user(evidence: str) -> str:
     import re
 
-    m = re.search(r"User '([^']+)'", evidence or "")
+    m = re.search(r"user '([^']+)'", evidence or "", re.IGNORECASE)
     if m:
         return m.group(1)
-    m = re.search(r"account '([^']+)'", evidence or "")
+    m = re.search(r"account '([^']+)'", evidence or "", re.IGNORECASE)
     return m.group(1) if m else "?"
+
+
+#: User values that carry no identity signal (placeholder / missing user in
+#: the source event). Findings from such users merge into one open alert
+#: per rule instead of opening a fresh alert on every occurrence.
+_UNKNOWN_USERS = frozenset({"", "?", "-"})
 
 
 def _refresh_chain(session: Session, incident) -> None:
