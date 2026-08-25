@@ -217,7 +217,9 @@ def compute_risk_score(
     cm = confidence_multiplier(confidence)
     acm = asset_criticality_multiplier(asset_criticality)
     crm = correlation_multiplier(correlated_alerts, is_attack_chain)
-    rm = recency_multiplier(last_seen, now)
+    # A missing last_seen means the alert is brand new (never seen stale):
+    # neutral recency instead of the unknown-age dampening.
+    rm = recency_multiplier(last_seen, now) if last_seen is not None else 1.00
     rd = repeat_dampener(occurrence)
 
     raw = sw * cm * acm * crm * rm * rd
@@ -250,7 +252,7 @@ def compute_risk_score(
         correlation_multiplier=crm,
         is_attack_chain=is_attack_chain,
         recency_minutes=(
-            max(0.0, (datetime.now(timezone.utc) - last_seen.replace(tzinfo=timezone.utc)).total_seconds() / 60.0)
+            max(0.0, ((now or datetime.now(timezone.utc)) - last_seen.replace(tzinfo=timezone.utc)).total_seconds() / 60.0)
             if last_seen
             else 0.0
         ),
