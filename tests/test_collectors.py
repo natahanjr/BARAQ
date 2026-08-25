@@ -1,12 +1,24 @@
 """Test collectors: live collectors and collector manager wiring."""
 from __future__ import annotations
 
+import pytest
+
 from backend.collectors import CollectorManager
 from backend.collectors.dns_http import DnsHttpCollector
 from backend.collectors.email import EmailCollector
 from backend.collectors.malware import MalwareFileCollector
 from backend.collectors.usb import UsbCollector
 from tests.fixtures import brute_force, port_scan, suspicious_powershell
+
+
+@pytest.fixture
+def clean_health_registry():
+    """Isolate the process-wide collector-health singleton per test."""
+    from backend.collectors.health import registry
+
+    registry.reset()
+    yield registry
+    registry.reset()
 
 
 def test_collector_manager_registers_live_collectors():
@@ -100,9 +112,9 @@ def test_fixtures_powershell_encoded():
     assert records[0]["raw"]["has_download"] is True
 
 
-def test_health_registry_tracks_channels():
+def test_health_registry_tracks_channels(clean_health_registry):
     """Per-channel success/failure counters drive the /collectors/health API."""
-    from backend.collectors.health import registry
+    registry = clean_health_registry
 
     registry.record_success("Security", 5)
     registry.record_failure("Security", "boom")
@@ -119,8 +131,10 @@ def test_health_registry_tracks_channels():
     assert registry.unhealthy() == []
 
 
-def test_health_permission_error_marked():
-    from backend.collectors.health import PRIVILEGE_NOT_HELD, registry
+def test_health_permission_error_marked(clean_health_registry):
+    from backend.collectors.health import PRIVILEGE_NOT_HELD
+
+    registry = clean_health_registry
 
     registry.record_failure("Security", "1314", permission_issue=True)
     snap = {c["channel"]: c for c in registry.snapshot()}

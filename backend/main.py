@@ -953,6 +953,13 @@ def health():
         return {
             "status": overall_status,
             "checks": checks,
+            # Top-level data-quality block (healthy/warning/degraded/critical
+            # vocabulary) so consoles and tests read it without digging
+            # through the raw dependency checks.
+            "data_quality": {
+                "status": status_for_rate(rate),
+                "corruption_rate": round(rate, 4),
+            },
         }
     else:
         return JSONResponse(

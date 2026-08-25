@@ -49,6 +49,12 @@ class CollectorHealth:
         self._channels: dict[str, dict] = {}
         self.started_at = datetime.now(timezone.utc).isoformat()
 
+    def reset(self) -> None:
+        """Clear all per-channel state (tests, post-incident triage)."""
+        with self._lock:
+            self._channels.clear()
+            self.started_at = datetime.now(timezone.utc).isoformat()
+
     @staticmethod
     def _blank(channel: str) -> dict:
         return {
