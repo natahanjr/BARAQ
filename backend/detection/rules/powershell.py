@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 
 from backend.database.models import NormalizedEvent
+from backend.detection.fp_filters import is_trusted_agent_activity
 from backend.detection.rules.base import BaseRule, DetectionResult
 
 SUSPICIOUS_PATTERNS = {
@@ -19,7 +20,9 @@ SUSPICIOUS_PATTERNS = {
         r"DownloadString|DownloadFile|WebClient|Invoke-WebRequest|IWR |Start-BitsTransfer",
         re.IGNORECASE,
     ),
-    "hidden_execution": re.compile(r"-W(indowStyle)?\s+Hidden|-nop(rofile)?\b|-ex\s+Bypass", re.IGNORECASE),
+    # Only a genuinely hidden window counts: -NoProfile / -ExecutionPolicy
+    # Bypass are ubiquitous in legitimate automation and carry no signal.
+    "hidden_execution": re.compile(r"-W(indowStyle)?\s+Hidden\b|-w\s+hidden\b", re.IGNORECASE),
     "reflective_invoke": re.compile(r"Invoke-Expression|iex\b|IEX\s|Invoke-Mimikatz|Get-KerberosTicket", re.IGNORECASE),
 }
 
@@ -63,6 +66,11 @@ class SuspiciousPowerShellRule(BaseRule):
             # Process-creation (4688) records are only PowerShell evidence when
             # the command line actually invokes a PowerShell engine.
             if event.event_id == 4688 and not re.search(r"powershell|pwsh", haystack, re.IGNORECASE):
+                continue
+
+            # FP filter: local automation tooling running scripts from its
+            # own trusted directory is expected behaviour, never an alert.
+            if is_trusted_agent_activity(haystack):
                 continue
 
             hits = [label for label, pattern in SUSPICIOUS_PATTERNS.items() if pattern.search(haystack)]
