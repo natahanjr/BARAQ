@@ -10,17 +10,19 @@ detection:
         EventID: 4688
         CommandLine|contains:
             - -EncodedCommand
-            - -enc
-            - -e
+            - ' -enc '
+            - ' -e '
             - -windowstyle hidden
             - -w hidden
             - -exec bypass
     filter_noise:
         CommandLine|contains:
             - 'C:\Program Files'
+            - AppData\Local\Temp\opencode\
     condition: selection and not filter_noise
 falsepositives:
     - Deployment scripts using encoded commands
+    - Local automation tooling (coding agents) running from their Temp directory
 fields:
     - EventID
     - Image
