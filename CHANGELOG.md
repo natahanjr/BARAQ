@@ -4,6 +4,21 @@ All notable changes to BARAQ are documented in this
 file. The format is based on [Keep a Changelog](https://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Trusted-agent FP filter**: `backend/detection/fp_filters.py` allowlists local automation paths (`AppData\Local\Temp\opencode\` by default; extend via `BARAQ_FP_ALLOW_PATHS`, semicolon-separated). Wired into the native PowerShell rule, the D003 v2 detector, and the Sigma engine — matches referencing a trusted path are suppressed before alerting
+- Regression suite `tests/test_fp_regression_scrubdocs.py` pinning every layer of the August 2026 PowerShell false-positive wave
+
+### Changed
+- `hidden_execution` (native rule + D003) now requires a real hidden window (`-WindowStyle Hidden` / `-w hidden`); bare `-NoProfile` / `-nop` carry no signal any more
+- BARAQ Sigma encoded-command rule no longer matches the over-broad `-e` / `-enc` substrings; flags must be standalone tokens and the agent Temp path is filtered
+
+### Fixed
+- Alert dedup never merged repeats: user extraction from evidence was case-sensitive (`User '` vs `user '-'`) so identical findings opened a fresh alert on every occurrence; unknown users (`-`, `?`, empty) now share one anchor per rule
+- Reopen-guard's inner-loop `continue` bumped counters but still created a new alert; a guard match now absorbs the finding entirely
+- Risk ranking: a missing `last_seen` scores neutral recency (1.0) instead of silently halving new alerts' risk; the explanation breakdown respects an injected `now` instead of wall-clock
+
 ## [0.12.0] - 2026-08-17 — "Incident Management"
 
 ### Added

@@ -42,7 +42,14 @@ asserts unique ids and emits detectors in registration order
    bumps `version`. Old versions remain readable in `detections`.
 5. **Never false-positive on noise.** A single benign event must not
    fire. Thresholds aggregate over a documented window (e.g. D002: 10
-   failures / 15 min; D005: 20 file modifications / 5 min).
+   failures / 15 min; D005: 20 file modifications / 5 min). Command-line
+   detectors must additionally honour the trusted-agent FP filter
+   (`backend.detection.fp_filters.is_trusted_agent_activity`) so local
+   automation tooling (coding agents running from their own Temp
+   directory, extendable via `BARAQ_FP_ALLOW_PATHS`) never alerts.
+   Ubiquitous benign flags (`-NoProfile`, `-ExecutionPolicy Bypass`)
+   are not signals on their own; only combinations or genuinely
+   suspicious flags (`-WindowStyle Hidden`) count.
 6. **Gated on `event_type`.** Use `supported_event_types` so the
    detector only sees canonical classes it understands. The generic
    normalizer derives `event_type` from `action` when a record lacks it.
