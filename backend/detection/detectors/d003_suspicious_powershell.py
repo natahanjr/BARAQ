@@ -16,6 +16,7 @@ import re
 from backend.detection.context import DetectionContext
 from backend.detection.contract import DETECTION
 from backend.detection.evidence import ev
+from backend.detection.fp_filters import is_trusted_agent_activity
 from backend.detection.registry import Detector
 from backend.telemetry.contract import EVENT
 
@@ -36,7 +37,8 @@ _UNUSUAL_LOCATION_RE = re.compile(
     r"/tmp/|/var/tmp/|/dev/shm",
     re.IGNORECASE,
 )
-_HIDDEN_WINDOW_RE = re.compile(r"-windowstyle\s+hidden|-w\s+hidden|-nop\b", re.IGNORECASE)
+# Only a genuinely hidden window counts; -nop is ubiquitous benign automation.
+_HIDDEN_WINDOW_RE = re.compile(r"-windowstyle\s+hidden|-w\s+hidden\b", re.IGNORECASE)
 
 
 class SuspiciousPowerShellDetector(Detector):
@@ -66,6 +68,11 @@ class SuspiciousPowerShellDetector(Detector):
             or ""
         )
         path = str(proc.get("path") or event.facts.get("path") or "")
+
+        # FP filter: trusted local automation tooling (e.g. coding agents
+        # running helpers from their own Temp directory) never alerts here.
+        if is_trusted_agent_activity(command_line, path):
+            return None
 
         characteristics: list[tuple[str, str, str]] = []
         if _ENCODED_RE.search(command_line) or _ENCODED_B64_RE.search(command_line):
