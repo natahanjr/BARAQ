@@ -311,6 +311,12 @@ def update_incident(
     actor = actor_name(request)
     changes: list[str] = []
 
+    # Original values: the SLA checks below must compare against what the
+    # record looked like BEFORE this request - the generic field loop would
+    # otherwise mutate e.g. ``owner`` first and make "owner changed" false.
+    prev_status = incident.status
+    prev_owner = incident.owner
+
     for field, value in body.model_dump(exclude_unset=True).items():
         if value is None:
             continue
@@ -339,7 +345,7 @@ def update_incident(
     # Assigning an owner also counts as a first response (the case is engaged).
     if (
         body.owner
-        and body.owner != incident.owner
+        and body.owner != prev_owner
         and incident.responded_at is None
     ):
         incident.responded_at = datetime.now(timezone.utc)

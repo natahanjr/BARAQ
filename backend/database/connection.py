@@ -83,7 +83,7 @@ _ADDITIVE_MIGRATIONS = {
         ("demo", "BOOLEAN DEFAULT 0"),
         ("last_escalated_level", "VARCHAR(16) DEFAULT ''"),
         ("last_escalated_score", "REAL DEFAULT 0"),
-        ("last_escalated_at", "TIMESTAMP"),
+        ("last_escalated_at", "TIMESTAMPTZ"),
     ],
     "entity_risk_events": [
         ("demo", "BOOLEAN DEFAULT 0"),
@@ -96,7 +96,7 @@ _ADDITIVE_MIGRATIONS = {
         ("chain_json", "TEXT"),
         ("chain_confidence", "REAL DEFAULT 0"),
         ("chain_risk", "INTEGER DEFAULT 0"),
-        ("responded_at", "TIMESTAMP"),
+        ("responded_at", "TIMESTAMPTZ"),
     ],
     "network_connections": [
         ("bytes_sent", "INTEGER DEFAULT 0"),
@@ -353,6 +353,29 @@ def init_db() -> None:
                         f"ALTER TABLE {table} ADD COLUMN {column} {_ddl_default(ddl_type)}"
                     )
                     logger.info("Migration: added %s.%s", table, column)
+    # Type repair: columns created before a model gained ``timezone=True``
+    # stay naive TIMESTAMP and poison every aware-datetime comparison
+    # (SLA responded_at arithmetic crashed the workload endpoint). Postgres
+    # casts timestamp -> timestamptz implicitly, so this is idempotent.
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as conn:
+            for table, column in (
+                ("incidents", "responded_at"),
+                ("entity_risk", "last_escalated_at"),
+            ):
+                if not inspector.has_table(table):
+                    continue
+                col = next(
+                    (c for c in inspect(engine).get_columns(table) if c["name"] == column),
+                    None,
+                )
+                if col is not None and getattr(col.get("type"), "timezone", True) is False:
+                    conn.exec_driver_sql(
+                        f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMPTZ"
+                    )
+                    logger.info(
+                        "Migration: repaired %s.%s to TIMESTAMPTZ", table, column
+                    )
     with engine.begin() as conn:
         conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS idx_events_ts ON events (timestamp)"
