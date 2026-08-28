@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import (
@@ -28,6 +28,10 @@ from backend.incidents.contract import (
     INCIDENT_SEVERITIES,
     INCIDENT_STATES,
 )
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class IncidentV2(Base):
@@ -161,7 +165,7 @@ class IncidentV2AlertLink(Base):
     )
     alert_id: Mapped[str] = mapped_column(String(64), index=True)
     membership_reason: Mapped[str] = mapped_column(String(255), default="alert evidence")
-    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     incident: Mapped["IncidentV2"] = relationship(back_populates="alerts")
     __table_args__ = (UniqueConstraint("incident_id", "alert_id", name="uq_incident_v2_alert"),)
 
@@ -175,7 +179,7 @@ class IncidentV2BehaviorGroupLink(Base):
     )
     behavior_group_id: Mapped[str] = mapped_column(String(64), index=True)
     membership_reason: Mapped[str] = mapped_column(String(255), default="behavior group evidence")
-    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     incident: Mapped["IncidentV2"] = relationship(back_populates="groups")
     __table_args__ = (UniqueConstraint("incident_id", "behavior_group_id", name="uq_incident_v2_group"),)
 
@@ -189,7 +193,7 @@ class IncidentV2CorrelationLink(Base):
     )
     correlation_finding_id: Mapped[str] = mapped_column(String(64), index=True)
     membership_reason: Mapped[str] = mapped_column(String(255), default="correlation finding")
-    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     incident: Mapped["IncidentV2"] = relationship(back_populates="correlations")
     __table_args__ = (UniqueConstraint("incident_id", "correlation_finding_id", name="uq_incident_v2_correlation"),)
 
@@ -203,7 +207,7 @@ class IncidentV2RiskLink(Base):
     )
     risk_id: Mapped[str] = mapped_column(String(32), index=True)
     membership_reason: Mapped[str] = mapped_column(String(255), default="entity risk context")
-    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     incident: Mapped["IncidentV2"] = relationship(back_populates="risks")
     __table_args__ = (UniqueConstraint("incident_id", "risk_id", name="uq_incident_v2_risk"),)
 
@@ -221,7 +225,7 @@ class IncidentV2Evidence(Base):
     value: Mapped[str] = mapped_column(Text)
     reason: Mapped[str] = mapped_column(Text)
     observed_at: Mapped[datetime] = mapped_column(DateTime, index=True)
-    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     incident: Mapped["IncidentV2"] = relationship(back_populates="evidence")
     __table_args__ = (
         Index("ix_incident_v2_evidence_source", "incident_id", "source_type", "source_id"),
@@ -240,7 +244,7 @@ class IncidentV2AuditEvent(Base):
     old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
     incident: Mapped["IncidentV2"] = relationship(back_populates="audit")
     __table_args__ = (Index("ix_incident_v2_audit_action", "incident_id", "action"),)
 
@@ -254,8 +258,8 @@ class IncidentV2Note(Base):
     )
     author: Mapped[str] = mapped_column(String(128))
     content: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     incident: Mapped["IncidentV2"] = relationship(back_populates="notes")
 
 
@@ -269,7 +273,7 @@ class IncidentV2Feedback(Base):
     analyst: Mapped[str] = mapped_column(String(128))
     feedback_type: Mapped[str] = mapped_column(String(32), index=True)
     reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     incident: Mapped["IncidentV2"] = relationship(back_populates="feedback")
     __table_args__ = (Index("ix_incident_v2_feedback_type", "incident_id", "feedback_type"),)
 
@@ -286,7 +290,7 @@ class IncidentV2GraphEdge(Base):
     target_id: Mapped[str] = mapped_column(String(128))
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     evidence: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     incident: Mapped["IncidentV2"] = relationship(back_populates="graph_edges")
     __table_args__ = (Index("ix_incident_v2_graph_rel", "incident_id", "relationship_type"),)
 
@@ -304,4 +308,4 @@ class IncidentV2Suppression(Base):
     scope: Mapped[str] = mapped_column(String(64))
     expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
     created_by: Mapped[str] = mapped_column(String(128))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

@@ -1,7 +1,7 @@
 """Phase 7 incident investigation operations (spec 7.16-7.18, 7.19, 7.17)."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -27,7 +27,7 @@ def add_note(
     if is_terminal(incident.status):
         raise ValueError(f"cannot add note to terminal incident {incident.status!r}")
     if note_id is None:
-        note_id = f"NOTE-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{incident_id[-4:]}"
+        note_id = f"NOTE-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{incident_id[-4:]}"
     row = IncidentV2Note(
         note_id=note_id,
         incident_id=incident_id,
@@ -43,9 +43,9 @@ def add_note(
         actor=author,
         new_value=note_id,
         reason="analyst note",
-        now=datetime.utcnow(),
+        now=datetime.now(timezone.utc),
     )
-    incident.updated_at = datetime.utcnow()
+    incident.updated_at = datetime.now(timezone.utc)
     incident.updated_by = author
     db.flush()
     return row
@@ -67,15 +67,15 @@ def assign_incident(
     old_team = incident.assigned_team
     incident.assigned_to = assigned_to
     incident.assigned_team = assigned_team
-    incident.assigned_at = datetime.utcnow()
-    incident.updated_at = datetime.utcnow()
+    incident.assigned_at = datetime.now(timezone.utc)
+    incident.updated_at = datetime.now(timezone.utc)
     incident.updated_by = actor
     db.flush()
     if old_to != assigned_to:
         action = "INCIDENT_ASSIGNED" if assigned_to else "INCIDENT_UNASSIGNED"
-        audit(db, incident_id, action, actor=actor, old_value=old_to, new_value=assigned_to, now=datetime.utcnow())
+        audit(db, incident_id, action, actor=actor, old_value=old_to, new_value=assigned_to, now=datetime.now(timezone.utc))
     if old_team != assigned_team:
-        audit(db, incident_id, "INCIDENT_TEAM_ASSIGNED", actor=actor, old_value=old_team, new_value=assigned_team, now=datetime.utcnow())
+        audit(db, incident_id, "INCIDENT_TEAM_ASSIGNED", actor=actor, old_value=old_team, new_value=assigned_team, now=datetime.now(timezone.utc))
     return {"assigned_to": assigned_to, "assigned_team": assigned_team}
 
 
