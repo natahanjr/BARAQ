@@ -21,10 +21,31 @@ import re
 from datetime import datetime, timezone
 
 from backend.collectors.base import BaseCollector
-from backend.collectors.health import PRIVILEGE_NOT_HELD, registry, retry_with_backoff
+from backend.collectors.health import (
+    PRIVILEGE_NOT_HELD,
+    check_channel_access,
+    registry,
+    retry_with_backoff,
+)
 from backend.config import EVENT_LOG_POLL_BATCH, INCREMENTAL_COLLECTION, SYSMON_CHANNELS
 
 logger = logging.getLogger("baraq.collectors.sysmon")
+
+
+def is_sysmon_available() -> bool:
+    """Best-effort check that the Sysmon event channel can be opened.
+
+    Many high-value detections (in-memory LSASS access / T1003, parent-child
+    process-tree anomalies for T1059/T1218, file-delete churn) depend on the
+    Sysmon channel. When it is missing the platform silently loses those
+    detections, so callers surface the result (startup banner + health) instead
+    of failing quietly.
+    """
+    if not HAS_PYWIN32:
+        return False
+    channel = SYSMON_CHANNELS[0] if SYSMON_CHANNELS else "Microsoft-Windows-Sysmon/Operational"
+    readable, _winerror, _detail = check_channel_access(channel)
+    return readable
 
 try:
     import win32evtlog

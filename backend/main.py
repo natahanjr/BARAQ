@@ -484,6 +484,18 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     from backend.config import POWERSHELL_CHANNELS, SECURITY_LOG_CHANNELS, SYSMON_CHANNELS
 
     check_collector_permissions([*SECURITY_LOG_CHANNELS, *POWERSHELL_CHANNELS, *SYSMON_CHANNELS])
+    # Capability banner: many high-value detections depend on the Sysmon channel.
+    # When it is absent the platform silently loses in-memory / process-tree
+    # coverage, so call it out loudly at startup (see red_team_validation.md #2/#4).
+    from backend.collectors.sysmon import is_sysmon_available
+
+    if not is_sysmon_available():
+        logger.warning(
+            "CAPABILITY GAP: Sysmon channel unavailable - in-memory credential "
+            "access (T1003), parent-child process-tree anomalies (T1059/T1218) and "
+            "file-delete churn detections are DISABLED. Install Sysmon with a "
+            "full schema to restore full coverage."
+        )
     from backend.locks import acquire_instance_lock, release_instance_lock
 
     global _scheduler_thread
