@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
 from backend.database.models import EvaluationRun
+from backend.config import ML_VALIDATE_ON_REAL
 from backend.evaluation.evaluator import run_evaluation
 from backend.evaluation.holdout import run_holdout_evaluation
 from backend.security import require_admin, require_auth
@@ -30,7 +31,7 @@ def run(with_ml: bool = True, db: Session = Depends(get_db)):
 @router.post("/holdout", dependencies=[Depends(require_admin)])
 def run_holdout(
     with_ml: bool = True,
-    use_real_baseline: bool = True,
+    use_real_baseline: bool | None = None,
     randomize: bool = False,
     seed: int = 20260806,
     db: Session = Depends(get_db),
@@ -38,10 +39,14 @@ def run_holdout(
     """Run the external-validity evaluation (hold-out test set + real baseline).
 
     ``randomize=True`` applies seeded domain randomization (timing/address
-    jitter) to the hold-out attacks to de-risk deterministic fixtures.
+    jitter) to the hold-out attacks to de-risk deterministic fixtures. When
+    ``use_real_baseline`` is not supplied it follows ``ML_VALIDATE_ON_REAL``
+    (default True): the negative class is live host telemetry rather than the
+    synthetic benign baseline.
     """
+    use_real = ML_VALIDATE_ON_REAL if use_real_baseline is None else use_real_baseline
     return run_holdout_evaluation(
-        db, with_ml=with_ml, use_real_baseline=use_real_baseline,
+        db, with_ml=with_ml, use_real_baseline=use_real,
         randomize=randomize, seed=seed,
     )
 
