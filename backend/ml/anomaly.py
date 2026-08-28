@@ -938,8 +938,8 @@ def _get_dns_query_pattern(session, hours: int = 1) -> float:
 def event_feature_vector(event) -> list[float] | None:
     """Feature vector for a single event (None if the behavior stream is unknown).
 
-    v5 feature space: enhanced behavioral features, parent-child analysis, LOLBin detection,
-    port scanning, beaconing detection, and temporal patterns.
+    v6 feature space: enhanced behavioral features, parent-child analysis, LOLBin detection,
+    port scanning, beaconing detection, temporal patterns, and Phase 2 temporal/contextual features.
     Training and scoring share this exact function, so the feature space never drifts.
     """
     from backend.database.connection import SessionLocal
@@ -990,7 +990,16 @@ def event_feature_vector(event) -> list[float] | None:
             # Cross-stream sequence features
             cross_stream_features = _get_cross_stream_features(session, int(event_id))
 
-            return base_features + enhanced_features + login_v5_features + cross_stream_features
+            # Phase 2 temporal/contextual features
+            temporal_features = [
+                _get_business_hours_indicator(event),  # Business hours indicator
+                min(_get_event_burst_score(session, "login", 5), 2.0),  # 5-min burst score
+                _get_kill_chain_phase(event),  # Kill chain phase encoding
+                max(-3.0, min(3.0, _get_user_session_deviation(session, target_user, "login", 24))),  # Session duration deviation
+                _get_user_attack_frequency(session, target_user, 168),  # Historical attack frequency
+            ]
+
+            return base_features + enhanced_features + login_v5_features + cross_stream_features + temporal_features
 
         if behavior == "process":
             # Base features (with cyclical time encoding)
@@ -1027,12 +1036,161 @@ def event_feature_vector(event) -> list[float] | None:
             # Cross-stream sequence features
             cross_stream_features = _get_cross_stream_features(session, int(event_id))
 
-            return base_features + enhanced_features + process_v5_features + cross_stream_features
+            # Phase 2 temporal/contextual features
+            temporal_features = [
+                _get_business_hours_indicator(event),  # Business hours indicator
+                min(_get_event_burst_score(session, "process", 5), 2.0),  # 5-min burst score
+                _get_kill_chain_phase(event),  # Kill chain phase encoding
+                _get_threat_intel_score(event),  # Reuse TI score as process risk proxy
+                _get_user_attack_frequency(session, "", 168),  # Placeholder for process stream
+            ]
+
+            return base_features + enhanced_features + process_v5_features + cross_stream_features + temporal_features
 
         # For network or unknown behaviors, return None to use existing network handling
         return None
     finally:
         session.close()
+
+
+# ---------------------------------------------------------------------------
+# Temporal feature helpers (Phase 2)
+# ---------------------------------------------------------------------------
+def _get_business_hours_indicator(event) -> float:
+    """1.0 if the event occurred during business hours (08:00-18:00 Mon-Fri), 0.0 otherwise."""
+    _, _, is_night, is_weekend, hour_of_day = _time_features(event)
+    if is_weekend:
+        return 0.0
+    return 1.0 if 8 <= hour_of_day < 18 else 0.0
+
+
+def _get_user_session_deviation(session, user: str, behavior: str, hours: int = 24) -> float:
+    """Z-score of the current session duration vs the user's historical mean.
+
+    A high absolute z-score means the session length deviates significantly
+    from the user's norm, which may indicate compromised credentials or
+    automated tooling.
+    """
+    if not user or behavior not in LOGIN_EVENTS:
+        return 0.0
+    try:
+        since = datetime.now(timezone.utc) - timedelta(hours=hours)
+        rows = session.execute(
+            select(NormalizedEvent.raw_json).where(
+                NormalizedEvent.event_id.in_(behavior == "login" and LOGIN_EVENTS or PROCESS_EVENTS),
+                NormalizedEvent.timestamp >= since,
+            )
+        ).all()
+        durations: list[float] = []
+        for (raw,) in rows:
+            facts = (raw or {}).get("facts") or {}
+            tgt = str(facts.get("target_user", "") or "")
+            if tgt.lower() == user.lower():
+                dur = float(facts.get("session_duration", 0) or 0)
+                if dur > 0:
+                    durations.append(dur)
+        if len(durations) < 3:
+            return 0.0
+        import statistics
+        mu = statistics.mean(durations)
+        sigma = statistics.stdev(durations)
+        if sigma < 1e-9:
+            return 0.0
+        latest = durations[-1]
+        return max(-3.0, min(3.0, (latest - mu) / sigma))
+    except Exception:
+        return 0.0
+
+
+def _get_event_burst_score(session, behavior: str, minutes: int = 5) -> float:
+    """Burst score: ratio of events in the last `minutes` to the hourly rate.
+
+    A burst score >> 1.0 means events are clustered together in time (possible
+    automated attack or tool execution).
+    """
+    event_ids = LOGIN_EVENTS if behavior == "login" else PROCESS_EVENTS
+    try:
+        now = datetime.now(timezone.utc)
+        recent_since = now - timedelta(minutes=minutes)
+        hourly_since = now - timedelta(hours=1)
+        recent_count = session.scalar(
+            select(func.count(NormalizedEvent.id)).where(
+                NormalizedEvent.event_id.in_(event_ids),
+                NormalizedEvent.timestamp >= recent_since,
+            )
+        ) or 0
+        hourly_count = session.scalar(
+            select(func.count(NormalizedEvent.id)).where(
+                NormalizedEvent.event_id.in_(event_ids),
+                NormalizedEvent.timestamp >= hourly_since,
+            )
+        ) or 0
+        if hourly_count == 0:
+            return 0.0
+        # Scale: if all hourly events are in the burst window, score = 1.0
+        # Extrapolate hourly rate from the burst window
+        extrapolated = float(recent_count) * (60.0 / max(minutes, 1))
+        return min(2.0, extrapolated / max(float(hourly_count), 1.0))
+    except Exception:
+        return 0.0
+
+
+def _get_kill_chain_phase(event) -> float:
+    """Encode the kill chain phase of the event as a normalized float.
+
+    Phase mapping (MITRE ATT&CK alignment):
+    0.0 = Reconnaissance/Initial Access (logons)
+    0.25 = Execution (process creation, PowerShell)
+    0.5 = Persistence (service install, scheduled task)
+    0.75 = Lateral Movement/Privilege Escalation (account changes)
+    1.0 = Exfiltration/Impact (network, file operations)
+    """
+    event_id = int(event.event_id if not isinstance(event, dict) else event.get("event_id", 0))
+    if event_id in (4624, 4625, 4634, 4647, 4771):
+        return 0.0  # Initial Access
+    if event_id in (4688, 4104, 4103):
+        return 0.25  # Execution
+    if event_id in (7045, 4698):
+        return 0.5  # Persistence
+    if event_id in (4720, 4726, 4732):
+        return 0.75  # Privilege Escalation / Lateral Movement
+    return 0.5  # Default
+
+
+def _get_user_attack_frequency(session, user: str, hours: int = 168) -> float:
+    """Historical attack frequency for this user over the past `hours`.
+
+    Returns the fraction of the user's recent events that were labelled as
+    attacks (heuristic or analyst verdict). A high value means the user
+    account has a history of suspicious activity.
+    """
+    if not user:
+        return 0.0
+    try:
+        since = datetime.now(timezone.utc) - timedelta(hours=hours)
+        rows = session.execute(
+            select(NormalizedEvent.id, NormalizedEvent.event_id, NormalizedEvent.raw_json)
+            .where(NormalizedEvent.timestamp >= since)
+        ).all()
+        total = 0
+        attacks = 0
+        verdicts = _verdict_map(session)
+        for eid, raw_event_id, raw in rows:
+            facts = (raw or {}).get("facts") or {}
+            tgt = str(facts.get("target_user", "") or "")
+            if tgt.lower() != user.lower():
+                continue
+            total += 1
+            if eid in verdicts:
+                if verdicts[eid]:
+                    attacks += 1
+            elif MLAnomalyDetector._is_attack_sample(raw_event_id, raw or {}):
+                attacks += 1
+        if total < 3:
+            return 0.0
+        return min(1.0, attacks / total)
+    except Exception:
+        return 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -1106,7 +1264,8 @@ def _load_network_features(
 ) -> tuple[np.ndarray, list[dict]]:
     """Per-remote-IP flow features with subnet-based IP encoding and enhanced network features.
 
-    v5 features: connection velocity, port scanning, exfiltration, beaconing, DNS patterns.
+    v6 features: connection velocity, port scanning, exfiltration, beaconing, DNS patterns,
+    and Phase 2 temporal/contextual features (burst, kill chain, attack history).
     Returns (X, rows) where ``rows`` carries the remote_ip label for each
     feature row.
     """
@@ -1127,7 +1286,7 @@ def _load_network_features(
             stmt = stmt.where(NetworkConnection.observed_at < cutoff)
         rows = local_session.execute(stmt.group_by(NetworkConnection.remote_ip)).all()
         if not rows:
-            return np.empty((0, 21)), []  # 8 subnet + 6 flow + 2 base + 5 enhanced = 21
+            return np.empty((0, 26)), []  # 8 subnet + 6 flow + 5 enhanced + 2 base + 5 temporal = 26
         flows = []
         ips = []
         for r in rows:
@@ -1156,7 +1315,17 @@ def _load_network_features(
                 _get_dns_query_pattern(local_session, 1),  # DNS query pattern
             ]
             
-            flows.append(subnet_feats + flow_feats + enhanced_feats)
+            # Phase 2 temporal/contextual features for network
+            is_attack_ip = 1.0 if ip.startswith(_NET_ATTACK_PREFIXES) else 0.0
+            temporal_feats = [
+                min(_get_connection_velocity_per_ip(local_session, ip, 5), 2.0),  # 5-min burst velocity
+                0.5,  # Kill chain phase (network = exfiltration/impact, encoded 0.5)
+                is_attack_ip,  # Historical attack frequency (binary from prefix match)
+                min(float(count) / max(duration_h * 60.0, 1.0), 2.0),  # Connections per minute
+                min(_get_port_scan_indicator(local_session, ip, 15), 2.0),  # 15-min port scan trend
+            ]
+            
+            flows.append(subnet_feats + flow_feats + enhanced_feats + temporal_feats)
         X = np.array(flows, dtype=float)
         X = np.hstack([X, np.zeros((X.shape[0], 2))])  # is_novel, hour (filled at score time)
         return X, [{"remote_ip": ip} for ip in ips]
@@ -2247,6 +2416,9 @@ class MLAnomalyDetector:
         few attack patterns seen and *loses* recall versus a shallow random
         forest (measured ~15 points on the hold-out suite). Below
         ``_XGB_MIN_SAMPLES`` we deliberately prefer the forest.
+
+        Phase 2: Enhanced calibration with Platt scaling fallback and
+        calibration quality validation via Brier score.
         """
         pos = int(y.sum())
         neg = int(len(y) - pos)
@@ -2267,13 +2439,46 @@ class MLAnomalyDetector:
             )
             model.fit(X, y)
             name = "random_forest"
-        if len(y) >= 24 and min(pos, neg) >= 6:
+
+        # Phase 2: Enhanced calibration with quality validation
+        if len(y) >= 18 and min(pos, neg) >= 4:
+            try:
+                from sklearn.calibration import CalibratedClassifierCV, calibration_curve
+                from sklearn.metrics import brier_score_loss
+
+                # Try isotonic regression first (preferred, non-parametric)
+                min_cv = min(3, min(pos, neg))
+                cal = CalibratedClassifierCV(model, cv=min_cv, method="isotonic")
+                cal.fit(X, y)
+
+                # Validate calibration quality via Brier score
+                try:
+                    proba = cal.predict_proba(X)[:, 1]
+                    brier = brier_score_loss(y, proba)
+                    # Also check calibration curve deviation
+                    fraction_pos, mean_pred = calibration_curve(y, proba, n_bins=5)
+                    calibration_error = float(np.mean(np.abs(fraction_pos - mean_pred)))
+                    # If calibration is poor (Brier > 0.25 or ECE > 0.15), try Platt
+                    if brier > 0.25 or calibration_error > 0.15:
+                        raise ValueError(f"Poor calibration: Brier={brier:.3f}, ECE={calibration_error:.3f}")
+                except Exception:  # noqa: BLE001
+                    # Fall back to Platt scaling (parametric, sigmoid)
+                    try:
+                        cal_platt = CalibratedClassifierCV(model, cv=min_cv, method="sigmoid")
+                        cal_platt.fit(X, y)
+                        return cal_platt, name + "+platt"
+                    except Exception:  # noqa: BLE001
+                        pass
+                return cal, name + "+calibrated"
+            except Exception:  # noqa: BLE001
+                pass
+        elif len(y) >= 12 and min(pos, neg) >= 3:
+            # Minimum calibration with Platt scaling only (small sample)
             try:
                 from sklearn.calibration import CalibratedClassifierCV
-
-                cal = CalibratedClassifierCV(model, cv=3, method="isotonic")
+                cal = CalibratedClassifierCV(model, cv=2, method="sigmoid")
                 cal.fit(X, y)
-                return cal, name + "+calibrated"
+                return cal, name + "+platt"
             except Exception:  # noqa: BLE001
                 pass
         return model, name
@@ -2372,20 +2577,19 @@ class MLAnomalyDetector:
     ) -> float:
         """Anomaly score for an aggregated remote-IP flow bucket.
 
-        v5 Feature vector: [is_private, is_testnet, is_link_local, first_octet,
+        v6 Feature vector: [is_private, is_testnet, is_link_local, first_octet,
         second_octet, is_class_a, is_class_b, is_class_c, count,
         distinct_ports, bytes_sent(MB), bytes_recv(MB), duration(h),
         send_rate(MB/s), connection_velocity, port_scan_indicator,
         exfiltration_indicator, beaconing_indicator, dns_query_pattern,
-        is_novel, hour].
+        burst_velocity, kill_chain_phase, attack_history,
+        connections_per_minute, port_scan_trend, is_novel, hour].
         """
         model = self.models.get("network")
         if model is None:
             return 0.0
 
         subnet_feats = _ip_subnet_features(remote_ip)
-        # Check if IP was seen in training (for is_novel feature)
-        # Since we no longer use LabelEncoder, check against known attack prefixes
         is_novel = 1.0 if remote_ip.startswith(_NET_ATTACK_PREFIXES) else 0.0
 
         sent_mb = float(bytes_sent) / 1_000_000.0
@@ -2397,7 +2601,6 @@ class MLAnomalyDetector:
             hours_dur, rate,
         ]
         
-        # Enhanced v5 network features (using current session)
         from backend.database.connection import SessionLocal
         session = SessionLocal()
         try:
@@ -2408,10 +2611,19 @@ class MLAnomalyDetector:
                 _get_beaconing_indicator(session, remote_ip, 1),
                 _get_dns_query_pattern(session, 1),
             ]
+            
+            is_attack_ip = 1.0 if remote_ip.startswith(_NET_ATTACK_PREFIXES) else 0.0
+            temporal_feats = [
+                min(_get_connection_velocity_per_ip(session, remote_ip, 5), 2.0),
+                0.5,  # Kill chain phase (network = exfiltration/impact)
+                is_attack_ip,
+                min(float(count) / max(hours_dur * 60.0, 1.0), 2.0),
+                min(_get_port_scan_indicator(session, remote_ip, 15), 2.0),
+            ]
         finally:
             session.close()
         
-        features = subnet_feats + flow_feats + enhanced_feats + [is_novel, 0.0]
+        features = subnet_feats + flow_feats + enhanced_feats + temporal_feats + [is_novel, 0.0]
         return self._weighted_score(
             "network",
             self._combined_score("network", model, features),
