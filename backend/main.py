@@ -373,38 +373,42 @@ def _scheduler_loop(interval_seconds: int = 15):
                     except Exception:  # noqa: BLE001 - drift must not wedge the loop
                         logger.exception("ML drift check failed")
                 if counter % 240 == 0:  # every ~1 hour (240 cycles x 15s)
-                    # Roadmap 4.1 - scheduled incremental update when the
-                    # analyst feedback queue is busy enough to matter. Trains
-                    # on the full history so the model never shrinks to a
-                    # recent sample window.
+                    # Phase 3: Online learning - incremental update via
+                    # sliding-window buffer instead of full retrain.
                     try:
-                        from backend.config import (
-                            ML_INCREMENTAL_MIN_VERDICTS,
-                        )
-                        from backend.database.models import Verdict as _Verdict
-                        from datetime import datetime, timedelta
-                        from sqlalchemy import func as _func
+                        detector = get_detector()
+                        if detector.online_learner is not None and detector.online_learner.should_update():
+                            result = detector.online_learner.incremental_update(db)
+                            if result.get("updated"):
+                                logger.info(
+                                    "ML online update: streams=%s buffer=%s",
+                                    result.get("streams_updated"),
+                                    result.get("buffer_sizes"),
+                                )
+                        elif detector.is_ready:
+                            # Fallback: full retrain if online learner not ready
+                            from backend.config import ML_INCREMENTAL_MIN_VERDICTS
+                            from backend.database.models import Verdict as _Verdict
+                            from datetime import datetime, timedelta
+                            from sqlalchemy import func as _func
 
-                        recent_verdicts = db.scalar(
-                            select(_func.count(_Verdict.id)).where(
-                                _Verdict.created_at
-                                >= datetime.now(timezone.utc) - timedelta(hours=24)
-                            )
-                        ) or 0
-                        if (
-                            get_detector().is_ready
-                            and recent_verdicts >= ML_INCREMENTAL_MIN_VERDICTS
-                        ):
-                            logger.info(
-                                "ML incremental update (%d verdicts in 24h)",
-                                recent_verdicts,
-                            )
-                            get_detector().train(
-                                db, hours=None,
-                                validate=False, kind="incremental",
-                            )
+                            recent_verdicts = db.scalar(
+                                select(_func.count(_Verdict.id)).where(
+                                    _Verdict.created_at
+                                    >= datetime.now(timezone.utc) - timedelta(hours=24)
+                                )
+                            ) or 0
+                            if recent_verdicts >= ML_INCREMENTAL_MIN_VERDICTS:
+                                logger.info(
+                                    "ML full retrain (%d verdicts in 24h, online learner not ready)",
+                                    recent_verdicts,
+                                )
+                                detector.train(
+                                    db, hours=None,
+                                    validate=False, kind="incremental",
+                                )
                     except Exception:  # noqa: BLE001
-                        logger.exception("ML incremental update failed")
+                        logger.exception("ML online update failed")
                     from backend.database.retention import purge_old_data
                     purged = purge_old_data(db)
                     if any(purged.values()):

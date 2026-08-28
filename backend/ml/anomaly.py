@@ -83,6 +83,7 @@ except ImportError:  # pragma: no cover
 try:
     from backend.ml.ensemble import EnsembleStacker
     from backend.ml.robustness import evaluate_robustness
+    from backend.ml.online import OnlineLearner
     HAS_ENSEMBLE = True
 except ImportError:  # pragma: no cover
     HAS_ENSEMBLE = False
@@ -1371,6 +1372,8 @@ class MLAnomalyDetector:
         self.ensemble = EnsembleStacker() if HAS_ENSEMBLE else None
         #: Phase 2.3: robustness evaluation result (updated after each train).
         self.robustness: dict = {}
+        #: Phase 3: online learning wrapper for incremental updates.
+        self.online_learner = OnlineLearner(self) if HAS_ENSEMBLE else None
         self._load_meta()
         if load_persisted and not self.models:
             if not self._load_bundle():

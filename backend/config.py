@@ -533,6 +533,14 @@ ML_INCREMENTAL_HOURS = max(1, int(os.environ.get("BARAQ_ML_INCREMENTAL_HOURS", "
 ML_INCREMENTAL_MIN_VERDICTS = max(
     1, int(os.environ.get("BARAQ_ML_INCREMENTAL_MIN_VERDICTS", "5"))
 )
+#: Online learning: buffer size for sliding-window features (per stream).
+ML_ONLINE_BUFFER_SIZE = max(512, int(os.environ.get("BARAQ_ML_ONLINE_BUFFER_SIZE", "2048")))
+#: Online learning: minimum new events before triggering an incremental update.
+ML_ONLINE_MIN_NEW_EVENTS = max(10, int(os.environ.get("BARAQ_ML_ONLINE_MIN_NEW_EVENTS", "50")))
+#: Online learning: minimum new verdicts before triggering an incremental update.
+ML_ONLINE_MIN_NEW_VERDICTS = max(1, int(os.environ.get("BARAQ_ML_ONLINE_MIN_NEW_VERDICTS", "5")))
+#: Online learning: minimum minutes between incremental updates.
+ML_ONLINE_UPDATE_INTERVAL = max(5, int(os.environ.get("BARAQ_ML_ONLINE_UPDATE_INTERVAL", "15")))
 #: Model versioning (4.1): how many training runs are kept in the version
 #: history (meta file); the previous model bundle is always kept for A/B.
 ML_VERSION_HISTORY = max(2, int(os.environ.get("BARAQ_ML_VERSION_HISTORY", "10")))
