@@ -80,6 +80,13 @@ try:
 except ImportError:  # pragma: no cover
     HAS_XGBOOST = False
 
+try:
+    from backend.ml.ensemble import EnsembleStacker
+    from backend.ml.robustness import evaluate_robustness
+    HAS_ENSEMBLE = True
+except ImportError:  # pragma: no cover
+    HAS_ENSEMBLE = False
+
 BEHAVIOR_KEYS = ("login", "process", "network")
 
 # Event IDs mapped to the behavior stream they belong to.
@@ -1360,6 +1367,10 @@ class MLAnomalyDetector:
         #: "bootstrap" (bundled seed model on a fresh deployment) or
         #: "user" (trained on this deployment's own telemetry).
         self.model_source = "none"
+        #: Phase 2.4: ensemble stacking meta-learner for IF + supervised + Markov fusion.
+        self.ensemble = EnsembleStacker() if HAS_ENSEMBLE else None
+        #: Phase 2.3: robustness evaluation result (updated after each train).
+        self.robustness: dict = {}
         self._load_meta()
         if load_persisted and not self.models:
             if not self._load_bundle():
@@ -2337,6 +2348,25 @@ class MLAnomalyDetector:
             self.n_samples = n_samples
             self.encoders = {}  # No longer using LabelEncoder for network
 
+            # Phase 2.4: Train ensemble meta-learner on held-out base model predictions
+            if self.ensemble is not None and len(new_models) >= 2:
+                try:
+                    self._train_ensemble_meta(session, new_models, new_supervised_by_stream, new_baselines)
+                except Exception:  # noqa: BLE001
+                    logger.debug("Ensemble meta-learner training skipped", exc_info=True)
+
+            # Phase 2.3: Run robustness evaluation on trained models
+            if HAS_ENSEMBLE and new_models:
+                try:
+                    self.robustness = evaluate_robustness(
+                        _QuickModelProxy(new_models, new_baselines),
+                        X_login=stream_X.get("login"),
+                        X_process=stream_X.get("process"),
+                        X_network=stream_X.get("network"),
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.debug("Robustness evaluation skipped", exc_info=True)
+
             if self.n_samples < ML_TRAIN_MIN_SAMPLES:
                 logger.info(
                     "Only %d samples; training anyway (min %d)", self.n_samples, ML_TRAIN_MIN_SAMPLES
@@ -2406,6 +2436,62 @@ class MLAnomalyDetector:
         if not deltas:
             return False
         return sum(deltas) / len(deltas) < -0.02
+
+    def _train_ensemble_meta(
+        self,
+        session,
+        new_models: dict,
+        new_supervised_by_stream: dict,
+        new_baselines: dict,
+    ) -> None:
+        """Train the ensemble stacking meta-learner on base model predictions."""
+        if self.ensemble is None or not HAS_ENSEMBLE:
+            return
+
+        all_if_scores = []
+        all_sup_probas = []
+        all_labels = []
+
+        for behavior, model in new_models.items():
+            labeled = self._labeled_samples(session)
+            if behavior not in labeled:
+                continue
+            atk, ben = labeled[behavior]
+            if not atk or not ben:
+                continue
+            X = np.vstack([ben, atk])
+            y = np.array([0] * len(ben) + [1] * len(atk))
+            if len(X) < 10:
+                continue
+
+            try:
+                raws = np.array([self._score_with(model, row) for row in X], dtype=float)
+                if_ranks = self._rank_of(raws, new_baselines.get(behavior))
+            except Exception:  # noqa: BLE001
+                continue
+
+            sup = new_supervised_by_stream.get(behavior)
+            sup_probas = np.zeros(len(X))
+            if sup is not None:
+                try:
+                    proba = sup.predict_proba(X)
+                    if proba.shape[1] > 1:
+                        sup_probas = proba[:, 1]
+                except Exception:  # noqa: BLE001
+                    pass
+
+            all_if_scores.append(if_ranks)
+            all_sup_probas.append(sup_probas)
+            all_labels.append(y)
+
+        if not all_if_scores:
+            return
+
+        if_scores = np.concatenate(all_if_scores)
+        sup_probas = np.concatenate(all_sup_probas)
+        labels = np.concatenate(all_labels)
+
+        self.ensemble.train_meta(if_scores, sup_probas, None, labels)
 
     @staticmethod
     def _build_classifier(X, y):
@@ -2486,13 +2572,22 @@ class MLAnomalyDetector:
     # ------------------------------------------------------------------
     def _combined_score(self, behavior: str, model, features: list[float]) -> float:
         """Blend the (rank-calibrated) IsolationForest anomaly signal with the
-        supervised classifier's attack probability into a single [0,1] score."""
+        supervised classifier's attack probability into a single [0,1] score.
+
+        Phase 2.4: When the ensemble meta-learner is trained, uses it for
+        optimal blending. Otherwise falls back to fixed 0.6*IF + 0.4*supervised.
+        """
         raw = self._score_with(model, features)
         base = float(self._rank_of([raw], self.baselines.get(behavior))[0])
         classifier = self.supervised_by_stream.get(behavior) or self.supervised
         if classifier is None:
             return base
         p = self.supervised_proba(features, classifier)
+
+        # Phase 2.4: Use ensemble meta-learner when available
+        if self.ensemble is not None and self.ensemble.is_trained:
+            return float(max(0.0, min(1.0, self.ensemble.predict(base, p))))
+
         return float(max(0.0, min(1.0, 0.6 * base + 0.4 * p)))
 
     def score_event(self, features: list[float]) -> float:
@@ -2554,7 +2649,11 @@ class MLAnomalyDetector:
                         p = proba[:, 1]
                 except Exception:  # noqa: BLE001
                     p = np.zeros(len(idxs), dtype=float)
-            scores = np.clip(0.6 * base + 0.4 * p, 0.0, 1.0)
+            # Phase 2.4: Use ensemble meta-learner when available
+            if self.ensemble is not None and self.ensemble.is_trained:
+                scores = np.clip(self.ensemble.predict_batch(base, p), 0.0, 1.0)
+            else:
+                scores = np.clip(0.6 * base + 0.4 * p, 0.0, 1.0)
             weight = self.feedback_weights.get(behavior, 1.0)
             for pos, idx in enumerate(idxs):
                 out[idx] = float(max(0.0, min(1.0, scores[pos] * weight)))
@@ -2734,7 +2833,7 @@ class MLAnomalyDetector:
     def status(self, session=None) -> dict:
         drifted, drift_reason = self._drift_result(session)
         stale, reason = self.is_stale(session)
-        return {
+        result = {
             "has_sklearn": HAS_SKLEARN,
             "has_xgboost": HAS_XGBOOST,
             "ready": self.is_ready,
@@ -2753,6 +2852,43 @@ class MLAnomalyDetector:
             "drift": drifted,
             "drift_reason": drift_reason,
         }
+        # Phase 2.4: ensemble meta-learner status
+        if self.ensemble is not None:
+            result["ensemble"] = self.ensemble.status()
+        # Phase 2.3: robustness evaluation result
+        if self.robustness:
+            result["robustness"] = self.robustness
+        return result
+
+
+class _QuickModelProxy:
+    """Minimal proxy for robustness evaluation (avoids circular import)."""
+
+    def __init__(self, models: dict, baselines: dict):
+        self._models = models
+        self._baselines = baselines
+
+    @property
+    def models(self):
+        return self._models
+
+    def decision_function(self, X):
+        for model in self._models.values():
+            return model.decision_function(X)
+        raise ValueError("No models available")
+
+    def predict(self, X):
+        for model in self._models.values():
+            return model.predict(X)
+        raise ValueError("No models available")
+
+    def score(self, X, y=None):
+        for model in self._models.values():
+            try:
+                return model.score(X, y) if y is not None else model.score(X)
+            except Exception:
+                continue
+        return 0.0
 
 
 _detector: MLAnomalyDetector | None = None
