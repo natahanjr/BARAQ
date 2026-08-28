@@ -138,7 +138,13 @@ from backend.detection.rules.c2_exfil_extra import (
 )
 from backend.detection.sigma.engine import SigmaRuleEngine
 from backend.detection.correlation_engine import CorrelationEngine
-from backend.config import KILL_CHAIN, RULES_COUNT, RULE_OVERRIDES
+from backend.config import (
+    KILL_CHAIN,
+    PORT_SCAN_DISTINCT_PORTS,
+    PORT_SCAN_WINDOW_SECONDS,
+    RULES_COUNT,
+    RULE_OVERRIDES,
+)
 from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
 
 logger = logging.getLogger("baraq.detection")
@@ -161,7 +167,13 @@ def build_rules(session: Session, overrides: dict | None = None) -> list[BaseRul
         SuspiciousPowerShellRule(session),
         PrivilegeEscalationRule(session),
         PersistenceRule(session),
-        build(NetworkReconRule, "network_recon", session),
+        build(
+            NetworkReconRule,
+            "network_recon",
+            session,
+            distinct_ports=PORT_SCAN_DISTINCT_PORTS,
+            window_seconds=PORT_SCAN_WINDOW_SECONDS,
+        ),
         build(LateralMovementRule, "lateral_movement", session),
         build(DataStagingRule, "data_staging", session),
         MalwareFileRule(session),

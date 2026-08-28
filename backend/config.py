@@ -339,7 +339,16 @@ EVENT_RETENTION_DAYS = 30
 # --------------------------------------------------------------------------
 # Collection
 # --------------------------------------------------------------------------
-COLLECT_INTERVAL_SECONDS = int(os.environ.get("BARAQ_INTERVAL", "15"))
+#: Seconds between host telemetry collection cycles. The scheduler polls the
+#: local Windows event log / Sysmon / process / network sources on this
+#: interval, so it is the minimum blind spot for the *local* collector. Remote
+#: agents push telemetry in real time (see api/endpoints.py /ingest), so the
+#: platform is real-time for fleet hosts; lower this to shrink the local blind
+#: spot at the cost of more CPU. Floored at 5 s: the scheduler cycle also runs
+#: tenant-wide detection + ML/risk sweeps, so sub-5s intervals risk DB
+#: contention and CPU saturation with no real-time benefit (the agent push
+#: path already covers sub-second ingest).
+COLLECT_INTERVAL_SECONDS = max(5, int(os.environ.get("BARAQ_INTERVAL", "15")))
 SCHEDULER_ENABLED = os.environ.get("BARAQ_SCHEDULER_ENABLED", "1").lower() not in (
     "0", "false", "no", "off",
 )
@@ -445,7 +454,10 @@ DETECTION_WINDOW_MINUTES = 10
 BRUTE_FORCE_THRESHOLD = 5            # failed logons within window
 BRUTE_FORCE_ACCOUNTS = 1             # distinct accounts to consider
 PORT_SCAN_DISTINCT_PORTS = 20        # distinct ports probed by one source
-PORT_SCAN_WINDOW_SECONDS = 120
+# Wider than the old 120s default: a 120s window let slow / distributed scans
+# interleaved with normal traffic fall below the distinct-port threshold and
+# evade detection (see documentation/red_team_validation.md false-negative #5).
+PORT_SCAN_WINDOW_SECONDS = 300
 HONEYPOT_ACCOUNT_PREFIXES = ("administrator", "admin", "sa", "root")
 #: Directory of Sigma (SigmaHQ) rule YAML files. Empty/missing disables the
 #: Sigma engine. Populate with scripts/sigma_pull.py (3000+ community rules).
@@ -489,7 +501,7 @@ ML_META_FILE = Path(os.environ.get(
 ))
 #: Version of the event feature space; persisted bundles with a different
 #: version are ignored and a clean retrain is forced.
-ML_FEATURE_VERSION = 3
+ML_FEATURE_VERSION = 5
 #: Persisted model bundle (Isolation Forests + supervised + thresholds).
 ML_MODEL_BUNDLE = Path(os.environ.get(
     "BARAQ_ML_MODEL_BUNDLE",
@@ -539,6 +551,22 @@ ML_BOOTSTRAP_BUNDLE = Path(os.environ.get(
     "BARAQ_ML_BOOTSTRAP_BUNDLE",
     (Path(__file__).parent / "ml" / "assets" / "bootstrap_model.joblib").as_posix(),
 ))
+#: The bundled bootstrap model is a DETERMINISTIC SYNTHETIC corpus. It guarantees
+#: day-1 coverage but does not reflect a given environment's behaviour. Once
+#: ``ML_TRAIN_MIN_SAMPLES`` real events have been collected, the scheduler
+#: retrains on real telemetry and the synthetic model is superseded. Set
+#: ``BARAQ_ML_ALLOW_BOOTSTRAP=0`` to refuse the synthetic model entirely - the
+#: platform will stay untrained until enough REAL telemetry is collected (closes
+#: the "ML trained only on synthetic data" gap for high-assurance deployments).
+ML_ALLOW_BOOTSTRAP = os.environ.get("BARAQ_ML_ALLOW_BOOTSTRAP", "1").lower() not in (
+    "0", "false", "no", "off",
+)
+#: Validate detection against REAL host telemetry, not just synthetic fixtures:
+#: the hold-out endpoint (``/api/evaluation/holdout?use_real_baseline=true``) and
+#: ``scripts/validate_realworld.py`` use live collectors for the negative class.
+ML_VALIDATE_ON_REAL = os.environ.get("BARAQ_ML_VALIDATE_ON_REAL", "1").lower() not in (
+    "0", "false", "no", "off",
+)
 
 # --------------------------------------------------------------------------
 # ML tuning
