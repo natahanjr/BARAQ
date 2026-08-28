@@ -26,7 +26,7 @@ def _percentile(values: list[float], pct: float) -> float:
 
 
 def incident_metrics(db, now: datetime | None = None) -> dict[str, Any]:
-    now = now or datetime.utcnow()
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     if now.tzinfo is not None:
         now = now.astimezone(timezone.utc).replace(tzinfo=None)
     total = db.scalars(select(func.count()).select_from(IncidentV2)).one()

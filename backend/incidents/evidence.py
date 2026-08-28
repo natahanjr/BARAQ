@@ -1,7 +1,7 @@
 """Phase 7 incident evidence handling (spec 7.12, 7.13, 7.42)."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -35,7 +35,7 @@ def add_evidence(
         field=field,
         value=value,
         reason=reason,
-        observed_at=observed_at or datetime.utcnow(),
+        observed_at=observed_at or datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(row)
     db.flush()

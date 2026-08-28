@@ -82,8 +82,9 @@ class TestMLAnomalyDetector:
         }
         features = event_feature_vector(record)
         assert features is not None
-        # v3 feature space: 9 base + 4 enhanced (temporal/velocity/threat-intel)
-        assert len(features) == 13
+        # v4 feature space: 9 base + 4 enhanced + 8 cross-stream + 1 temporal = 22
+        # v5 feature space: login stream has 29 features (10 base + 4 enhanced + 7 v5 + 8 cross-stream)
+        assert len(features) == 29
         assert features[0] == 4625  # event_id
 
     def test_detector_trains_on_baseline(self, ml_session):

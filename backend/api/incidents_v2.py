@@ -1,7 +1,7 @@
 """Phase 7 incident management API (spec 7.30-7.33, 7.35, 7.39, 7.48-7.51)."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -307,7 +307,7 @@ def post_suppress(
     expires_in_days: int = Query(default=30, ge=1, le=90),
     actor: str = Query(default="system"),
 ) -> dict:
-    expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
+    expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=expires_in_days)
     try:
         row = suppress_incident(db, incident_id, reason, scope, expires_at, actor)
     except ValueError as exc:
@@ -336,7 +336,7 @@ def post_feedback(
     )
     db.add(row)
     db.flush()
-    audit(db, incident_id, "INCIDENT_FEEDBACK_ADDED", actor=analyst, new_value=feedback_type.upper(), now=datetime.utcnow())
+    audit(db, incident_id, "INCIDENT_FEEDBACK_ADDED", actor=analyst, new_value=feedback_type.upper(), now=datetime.now(timezone.utc).replace(tzinfo=None))
     return {"feedback_id": row.id, "incident_id": incident_id}
 
 

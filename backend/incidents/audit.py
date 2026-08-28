@@ -1,7 +1,7 @@
 """Phase 7 incident audit trail (spec 7.20)."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -34,7 +34,7 @@ def audit(
         old_value=old_value,
         new_value=new_value,
         reason=reason,
-        created_at=now or datetime.utcnow(),
+        created_at=now or datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(row)
     db.flush()
