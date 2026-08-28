@@ -90,6 +90,12 @@ FEATURE_NAMES = {
         "has_failed_then_process",
         "has_process_then_network",
         "event_diversity",
+        # Phase 2 temporal features (v6)
+        "business_hours_indicator",
+        "event_burst_score",
+        "kill_chain_phase",
+        "session_duration_deviation",
+        "user_attack_frequency",
     ],
     "process": [
         "event_id",
@@ -121,6 +127,12 @@ FEATURE_NAMES = {
         "has_failed_then_process",
         "has_process_then_network",
         "event_diversity",
+        # Phase 2 temporal features (v6)
+        "business_hours_indicator",
+        "event_burst_score",
+        "kill_chain_phase",
+        "process_risk_proxy",
+        "process_attack_frequency",
     ],
     "network": [
         "is_private",
@@ -143,6 +155,12 @@ FEATURE_NAMES = {
         "exfiltration_indicator",
         "beaconing_indicator",
         "dns_query_pattern",
+        # Phase 2 temporal features (v6)
+        "burst_velocity",
+        "kill_chain_phase",
+        "attack_history",
+        "connections_per_minute",
+        "port_scan_trend",
         # Base features
         "is_novel",
         "hour",
