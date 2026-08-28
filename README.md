@@ -685,12 +685,23 @@ expected. It exits non-zero with a message on the first failing check.
 The analyst workspace now covers the enterprise security surface:
 RBA with live tuning, declarative multi-source correlation, pipe-based search
 (`stats` / `timechart` / `transaction`), saved searches, dashboards and SOAR
-automation — all with a web UI. Remaining planned work: managed certificate
-rotation/CA integration, secure secret management, **multi-node/HA
-deployment** (the one intentionally-out-of-scope area — it requires a
-distributed-architecture rewrite), SOC2/ISO 27001-aligned audit trails,
-immutable evidence storage, and a managed-versioning/update channel. See the
-phased deployment plan for details.
+automation — all with a web UI.
+
+### Known limitations & their status
+
+| Limitation | Status | Notes |
+|---|---|---|
+| **"Real-time" was poll-based (15 s local blind spot)** | Mitigated | `COLLECT_INTERVAL_SECONDS` is now configurable down to 1 s; remote agents push telemetry in real time via `POST /api/endpoints/ingest`, so fleet hosts are real-time. A true local event-driven (ETW/Sysmon subscription) collector remains a future enhancement. |
+| **Short detection windows (recon evasion)** | Fixed | `PORT_SCAN_WINDOW_SECONDS` is configurable (default raised 120 s → 300 s) and wired into `NetworkReconRule`; every rule window is already parameterised. |
+| **Validation only on synthetic fixtures** | Mitigated | `POST /api/evaluation/holdout?use_real_baseline=true` and `scripts/validate_realworld.py` validate the negative class against **live host telemetry**. Run both before trusting metrics. |
+| **ML trained on synthetic corpus** | Mitigated | Day-1 bootstrap is synthetic by design; the scheduler retrains on real telemetry once `ML_TRAIN_MIN_SAMPLES` events exist. `BARAQ_ML_ALLOW_BOOTSTRAP=0` refuses the synthetic model for high-assurance deployments. |
+| **Undetectable without Sysmon** | Mitigated | A startup capability banner now warns when the Sysmon channel is unavailable (disabling T1003 / process-tree detections). Event-Log-only rules still run. |
+| **Vault not enforced off-Windows** | Fixed | The vault now uses DPAPI on Windows and **AES-256-GCM (Fernet) on every other platform**; `BARAQ_VAULT_ENFORCED=1` fails closed when no encryption backend is present. |
+| **Multi-node / HA** | Partial | Single-writer HA is achieved via `scheduler_service.py` + a Redis/Postgres distributed lock and stateless `BARAQ_ROLE=api` replicas with an optional read replica. Fully active-active detection requires a distributed-architecture rewrite and remains out of scope. |
+
+Remaining planned work: managed certificate rotation/CA integration, SOC2/ISO
+27001-aligned audit trails, immutable evidence storage, and a
+managed-versioning/update channel. See the phased deployment plan for details.
 
 ---
 
