@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { api, isAdmin } from "../api.js";
 import Pagination from "../components/Pagination.jsx";
@@ -7,14 +7,16 @@ import { EventsIcon } from "../components/icons.jsx";
 
 const EVENTS_PAGE_SIZE = 50;
 
-function EventRow({ event }) {
-  const categoryColor = {
-    Authentication: "border-cyan-400/40 bg-cyan-500/10",
-    "Account Management": "border-violet-500/40 bg-violet-500/10",
-    Service: "border-amber-500/40 bg-amber-500/10",
-    PowerShell: "border-emerald-500/40 bg-emerald-500/10",
-    Other: "border-slate-500/40 bg-slate-500/10",
-  };
+const CATEGORY_COLORS = {
+  Authentication: "border-cyan-400/40 bg-cyan-500/10",
+  "Account Management": "border-violet-500/40 bg-violet-500/10",
+  Service: "border-amber-500/40 bg-amber-500/10",
+  PowerShell: "border-emerald-500/40 bg-emerald-500/10",
+  Other: "border-slate-500/40 bg-slate-500/10",
+};
+
+const EventRow = memo(function EventRow({ event }) {
+  const categoryColor = CATEGORY_COLORS;
 
   const category = event.category || "Other";
   const colors = categoryColor[category] || categoryColor.Other;
@@ -78,7 +80,7 @@ function EventRow({ event }) {
       </div>
     </div>
   );
-}
+});
 
 function EventsPanel() {
   const [searchParams] = useSearchParams();
@@ -250,7 +252,7 @@ function processNote(process) {
   ];
 }
 
-function ProcessRow({ process }) {
+const ProcessRow = memo(function ProcessRow({ process }) {
   const [showNote, setShowNote] = useState(false);
   return (
     <div
@@ -325,7 +327,7 @@ function ProcessRow({ process }) {
       )}
     </div>
   );
-}
+});
 
 const STATE_HELP = {
   ESTABLISHED:
@@ -449,16 +451,16 @@ function connectionNote(connection) {
   ];
 }
 
-function NetworkRow({ connection }) {
-  const [showNote, setShowNote] = useState(false);
-  const stateColor = {
-    ESTABLISHED: "bg-emerald-500/15 text-emerald-400",
-    LISTEN: "bg-cyan-500/15 text-cyan-400",
-    SYN_SENT: "bg-amber-500/15 text-amber-400",
-    TIME_WAIT: "bg-slate-500/15 text-slate-400",
-  };
+const NETWORK_STATE_COLORS = {
+  ESTABLISHED: "bg-emerald-500/15 text-emerald-400",
+  LISTEN: "bg-cyan-500/15 text-cyan-400",
+  SYN_SENT: "bg-amber-500/15 text-amber-400",
+  TIME_WAIT: "bg-slate-500/15 text-slate-400",
+};
 
-  const color = stateColor[connection.state] || "bg-slate-500/15 text-slate-400";
+const NetworkRow = memo(function NetworkRow({ connection }) {
+  const [showNote, setShowNote] = useState(false);
+  const color = NETWORK_STATE_COLORS[connection.state] || "bg-slate-500/15 text-slate-400";
 
   return (
     <div
@@ -537,7 +539,7 @@ function NetworkRow({ connection }) {
       )}
     </div>
   );
-}
+});
 
 function DatasetCollectorPanel() {
   const [data, setData] = useState(null);
