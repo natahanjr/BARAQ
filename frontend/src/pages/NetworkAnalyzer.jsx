@@ -95,16 +95,16 @@ function classifyIP(ip) {
 async function blockIp(ip, toast) {
   if (!confirm(`Block IP ${ip} for 24h?`)) return false;
   try {
-    // Check if already blocked
     const existing = await api.suppressions().catch(() => []);
     const already = Array.isArray(existing) && existing.some((s) => s.rule === ip || s.ip === ip || (s.pattern && s.pattern.includes(ip)));
     if (already) {
       toast({ title: `IP ${ip} already blocked`, type: "info" });
       return false;
     }
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     await api.request("/api/alerts/suppressions", {
       method: "POST",
-      body: JSON.stringify({ rule: ip, reason: "Manual block from Network Analyzer", expires_hours: 24 }),
+      body: JSON.stringify({ rule: ip, reason: "Manual block from Network Analyzer", expires_at: expiresAt }),
     });
     toast({ title: `IP ${ip} blocked`, type: "success" });
     return true;
@@ -237,22 +237,22 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
   const nodeMap = new Map(layoutNodes.map((nd) => [nd.id, nd]));
 
   return (
-    <div className="relative w-full overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-inset)]" style={{ height: 420 }}>
+    <div className="relative w-full overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200" style={{ height: 420 }}>
       {/* Controls */}
       <div className="absolute right-3 top-3 z-10 flex gap-1.5">
-        <button onClick={() => setTransform((t) => ({ ...t, scale: Math.min(3, t.scale * 1.2) }))} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors" title="Zoom in">
+        <button onClick={() => setTransform((t) => ({ ...t, scale: Math.min(3, t.scale * 1.2) }))} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors" title="Zoom in">
           <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v10M3 8h10" /></svg>
         </button>
-        <button onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.3, t.scale * 0.8) }))} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors" title="Zoom out">
+        <button onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.3, t.scale * 0.8) }))} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors" title="Zoom out">
           <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10" /></svg>
         </button>
-        <button onClick={() => setTransform({ x: 0, y: 0, scale: 1 })} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors" title="Reset view">
+        <button onClick={() => setTransform({ x: 0, y: 0, scale: 1 })} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors" title="Reset view">
           <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3h10v10H3z" /></svg>
         </button>
       </div>
 
       {/* Legend */}
-      <div className="absolute left-3 top-3 z-10 flex flex-col gap-1 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)]/90 px-2.5 py-2 text-[11px]">
+      <div className="absolute left-3 top-3 z-10 flex flex-col gap-1 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200/90 px-2.5 py-2 text-[11px]">
         {[
           ["Host", "var(--status-healthy)"],
           ["External IP", "var(--accent-cyan)"],
@@ -291,7 +291,7 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
                 <line
                   x1={src.x} y1={src.y} x2={tgt.x} y2={tgt.y}
                   stroke={edgeColor} strokeWidth={width} strokeOpacity={bytes > 0 ? 0.7 : 0.4}
-                  className="transition-colors hover:stroke-[var(--accent-cyan)]"
+                  className="transition-all hover:stroke-[var(--accent-cyan)]"
                 />
                 <title>{`${src.label} → ${tgt.label} (${edge.label})${bytes ? " · " + fmtBytes(bytes) : ""}`}</title>
               </g>
@@ -1381,7 +1381,7 @@ export default function NetworkAnalyzer() {
           <select
             value={direction}
             onChange={(e) => setDirection(e.target.value)}
-            className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--fg-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/30"
+            className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 px-2.5 py-1.5 text-[11px] font-medium text-[var(--fg-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/30"
           >
             <option value="all">All Directions</option>
             <option value="outbound">Outbound ↑</option>
@@ -1390,7 +1390,7 @@ export default function NetworkAnalyzer() {
           <select
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value)}
-            className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--fg-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/30"
+            className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 px-2.5 py-1.5 text-[11px] font-medium text-[var(--fg-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/30"
           >
             <option value="all">All Time</option>
             <option value="1">Last 1h</option>
@@ -1410,7 +1410,7 @@ export default function NetworkAnalyzer() {
               a.click(); URL.revokeObjectURL(url);
               toast({ title: `Exported ${data.length} connections`, type: "success" });
             }}
-            className="inline-flex items-center gap-1.5 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 px-2.5 py-1.5 text-[11px] font-semibold text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] transition-colors"
             title="Export filtered connections as JSON"
           >
             <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 2v8M4 10l4 4 4-4M3 14h10" /></svg>
