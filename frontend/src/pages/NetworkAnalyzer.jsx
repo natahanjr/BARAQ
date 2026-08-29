@@ -469,21 +469,21 @@ function ConnectionTable({ connections, onSelect }) {
     else { setSortKey(key); setSortDir("desc"); }
   };
 
-  const SortHeader = ({ field, children }) => (
+  const SortHeader = ({ field, children, className = "" }) => (
     <th
       onClick={() => toggleSort(field)}
-      className="cursor-pointer select-none hover:text-[var(--fg-secondary)] transition-colors"
+      className={`px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] cursor-pointer select-none hover:text-[var(--fg-secondary)] transition-colors border-b border-[var(--border-subtle)] ${className}`}
     >
-      <span className="flex items-center gap-1">
+      <span className="flex items-center gap-1.5">
         {children}
-        {sortKey === field && <span className="text-[var(--fg-faint)]">{sortDir === "asc" ? "↑" : "↓"}</span>}
+        {sortKey === field && <span className="text-[var(--accent-cyan)] text-[11px]">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
       </span>
     </th>
   );
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left">
+      <table className="w-full text-left border-collapse">
         <thead>
           <tr>
             <SortHeader field="local_ip">Source</SortHeader>
@@ -496,37 +496,61 @@ function ConnectionTable({ connections, onSelect }) {
           </tr>
         </thead>
         <tbody>
-          {sorted.map((conn) => (
-            <tr
-              key={conn.id}
-              onClick={() => onSelect?.(conn)}
-              className="cursor-pointer hover:bg-[var(--bg-surface-hover)] transition-colors"
-            >
-              <td className="font-mono text-[12px] text-[var(--fg-secondary)]">{conn.local_ip || "—"}</td>
-              <td className="font-mono text-[12px] text-[var(--fg-primary)]">{conn.remote_ip || "—"}</td>
-              <td className="font-mono text-[12px]">
-                <span className="text-[var(--fg-muted)]">{conn.remote_port || "—"}</span>
-                {PORT_LABELS[conn.remote_port] && (
-                  <span className="ml-1 text-[10px] text-[var(--fg-faint)]">{PORT_LABELS[conn.remote_port]}</span>
-                )}
-              </td>
-              <td>
-                <span className="inline-flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: STATE_COLORS[conn.state] || "var(--fg-muted)" }} />
-                  <span className="text-[11px] text-[var(--fg-secondary)]">{conn.state || "—"}</span>
-                </span>
-              </td>
-              <td className="text-[11px] text-[var(--fg-muted)]">
-                {conn.bytes_sent || conn.bytes_recv ? fmtBytes((conn.bytes_sent || 0) + (conn.bytes_recv || 0)) : "—"}
-              </td>
-              <td className="text-[11px] text-[var(--fg-secondary)] max-w-[120px] truncate">{conn.process || "—"}</td>
-              <td className="text-[11px] text-[var(--fg-muted)]">{fmtDate(conn.observed_at)}</td>
-            </tr>
-          ))}
+          {sorted.map((conn) => {
+            const stateColor = STATE_COLORS[conn.state] || "var(--fg-muted)";
+            return (
+              <tr
+                key={conn.id}
+                onClick={() => onSelect?.(conn)}
+                className="group cursor-pointer border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--bg-surface-hover)] transition-colors duration-150"
+              >
+                <td className="px-4 py-3 font-mono text-[12px] text-[var(--fg-muted)] group-hover:text-[var(--fg-secondary)] transition-colors">
+                  {conn.local_ip || "\u2014"}
+                  {conn.local_port ? <span className="text-[var(--fg-faint)]">:{conn.local_port}</span> : null}
+                </td>
+                <td className="px-4 py-3 font-mono text-[12px] font-medium text-[var(--fg-primary)]">
+                  {conn.remote_ip || "\u2014"}
+                </td>
+                <td className="px-4 py-3">
+                  {conn.remote_port ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="font-mono text-[12px] font-medium text-[var(--fg-primary)]">{conn.remote_port}</span>
+                      {PORT_LABELS[conn.remote_port] && (
+                        <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold tracking-wide" style={{ background: "var(--bg-surface)", color: "var(--fg-muted)", border: "1px solid var(--border-subtle)" }}>
+                          {PORT_LABELS[conn.remote_port]}
+                        </span>
+                      )}
+                    </span>
+                  ) : <span className="text-[var(--fg-faint)]">\u2014</span>}
+                </td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: `color-mix(in srgb, ${stateColor} 10%, transparent)`, color: stateColor }}>
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: stateColor }} />
+                    {conn.state || "NONE"}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-[11px] font-mono text-[var(--fg-muted)] tabular-nums">
+                  {conn.bytes_sent || conn.bytes_recv ? fmtBytes((conn.bytes_sent || 0) + (conn.bytes_recv || 0)) : "\u2014"}
+                </td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--fg-secondary)] max-w-[140px]">
+                    <span className="h-1 w-1 rounded-full bg-[var(--accent-cyan)] opacity-60 shrink-0" />
+                    <span className="truncate">{conn.process || "\u2014"}</span>
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-[11px] text-[var(--fg-muted)] tabular-nums">
+                  {fmtDate(conn.observed_at)}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       {sorted.length === 0 && (
-        <div className="py-12 text-center text-[13px] text-[var(--fg-muted)]">No connections found</div>
+        <div className="py-16 text-center">
+          <p className="text-[13px] text-[var(--fg-muted)]">No connections found</p>
+          <p className="text-[11px] text-[var(--fg-faint)] mt-1">Traffic data will appear here once the collector captures connections</p>
+        </div>
       )}
     </div>
   );
@@ -539,28 +563,36 @@ function ConnectionTable({ connections, onSelect }) {
 function DNSTable({ queries }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left">
+      <table className="w-full text-left border-collapse">
         <thead>
           <tr>
-            <th>Time</th>
-            <th>Query</th>
-            <th>Response</th>
-            <th>Process</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Time</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Query</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Response</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Process</th>
           </tr>
         </thead>
         <tbody>
           {queries.map((q) => (
-            <tr key={q.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
-              <td className="text-[11px] text-[var(--fg-muted)]">{fmtDate(q.observed_at)}</td>
-              <td className="font-mono text-[12px] text-[var(--accent-cyan)]">{q.query || "—"}</td>
-              <td className="font-mono text-[12px] text-[var(--fg-secondary)]">{q.response || "—"}</td>
-              <td className="text-[11px] text-[var(--fg-secondary)] max-w-[120px] truncate">{q.process || "—"}</td>
+            <tr key={q.id} className="group border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--bg-surface-hover)] transition-colors duration-150">
+              <td className="px-4 py-3 text-[11px] text-[var(--fg-muted)] tabular-nums">{fmtDate(q.observed_at)}</td>
+              <td className="px-4 py-3 font-mono text-[12px] text-[var(--accent-cyan)] font-medium">{q.query || "\u2014"}</td>
+              <td className="px-4 py-3 font-mono text-[12px] text-[var(--fg-secondary)]">{q.response || "\u2014"}</td>
+              <td className="px-4 py-3">
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--fg-secondary)] max-w-[140px]">
+                  <span className="h-1 w-1 rounded-full bg-[var(--accent-cyan)] opacity-60 shrink-0" />
+                  <span className="truncate">{q.process || "\u2014"}</span>
+                </span>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
       {queries.length === 0 && (
-        <div className="py-12 text-center text-[13px] text-[var(--fg-muted)]">No DNS queries found</div>
+        <div className="py-16 text-center">
+          <p className="text-[13px] text-[var(--fg-muted)]">No DNS queries found</p>
+          <p className="text-[11px] text-[var(--fg-faint)] mt-1">DNS traffic will appear here once the collector captures queries</p>
+        </div>
       )}
     </div>
   );
@@ -573,38 +605,50 @@ function DNSTable({ queries }) {
 function HTTPTable({ requests }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left">
+      <table className="w-full text-left border-collapse">
         <thead>
           <tr>
-            <th>Time</th>
-            <th>Method</th>
-            <th>Host</th>
-            <th>Status</th>
-            <th>Process</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Time</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Method</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Host</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Status</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Process</th>
           </tr>
         </thead>
         <tbody>
-          {requests.map((r) => (
-            <tr key={r.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
-              <td className="text-[11px] text-[var(--fg-muted)]">{fmtDate(r.observed_at)}</td>
-              <td>
-                <span className="font-mono text-[11px] font-semibold" style={{ color: METHOD_COLORS[r.method] || "var(--fg-muted)" }}>
-                  {r.method || "—"}
-                </span>
-              </td>
-              <td className="font-mono text-[12px] text-[var(--fg-secondary)] max-w-[200px] truncate">{r.host || "—"}</td>
-              <td>
-                <span className="font-mono text-[11px] font-semibold" style={{ color: HTTP_STATUS_COLORS[Math.floor((r.status_code || 0) / 100)] || "var(--fg-muted)" }}>
-                  {r.status_code || "—"}
-                </span>
-              </td>
-              <td className="text-[11px] text-[var(--fg-secondary)] max-w-[120px] truncate">{r.process || "—"}</td>
-            </tr>
-          ))}
+          {requests.map((r) => {
+            const statusColor = HTTP_STATUS_COLORS[Math.floor((r.status_code || 0) / 100)] || "var(--fg-muted)";
+            return (
+              <tr key={r.id} className="group border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--bg-surface-hover)] transition-colors duration-150">
+                <td className="px-4 py-3 text-[11px] text-[var(--fg-muted)] tabular-nums">{fmtDate(r.observed_at)}</td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-bold" style={{ background: `color-mix(in srgb, ${METHOD_COLORS[r.method] || "var(--fg-muted)"} 12%, transparent)`, color: METHOD_COLORS[r.method] || "var(--fg-muted)" }}>
+                    {r.method || "\u2014"}
+                  </span>
+                </td>
+                <td className="px-4 py-3 font-mono text-[12px] text-[var(--fg-secondary)] max-w-[200px] truncate">{r.host || "\u2014"}</td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-bold" style={{ color: statusColor }}>
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: statusColor }} />
+                    {r.status_code || "\u2014"}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--fg-secondary)] max-w-[140px]">
+                    <span className="h-1 w-1 rounded-full bg-[var(--accent-cyan)] opacity-60 shrink-0" />
+                    <span className="truncate">{r.process || "\u2014"}</span>
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       {requests.length === 0 && (
-        <div className="py-12 text-center text-[13px] text-[var(--fg-muted)]">No HTTP requests found</div>
+        <div className="py-16 text-center">
+          <p className="text-[13px] text-[var(--fg-muted)]">No HTTP requests found</p>
+          <p className="text-[11px] text-[var(--fg-faint)] mt-1">HTTP traffic will appear here once the collector captures requests</p>
+        </div>
       )}
     </div>
   );
@@ -838,30 +882,38 @@ export default function NetworkAnalyzer() {
       )}
 
       {tab === "connections" && (
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
-            <span className="text-[12px] text-[var(--fg-muted)]">{filteredConnections.length} connections</span>
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border-subtle)]">
+            <span className="text-[12px] font-medium text-[var(--fg-secondary)]">
+              <span className="font-semibold text-[var(--fg-primary)]">{filteredConnections.length}</span> connections
+              {filter && <span className="text-[var(--fg-muted)]"> matching "{filter}"</span>}
+            </span>
+            <span className="text-[10px] text-[var(--fg-faint)] uppercase tracking-wider">Click row to inspect</span>
           </div>
           <ConnectionTable connections={filteredConnections} onSelect={(c) => setSelectedEdge({ connection: c })} />
-        </Card>
+        </div>
       )}
 
       {tab === "dns" && (
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
-            <span className="text-[12px] text-[var(--fg-muted)]">{filteredDns.length} queries</span>
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border-subtle)]">
+            <span className="text-[12px] font-medium text-[var(--fg-secondary)]">
+              <span className="font-semibold text-[var(--fg-primary)]">{filteredDns.length}</span> DNS queries
+            </span>
           </div>
           <DNSTable queries={filteredDns} />
-        </Card>
+        </div>
       )}
 
       {tab === "http" && (
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
-            <span className="text-[12px] text-[var(--fg-muted)]">{filteredHttp.length} requests</span>
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border-subtle)]">
+            <span className="text-[12px] font-medium text-[var(--fg-secondary)]">
+              <span className="font-semibold text-[var(--fg-primary)]">{filteredHttp.length}</span> HTTP requests
+            </span>
           </div>
           <HTTPTable requests={filteredHttp} />
-        </Card>
+        </div>
       )}
 
       {tab === "analytics" && <AnalyticsView stats={stats} />}
