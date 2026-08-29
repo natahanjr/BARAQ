@@ -92,6 +92,28 @@ function classifyIP(ip) {
   return "external";
 }
 
+async function blockIp(ip, toast) {
+  if (!confirm(`Block IP ${ip} for 24h?`)) return false;
+  try {
+    // Check if already blocked
+    const existing = await api.suppressions().catch(() => []);
+    const already = Array.isArray(existing) && existing.some((s) => s.rule === ip || s.ip === ip || (s.pattern && s.pattern.includes(ip)));
+    if (already) {
+      toast({ title: `IP ${ip} already blocked`, type: "info" });
+      return false;
+    }
+    await api.request("/api/alerts/suppressions", {
+      method: "POST",
+      body: JSON.stringify({ rule: ip, reason: "Manual block from Network Analyzer", expires_hours: 24 }),
+    });
+    toast({ title: `IP ${ip} blocked`, type: "success" });
+    return true;
+  } catch (e) {
+    toast({ title: "Block failed", description: e.message, type: "error" });
+    return false;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  * Network Topology (ReactFlow-compatible SVG)
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -230,7 +252,7 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
       </div>
 
       {/* Legend */}
-      <div className="absolute left-3 top-3 z-10 flex flex-col gap-1 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)]/90 px-2.5 py-2 text-[10px]">
+      <div className="absolute left-3 top-3 z-10 flex flex-col gap-1 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)]/90 px-2.5 py-2 text-[11px]">
         {[
           ["Host", "var(--status-healthy)"],
           ["External IP", "var(--accent-cyan)"],
@@ -259,14 +281,19 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
             const src = nodeMap.get(edge.source);
             const tgt = nodeMap.get(edge.target);
             if (!src || !tgt) return null;
+            const bytes = edge.bytes || 0;
+            const maxBytes = Math.max(...edges.map((e) => e.bytes || 0), 1);
+            const width = 1 + Math.min(5, (bytes / maxBytes) * 5);
+            const isUpload = (edge.connection?.bytes_sent || 0) >= (edge.connection?.bytes_recv || 0);
+            const edgeColor = bytes > 0 ? (isUpload ? "var(--severity-high)" : "var(--accent-cyan)") : "var(--border-default)";
             return (
               <g key={edge.id} onClick={() => onConnectionClick?.(edge)} className="cursor-pointer">
                 <line
                   x1={src.x} y1={src.y} x2={tgt.x} y2={tgt.y}
-                  stroke="var(--border-default)" strokeWidth="1.5"
+                  stroke={edgeColor} strokeWidth={width} strokeOpacity={bytes > 0 ? 0.7 : 0.4}
                   className="transition-colors hover:stroke-[var(--accent-cyan)]"
                 />
-                <title>{`${src.label} → ${tgt.label} (${edge.label})`}</title>
+                <title>{`${src.label} → ${tgt.label} (${edge.label})${bytes ? " · " + fmtBytes(bytes) : ""}`}</title>
               </g>
             );
           })}
@@ -284,18 +311,18 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
                 {isInternet ? (
                   <>
                     <rect x={nd.x - 38} y={nd.y - 16} width={76} height={32} rx={8} fill="var(--bg-surface)" stroke={color} strokeWidth="2" />
-                    <text x={nd.x} y={nd.y + 4} textAnchor="middle" className="fill-[var(--fg-muted)] text-[10px] font-bold">INTERNET</text>
+                    <text x={nd.x} y={nd.y + 4} textAnchor="middle" className="fill-[var(--fg-muted)] text-[11px] font-bold">INTERNET</text>
                   </>
                 ) : (
                   <>
                     <circle cx={nd.x} cy={nd.y} r={18} fill="var(--bg-surface)" stroke={color} strokeWidth="2.5" />
-                    <text x={nd.x} y={nd.y + 3} textAnchor="middle" className="fill-[var(--fg-primary)] text-[9px] font-mono font-bold pointer-events-none">
+                    <text x={nd.x} y={nd.y + 3} textAnchor="middle" className="fill-[var(--fg-primary)] text-[11px] font-mono font-bold pointer-events-none">
                       {nd.label.split(".").slice(-1)[0]}
                     </text>
                   </>
                 )}
                 {nd.connections > 1 && (
-                  <text x={nd.x} y={nd.y + 34} textAnchor="middle" className="fill-[var(--fg-faint)] text-[8px] pointer-events-none">
+                  <text x={nd.x} y={nd.y + 34} textAnchor="middle" className="fill-[var(--fg-faint)] text-[12px] pointer-events-none">
                     {nd.connections} conns
                   </text>
                 )}
@@ -352,7 +379,7 @@ function NodeInspector({ node, connections, onClose, navigate, toast }) {
         {/* Risk Gauge */}
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Risk Score</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Risk Score</span>
             <span className="text-lg font-bold" style={{ color: riskColor }}>{riskScore}</span>
           </div>
           <div className="mt-2 h-2 rounded-full overflow-hidden" style={{ background: "var(--border-subtle)" }}>
@@ -363,19 +390,19 @@ function NodeInspector({ node, connections, onClose, navigate, toast }) {
         {/* Stats */}
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface-active)] p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Connections</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Connections</p>
             <p className="mt-0.5 text-lg font-bold text-[var(--fg-primary)]">{relatedConns.length}</p>
           </div>
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface-active)] p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Total Bytes</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Total Bytes</p>
             <p className="mt-0.5 text-lg font-bold text-[var(--fg-primary)]">{fmtBytes(totalBytes)}</p>
           </div>
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface-active)] p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Unique Peers</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Unique Peers</p>
             <p className="mt-0.5 text-lg font-bold text-[var(--fg-primary)]">{uniquePeers.size}</p>
           </div>
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface-active)] p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">External Peers</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">External Peers</p>
             <p className="mt-0.5 text-lg font-bold text-[var(--fg-primary)]">{externalConns.length}</p>
           </div>
         </div>
@@ -393,7 +420,7 @@ function NodeInspector({ node, connections, onClose, navigate, toast }) {
                   <span className="font-mono text-[var(--fg-secondary)] truncate">
                     {c.local_ip === node.id ? `→ ${c.remote_ip}:${c.remote_port || "—"}` : `${c.local_ip}:${c.local_port || "—"} →`}
                   </span>
-                  <span className="ml-auto flex items-center gap-1.5 text-[10px]">
+                  <span className="ml-auto flex items-center gap-1.5 text-[11px]">
                     <span className="text-[var(--severity-high)]" title={`Sent: ${fmtBytes(c.bytes_sent)}`}>\u2191{fmtBytes(c.bytes_sent)}</span>
                     <span className="text-[var(--accent-cyan)]" title={`Recv: ${fmtBytes(c.bytes_recv)}`}>\u2193{fmtBytes(c.bytes_recv)}</span>
                   </span>
@@ -401,7 +428,7 @@ function NodeInspector({ node, connections, onClose, navigate, toast }) {
               );
             })}
             {relatedConns.length > 20 && (
-              <p className="text-center text-[10px] text-[var(--fg-faint)] py-1">+{relatedConns.length - 20} more</p>
+              <p className="text-center text-[11px] text-[var(--fg-faint)] py-1">+{relatedConns.length - 20} more</p>
             )}
           </div>
         </div>
@@ -412,13 +439,7 @@ function NodeInspector({ node, connections, onClose, navigate, toast }) {
             onClose();
             navigate(`/network?ip=${encodeURIComponent(ip)}`);
           }}>Investigate</Button>
-          <Button variant="danger-ghost" size="sm" onClick={async () => {
-            if (!confirm(`Block IP ${ip}?`)) return;
-            try {
-              await api.request("/api/alerts/suppressions", { method: "POST", body: JSON.stringify({ rule: ip, reason: "Manual block from Network Analyzer", expires_hours: 24 }) });
-              toast({ title: `IP ${ip} blocked`, type: "success" });
-            } catch (e) { toast({ title: "Block failed", description: e.message, type: "error" }); }
-          }}>Block IP</Button>
+          <Button variant="danger-ghost" size="sm" onClick={() => blockIp(ip, toast)}>Block IP</Button>
         </div>
       </div>
     </Drawer>
@@ -453,11 +474,11 @@ function ConnectionInspector({ edge, onClose, navigate, toast }) {
         {/* Stats */}
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface-active)] p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Bytes Sent \u2191</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Bytes Sent \u2191</p>
             <p className="mt-0.5 text-lg font-bold text-[var(--severity-high)]">{fmtBytes(conn.bytes_sent)}</p>
           </div>
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface-active)] p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Bytes Recv \u2193</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Bytes Recv \u2193</p>
             <p className="mt-0.5 text-lg font-bold text-[var(--accent-cyan)]">{fmtBytes(conn.bytes_recv)}</p>
           </div>
         </div>
@@ -465,7 +486,7 @@ function ConnectionInspector({ edge, onClose, navigate, toast }) {
         {/* Byte Flow Split Bar */}
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Byte Flow</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Byte Flow</span>
             <span className="text-[11px] font-medium text-[var(--fg-secondary)]">
               {conn.bytes_sent + conn.bytes_recv > 0
                 ? `${Math.round((conn.bytes_sent / (conn.bytes_sent + conn.bytes_recv)) * 100)}% up`
@@ -484,10 +505,11 @@ function ConnectionInspector({ edge, onClose, navigate, toast }) {
               title={`Recv: ${fmtBytes(conn.bytes_recv)}`}
             />
           </div>
-          <div className="mt-1.5 flex items-center justify-between text-[9px]">
+          <div className="mt-1.5 flex items-center justify-between text-[11px]">
             <span className="inline-flex items-center gap-1 text-[var(--severity-high)]">\u25A0 Upload</span>
             <span className="inline-flex items-center gap-1 text-[var(--accent-cyan)]">\u25A0 Download</span>
           </div>
+          <p className="mt-1.5 text-[9px] text-[var(--fg-faint)]">Bytes are process-shared estimates (Windows exposes per-process I/O, not per-socket).</p>
         </div>
 
         {/* Details */}
@@ -512,13 +534,7 @@ function ConnectionInspector({ edge, onClose, navigate, toast }) {
             onClose();
             navigate(`/network?ip=${encodeURIComponent(ip)}`);
           }}>Investigate</Button>
-          <Button variant="danger-ghost" size="sm" onClick={async () => {
-            if (!confirm(`Block IP ${ip}?`)) return;
-            try {
-              await api.request("/api/alerts/suppressions", { method: "POST", body: JSON.stringify({ rule: ip, reason: "Manual block from Network Analyzer", expires_hours: 24 }) });
-              toast({ title: `IP ${ip} blocked`, type: "success" });
-            } catch (e) { toast({ title: "Block failed", description: e.message, type: "error" }); }
-          }}>Block IP</Button>
+          <Button variant="danger-ghost" size="sm" onClick={() => blockIp(ip, toast)}>Block IP</Button>
         </div>
       </div>
     </Drawer>
@@ -552,7 +568,7 @@ function ConnectionTable({ connections, onSelect }) {
   const SortHeader = ({ field, children, className = "" }) => (
     <th
       onClick={() => toggleSort(field)}
-      className={`px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] cursor-pointer select-none hover:text-[var(--fg-secondary)] transition-colors border-b border-[var(--border-subtle)] ${className}`}
+      className={`px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] cursor-pointer select-none hover:text-[var(--fg-secondary)] transition-colors border-b border-[var(--border-subtle)] ${className}`}
     >
       <span className="flex items-center gap-1.5">
         {children}
@@ -597,7 +613,7 @@ function ConnectionTable({ connections, onSelect }) {
                     <span className="inline-flex items-center gap-1.5">
                       <span className="font-mono text-[12px] font-medium text-[var(--fg-primary)]">{conn.remote_port}</span>
                       {PORT_LABELS[conn.remote_port] && (
-                        <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold tracking-wide" style={{ background: "var(--bg-surface)", color: "var(--fg-muted)", border: "1px solid var(--border-subtle)" }}>
+                        <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold tracking-wide" style={{ background: "var(--bg-surface)", color: "var(--fg-muted)", border: "1px solid var(--border-subtle)" }}>
                           {PORT_LABELS[conn.remote_port]}
                         </span>
                       )}
@@ -605,7 +621,7 @@ function ConnectionTable({ connections, onSelect }) {
                   ) : <span className="text-[var(--fg-faint)]">\u2014</span>}
                 </td>
                 <td className="px-4 py-3">
-                  <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: `color-mix(in srgb, ${stateColor} 10%, transparent)`, color: stateColor }}>
+                  <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: `color-mix(in srgb, ${stateColor} 10%, transparent)`, color: stateColor }}>
                     <span className="h-1.5 w-1.5 rounded-full" style={{ background: stateColor }} />
                     {conn.state || "NONE"}
                   </span>
@@ -691,10 +707,10 @@ function DNSTable({ queries }) {
       <table className="w-full text-left border-collapse">
         <thead>
           <tr>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Time</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Query</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Response</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Process</th>
+            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Time</th>
+            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Query</th>
+            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Response</th>
+            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Process</th>
           </tr>
         </thead>
         <tbody>
@@ -754,12 +770,12 @@ function HTTPTable({ requests }) {
       <table className="w-full text-left border-collapse">
         <thead>
           <tr>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Time</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Method</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Host</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Path</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Status</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Process</th>
+            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Time</th>
+            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Method</th>
+            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Host</th>
+            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Path</th>
+            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Status</th>
+            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Process</th>
           </tr>
         </thead>
         <tbody>
@@ -769,7 +785,7 @@ function HTTPTable({ requests }) {
               <tr key={r.id} className="group border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--bg-surface-hover)] transition-colors duration-150">
                 <td className="px-4 py-3 text-[11px] text-[var(--fg-muted)] tabular-nums">{fmtDate(r.observed_at)}</td>
                 <td className="px-4 py-3">
-                  <span className="inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-bold" style={{ background: `color-mix(in srgb, ${METHOD_COLORS[r.method] || "var(--fg-muted)"} 12%, transparent)`, color: METHOD_COLORS[r.method] || "var(--fg-muted)" }}>
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[11px] font-bold" style={{ background: `color-mix(in srgb, ${METHOD_COLORS[r.method] || "var(--fg-muted)"} 12%, transparent)`, color: METHOD_COLORS[r.method] || "var(--fg-muted)" }}>
                     {r.method || "\u2014"}
                   </span>
                 </td>
@@ -967,7 +983,7 @@ function AnalyticsView({ stats, connections }) {
                     style={{ height: `${(count / maxCount) * 100}%`, minHeight: count > 0 ? "3px" : "0" }}
                     title={`${h}: ${count} connections`}
                   />
-                  <span className="absolute -bottom-4 text-[8px] text-[var(--fg-faint)] opacity-0 group-hover:opacity-100 transition-opacity">{h.slice(0, 2)}</span>
+                  <span className="absolute -bottom-4 text-[12px] text-[var(--fg-faint)] opacity-0 group-hover:opacity-100 transition-opacity">{h.slice(0, 2)}</span>
                 </div>
               );
             })}
@@ -989,12 +1005,12 @@ function AnalyticsView({ stats, connections }) {
                   <div className="w-full bg-[var(--severity-high)] transition-all duration-300 group-hover:opacity-80" style={{ height: `${sent / Math.max(total, 1) * 100}%` }} title={`Sent: ${fmtBytes(sent)}`} />
                   <div className="w-full bg-[var(--accent-cyan)] transition-all duration-300 group-hover:opacity-80" style={{ height: `${recv / Math.max(total, 1) * 100}%` }} title={`Recv: ${fmtBytes(recv)}`} />
                 </div>
-                <span className="absolute -bottom-4 text-[8px] text-[var(--fg-faint)] opacity-0 group-hover:opacity-100 transition-opacity">{h.slice(0, 2)}</span>
+                <span className="absolute -bottom-4 text-[12px] text-[var(--fg-faint)] opacity-0 group-hover:opacity-100 transition-opacity">{h.slice(0, 2)}</span>
               </div>
             );
           })}
         </div>
-        <div className="mt-5 flex items-center gap-4 text-[10px]">
+        <div className="mt-5 flex items-center gap-4 text-[11px]">
           <span className="inline-flex items-center gap-1.5 text-[var(--severity-high)]"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: "var(--severity-high)" }} /> Upload (Sent)</span>
           <span className="inline-flex items-center gap-1.5 text-[var(--accent-cyan)]"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: "var(--accent-cyan)" }} /> Download (Recv)</span>
         </div>
@@ -1135,11 +1151,9 @@ function IPInvestigation({ ip, connections, dnsQueries, httpRequests, onClose, n
         </button>
         <Button variant="danger-ghost" size="sm" onClick={async () => {
           if (!confirm(`Block IP ${ip}?`)) return;
-          try {
-            await api.request("/api/alerts/suppressions", { method: "POST", body: JSON.stringify({ rule: ip, reason: "Manual block from Network Analyzer", expires_hours: 24 }) });
-            toast({ title: `IP ${ip} blocked`, type: "success" });
-          } catch (e) { toast({ title: "Block failed", description: e.message, type: "error" }); }
+          blockIp(ip, toast);
         }}>Block IP</Button>
+        <Button variant="secondary" size="sm" disabled title="Packet capture requires the ETW/WFP collector (not enabled)">PCAP</Button>
       </div>
 
       <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
@@ -1166,29 +1180,33 @@ function IPInvestigation({ ip, connections, dnsQueries, httpRequests, onClose, n
               </svg>
               <span className="absolute inset-0 flex items-center justify-center text-[16px] font-bold" style={{ color: riskColor }}>{riskScore}</span>
             </div>
-            <p className="mt-1 text-[9px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">Risk</p>
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">Risk*</p>
           </div>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3 text-center">
-            <p className="text-[9px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Connections</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Connections</p>
             <p className="mt-0.5 text-[17px] font-bold text-[var(--fg-primary)]">{relatedConns.length}</p>
           </div>
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3 text-center">
-            <p className="text-[9px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Total Bytes</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Total Bytes</p>
             <p className="mt-0.5 text-[17px] font-bold text-[var(--fg-primary)]">{fmtBytes(totalBytes)}</p>
           </div>
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3 text-center">
-            <p className="text-[9px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Outbound</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Outbound</p>
             <p className="mt-0.5 text-[17px] font-bold text-[var(--fg-primary)]">{localConns.length}</p>
           </div>
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3 text-center">
-            <p className="text-[9px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Unique Peers</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Unique Peers</p>
             <p className="mt-0.5 text-[17px] font-bold text-[var(--fg-primary)]">{uniquePeers.size}</p>
           </div>
         </div>
       </div>
+
+      <p className="text-[10px] text-[var(--fg-faint)] -mt-2">
+        *Risk is a heuristic score (connection count, bytes, external exposure). Not yet tied to ML anomaly scores or threat intelligence.
+      </p>
 
       <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
 
@@ -1226,6 +1244,8 @@ export default function NetworkAnalyzer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
+  const [direction, setDirection] = useState("all");
+  const [timeRange, setTimeRange] = useState("all");
   const [selectedNode, setSelectedNode] = useState(null);
   const [selectedEdge, setSelectedEdge] = useState(null);
   const [live, setLive] = useState(true);
@@ -1234,9 +1254,11 @@ export default function NetworkAnalyzer() {
 
   const load = useCallback(async () => {
     try {
+      const since = timeRange === "all" ? null
+        : new Date(Date.now() - parseInt(timeRange) * 60 * 60 * 1000).toISOString();
       const [st, net, dns, http] = await Promise.all([
         api.networkStats().catch(() => null),
-        api.network(500),
+        api.network(2000, { since, direction: direction === "all" ? undefined : direction }),
         api.dns(500),
         api.http(500),
       ]);
@@ -1251,7 +1273,7 @@ export default function NetworkAnalyzer() {
     } finally {
       if (alive.current) setLoading(false);
     }
-  }, []);
+  }, [direction, timeRange]);
 
   useEffect(() => {
     alive.current = true;
@@ -1355,7 +1377,47 @@ export default function NetworkAnalyzer() {
           placeholder="Search IP, host, domain, port, protocol..."
           className="sm:w-80"
         />
-        <Tabs tabs={TABS} active={tab} onChange={setTab} />
+        <div className="flex items-center gap-2">
+          <select
+            value={direction}
+            onChange={(e) => setDirection(e.target.value)}
+            className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--fg-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/30"
+          >
+            <option value="all">All Directions</option>
+            <option value="outbound">Outbound ↑</option>
+            <option value="inbound">Inbound ↓</option>
+          </select>
+          <select
+            value={timeRange}
+            onChange={(e) => setTimeRange(e.target.value)}
+            className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--fg-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/30"
+          >
+            <option value="all">All Time</option>
+            <option value="1">Last 1h</option>
+            <option value="6">Last 6h</option>
+            <option value="24">Last 24h</option>
+          </select>
+          <button
+            onClick={() => {
+              const data = connections.map((c) => ({
+                local: `${c.local_ip}:${c.local_port}`, remote: `${c.remote_ip}:${c.remote_port}`,
+                state: c.state, sent: c.bytes_sent, recv: c.bytes_recv, process: c.process, org: c.org || "", observed: c.observed_at,
+              }));
+              const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url; a.download = `network-connections-${Date.now()}.json`;
+              a.click(); URL.revokeObjectURL(url);
+              toast({ title: `Exported ${data.length} connections`, type: "success" });
+            }}
+            className="inline-flex items-center gap-1.5 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] transition-colors"
+            title="Export filtered connections as JSON"
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 2v8M4 10l4 4 4-4M3 14h10" /></svg>
+            Export
+          </button>
+          <Tabs tabs={TABS} active={tab} onChange={setTab} />
+        </div>
       </div>
 
       {/* Stat Cards */}
@@ -1382,7 +1444,7 @@ export default function NetworkAnalyzer() {
               <span className="font-semibold text-[var(--fg-primary)]">{filteredConnections.length}</span> connections
               {filter && <span className="text-[var(--fg-muted)]"> matching "{filter}"</span>}
             </span>
-            <span className="text-[10px] text-[var(--fg-faint)] uppercase tracking-wider">Click row to inspect</span>
+            <span className="text-[11px] text-[var(--fg-faint)] uppercase tracking-wider">Click row to inspect</span>
           </div>
           <ConnectionTable connections={filteredConnections} onSelect={(c) => setSelectedEdge({ connection: c })} />
         </div>

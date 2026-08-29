@@ -98,13 +98,44 @@ def list_processes(limit: int = Query(200, ge=1, le=1000), db: Session = Depends
 
 @router.get("/network")
 def list_network(
-    limit: int = Query(200, ge=1, le=1000),
+    limit: int = Query(500, ge=1, le=2000),
     remote_ip: str | None = None,
+    since: str | None = None,
+    direction: str | None = None,
     db: Session = Depends(get_db),
 ):
     stmt = select(NetworkConnection)
     if remote_ip:
         stmt = stmt.where(NetworkConnection.remote_ip == remote_ip)
+    if since:
+        from datetime import datetime as _dt
+        try:
+            since_dt = _dt.fromisoformat(since)
+            stmt = stmt.where(NetworkConnection.observed_at >= since_dt)
+        except ValueError:
+            pass
+    if direction == "outbound":
+        # local is internal/private, remote is external
+        stmt = stmt.where(NetworkConnection.remote_ip != "").where(
+            ~NetworkConnection.remote_ip.like("10.%"),
+            ~NetworkConnection.remote_ip.like("192.168.%"),
+            ~NetworkConnection.remote_ip.like("172.16.%"),
+            ~NetworkConnection.remote_ip.like("172.17.%"),
+            ~NetworkConnection.remote_ip.like("172.18.%"),
+            ~NetworkConnection.remote_ip.like("172.19.%"),
+            ~NetworkConnection.remote_ip.like("172.2%"),
+            ~NetworkConnection.remote_ip.like("172.3%"),
+            ~NetworkConnection.remote_ip.like("127.%"),
+            ~NetworkConnection.remote_ip.like("0.%"),
+            ~NetworkConnection.remote_ip.like("::1"),
+        )
+    elif direction == "inbound":
+        stmt = stmt.where(NetworkConnection.remote_ip != "").where(
+            NetworkConnection.remote_ip.like("10.%"),
+            NetworkConnection.remote_ip.like("192.168.%"),
+            NetworkConnection.remote_ip.like("172.1%"),
+            NetworkConnection.remote_ip.like("127.%"),
+        )
     rows = db.scalars(stmt.order_by(NetworkConnection.observed_at.desc()).limit(limit)).all()
     return {"total": len(rows), "items": [c.to_dict() for c in rows]}
 
