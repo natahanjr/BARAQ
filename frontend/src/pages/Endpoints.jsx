@@ -1,29 +1,48 @@
-import { useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { api } from "../api.js";
 import { Loading, ErrorBanner } from "../components/Feedback.jsx";
+import { PageHeader, Card, Badge, Button, SearchInput } from "../components/ui/index.js";
 
-export default function Endpoints() {
+const ACTIONS = [
+  { id: "block_ip", label: "Block IP" },
+  { id: "kill_process", label: "Kill Process" },
+  { id: "quarantine", label: "Quarantine" },
+  { id: "isolate", label: "Isolate Endpoint" },
+  { id: "disable_account", label: "Disable Account" },
+  { id: "escalate", label: "Escalate" },
+];
+
+function Endpoints() {
   const [endpoints, setEndpoints] = useState([]);
   const [commands, setCommands] = useState([]);
-  const [busy, setBusy] = useState("");
-  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
   const [cmdAgent, setCmdAgent] = useState(null);
   const [cmdAction, setCmdAction] = useState("block_ip");
   const [cmdTarget, setCmdTarget] = useState("");
   const [cmdNote, setCmdNote] = useState("");
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState("");
 
-  const refresh = async () => {
-    const [eps, cmds] = await Promise.allSettled([api.endpoints(), api.listCommands(30)]);
-    setEndpoints(eps.status === "fulfilled" ? eps.value.items || [] : endpoints);
-    setCommands(cmds.status === "fulfilled" ? cmds.value.items || [] : commands);
-    if (eps.status !== "fulfilled") setError(eps.reason.message);
-  };
+  const refresh = useCallback(async () => {
+    try {
+      const [eps, cmds] = await Promise.allSettled([api.endpoints(), api.listCommands(30)]);
+      setEndpoints(eps.status === "fulfilled" ? eps.value?.items || [] : []);
+      setCommands(cmds.status === "fulfilled" ? cmds.value?.items || [] : []);
+      setError("");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     refresh();
     const t = setInterval(refresh, 10000);
     return () => clearInterval(t);
-  }, []);
+  }, [refresh]);
 
   const sendCommand = async () => {
     if (!cmdAgent) return;
@@ -32,7 +51,7 @@ export default function Endpoints() {
     setMessage("");
     try {
       const res = await api.sendCommand(cmdAgent, cmdAction, cmdTarget.trim(), cmdNote.trim());
-      setMessage(`Command #${res.id} queued for ${res.agent_id} (${res.action} ${res.target})`);
+      setMessage(`Command #${res.id} queued for ${res.agent_id}`);
       setCmdAgent(null);
       setCmdTarget("");
       setCmdNote("");
@@ -44,233 +63,176 @@ export default function Endpoints() {
     }
   };
 
-  if (!endpoints.length && !commands.length && !error) return <Loading label="Loading endpoints" />;
+  if (loading) return <Loading label="Loading endpoints" />;
+
+  const filtered = endpoints.filter((ep) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return ep.hostname?.toLowerCase().includes(q) || ep.agent_id?.toLowerCase().includes(q);
+  });
+
+  const onlineCount = endpoints.filter((ep) => Date.now() - new Date(ep.last_seen).getTime() < 2 * 60 * 1000).length;
 
   return (
-    <div className="space-y-6 pb-12">
-      <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6">
-        <h1 className="text-[24px] font-bold tracking-[-0.03em] text-white">Endpoints</h1>
-        <p className="mt-1 text-[13px] text-slate-400">Remote agents, online status and the command channel</p>
+    <div className="space-y-5 pb-10">
+      <PageHeader
+        title="Endpoints"
+        subtitle="Remote agents, online status and the command channel"
+      />
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Card className="p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Total Agents</p>
+          <p className="mt-1 text-2xl font-bold text-[var(--fg-primary)]">{endpoints.length}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Online</p>
+          <p className="mt-1 text-2xl font-bold text-[var(--status-healthy)]">{onlineCount}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Offline</p>
+          <p className="mt-1 text-2xl font-bold text-[var(--severity-critical)]">{endpoints.length - onlineCount}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Commands</p>
+          <p className="mt-1 text-2xl font-bold text-[var(--fg-primary)]">{commands.length}</p>
+        </Card>
       </div>
 
       {message && (
-        <div className="rounded-xl border p-4 text-sm" style={{ background: "var(--success-bg, #ecfdf5)", borderColor: "var(--success-border, #a7f3d0)", color: "var(--success-text, #065f46)" }}>
-          {message}
-        </div>
+        <div className="rounded-[var(--radius-lg)] border border-[var(--status-healthy-border)] bg-[var(--status-healthy)]/[0.06] p-3 text-[12px] text-[var(--status-healthy)]">{message}</div>
       )}
       {error && <ErrorBanner message={error} onRetry={refresh} />}
 
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-            <span className="h-1 w-1 rounded-full bg-cyan-400" />
-            Connected Endpoints
-          </h3>
-          <span className="text-xs text-slate-500">
-            {endpoints.length === 0 ? "No agents reporting yet" : `${endpoints.length} agent${endpoints.length === 1 ? "" : "s"}`}
-          </span>
-        </div>
-        {endpoints.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03]">
-              <svg className="h-5 w-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
-              </svg>
-            </div>
-            <h4 className="text-[13px] font-semibold text-slate-300">No Agents Connected</h4>
-            <p className="mt-1 max-w-xs text-xs text-slate-500">No remote agents have reported yet. Set one up from <span className="font-mono text-cyan-400">Agent Setup</span>, or ingest directly via <span className="font-mono text-cyan-400">POST /api/ingest</span> with an X-Agent-Key.</p>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {endpoints.map((ep) => {
-              const online = Date.now() - new Date(ep.last_seen).getTime() < 2 * 60 * 1000;
-              return (
-                <div key={ep.agent_id} className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-5 transition-all hover:border-white/[0.12] hover:bg-white/[0.035]">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-[13px] font-semibold text-slate-100">{ep.hostname}</span>
-                    <span
-                      className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
-                        online
-                          ? "rounded-lg border border-emerald-500/30 bg-emerald-500/[0.1] text-emerald-400"
-                          : "rounded-lg border border-rose-500/30 bg-rose-500/[0.1] text-rose-400"
-                      }`}
-                    >
-                      {online ? "ONLINE" : "OFFLINE"}
-                    </span>
-                  </div>
-                  <p className="mt-1 truncate font-mono text-[10px] text-slate-500">{ep.agent_id}</p>
-                  {ep.org ? (
-                    <span className="mt-1 inline-block max-w-full truncate rounded-md bg-violet-500/10 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-violet-300" title={`Organization: ${ep.org}`}>
-                      {ep.org}
-                    </span>
-                  ) : null}
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-xl bg-white/[0.03] px-3 py-2 ring-1 ring-white/[0.04]">
-                      <p className="text-[12px] font-bold text-cyan-400">{ep.records}</p>
-                      <p className="text-[9px] uppercase tracking-wider text-slate-500">records</p>
-                    </div>
-                    <div className="rounded-xl bg-white/[0.03] px-3 py-2 ring-1 ring-white/[0.04]">
-                      <p className="text-[12px] font-bold text-slate-200">{ep.events}</p>
-                      <p className="text-[9px] uppercase tracking-wider text-slate-500">events</p>
-                    </div>
-                    <div className="rounded-xl bg-white/[0.03] px-3 py-2 ring-1 ring-white/[0.04]">
-                      <p className="text-[12px] font-bold text-amber-400">{ep.alerts}</p>
-                      <p className="text-[9px] uppercase tracking-wider text-slate-500">alerts</p>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-[10px] text-slate-500">
-                    last seen{" "}
-                    {new Date(ep.last_seen).toLocaleString([], {
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
+      <SearchInput value={search} onChange={setSearch} placeholder="Search endpoints..." className="sm:w-80" />
 
-                  {cmdAgent === ep.agent_id ? (
-                    <div className="mt-3 rounded-xl border border-cyan-500/15 bg-cyan-500/[0.04] p-4">
-                      <select
-                        value={cmdAction}
-                        onChange={(e) => setCmdAction(e.target.value)}
-                        className="mb-2 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-2.5 text-[12px] text-slate-200 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
-                      >
-                        <option value="block_ip">Block IP (firewall)</option>
-                        <option value="kill_process">Kill Process</option>
-                        <option value="quarantine">Quarantine File</option>
-                        <option value="isolate">Isolate Endpoint</option>
-                        <option value="disable_account">Disable Account</option>
-                        <option value="escalate">Escalate / Review</option>
-                      </select>
-                      {cmdAction !== "escalate" && (
-                        <input
-                          value={cmdTarget}
-                          onChange={(e) => setCmdTarget(e.target.value)}
-                          placeholder={cmdAction === "block_ip" ? "e.g. 185.220.101.45" : cmdAction === "isolate" ? "e.g. WS-ALPHA (optional)" : "e.g. miner.exe or C:\\Users\\...\\malware.exe"}
-                          className="mb-2 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-2.5 font-mono text-xs text-slate-200 placeholder-slate-500 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
-                        />
-                      )}
-                      <input
-                        value={cmdNote}
-                        onChange={(e) => setCmdNote(e.target.value)}
-                        placeholder="note (optional)"
-                        className="mb-3 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-2.5 text-xs text-slate-200 placeholder-slate-500 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={sendCommand}
-                          disabled={busy === `cmd:${ep.agent_id}`}
-                          className="flex-1 rounded-xl border border-cyan-500/25 bg-cyan-500/[0.08] px-4 py-2.5 text-[12px] font-semibold text-cyan-400 transition-all hover:bg-cyan-500/[0.15] disabled:opacity-50"
-                        >
-                          {busy === `cmd:${ep.agent_id}` ? "Sending..." : "Send Command"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCmdAgent(null)}
-                          className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-2.5 text-[12px] text-slate-300 transition-all hover:bg-white/[0.06]"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCmdAgent(ep.agent_id);
-                        setCmdAction("block_ip");
-                        setCmdTarget("");
-                        setCmdNote("");
-                        setError("");
-                      }}
-                      disabled={!online}
-                      className="mt-3 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-2.5 text-[12px] font-semibold text-slate-300 transition-all hover:border-cyan-500/30 hover:bg-cyan-500/[0.06] hover:text-cyan-300 disabled:opacity-40"
-                    >
-                      Send Command
-                    </button>
-                  )}
+      {/* Endpoints Grid */}
+      {filtered.length === 0 ? (
+        <Card>
+          <div className="py-12 text-center text-[13px] text-[var(--fg-muted)]">
+            No agents connected. Set one up from Agent Setup.
+          </div>
+        </Card>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((ep) => {
+            const online = Date.now() - new Date(ep.last_seen).getTime() < 2 * 60 * 1000;
+            return (
+              <Card key={ep.agent_id} hover>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-mono text-[13px] font-semibold text-[var(--fg-primary)]">{ep.hostname}</span>
+                  <Badge severity={online ? "info" : "critical"} size="sm">{online ? "ONLINE" : "OFFLINE"}</Badge>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                <p className="mt-1 truncate font-mono text-[10px] text-[var(--fg-muted)]">{ep.agent_id}</p>
+                {ep.org && <Badge severity="low" size="sm">{ep.org}</Badge>}
 
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-            <span className="h-1 w-1 rounded-full bg-cyan-400" />
-            Agent Command History
-          </h3>
-          <span className="text-xs text-slate-500">
-            {commands.length === 0 ? "No commands issued yet" : `latest ${commands.length}`}
-          </span>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-[var(--radius-md)] bg-[var(--bg-inset)] px-2 py-1.5">
+                    <p className="text-[12px] font-bold text-[var(--accent-cyan)]">{ep.records}</p>
+                    <p className="text-[9px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">records</p>
+                  </div>
+                  <div className="rounded-[var(--radius-md)] bg-[var(--bg-inset)] px-2 py-1.5">
+                    <p className="text-[12px] font-bold text-[var(--fg-primary)]">{ep.events}</p>
+                    <p className="text-[9px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">events</p>
+                  </div>
+                  <div className="rounded-[var(--radius-md)] bg-[var(--bg-inset)] px-2 py-1.5">
+                    <p className="text-[12px] font-bold text-[var(--severity-high)]">{ep.alerts}</p>
+                    <p className="text-[9px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">alerts</p>
+                  </div>
+                </div>
+
+                <p className="mt-2 text-[10px] text-[var(--fg-muted)]">
+                  Last seen {new Date(ep.last_seen).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </p>
+
+                {cmdAgent === ep.agent_id ? (
+                  <div className="mt-3 rounded-[var(--radius-lg)] border border-[var(--accent-cyan)]/20 bg-[var(--accent-cyan)]/[0.04] p-3 space-y-2">
+                    <select
+                      value={cmdAction}
+                      onChange={(e) => setCmdAction(e.target.value)}
+                      className="w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-3 py-2 text-[12px] text-[var(--fg-primary)] outline-none focus:border-[var(--accent-cyan)]/40"
+                    >
+                      {ACTIONS.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+                    </select>
+                    {cmdAction !== "escalate" && (
+                      <input
+                        value={cmdTarget}
+                        onChange={(e) => setCmdTarget(e.target.value)}
+                        placeholder="Target (IP, process, file path)"
+                        className="w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-3 py-2 font-mono text-[11px] text-[var(--fg-primary)] outline-none focus:border-[var(--accent-cyan)]/40"
+                      />
+                    )}
+                    <input
+                      value={cmdNote}
+                      onChange={(e) => setCmdNote(e.target.value)}
+                      placeholder="Note (optional)"
+                      className="w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-3 py-2 text-[12px] text-[var(--fg-primary)] outline-none focus:border-[var(--accent-cyan)]/40"
+                    />
+                    <div className="flex gap-2">
+                      <Button onClick={sendCommand} disabled={busy === `cmd:${ep.agent_id}`} size="xs" className="flex-1">
+                        {busy === `cmd:${ep.agent_id}` ? "Sending..." : "Send"}
+                      </Button>
+                      <Button variant="ghost" size="xs" onClick={() => setCmdAgent(null)}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setCmdAgent(ep.agent_id); setCmdAction("block_ip"); setCmdTarget(""); setCmdNote(""); }}
+                    disabled={!online}
+                    className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-3 py-2 text-[11px] font-semibold text-[var(--fg-secondary)] transition-colors hover:border-[var(--accent-cyan)]/30 hover:text-[var(--accent-cyan)] disabled:opacity-40"
+                  >
+                    Send Command
+                  </button>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Command History */}
+      <Card padding={false}>
+        <div className="px-5 pt-4 pb-3">
+          <h3 className="text-[14px] font-semibold text-[var(--fg-primary)]">Command History</h3>
+          <p className="mt-0.5 text-[11px] text-[var(--fg-muted)]">{commands.length} command{commands.length === 1 ? "" : "s"}</p>
         </div>
         {commands.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03]">
-              <svg className="h-5 w-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-              </svg>
-            </div>
-            <h4 className="text-[13px] font-semibold text-slate-300">No Commands Issued</h4>
-            <p className="mt-1 max-w-xs text-xs text-slate-500">Queue a remote action on an endpoint above — the agent picks it up within 15s and reports back.</p>
-          </div>
+          <div className="py-12 text-center text-[13px] text-[var(--fg-muted)]">No commands issued</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-white/[0.06] text-[10px] uppercase tracking-[0.08em] text-slate-500/70">
-                  <th className="pb-2 pr-3 text-left font-medium">#</th>
-                  <th className="pb-2 pr-3 text-left font-medium">Agent</th>
-                  <th className="pb-2 pr-3 text-left font-medium">Action</th>
-                  <th className="pb-2 pr-3 text-left font-medium">Target</th>
-                  <th className="pb-2 pr-3 text-left font-medium">Status</th>
-                  <th className="pb-2 pr-3 text-left font-medium">Detail</th>
-                  <th className="pb-2 text-left font-medium">Queued</th>
+                <tr>
+                  <th>#</th>
+                  <th>Agent</th>
+                  <th>Action</th>
+                  <th>Target</th>
+                  <th>Status</th>
+                  <th>Detail</th>
+                  <th>Queued</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody>
                 {commands.map((c) => (
                   <tr key={c.id}>
-                    <td className="py-2.5 pr-3 font-mono text-xs text-slate-400">{c.id}</td>
-                    <td className="py-2.5 pr-3 font-mono text-xs text-slate-300">{c.agent_id}</td>
-                    <td className="py-2.5 pr-3 font-mono text-xs text-cyan-300">{c.action}</td>
-                    <td className="max-w-[200px] truncate py-2.5 pr-3 font-mono text-xs text-slate-300">{c.target || "—"}</td>
-                    <td className="py-2.5 pr-3">
-                      <span
-                        className={`rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
-                          c.status === "success"
-                            ? "border border-emerald-500/30 bg-emerald-500/[0.1] text-emerald-400"
-                            : c.status === "failed"
-                              ? "border border-rose-500/30 bg-rose-500/[0.1] text-rose-400"
-                              : "border border-amber-500/30 bg-amber-500/[0.1] text-amber-400"
-                        }`}
-                      >
-                        {c.status}
-                      </span>
-                    </td>
-                    <td className="max-w-[220px] truncate py-2.5 pr-3 text-xs text-slate-500">{c.detail || "—"}</td>
-                    <td className="py-2.5 text-xs text-slate-500">
-                      {new Date(c.created_at).toLocaleString([], {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
+                    <td className="font-mono text-[11px] text-[var(--fg-muted)]">{c.id}</td>
+                    <td className="font-mono text-[11px] text-[var(--fg-secondary)]">{c.agent_id}</td>
+                    <td className="font-mono text-[11px] text-[var(--accent-cyan)]">{c.action}</td>
+                    <td className="max-w-[200px] truncate font-mono text-[11px] text-[var(--fg-secondary)]">{c.target || "—"}</td>
+                    <td><Badge severity={c.status === "success" ? "info" : c.status === "failed" ? "critical" : "medium"} size="sm">{c.status}</Badge></td>
+                    <td className="max-w-[220px] truncate text-[11px] text-[var(--fg-muted)]">{c.detail || "—"}</td>
+                    <td className="text-[11px] text-[var(--fg-muted)]">{new Date(c.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
-
-      <div className="flex justify-center pt-4">
-        <p className="text-xs font-medium text-slate-500/50">BARAQ · Real-Time Endpoint Security Operations</p>
-      </div>
+      </Card>
     </div>
   );
 }
+
+export default memo(Endpoints);
