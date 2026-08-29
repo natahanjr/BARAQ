@@ -34,7 +34,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 
 # ------------------------------------------------------------------ defaults
-$Port = if ($env:BARAQ_PG_PORT) { $env:BARAQ_PG_PORT } else { "55432" }
+$Port = if ($env:BARAQ_PG_PORT) { $env:BARAQ_PG_PORT } else { "5432" }
 $Bind = if ($env:BARAQ_PG_HOST) { $env:BARAQ_PG_HOST } else { "127.0.0.1" }
 if (-not $PgHome) { $PgHome = $env:BARAQ_PG_HOME }
 if (-not $PgHome) { $PgHome = Join-Path $env:LOCALAPPDATA "BARAQ\postgres" }

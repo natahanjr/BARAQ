@@ -162,6 +162,18 @@ export const api = {
   detectionMethods: () => request("/api/dashboard/detection-methods" + qsSuffix(demoParams())),
   riskDistribution: () => request("/api/dashboard/risk-distribution" + qsSuffix(demoParams())),
 
+  // Detections (v2 detector catalog)
+  detections: (params = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(demoParams(params)).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") qs.set(k, v);
+    });
+    return request(`/api/detections?${qs.toString()}`);
+  },
+  detectionDetail: (id) => request(`/api/detections/${id}`),
+  detectors: () => request("/api/detectors"),
+  detectorDetail: (id) => request(`/api/detectors/${id}`),
+
   evaluationRun: () => request("/api/evaluation/run?with_ml=true", { method: "POST" }),
   evaluationResults: (limit = 50) => request(`/api/evaluation/results?limit=${limit}`),
   evaluationLatest: () => request("/api/evaluation/latest"),
@@ -201,6 +213,18 @@ export const api = {
   },
   processes: (limit = 200) => request(`/api/processes?limit=${limit}`),
   network: (limit = 200) => request(`/api/network?limit=${limit}`),
+  dns: (limit = 200, process = null) => {
+    const p = new URLSearchParams({ limit });
+    if (process) p.set("process", process);
+    return request(`/api/dns?${p.toString()}`);
+  },
+  http: (limit = 200, host = null, method = null) => {
+    const p = new URLSearchParams({ limit });
+    if (host) p.set("host", host);
+    if (method) p.set("method", method);
+    return request(`/api/http?${p.toString()}`);
+  },
+  networkStats: () => request("/api/network/stats"),
   eventStatistics: () => request("/api/events/statistics"),
 
   datasetStatus: () => request("/api/telemetry/dataset"),
@@ -257,7 +281,7 @@ export const api = {
   listReports: () => request("/api/reports/list"),
 
   systemStatus: () => request("/api/system/status"),
-  healthCheck: () => fetch("/api/health").then((r) => { if (!r.ok) throw new Error("unreachable"); return r.json(); }),
+  healthCheck: () => fetch("/api/health", { cache: "no-store", headers: { "Cache-Control": "no-cache" } }).then((r) => { if (!r.ok) throw new Error("unreachable"); return r.json(); }),
   collect: () => request("/api/system/collect", { method: "POST" }),
   dataQuality: () => request("/api/system/data-quality"),
   dataQualityHistory: () => request("/api/system/data-quality/history"),

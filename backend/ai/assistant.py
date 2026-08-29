@@ -369,7 +369,7 @@ class SecurityAssistant:
                 reasoning_parts: list[str] = []
                 content_parts: list[str] = []
 
-                with httpx.Client(timeout=httpx.Timeout(connect=10, read=60, write=10, pool=10)) as hclient:
+                with httpx.Client(timeout=httpx.Timeout(connect=5, read=15, write=5, pool=5)) as hclient:
                     with hclient.stream(
                         "POST", url, json=payload,
                         headers={"Content-Type": "application/json", "Authorization": f"Bearer {AI_API_KEY}"},
@@ -910,7 +910,7 @@ class SecurityAssistant:
             reasoning_parts: list[str] = []
             content_parts: list[str] = []
 
-            with httpx.Client(timeout=httpx.Timeout(connect=10, read=60, write=10, pool=10)) as client:
+            with httpx.Client(timeout=httpx.Timeout(connect=5, read=15, write=5, pool=5)) as client:
                 with client.stream(
                     "POST",
                     url,

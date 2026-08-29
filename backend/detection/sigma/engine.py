@@ -34,6 +34,16 @@ logger = logging.getLogger("baraq.sigma.engine")
 #: Max findings emitted per rule per cycle (alerting dedups the rest).
 MAX_FINDINGS_PER_RULE = 20
 
+#: Known-benign event message patterns that should never trigger sigma rules.
+#: These are legitimate Windows operations that sigma rules commonly match
+#: on event type alone (e.g. WMI event IDs 19/20/21 for Defender updates).
+_FP_MESSAGE_PATTERNS = (
+    re.compile(r"Security Intelligence Update for Microsoft Defender", re.IGNORECASE),
+    re.compile(r"Windows successfully installed the following update", re.IGNORECASE),
+    re.compile(r"Microsoft Defender.*Version.*Current Channel", re.IGNORECASE),
+    re.compile(r"Update for Microsoft Defender.*KB\d+", re.IGNORECASE),
+)
+
 #: Canonical severity ladder used to demote unreliable matches.
 _SEVERITY_ORDER = ("info", "low", "medium", "high", "critical")
 
@@ -358,6 +368,16 @@ class SigmaRuleEngine(BaseRule):
                         "FP-suppressed (trusted agent path): rule '%s' on "
                         "event %s",
                         rule.title, event.id,
+                    )
+                    continue
+                # FP filter: known-benign Windows operations that sigma rules
+                # commonly match on event type alone (e.g. WMI events for
+                # Defender security intelligence updates).
+                if any(p.search(event.message or "") for p in _FP_MESSAGE_PATTERNS):
+                    logger.info(
+                        "FP-suppressed (benign Windows operation): rule '%s' "
+                        "on event %s: %s",
+                        rule.title, event.id, (event.message or "")[:120],
                     )
                     continue
                 emitted[rule.rule_id] = emitted.get(rule.rule_id, 0) + 1

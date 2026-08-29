@@ -18,6 +18,14 @@ import re
 _DEFAULT_TRUSTED_FRAGMENTS = (
     r"AppData\\Local\\Temp\\opencode\\",
     r"AppData/Local/Temp/opencode/",
+    # Baraq project directory — user's own scripts (toast notifications, helpers).
+    r"F:\\My Project\\Baraq\\",
+    r"F:/My Project/Baraq/",
+    # Common user project directories.
+    r"\\Documents\\",
+    r"\\Desktop\\",
+    r"\\Repos\\",
+    r"\\Projects\\",
 )
 
 

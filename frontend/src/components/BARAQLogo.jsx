@@ -1,16 +1,16 @@
 /** The BARAQ mark — a lightning bolt cutting through a hexagonal shield,
- *  duotone cyan → violet with a pulsing glow. (בָּרָק = lightning.) */
+ *  duotone teal → gold with a pulsing glow. (בָּרָק = lightning.) */
 export default function BARAQLogo({ className = "h-10 w-10", pulse = true }) {
   return (
     <svg className={className} viewBox="0 0 64 64" aria-hidden="true">
       <defs>
         <linearGradient id="bqShield" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#00f0ff" />
-          <stop offset="100%" stopColor="#7b61ff" />
+          <stop offset="0%" stopColor="#14b8a6" />
+          <stop offset="100%" stopColor="#eab308" />
         </linearGradient>
         <linearGradient id="bqBolt" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="100%" stopColor="#00f0ff" />
+          <stop offset="100%" stopColor="#14b8a6" />
         </linearGradient>
         <filter id="bqGlow" x="-40%" y="-40%" width="180%" height="180%">
           <feGaussianBlur stdDeviation="2.2" result="blur" />

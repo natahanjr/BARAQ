@@ -16,17 +16,17 @@ const STATUSES = [
 const SEVERITIES = ["critical", "high", "medium", "low"];
 
 const inputClass =
-  "w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10";
+  "w-full rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] px-4 py-3 text-[13px] text-[var(--fg-primary)] placeholder-[var(--fg-faint)] outline-none transition-all focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20";
 
 const selectClass =
-  "rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10";
+  "rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] px-4 py-3 text-[13px] text-[var(--fg-primary)] placeholder-[var(--fg-faint)] outline-none transition-all focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20";
 
 function confidenceTone(label) {
   return {
-    high: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40",
-    medium: "bg-amber-500/15 text-amber-300 border-amber-500/40",
-    low: "bg-red-500/15 text-red-300 border-red-500/40",
-  }[label] || "bg-slate-500/15 text-slate-300 border-slate-500/40";
+    high: "bg-[var(--status-healthy)]/15 text-[var(--status-healthy)] border-[var(--status-healthy)]/40",
+    medium: "bg-[var(--severity-medium)]/15 text-[var(--severity-medium)] border-[var(--severity-medium)]/40",
+    low: "bg-[var(--severity-critical)]/15 text-[var(--severity-critical)] border-[var(--severity-critical)]/40",
+  }[label] || "bg-[var(--fg-muted)]/15 text-[var(--fg-muted)] border-[var(--fg-muted)]/40";
 }
 
 function ConfidenceBadge({ score, label }) {
@@ -46,21 +46,21 @@ function IncidentCard({ incident, onOpen, onSelect, selected }) {
     <div
       className={`group flex cursor-pointer items-start gap-3 rounded-2xl border p-5 transition-all ${
         selected
-          ? "border-cyan-500/40 bg-white/[0.025] shadow-[0_0_20px_-4px_rgba(0,240,255,0.15)]"
-          : "border-white/[0.06] bg-white/[0.025] hover:border-white/[0.12] hover:bg-white/[0.035]"
+          ? "border-[var(--accent-cyan)]/40 bg-[var(--bg-surface)] shadow-[0_0_20px_-4px_rgba(0,240,255,0.15)]"
+          : "border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface)]"
       }`}
       onClick={() => onSelect(incident.id)}
       onDoubleClick={() => onOpen(incident)}
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] text-slate-500">{incident.ref}</span>
-          <h3 className="truncate text-sm font-semibold text-white group-hover:text-cyan-300">
+          <span className="font-mono text-[11px] text-[var(--fg-faint)]">{incident.ref}</span>
+          <h3 className="truncate text-sm font-semibold text-[var(--fg-primary)] group-hover:text-[var(--accent-cyan)]">
             {incident.title}
           </h3>
         </div>
         {incident.description && (
-          <p className="mt-1.5 line-clamp-2 text-sm text-slate-400">{incident.description}</p>
+          <p className="mt-1.5 line-clamp-2 text-sm text-[var(--fg-secondary)]">{incident.description}</p>
         )}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <SeverityBadge severity={incident.severity} />
@@ -69,12 +69,12 @@ function IncidentCard({ incident, onOpen, onSelect, selected }) {
             <ConfidenceBadge score={incident.confidence} label={null} />
           )}
           {incident.alert_count > 0 && (
-            <span className="rounded-md bg-white/[0.04] px-2.5 py-1 font-mono text-[10px] text-cyan-400 ring-1 ring-white/[0.06]">
+            <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] text-[var(--accent-cyan)] ring-1 ring-[var(--border-default)]">
               {incident.alert_count} alert{incident.alert_count === 1 ? "" : "s"}
             </span>
           )}
           {incident.mitre_id && (
-            <span className="rounded-md bg-white/[0.04] px-2.5 py-1 font-mono text-[10px] text-slate-400 ring-1 ring-white/[0.06]">
+            <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] text-[var(--fg-secondary)] ring-1 ring-[var(--border-default)]">
               {incident.mitre_id}
             </span>
           )}
@@ -82,9 +82,9 @@ function IncidentCard({ incident, onOpen, onSelect, selected }) {
       </div>
       <div className="shrink-0 text-right">
         {incident.owner && (
-          <p className="text-xs font-medium text-slate-400">{incident.owner}</p>
+          <p className="text-xs font-medium text-[var(--fg-secondary)]">{incident.owner}</p>
         )}
-        <p className="mt-1 text-[11px] text-slate-500">
+        <p className="mt-1 text-[11px] text-[var(--fg-faint)]">
           {incident.created_at
             ? new Date(incident.created_at).toLocaleString([], {
                 month: "short",
@@ -143,14 +143,14 @@ function CreateIncident({ onCreated }) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+    <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold text-white">New Incident</h3>
+        <h3 className="text-base font-semibold text-[var(--fg-primary)]">New Incident</h3>
         {isAdmin() && (
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="rounded-xl border border-cyan-500/25 bg-cyan-500/[0.08] px-4 py-2.5 text-[13px] font-semibold text-cyan-400 transition-all hover:bg-cyan-500/[0.15] hover:shadow-[0_0_20px_-4px_rgba(0,240,255,0.2)]"
+            className="rounded-xl bg-[var(--accent-cyan)] text-white shadow-lg shadow-[var(--accent-cyan)]/25 hover:shadow-xl transition-all px-4 py-2.5 text-[13px] font-semibold"
           >
             {open ? "Cancel" : "Create"}
           </button>
@@ -199,11 +199,11 @@ function CreateIncident({ onCreated }) {
               className={inputClass}
             />
           </div>
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-[var(--severity-critical)]">{error}</p>}
           <button
             type="submit"
             disabled={saving || !title.trim()}
-            className="w-full rounded-xl border border-cyan-500/25 bg-cyan-500/[0.08] px-4 py-2.5 text-[13px] font-semibold text-cyan-400 transition-all hover:bg-cyan-500/[0.15] hover:shadow-[0_0_20px_-4px_rgba(0,240,255,0.2)] disabled:opacity-50"
+            className="w-full rounded-xl bg-[var(--accent-cyan)] text-white shadow-lg shadow-[var(--accent-cyan)]/25 hover:shadow-xl transition-all px-4 py-2.5 text-[13px] font-semibold disabled:opacity-50"
           >
             {saving ? "Creating..." : "Create Incident"}
           </button>
@@ -300,7 +300,7 @@ function IncidentDetail({ incident, onChanged }) {
     <div className="space-y-4">
       <div>
         <div className="flex flex-wrap items-center gap-2.5">
-          <h2 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+          <h2 className="text-xl font-bold tracking-tight text-[var(--fg-primary)] sm:text-2xl">
             {incident.ref} · {incident.title}
           </h2>
           <SeverityBadge severity={incident.severity} />
@@ -308,7 +308,7 @@ function IncidentDetail({ incident, onChanged }) {
           {incident.alerts?.length > 0 && (
             <Link
               to={`/investigation?alert=${incident.alerts[0].alert_id}`}
-              className="rounded-xl border border-cyan-500/25 bg-cyan-500/[0.08] px-4 py-2.5 text-[13px] font-semibold text-cyan-400 transition-all hover:bg-cyan-500/[0.15] hover:shadow-[0_0_20px_-4px_rgba(0,240,255,0.2)]"
+              className="rounded-xl bg-[var(--accent-cyan)] text-white shadow-lg shadow-[var(--accent-cyan)]/25 hover:shadow-xl transition-all px-4 py-2.5 text-[13px] font-semibold"
               title="Open the full investigation workspace for this incident's alerts"
             >
               Investigation workspace →
@@ -316,21 +316,21 @@ function IncidentDetail({ incident, onChanged }) {
           )}
         </div>
         {incident.description && (
-          <p className="mt-2 text-sm leading-relaxed text-slate-300">{incident.description}</p>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--fg-secondary)]">{incident.description}</p>
         )}
-        <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
-          {incident.owner && <span>Owner: <b className="text-slate-300">{incident.owner}</b></span>}
-          {incident.host && <span>Host: <b className="text-slate-300">{incident.host}</b></span>}
+        <div className="mt-3 flex flex-wrap gap-4 text-xs text-[var(--fg-faint)]">
+          {incident.owner && <span>Owner: <b className="text-[var(--fg-secondary)]">{incident.owner}</b></span>}
+          {incident.host && <span>Host: <b className="text-[var(--fg-secondary)]">{incident.host}</b></span>}
           {incident.mitre_id && (
-            <span>MITRE: <b className="font-mono text-cyan-400">{incident.mitre_id}</b> {incident.mitre_name}</span>
+            <span>MITRE: <b className="font-mono text-[var(--accent-cyan)]">{incident.mitre_id}</b> {incident.mitre_name}</span>
           )}
           {incident.risk_score ? (
-            <span>Risk: <b className="text-amber-300">{incident.risk_level} ({incident.risk_score.toFixed(1)})</b></span>
+            <span>Risk: <b className="text-[var(--severity-medium)]">{incident.risk_level} ({incident.risk_score.toFixed(1)})</b></span>
           ) : null}
           {incident.confidence != null && (
             <span>
               Confidence:{" "}
-              <b className="text-slate-300">
+              <b className="text-[var(--fg-secondary)]">
                 {Math.round(incident.confidence * 100)}% (
                 {incident.confidence >= 0.75 ? "high" : incident.confidence >= 0.5 ? "medium" : "low"})
               </b>
@@ -339,8 +339,8 @@ function IncidentDetail({ incident, onChanged }) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
-        <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400"><span className="h-1 w-1 rounded-full bg-cyan-400" />Status</h3>
+      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+        <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--fg-muted)]"><span className="h-1 w-1 rounded-full bg-[var(--accent-cyan)]" />Status</h3>
         {isAdmin() ? (
           <>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -352,8 +352,8 @@ function IncidentDetail({ incident, onChanged }) {
                   disabled={saving || incident.status === s.value}
                   className={`rounded-xl border px-3 py-2 text-xs font-semibold capitalize transition-all disabled:opacity-40 ${
                     incident.status === s.value
-                      ? "border-cyan-500/40 bg-cyan-500/[0.12] text-cyan-300"
-                      : "border-white/[0.06] bg-white/[0.02] text-slate-400 hover:bg-white/[0.04]"
+                      ? "border-[var(--accent-cyan)]/40 bg-[var(--accent-cyan)]/12 text-[var(--accent-cyan)]"
+                      : "border-[var(--border-default)] bg-[var(--bg-inset)] text-[var(--fg-muted)] hover:bg-[var(--bg-surface)]"
                   }`}
                 >
                   {s.label}
@@ -362,7 +362,7 @@ function IncidentDetail({ incident, onChanged }) {
             </div>
             <div className="mt-3 flex flex-wrap items-end gap-3">
               <label className="block">
-                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
                   Severity
                 </span>
                 <select
@@ -377,7 +377,7 @@ function IncidentDetail({ incident, onChanged }) {
                 </select>
               </label>
               <label className="block flex-1">
-                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
                   Owner (assignee)
                 </span>
                 <input
@@ -396,40 +396,40 @@ function IncidentDetail({ incident, onChanged }) {
                 />
               </label>
             </div>
-            <p className="mt-2 text-[10px] text-slate-500">
+            <p className="mt-2 text-[10px] text-[var(--fg-faint)]">
               Changes are audited and recorded on the timeline.
             </p>
           </>
         ) : (
-          <p className="text-xs text-slate-500">
-            Current status: <strong className="text-slate-300">{incident.status}</strong> — only
+          <p className="text-xs text-[var(--fg-faint)]">
+            Current status: <strong className="text-[var(--fg-secondary)]">{incident.status}</strong> — only
             administrators can change it.
           </p>
         )}
       </div>
 
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
-        <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400"><span className="h-1 w-1 rounded-full bg-cyan-400" />Linked Alerts ({incident.alerts?.length || 0})</h3>
+      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+        <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--fg-muted)]"><span className="h-1 w-1 rounded-full bg-[var(--accent-cyan)]" />Linked Alerts ({incident.alerts?.length || 0})</h3>
         {incident.alerts?.length ? (
           <div className="space-y-1.5">
             {incident.alerts.map((l) => (
               <div
                 key={l.alert_id}
-                className="flex items-center gap-2 rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2"
+                className="flex items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-3 py-2"
               >
-                <span className="font-mono text-[11px] text-slate-500">#{l.alert_id}</span>
-                <span className="min-w-0 flex-1 truncate text-xs text-slate-200">{l.name}</span>
+                <span className="font-mono text-[11px] text-[var(--fg-faint)]">#{l.alert_id}</span>
+                <span className="min-w-0 flex-1 truncate text-xs text-[var(--fg-primary)]">{l.name}</span>
                 <SeverityBadge severity={l.severity} />
               </div>
             ))}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025] text-slate-500">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--fg-faint)]">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             </div>
-            <p className="text-sm font-semibold text-slate-300">No linked alerts</p>
-            <p className="mt-1 text-xs text-slate-500">Link alerts to build this case</p>
+            <p className="text-sm font-semibold text-[var(--fg-secondary)]">No linked alerts</p>
+            <p className="mt-1 text-xs text-[var(--fg-faint)]">Link alerts to build this case</p>
           </div>
         )}
                 {isAdmin() && (
@@ -443,7 +443,7 @@ function IncidentDetail({ incident, onChanged }) {
             <button
               type="submit"
               disabled={saving}
-              className="shrink-0 rounded-xl border border-cyan-500/25 bg-cyan-500/[0.08] px-4 py-2.5 text-[13px] font-semibold text-cyan-400 transition-all hover:bg-cyan-500/[0.15] hover:shadow-[0_0_20px_-4px_rgba(0,240,255,0.2)] disabled:opacity-50"
+              className="shrink-0 rounded-xl bg-[var(--accent-cyan)] text-white shadow-lg shadow-[var(--accent-cyan)]/25 hover:shadow-xl transition-all px-4 py-2.5 text-[13px] font-semibold disabled:opacity-50"
             >
               Link
             </button>
@@ -451,8 +451,8 @@ function IncidentDetail({ incident, onChanged }) {
         )}
       </div>
 
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
-        <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400"><span className="h-1 w-1 rounded-full bg-cyan-400" />Timeline ({incident.comments?.length || 0})</h3>
+      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+        <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--fg-muted)]"><span className="h-1 w-1 rounded-full bg-[var(--accent-cyan)]" />Timeline ({incident.comments?.length || 0})</h3>
         <form onSubmit={submitComment} className="mb-4 flex gap-2">
           <input
             value={comment}
@@ -463,7 +463,7 @@ function IncidentDetail({ incident, onChanged }) {
           <button
             type="submit"
             disabled={saving || !comment.trim()}
-            className="shrink-0 rounded-xl border border-cyan-500/25 bg-cyan-500/[0.08] px-4 py-2.5 text-[13px] font-semibold text-cyan-400 transition-all hover:bg-cyan-500/[0.15] hover:shadow-[0_0_20px_-4px_rgba(0,240,255,0.2)] disabled:opacity-50"
+            className="shrink-0 rounded-xl bg-[var(--accent-cyan)] text-white shadow-lg shadow-[var(--accent-cyan)]/25 hover:shadow-xl transition-all px-4 py-2.5 text-[13px] font-semibold disabled:opacity-50"
           >
             Add
           </button>
@@ -471,19 +471,19 @@ function IncidentDetail({ incident, onChanged }) {
         {incident.comments?.length ? (
           <div className="space-y-2">
             {incident.comments.map((c) => (
-              <div key={c.id} className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-4">
+              <div key={c.id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-cyan-300">{c.author}</span>
+                  <span className="text-xs font-semibold text-[var(--accent-cyan)]">{c.author}</span>
                   {c.kind !== "comment" && (
-                    <span className="rounded-md bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-violet-400">
+                    <span className="rounded-md bg-[var(--accent-violet)]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--accent-violet)]">
                       {c.kind}
                     </span>
                   )}
-                  <span className="ml-auto text-[11px] text-slate-500">
+                  <span className="ml-auto text-[11px] text-[var(--fg-faint)]">
                     {c.created_at ? new Date(c.created_at).toLocaleString() : "—"}
                   </span>
                 </div>
-                <p className="mt-1.5 whitespace-pre-wrap text-xs leading-relaxed text-slate-300">
+                <p className="mt-1.5 whitespace-pre-wrap text-xs leading-relaxed text-[var(--fg-secondary)]">
                   {c.body}
                 </p>
               </div>
@@ -491,19 +491,19 @@ function IncidentDetail({ incident, onChanged }) {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025] text-slate-500">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--fg-faint)]">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
             </div>
-            <p className="text-sm font-semibold text-slate-300">No timeline entries</p>
-            <p className="mt-1 text-xs text-slate-500">Add a note to start the timeline</p>
+            <p className="text-sm font-semibold text-[var(--fg-secondary)]">No timeline entries</p>
+            <p className="mt-1 text-xs text-[var(--fg-faint)]">Add a note to start the timeline</p>
           </div>
         )}
       </div>
 
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
-        <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400"><span className="h-1 w-1 rounded-full bg-cyan-400" />Investigation</h3>
+      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+        <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--fg-muted)]"><span className="h-1 w-1 rounded-full bg-[var(--accent-cyan)]" />Investigation</h3>
         {investigationError ? (
-          <p className="text-xs text-red-400">{investigationError}</p>
+          <p className="text-xs text-[var(--severity-critical)]">{investigationError}</p>
         ) : !investigation ? (
           <Loading label="Building investigation..." />
         ) : (
@@ -514,32 +514,32 @@ function IncidentDetail({ incident, onChanged }) {
               const riskLevel = rc.risk?.level || "";
               const tone =
                 riskLevel === "CRITICAL" || riskLevel === "HIGH"
-                  ? "text-red-400 border-red-500/40 bg-red-500/10"
+                  ? "text-[var(--severity-critical)] border-[var(--severity-critical)]/40 bg-[var(--severity-critical)]/10"
                   : riskLevel === "MEDIUM"
-                  ? "text-amber-400 border-amber-500/40 bg-amber-500/10"
-                  : "text-emerald-400 border-emerald-500/40 bg-emerald-500/10";
+                  ? "text-[var(--severity-medium)] border-[var(--severity-medium)]/40 bg-[var(--severity-medium)]/10"
+                  : "text-[var(--status-healthy)] border-[var(--status-healthy)]/40 bg-[var(--status-healthy)]/10";
               return (
-                <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-4">
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-400">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-cyan)]">
                       Root cause
                     </p>
                     <span className={`rounded border px-2 py-0.5 font-mono text-[11px] ${tone}`}>
                       {riskLevel} · {rc.risk?.risk ?? "—"}
                     </span>
-                    <span className="text-[11px] font-medium text-slate-200">{rc.assessment}</span>
+                    <span className="text-[11px] font-medium text-[var(--fg-primary)]">{rc.assessment}</span>
                   </div>
-                  <p className="mt-2 text-xs leading-relaxed text-slate-300">{rc.summary}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-[var(--fg-secondary)]">{rc.summary}</p>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
                     {(rc.observations || []).map((o, idx) => (
                       <span
                         key={idx}
                         className={`text-[11px] ${
                           o.type === "warning"
-                            ? "text-amber-300"
+                            ? "text-[var(--severity-medium)]"
                             : o.type === "info"
-                            ? "text-cyan-300"
-                            : "text-emerald-300"
+                            ? "text-[var(--accent-cyan)]"
+                            : "text-[var(--status-healthy)]"
                         }`}
                       >
                         {o.type === "warning" ? "▲" : o.type === "info" ? "●" : "✓"} {o.text}
@@ -547,7 +547,7 @@ function IncidentDetail({ incident, onChanged }) {
                     ))}
                   </div>
                   {(rc.risk?.adjustments || []).length > 0 && (
-                    <p className="mt-2 font-mono text-[10px] text-slate-500">
+                    <p className="mt-2 font-mono text-[10px] text-[var(--fg-faint)]">
                       risk adjustments:{" "}
                       {rc.risk.adjustments.map((a) => `${a.signal} ${a.delta >= 0 ? "+" : ""}${a.delta}`).join(" · ")}
                     </p>
@@ -560,21 +560,21 @@ function IncidentDetail({ incident, onChanged }) {
               const ch = incident.chain;
               if (!ch || !ch.sequence || ch.sequence.length < 2) return null;
               return (
-                <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-4">
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-violet-400">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-violet)]">
                       Attack chain
                     </p>
-                    <span className="rounded-md bg-white/[0.04] px-2.5 py-1 font-mono text-[10px] text-violet-300 ring-1 ring-white/[0.06]">
+                    <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] text-[var(--accent-violet)] ring-1 ring-[var(--border-default)]">
                       {ch.confidence.toFixed(2)} confidence
                     </span>
                     {ch.risk_boost > 0 && (
-                      <span className="rounded-md bg-white/[0.04] px-2.5 py-1 font-mono text-[10px] text-red-300 ring-1 ring-white/[0.06]">
+                      <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] text-[var(--severity-critical)] ring-1 ring-[var(--border-default)]">
                         risk +{ch.risk_boost}
                       </span>
                     )}
                     {ch.cohesive_root && (
-                      <span className="rounded-md bg-white/[0.04] px-2.5 py-1 font-mono text-[10px] text-emerald-300 ring-1 ring-white/[0.06]">
+                      <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] text-[var(--status-healthy)] ring-1 ring-[var(--border-default)]">
                         root: {ch.root_process}
                       </span>
                     )}
@@ -583,23 +583,23 @@ function IncidentDetail({ incident, onChanged }) {
                     {ch.sequence.map((s, idx) => (
                       <span key={`${s}-${idx}`} className="flex items-center gap-1.5">
                         <span
-                          className={`rounded-md bg-white/[0.04] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wide ring-1 ring-white/[0.06] ${
+                          className={`rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wide ring-1 ring-[var(--border-default)] ${
                             ch.has_terminal && idx === ch.sequence.length - 1
-                              ? "text-red-300 ring-red-400/30"
-                              : "text-slate-300"
+                              ? "text-[var(--severity-critical)] ring-[var(--severity-critical)]/30"
+                              : "text-[var(--fg-secondary)]"
                           }`}
                         >
                           {s}
                         </span>
                         {idx < ch.sequence.length - 1 && (
-                          <span className="text-slate-600">→</span>
+                          <span className="text-[var(--fg-faint)]">→</span>
                         )}
                       </span>
                     ))}
                   </div>
-                  <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{ch.narrative}</p>
+                  <p className="mt-2 text-[11px] leading-relaxed text-[var(--fg-secondary)]">{ch.narrative}</p>
                   {ch.span_min > 0 && (
-                    <p className="mt-1 font-mono text-[10px] text-slate-600">
+                    <p className="mt-1 font-mono text-[10px] text-[var(--fg-faint)]">
                       span {ch.span_min.toFixed(0)} min · max gap {ch.max_gap_min.toFixed(1)} min ·{" "}
                       {ch.ordered ? "canonical order" : `${(ch.ordered_ratio * 100).toFixed(0)}% ordered`}
                     </p>
@@ -610,7 +610,7 @@ function IncidentDetail({ incident, onChanged }) {
 
             <div className="flex flex-wrap items-center gap-4">
               <ConfidenceBadge score={investigation.confidence?.score} label={investigation.confidence?.label} />
-              <span className="font-mono text-[11px] text-slate-500">
+              <span className="font-mono text-[11px] text-[var(--fg-faint)]">
                 {investigation.enrichment.event_count} evidence events ·{" "}
                 {investigation.enrichment.related_alerts} alerts
               </span>
@@ -620,14 +620,14 @@ function IncidentDetail({ incident, onChanged }) {
               <div className="space-y-2">
                 {investigation.confidence.breakdown.map((f) => (
                   <div key={f.factor} className="flex items-center gap-3">
-                    <span className="w-40 shrink-0 text-[11px] capitalize text-slate-400">{f.factor}</span>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+                    <span className="w-40 shrink-0 text-[11px] capitalize text-[var(--fg-muted)]">{f.factor}</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--border-default)]">
                       <div
-                        className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400"
+                        className="h-full rounded-full bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--status-healthy)]"
                         style={{ width: `${Math.max(0, Math.min(100, (f.score + (f.weight === 0 ? 1 : 0)) * 100))}%` }}
                       />
                     </div>
-                    <span className="w-10 shrink-0 text-right font-mono text-[11px] text-slate-300">
+                    <span className="w-10 shrink-0 text-right font-mono text-[11px] text-[var(--fg-secondary)]">
                       {f.score.toFixed(2)}
                     </span>
                   </div>
@@ -639,32 +639,32 @@ function IncidentDetail({ incident, onChanged }) {
               const w = investigation.enrichment.six_w || {};
               return (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-400">Who</p>
-                    <p className="mt-1 text-xs text-slate-300">{(w.who || []).join(", ") || "—"}</p>
+                  <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-cyan)]">Who</p>
+                    <p className="mt-1 text-xs text-[var(--fg-secondary)]">{(w.who || []).join(", ") || "—"}</p>
                   </div>
-                  <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-400">What</p>
-                    <p className="mt-1 text-xs text-slate-300">{(w.what || []).join(", ") || "—"}</p>
+                  <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-cyan)]">What</p>
+                    <p className="mt-1 text-xs text-[var(--fg-secondary)]">{(w.what || []).join(", ") || "—"}</p>
                   </div>
-                  <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-400">When</p>
-                    <p className="mt-1 text-xs text-slate-300">
+                  <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-cyan)]">When</p>
+                    <p className="mt-1 text-xs text-[var(--fg-secondary)]">
                       {w.when?.first ? new Date(w.when.first).toLocaleString() : "—"}
                       {w.when?.span_seconds ? ` · ${Math.round(w.when.span_seconds)}s span` : ""}
                     </p>
                   </div>
-                  <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-400">Where</p>
-                    <p className="mt-1 text-xs text-slate-300">{(w.where || []).join(", ") || "—"}</p>
+                  <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-cyan)]">Where</p>
+                    <p className="mt-1 text-xs text-[var(--fg-secondary)]">{(w.where || []).join(", ") || "—"}</p>
                   </div>
-                  <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-400">How</p>
-                    <p className="mt-1 text-xs text-slate-300">{(w.how || []).join(" → ") || "—"}</p>
+                  <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-cyan)]">How</p>
+                    <p className="mt-1 text-xs text-[var(--fg-secondary)]">{(w.how || []).join(" → ") || "—"}</p>
                   </div>
-                  <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-400">Why</p>
-                    <p className="mt-1 text-xs text-slate-300">
+                  <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-cyan)]">Why</p>
+                    <p className="mt-1 text-xs text-[var(--fg-secondary)]">
                       {w.why?.mitre_id ? `${w.why.mitre_id} ${w.why.mitre_name || ""}` : "—"}
                     </p>
                   </div>
@@ -680,29 +680,29 @@ function IncidentDetail({ incident, onChanged }) {
                 ["Network", investigation.enrichment.network_count],
                 ["Registry", investigation.enrichment.registry_count],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-4 text-center">
-                  <p className="font-mono text-xl font-bold text-white">{value}</p>
-                  <p className="mt-0.5 text-[11px] uppercase tracking-wider text-slate-500">{label}</p>
+                <div key={label} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4 text-center">
+                  <p className="font-mono text-xl font-bold text-[var(--fg-primary)]">{value}</p>
+                  <p className="mt-0.5 text-[11px] uppercase tracking-wider text-[var(--fg-faint)]">{label}</p>
                 </div>
               ))}
             </div>
 
             {investigation.enrichment.process_tree?.chain?.length > 0 && (
               <div>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-cyan-400">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-cyan)]">
                   Process chain
                 </p>
                 <div className="space-y-1">
                   {investigation.enrichment.process_tree.chain.map((n, idx) => (
                     <div key={`${n.pid}-${idx}`} className="flex items-center gap-2 font-mono text-[11px]">
-                      {idx > 0 && <span className="text-slate-600">└─</span>}
-                      <span className="text-slate-500">#{n.pid}</span>
-                      <span className="text-slate-200">{n.name || n.path || "?"}</span>
-                      {n.user && <span className="text-slate-500">({n.user})</span>}
+                      {idx > 0 && <span className="text-[var(--fg-faint)]">└─</span>}
+                      <span className="text-[var(--fg-faint)]">#{n.pid}</span>
+                      <span className="text-[var(--fg-primary)]">{n.name || n.path || "?"}</span>
+                      {n.user && <span className="text-[var(--fg-faint)]">({n.user})</span>}
                     </div>
                   ))}
                 </div>
-                <p className="mt-1.5 text-[11px] text-slate-500">
+                <p className="mt-1.5 text-[11px] text-[var(--fg-faint)]">
                   {investigation.enrichment.process_tree.node_count} nodes ·{" "}
                   {Math.round((investigation.enrichment.process_tree.completeness || 0) * 100)}% lineage verified
                 </p>
@@ -756,10 +756,13 @@ export default function Incidents() {
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6">
-        <h1 className="text-[24px] font-bold tracking-[-0.03em] text-white">Incidents</h1>
-        <p className="mt-1 text-sm text-slate-400">Security cases: group alerts, track ownership and response status</p>
-      </div>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">SECTION</p>
+          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">Incidents</h1>
+          <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">Security cases: group alerts, track ownership and response status</p>
+        </div>
+      </header>
 
       {error && <ErrorBanner message={error} onRetry={load} />}
 
@@ -777,11 +780,11 @@ export default function Incidents() {
               <Loading label="Loading incidents" />
             ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025] text-slate-500">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--fg-faint)]">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
                 </div>
-                <p className="text-sm font-semibold text-slate-300">No incidents</p>
-                <p className="mt-1 text-xs text-slate-500">Create one above to start a case</p>
+                <p className="text-sm font-semibold text-[var(--fg-secondary)]">No incidents</p>
+                <p className="mt-1 text-xs text-[var(--fg-faint)]">Create one above to start a case</p>
               </div>
             ) : (
               filtered.map((inc) => (
@@ -804,20 +807,20 @@ export default function Incidents() {
               onChanged={load}
             />
           ) : (
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+            <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
               <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025] text-slate-500">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--fg-faint)]">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
                 </div>
-                <p className="text-sm font-semibold text-slate-300">Select an incident</p>
-                <p className="mt-1 text-xs text-slate-500">Choose a case on the left to view its detail, timeline and linked alerts</p>
+                <p className="text-sm font-semibold text-[var(--fg-secondary)]">Select an incident</p>
+                <p className="mt-1 text-xs text-[var(--fg-faint)]">Choose a case on the left to view its detail, timeline and linked alerts</p>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      <div className="flex justify-center pt-4"><p className="text-[11px] font-medium text-slate-500/50">BARAQ · Real-Time Endpoint Security Operations</p></div>
+      <div className="flex justify-center pt-4"><p className="text-[11px] font-medium text-[var(--fg-faint)]/50">BARAQ · Real-Time Endpoint Security Operations</p></div>
     </div>
   );
 }

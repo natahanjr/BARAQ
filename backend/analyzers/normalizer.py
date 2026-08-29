@@ -114,6 +114,86 @@ EVENT_META: dict[int, dict[str, str]] = {
     5136: {"category": "Directory Service", "risk": "High", "severity": "high"},
     7: {"category": "Process", "risk": "Medium", "severity": "medium"},
     8: {"category": "Process", "risk": "High", "severity": "high"},
+    # Application channel
+    1000: {"category": "Application Crash", "risk": "Low", "severity": "info"},
+    1001: {"category": "Application Error", "risk": "Low", "severity": "info"},
+    1002: {"category": "Application Hang", "risk": "Low", "severity": "info"},
+    1026: {"category": "Application Error", "risk": "Low", "severity": "info"},
+    1170: {"category": "Application Error", "risk": "Medium", "severity": "medium"},
+    # Windows Defender
+    1006: {"category": "Defender", "risk": "Medium", "severity": "medium"},
+    1007: {"category": "Defender", "risk": "Medium", "severity": "medium"},
+    1008: {"category": "Defender", "risk": "Medium", "severity": "medium"},
+    1009: {"category": "Defender", "risk": "Medium", "severity": "medium"},
+    1010: {"category": "Defender", "risk": "Medium", "severity": "medium"},
+    1011: {"category": "Defender", "risk": "Medium", "severity": "medium"},
+    1013: {"category": "Defender", "risk": "Medium", "severity": "medium"},
+    1014: {"category": "Defender", "risk": "Medium", "severity": "medium"},
+    1015: {"category": "Defender", "risk": "Medium", "severity": "medium"},
+    1116: {"category": "Defender Detection", "risk": "High", "severity": "high"},
+    1117: {"category": "Defender Protection", "risk": "High", "severity": "high"},
+    # Windows Firewall
+    2001: {"category": "Firewall", "risk": "Low", "severity": "info"},
+    2002: {"category": "Firewall", "risk": "Low", "severity": "info"},
+    2003: {"category": "Firewall", "risk": "Medium", "severity": "medium"},
+    2004: {"category": "Firewall", "risk": "Low", "severity": "info"},
+    5156: {"category": "Firewall", "risk": "Low", "severity": "info"},
+    5157: {"category": "Firewall", "risk": "Low", "severity": "info"},
+    # Task Scheduler
+    106: {"category": "Task Scheduler", "risk": "Medium", "severity": "medium"},
+    140: {"category": "Task Scheduler", "risk": "Medium", "severity": "medium"},
+    141: {"category": "Task Scheduler", "risk": "Medium", "severity": "medium"},
+    200: {"category": "Task Scheduler", "risk": "Low", "severity": "info"},
+    201: {"category": "Task Scheduler", "risk": "Low", "severity": "info"},
+    202: {"category": "Task Scheduler", "risk": "Low", "severity": "info"},
+    325: {"category": "Task Scheduler", "risk": "High", "severity": "high"},
+    # Terminal Services / RDP
+    21: {"category": "Remote Desktop", "risk": "Medium", "severity": "low"},
+    22: {"category": "Remote Desktop", "risk": "Medium", "severity": "low"},
+    23: {"category": "Remote Desktop", "risk": "Medium", "severity": "low"},
+    24: {"category": "Remote Desktop", "risk": "Medium", "severity": "low"},
+    25: {"category": "Remote Desktop", "risk": "Low", "severity": "info"},
+    39: {"category": "Remote Desktop", "risk": "Medium", "severity": "low"},
+    40: {"category": "Remote Desktop", "risk": "Medium", "severity": "low"},
+    41: {"category": "Remote Desktop", "risk": "Low", "severity": "info"},
+    261: {"category": "Remote Desktop", "risk": "Medium", "severity": "low"},
+    262: {"category": "Remote Desktop", "risk": "Medium", "severity": "low"},
+    # WMI Activity
+    5856: {"category": "WMI", "risk": "Low", "severity": "info"},
+    5857: {"category": "WMI", "risk": "Low", "severity": "info"},
+    5860: {"category": "WMI", "risk": "Medium", "severity": "medium"},
+    5861: {"category": "WMI", "risk": "Medium", "severity": "medium"},
+    # Code Integrity
+    3001: {"category": "Code Integrity", "risk": "Medium", "severity": "medium"},
+    3002: {"category": "Code Integrity", "risk": "Medium", "severity": "medium"},
+    3003: {"category": "Code Integrity", "risk": "Medium", "severity": "medium"},
+    3004: {"category": "Code Integrity", "risk": "Medium", "severity": "medium"},
+    3033: {"category": "Code Integrity", "risk": "Medium", "severity": "medium"},
+    # Driver Frameworks
+    2001: {"category": "Driver", "risk": "Low", "severity": "info"},
+    2003: {"category": "Driver", "risk": "Low", "severity": "info"},
+    2100: {"category": "Driver", "risk": "Low", "severity": "info"},
+    2101: {"category": "Driver", "risk": "Low", "severity": "info"},
+    2102: {"category": "Driver", "risk": "Low", "severity": "info"},
+    # Group Policy
+    4004: {"category": "Group Policy", "risk": "Low", "severity": "info"},
+    4005: {"category": "Group Policy", "risk": "Low", "severity": "info"},
+    4006: {"category": "Group Policy", "risk": "Medium", "severity": "medium"},
+    4016: {"category": "Group Policy", "risk": "Medium", "severity": "medium"},
+    4017: {"category": "Group Policy", "risk": "Medium", "severity": "medium"},
+    # NTLM
+    8001: {"category": "NTLM", "risk": "Low", "severity": "info"},
+    8002: {"category": "NTLM", "risk": "Low", "severity": "info"},
+    # Kerberos (operational)
+    # 1000, 1001 already used by Application; Kerberos operational uses same IDs
+    # Print Service
+    316: {"category": "Print Service", "risk": "High", "severity": "high"},
+    808: {"category": "Print Service", "risk": "Medium", "severity": "medium"},
+    # AppLocker
+    8003: {"category": "AppLocker", "risk": "Medium", "severity": "medium"},
+    8004: {"category": "AppLocker", "risk": "Medium", "severity": "medium"},
+    8006: {"category": "AppLocker", "risk": "Medium", "severity": "medium"},
+    8007: {"category": "AppLocker", "risk": "Medium", "severity": "medium"},
 }
 
 MESSAGE_PATTERNS = {

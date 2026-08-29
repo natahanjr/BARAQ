@@ -48,6 +48,9 @@ _EXFIL_WEB = re.compile(
 #: an external host from a non-browser process warrants a look.
 _COMMON_PORTS = {21, 22, 25, 53, 80, 110, 123, 143, 443, 445, 853, 993, 995, 3389, 5985, 5986}
 _BROWSER_PROCS = ("chrome.exe", "msedge.exe", "msedgewebview2.exe", "firefox.exe", "iexplore.exe", "brave.exe", "opera.exe")
+#: Communication / collaboration apps that legitimately open many outbound
+#: connections to external hosts (Cloudflare, CDN, WebSocket).
+_COMM_PROCS = ("discord.exe", "slack.exe", "teams.exe", "zoom.exe", "telegram.exe", "signal.exe", "whatsapp.exe", "spotify.exe")
 #: Processes that legitimately open many outbound connections to arbitrary
 #: external hosts/ports (residential proxy agents, VPN/relay daemons, P2P).
 #: Extendable at runtime with BARAQ_TRUSTED_PROCESSES (comma separated).
@@ -148,6 +151,8 @@ class UnusualPortRule(BaseRule):
                 continue
             proc = (conn.process or "").lower()
             if any(b in proc for b in _BROWSER_PROCS):
+                continue
+            if any(b in proc for b in _COMM_PROCS):
                 continue
             if any(t in proc for t in _trusted_agent_procs()):
                 continue
