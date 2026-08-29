@@ -285,7 +285,10 @@ def _scheduler_loop(interval_seconds: int = 15):
                 if counter % 4 == 0:
                     stale, reason = get_detector().is_stale(db)
                     if stale:
-                        if reason == "never-trained":
+                        from backend.ml.tasks import train_in_background, training_active
+                        if training_active():
+                            logger.debug("Auto-train skipped: background training already running")
+                        elif reason == "never-trained":
                             total_events = db.scalar(
                                 select(func.count(NormalizedEvent.id))
                             ) or 0
@@ -294,10 +297,14 @@ def _scheduler_loop(interval_seconds: int = 15):
                                     "ML never trained; initial auto-training on %d events",
                                     total_events,
                                 )
-                                get_detector().train(db, hours=None, validate=False)
+                                scheduled = train_in_background(hours=None, validate=False)
+                                if not scheduled:
+                                    logger.debug("Auto-train: could not acquire training lock")
                         else:
                             logger.info("ML model stale (%s); retraining", reason)
-                            get_detector().train(db, hours=None, validate=False)
+                            scheduled = train_in_background(hours=None, validate=False)
+                            if not scheduled:
+                                logger.debug("Auto-train: could not acquire training lock")
 
                 # RBA - Correlate alerts into incidents
                 from backend.detection.rba import RBAManager

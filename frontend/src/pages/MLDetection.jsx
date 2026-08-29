@@ -36,15 +36,18 @@ function MLDetection() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Poll ML status every 10s when training is active or stale
+  // Poll ML status every 5s when training is active
   useEffect(() => {
     if (!training) return;
     const iv = setInterval(() => {
       api.mlStatus().then((s) => {
         setMlStatus(s || {});
-        if (s?.model_state === "HEALTHY" || s?.training === false) {
+        if (s && !s.training) {
           setTraining(false);
-          setTrainingResult((prev) => prev || { trained: true, window: "auto", message: "Training completed" });
+          setTrainingResult((prev) => {
+            if (prev?.status === "error") return prev;
+            return { trained: true, window: prev?.window || "auto", message: "Training completed" };
+          });
         }
       }).catch(() => {});
     }, 5000);
@@ -71,11 +74,15 @@ function MLDetection() {
     try {
       const result = await api.mlTrain({ force, sync: false });
       setTrainingResult(result);
-      toast({ title: "Training started", type: "success" });
+      if (result.scheduled) {
+        toast({ title: "Background training started", type: "success" });
+        return;
+      }
+      toast({ title: "Training complete", type: "success" });
+      setTraining(false);
     } catch (err) {
       setTrainingResult({ status: "error", message: err.message });
       toast({ title: "Training failed", description: err.message, type: "error" });
-    } finally {
       setTraining(false);
     }
   }, [toast]);
