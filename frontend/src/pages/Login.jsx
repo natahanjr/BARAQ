@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, authStore } from "../api.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
-export default function Login({ onAuthenticated }) {
+export default function Login() {
+  const { login } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -36,7 +38,7 @@ export default function Login({ onAuthenticated }) {
       if (challenge) {
         const res = await api.mfaVerify(challenge, code.trim());
         authStore.set(res.token);
-        onAuthenticated(res.user);
+        login(res);
         return;
       }
       if (mode === "register") {
@@ -63,7 +65,7 @@ export default function Login({ onAuthenticated }) {
         return;
       }
       authStore.set(res.token);
-      onAuthenticated(res.user);
+      login(res);
     } catch (err) {
       setError(err.message.replace(/^\d+: /, ""));
     } finally {
@@ -86,15 +88,15 @@ export default function Login({ onAuthenticated }) {
   };
 
   const inputCls =
-    "w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-500";
+    "w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-teal-500";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0a0e17] px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#080e14] px-4">
       <div
         className="pointer-events-none fixed inset-0"
         style={{
           background:
-            "radial-gradient(600px 400px at 20% 10%, rgba(0,240,255,0.07), transparent 60%), radial-gradient(600px 400px at 80% 90%, rgba(123,97,255,0.08), transparent 60%)",
+            "radial-gradient(600px 400px at 20% 10%, rgba(20,184,166,0.07), transparent 60%), radial-gradient(600px 400px at 80% 90%, rgba(234,179,8,0.06), transparent 60%)",
         }}
       />
       <div className="relative w-full max-w-sm">
@@ -102,8 +104,8 @@ export default function Login({ onAuthenticated }) {
           <svg className="h-16 w-16" viewBox="0 0 64 64">
             <defs>
               <linearGradient id="lgShield" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#00f0ff" />
-                <stop offset="100%" stopColor="#7b61ff" />
+                <stop offset="0%" stopColor="#14b8a6" />
+                <stop offset="100%" stopColor="#eab308" />
               </linearGradient>
               <filter id="lgGlow" x="-40%" y="-40%" width="180%" height="180%">
                 <feGaussianBlur stdDeviation="2.4" result="blur" />
@@ -127,13 +129,13 @@ export default function Login({ onAuthenticated }) {
             />
             <path
               d="M36.5 12 L22 34.5 L30.5 34.5 L26.5 52 L44 27.5 L34.5 27.5 Z"
-              fill="#00f0ff"
+              fill="#14b8a6"
               filter="url(#lgGlow)"
             />
           </svg>
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-wide text-white">BARAQ</h1>
-            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-cyan-400">
+            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-teal-400">
               {mode === "register" ? "Account Registration" : "Operator Access"}
             </p>
           </div>
@@ -141,7 +143,7 @@ export default function Login({ onAuthenticated }) {
 
         <form
           onSubmit={submit}
-          className="glass-line space-y-4 rounded-2xl bg-[#131b2a]/85 p-6 shadow-[0_0_60px_-15px_rgba(0,240,255,0.35)] backdrop-blur-xl"
+          className="glass-line space-y-4 rounded-2xl bg-[#0f1a24]/85 p-6 shadow-[0_0_60px_-15px_rgba(20,184,166,0.3)] backdrop-blur-xl"
         >
           {challenge ? (
             <div>
@@ -157,11 +159,11 @@ export default function Login({ onAuthenticated }) {
                 autoFocus
                 required
                 placeholder="6-digit authenticator code"
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-center font-mono text-lg tracking-[0.5em] text-slate-100 outline-none transition-colors placeholder:text-sm placeholder:tracking-normal placeholder:text-slate-600 focus:border-cyan-500"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-center font-mono text-lg tracking-[0.5em] text-slate-100 outline-none transition-colors placeholder:text-sm placeholder:tracking-normal placeholder:text-slate-600 focus:border-teal-500"
               />
               <p className="mt-2 text-center text-[11px] text-slate-500">
                 Password verified for{" "}
-                <span className="font-mono text-cyan-400">{username}</span> — enter
+                <span className="font-mono text-teal-400">{username}</span> — enter
                 the code from your authenticator app.
               </p>
             </div>
@@ -260,7 +262,7 @@ export default function Login({ onAuthenticated }) {
                   autoComplete="username"
                   autoFocus
                   required
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-500"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-teal-500"
                   placeholder="e.g. admin"
                 />
               </div>
@@ -275,7 +277,7 @@ export default function Login({ onAuthenticated }) {
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
                   required
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-500"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-teal-500"
                   placeholder="••••••••"
                 />
               </div>
@@ -297,7 +299,7 @@ export default function Login({ onAuthenticated }) {
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded-lg bg-gradient-to-r from-cyan-600 to-cyan-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-50"
+            className="w-full rounded-lg bg-gradient-to-r from-teal-600 to-teal-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:from-teal-500 hover:to-teal-400 disabled:opacity-50"
           >
             {busy
               ? challenge
@@ -352,7 +354,7 @@ export default function Login({ onAuthenticated }) {
             <button
               type="button"
               onClick={() => switchMode("register")}
-              className="w-full rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-400 transition-colors hover:border-cyan-500/50 hover:text-cyan-300"
+              className="w-full rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-400 transition-colors hover:border-teal-500/50 hover:text-teal-300"
             >
               New here? Create an account
             </button>
