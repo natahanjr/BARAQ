@@ -225,6 +225,7 @@ export const api = {
     return request(`/api/http?${p.toString()}`);
   },
   networkStats: () => request("/api/network/stats"),
+  ipGeo: (ip) => request(`/api/network/geo?ip=${encodeURIComponent(ip)}`),
   eventStatistics: () => request("/api/events/statistics"),
 
   datasetStatus: () => request("/api/telemetry/dataset"),

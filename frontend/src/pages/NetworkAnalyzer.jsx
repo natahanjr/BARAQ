@@ -161,15 +161,25 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
     return { nodes: Array.from(nodeMap.values()), edges: edgeList };
   }, [connections]);
 
-  // Auto-layout: simple force-directed (one pass)
+  // Concentric layout: INTERNET at center, hosts in inner ring, external IPs in outer ring
   const layoutNodes = useMemo(() => {
     const n = nodes.map((nd) => ({ ...nd }));
-    const map = new Map(n.map((nd) => [nd.id, nd]));
-    // Simple layout: internet at top, hosts in middle, IPs at right
+    const W = 800, H = 400, cx = W / 2, cy = H / 2;
+    const hosts = n.filter((nd) => nd.type !== "internet" && isPrivateIP(nd.id));
+    const externals = n.filter((nd) => nd.type !== "internet" && !isPrivateIP(nd.id));
+
     n.forEach((nd) => {
-      if (nd.type === "internet") { nd.x = 400; nd.y = 40; }
-      else if (nd.type === "host") { nd.x = 200 + Math.random() * 200; nd.y = 180 + Math.random() * 80; }
-      else { nd.x = 450 + Math.random() * 150; nd.y = 180 + Math.random() * 80; }
+      if (nd.type === "internet") { nd.x = cx; nd.y = 40; }
+    });
+    hosts.forEach((nd, i) => {
+      const angle = (i / Math.max(hosts.length, 1)) * Math.PI * 2;
+      nd.x = cx + Math.cos(angle) * 130;
+      nd.y = cy + Math.sin(angle) * 110;
+    });
+    externals.forEach((nd, i) => {
+      const angle = (i / Math.max(externals.length, 1)) * Math.PI * 2;
+      nd.x = cx + Math.cos(angle) * 300;
+      nd.y = cy + Math.sin(angle) * 150;
     });
     return n;
   }, [nodes]);
@@ -205,7 +215,7 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
   const nodeMap = new Map(layoutNodes.map((nd) => [nd.id, nd]));
 
   return (
-    <div className="relative w-full overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-inset)]" style={{ height: 400 }}>
+    <div className="relative w-full overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-inset)]" style={{ height: 420 }}>
       {/* Controls */}
       <div className="absolute right-3 top-3 z-10 flex gap-1.5">
         <button onClick={() => setTransform((t) => ({ ...t, scale: Math.min(3, t.scale * 1.2) }))} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors" title="Zoom in">
@@ -256,39 +266,42 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
                   stroke="var(--border-default)" strokeWidth="1.5"
                   className="transition-colors hover:stroke-[var(--accent-cyan)]"
                 />
-                <text
-                  x={(src.x + tgt.x) / 2} y={(src.y + tgt.y) / 2 - 4}
-                  textAnchor="middle" className="fill-[var(--fg-faint)] text-[8px] font-mono pointer-events-none"
-                >
-                  {edge.label}
-                </text>
+                <title>{`${src.label} → ${tgt.label} (${edge.label})`}</title>
               </g>
             );
           })}
 
           {/* Nodes */}
-          {layoutNodes.map((nd) => (
-            <g key={nd.id} onClick={() => onNodeClick?.(nd)} className="cursor-pointer">
-              {nd.type === "internet" ? (
-                <>
-                  <rect x={nd.x - 30} y={nd.y - 14} width={60} height={28} rx={6} fill="var(--bg-surface)" stroke="var(--border-default)" strokeWidth="1.5" />
-                  <text x={nd.x} y={nd.y + 4} textAnchor="middle" className="fill-[var(--fg-muted)] text-[9px] font-semibold">INTERNET</text>
-                </>
-              ) : (
-                <>
-                  <circle cx={nd.x} cy={nd.y} r={16} fill="var(--bg-surface)" stroke={nodeColor(nd)} strokeWidth="2" />
-                  <text x={nd.x} y={nd.y + 3} textAnchor="middle" className="fill-[var(--fg-primary)] text-[8px] font-mono font-bold">
-                    {nd.label.length > 8 ? nd.label.slice(0, 8) + "…" : nd.label}
-                  </text>
-                  {nd.connections > 1 && (
-                    <text x={nd.x} y={nd.y + 26} textAnchor="middle" className="fill-[var(--fg-faint)] text-[7px]">
-                      {nd.connections} conns
+          {layoutNodes.map((nd) => {
+            const color = nodeColor(nd);
+            const isInternet = nd.type === "internet";
+            const ringR = isInternet ? 30 : 18 + Math.min(nd.connections || 0, 10) * 1.2;
+            return (
+              <g key={nd.id} onClick={() => onNodeClick?.(nd)} className="cursor-pointer">
+                {nd.connections > 2 && (
+                  <circle cx={nd.x} cy={nd.y} r={ringR} fill="none" stroke={color} strokeOpacity="0.15" strokeWidth="2" />
+                )}
+                {isInternet ? (
+                  <>
+                    <rect x={nd.x - 38} y={nd.y - 16} width={76} height={32} rx={8} fill="var(--bg-surface)" stroke={color} strokeWidth="2" />
+                    <text x={nd.x} y={nd.y + 4} textAnchor="middle" className="fill-[var(--fg-muted)] text-[10px] font-bold">INTERNET</text>
+                  </>
+                ) : (
+                  <>
+                    <circle cx={nd.x} cy={nd.y} r={18} fill="var(--bg-surface)" stroke={color} strokeWidth="2.5" />
+                    <text x={nd.x} y={nd.y + 3} textAnchor="middle" className="fill-[var(--fg-primary)] text-[9px] font-mono font-bold pointer-events-none">
+                      {nd.label.split(".").slice(-1)[0]}
                     </text>
-                  )}
-                </>
-              )}
-            </g>
-          ))}
+                  </>
+                )}
+                {nd.connections > 1 && (
+                  <text x={nd.x} y={nd.y + 34} textAnchor="middle" className="fill-[var(--fg-faint)] text-[8px] pointer-events-none">
+                    {nd.connections} conns
+                  </text>
+                )}
+              </g>
+            );
+          })}
         </g>
       </svg>
 
@@ -957,6 +970,13 @@ function IPInvestigation({ ip, connections, dnsQueries, httpRequests, onClose, n
     { id: "http", label: `HTTP (${relatedHttp.length})` },
   ];
   const [activeTab, setActiveTab] = useState("connections");
+  const [geo, setGeo] = useState(null);
+
+  useEffect(() => {
+    if (classification === "external") {
+      api.ipGeo(ip).then(setGeo).catch(() => {});
+    }
+  }, [ip, classification]);
 
   return (
     <div className="space-y-5">
@@ -980,7 +1000,13 @@ function IPInvestigation({ ip, connections, dnsQueries, httpRequests, onClose, n
             <div className="mt-1.5 flex items-center gap-2">
               <Badge severity={classification === "external" ? "medium" : "info"} size="sm">{classification.toUpperCase()}</Badge>
               <Badge severity="low" size="sm">{uniquePeers.size} peers</Badge>
+              {geo?.org && geo.org !== "Unknown" && <Badge severity="info" size="sm">{geo.org}</Badge>}
             </div>
+            {geo && classification === "external" && (
+              <p className="mt-1.5 text-[11px] text-[var(--fg-muted)]">
+                IPv{geo.version} {geo.private ? "· private" : "· public"} · heuristic org match
+              </p>
+            )}
           </div>
           {/* Risk Gauge */}
           <div className="text-center">
