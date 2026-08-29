@@ -316,8 +316,16 @@ function NodeInspector({ node, connections, onClose, navigate, toast }) {
   const classification = classifyIP(node.id);
   const ip = node.id;
 
+  // Risk calculation: external IPs with many connections to unusual ports = higher risk
+  const externalConns = relatedConns.filter((c) => c.remote_ip && classifyIP(c.remote_ip) === "external");
+  const suspiciousPorts = relatedConns.filter((c) => c.remote_port && [4444, 1337, 31337, 6667, 6666, 8443, 8080].includes(c.remote_port)).length;
+  const riskScore = classification === "external"
+    ? Math.min(100, 30 + externalConns.length * 2 + suspiciousPorts * 15 + (totalBytes > 10 * 1024 * 1024 ? 20 : 0))
+    : Math.min(60, relatedConns.length + (totalBytes > 5 * 1024 * 1024 ? 20 : 0));
+  const riskColor = riskScore >= 70 ? "var(--severity-critical)" : riskScore >= 40 ? "var(--severity-high)" : riskScore >= 20 ? "var(--severity-medium)" : "var(--status-healthy)";
+
   return (
-    <Drawer open={!!node} onClose={onClose} title="Node Inspector" width={360}>
+    <Drawer open={!!node} onClose={onClose} title="Node Inspector" width={380}>
       <div className="space-y-5">
         {/* Header */}
         <div>
@@ -325,6 +333,17 @@ function NodeInspector({ node, connections, onClose, navigate, toast }) {
           <div className="mt-1 flex items-center gap-2">
             <Badge severity={node.type === "host" ? "info" : "low"} size="sm">{node.type.toUpperCase()}</Badge>
             <Badge severity={classification === "external" ? "medium" : "info"} size="sm">{classification}</Badge>
+          </div>
+        </div>
+
+        {/* Risk Gauge */}
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Risk Score</span>
+            <span className="text-lg font-bold" style={{ color: riskColor }}>{riskScore}</span>
+          </div>
+          <div className="mt-2 h-2 rounded-full overflow-hidden" style={{ background: "var(--border-subtle)" }}>
+            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${riskScore}%`, background: riskColor }} />
           </div>
         </div>
 
@@ -343,28 +362,36 @@ function NodeInspector({ node, connections, onClose, navigate, toast }) {
             <p className="mt-0.5 text-lg font-bold text-[var(--fg-primary)]">{uniquePeers.size}</p>
           </div>
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface-active)] p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Risk Score</p>
-            <p className="mt-0.5 text-lg font-bold text-[var(--fg-primary)]">{node.risk || 0}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">External Peers</p>
+            <p className="mt-0.5 text-lg font-bold text-[var(--fg-primary)]">{externalConns.length}</p>
           </div>
         </div>
 
         {/* Recent Connections */}
         <div>
-          <h4 className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)] mb-2">Recent Connections</h4>
-          <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-            {relatedConns.slice(0, 10).map((c) => (
-              <div key={c.id} className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[11px]">
+          <h4 className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)] mb-2">Recent Connections ({relatedConns.length})</h4>
+          <div className="space-y-1.5 max-h-[220px] overflow-y-auto">
+            {relatedConns.slice(0, 20).map((c) => (
+              <div key={c.id} className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[11px] bg-[var(--bg-inset)]">
                 <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: STATE_COLORS[c.state] || "var(--fg-muted)" }} />
-                <span className="font-mono text-[var(--fg-secondary)] truncate">{c.remote_ip}:{c.remote_port}</span>
+                <span className="font-mono text-[var(--fg-secondary)] truncate">
+                  {c.local_ip === node.id ? `→ ${c.remote_ip}:${c.remote_port || "—"}` : `${c.local_ip}:${c.local_port || "—"} →`}
+                </span>
                 <span className="ml-auto text-[var(--fg-muted)]">{c.state}</span>
               </div>
             ))}
+            {relatedConns.length > 20 && (
+              <p className="text-center text-[10px] text-[var(--fg-faint)] py-1">+{relatedConns.length - 20} more</p>
+            )}
           </div>
         </div>
 
         {/* Actions */}
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm" className="flex-1" onClick={() => { onClose(); navigate(`/alerts?search=${encodeURIComponent(ip)}`); }}>Investigate</Button>
+          <Button variant="secondary" size="sm" className="flex-1" onClick={() => {
+            onClose();
+            navigate(`/network?ip=${encodeURIComponent(ip)}`);
+          }}>Investigate</Button>
           <Button variant="danger-ghost" size="sm" onClick={async () => {
             if (!confirm(`Block IP ${ip}?`)) return;
             try {
@@ -433,7 +460,10 @@ function ConnectionInspector({ edge, onClose, navigate, toast }) {
 
         {/* Actions */}
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm" className="flex-1" onClick={() => { onClose(); navigate(`/alerts?search=${encodeURIComponent(ip)}`); }}>Investigate</Button>
+          <Button variant="secondary" size="sm" className="flex-1" onClick={() => {
+            onClose();
+            navigate(`/network?ip=${encodeURIComponent(ip)}`);
+          }}>Investigate</Button>
           <Button variant="danger-ghost" size="sm" onClick={async () => {
             if (!confirm(`Block IP ${ip}?`)) return;
             try {
@@ -454,6 +484,8 @@ function ConnectionInspector({ edge, onClose, navigate, toast }) {
 function ConnectionTable({ connections, onSelect }) {
   const [sortKey, setSortKey] = useState("observed_at");
   const [sortDir, setSortDir] = useState("desc");
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50;
 
   const sorted = useMemo(() => {
     return [...connections].sort((a, b) => {
@@ -496,7 +528,7 @@ function ConnectionTable({ connections, onSelect }) {
           </tr>
         </thead>
         <tbody>
-          {sorted.map((conn) => {
+          {sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((conn) => {
             const stateColor = STATE_COLORS[conn.state] || "var(--fg-muted)";
             return (
               <tr
@@ -552,6 +584,44 @@ function ConnectionTable({ connections, onSelect }) {
           <p className="text-[11px] text-[var(--fg-faint)] mt-1">Traffic data will appear here once the collector captures connections</p>
         </div>
       )}
+      {sorted.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
+          <span className="text-[11px] text-[var(--fg-muted)]">
+            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-2.5 py-1 text-[11px] font-medium text-[var(--fg-secondary)] disabled:opacity-40 hover:bg-[var(--bg-surface-hover)] transition-colors"
+            >
+              Prev
+            </button>
+            {Array.from({ length: Math.min(10, Math.ceil(sorted.length / PAGE_SIZE)) }).map((_, i) => {
+              const pageNum = page < 5 ? i : page - 5 + i;
+              if (pageNum >= Math.ceil(sorted.length / PAGE_SIZE)) return null;
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setPage(pageNum)}
+                  className={`h-7 w-7 rounded-[var(--radius-md)] text-[11px] font-medium transition-colors ${
+                    pageNum === page ? "bg-[var(--accent-cyan)] text-white" : "border border-[var(--border-default)] text-[var(--fg-secondary)] hover:bg-[var(--bg-surface-hover)]"
+                  }`}
+                >
+                  {pageNum + 1}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setPage((p) => Math.min(Math.ceil(sorted.length / PAGE_SIZE) - 1, p + 1))}
+              disabled={page >= Math.ceil(sorted.length / PAGE_SIZE) - 1}
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-2.5 py-1 text-[11px] font-medium text-[var(--fg-secondary)] disabled:opacity-40 hover:bg-[var(--bg-surface-hover)] transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -561,6 +631,9 @@ function ConnectionTable({ connections, onSelect }) {
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 function DNSTable({ queries }) {
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50;
+  const totalPages = Math.ceil(queries.length / PAGE_SIZE);
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left border-collapse">
@@ -573,7 +646,7 @@ function DNSTable({ queries }) {
           </tr>
         </thead>
         <tbody>
-          {queries.map((q) => (
+          {queries.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((q) => (
             <tr key={q.id} className="group border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--bg-surface-hover)] transition-colors duration-150">
               <td className="px-4 py-3 text-[11px] text-[var(--fg-muted)] tabular-nums">{fmtDate(q.observed_at)}</td>
               <td className="px-4 py-3 font-mono text-[12px] text-[var(--accent-cyan)] font-medium">{q.query || "\u2014"}</td>
@@ -594,6 +667,24 @@ function DNSTable({ queries }) {
           <p className="text-[11px] text-[var(--fg-faint)] mt-1">DNS traffic will appear here once the collector captures queries</p>
         </div>
       )}
+      {queries.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
+          <span className="text-[11px] text-[var(--fg-muted)]">
+            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, queries.length)} of {queries.length}
+          </span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-2.5 py-1 text-[11px] font-medium text-[var(--fg-secondary)] disabled:opacity-40 hover:bg-[var(--bg-surface-hover)] transition-colors">Prev</button>
+            {Array.from({ length: Math.min(10, totalPages) }).map((_, i) => {
+              const pageNum = page < 5 ? i : page - 5 + i;
+              if (pageNum >= totalPages) return null;
+              return (
+                <button key={pageNum} onClick={() => setPage(pageNum)} className={`h-7 w-7 rounded-[var(--radius-md)] text-[11px] font-medium transition-colors ${pageNum === page ? "bg-[var(--accent-cyan)] text-white" : "border border-[var(--border-default)] text-[var(--fg-secondary)] hover:bg-[var(--bg-surface-hover)]"}`}>{pageNum + 1}</button>
+              );
+            })}
+            <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-2.5 py-1 text-[11px] font-medium text-[var(--fg-secondary)] disabled:opacity-40 hover:bg-[var(--bg-surface-hover)] transition-colors">Next</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -603,6 +694,9 @@ function DNSTable({ queries }) {
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 function HTTPTable({ requests }) {
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50;
+  const totalPages = Math.ceil(requests.length / PAGE_SIZE);
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left border-collapse">
@@ -611,12 +705,13 @@ function HTTPTable({ requests }) {
             <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Time</th>
             <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Method</th>
             <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Host</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Path</th>
             <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Status</th>
             <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Process</th>
           </tr>
         </thead>
         <tbody>
-          {requests.map((r) => {
+          {requests.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r) => {
             const statusColor = HTTP_STATUS_COLORS[Math.floor((r.status_code || 0) / 100)] || "var(--fg-muted)";
             return (
               <tr key={r.id} className="group border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--bg-surface-hover)] transition-colors duration-150">
@@ -627,6 +722,7 @@ function HTTPTable({ requests }) {
                   </span>
                 </td>
                 <td className="px-4 py-3 font-mono text-[12px] text-[var(--fg-secondary)] max-w-[200px] truncate">{r.host || "\u2014"}</td>
+                <td className="px-4 py-3 font-mono text-[11px] text-[var(--fg-muted)] max-w-[180px] truncate">{r.path || "/"}</td>
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-bold" style={{ color: statusColor }}>
                     <span className="h-1.5 w-1.5 rounded-full" style={{ background: statusColor }} />
@@ -650,6 +746,24 @@ function HTTPTable({ requests }) {
           <p className="text-[11px] text-[var(--fg-faint)] mt-1">HTTP traffic will appear here once the collector captures requests</p>
         </div>
       )}
+      {requests.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
+          <span className="text-[11px] text-[var(--fg-muted)]">
+            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, requests.length)} of {requests.length}
+          </span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-2.5 py-1 text-[11px] font-medium text-[var(--fg-secondary)] disabled:opacity-40 hover:bg-[var(--bg-surface-hover)] transition-colors">Prev</button>
+            {Array.from({ length: Math.min(10, totalPages) }).map((_, i) => {
+              const pageNum = page < 5 ? i : page - 5 + i;
+              if (pageNum >= totalPages) return null;
+              return (
+                <button key={pageNum} onClick={() => setPage(pageNum)} className={`h-7 w-7 rounded-[var(--radius-md)] text-[11px] font-medium transition-colors ${pageNum === page ? "bg-[var(--accent-cyan)] text-white" : "border border-[var(--border-default)] text-[var(--fg-secondary)] hover:bg-[var(--bg-surface-hover)]"}`}>{pageNum + 1}</button>
+              );
+            })}
+            <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-2.5 py-1 text-[11px] font-medium text-[var(--fg-secondary)] disabled:opacity-40 hover:bg-[var(--bg-surface-hover)] transition-colors">Next</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -658,8 +772,36 @@ function HTTPTable({ requests }) {
  * Analytics View
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function AnalyticsView({ stats }) {
+function AnalyticsView({ stats, connections }) {
   if (!stats) return <div className="py-12 text-center text-[13px] text-[var(--fg-muted)]">No analytics data available</div>;
+
+  // Protocol distribution for donut
+  const protocolMap = {};
+  (connections || []).forEach((c) => {
+    const label = PORT_LABELS[c.remote_port] || (c.remote_port ? `:${c.remote_port}` : "other");
+    protocolMap[label] = (protocolMap[label] || 0) + 1;
+  });
+  const protocolData = Object.entries(protocolMap).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const protoColors = ["var(--accent-cyan)", "var(--accent-violet)", "var(--status-healthy)", "var(--severity-medium)", "var(--severity-high)", "var(--fg-muted)"];
+  const totalProto = protocolData.reduce((s, [, v]) => s + v, 0) || 1;
+  let cumAngle = 0;
+  const donutSegments = protocolData.map(([label, count], i) => {
+    const frac = count / totalProto;
+    const seg = { label, count, color: protoColors[i % protoColors.length], start: cumAngle, end: cumAngle + frac * 360 };
+    cumAngle += frac * 360;
+    return seg;
+  });
+
+  // Time series: bucket connections by hour
+  const timeMap = {};
+  (connections || []).forEach((c) => {
+    if (!c.observed_at) return;
+    const d = new Date(c.observed_at);
+    const key = `${d.getHours()}:00`;
+    timeMap[key] = (timeMap[key] || 0) + 1;
+  });
+  const hours = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0") + ":00");
+  const maxCount = Math.max(...Object.values(timeMap), 1);
 
   const BarList = ({ items, labelKey, countKey, color }) => {
     const max = Math.max(...items.map((i) => i[countKey] || 0), 1);
@@ -690,53 +832,206 @@ function AnalyticsView({ stats }) {
         <MetricCard label="Total Bandwidth" value={fmtBytes((stats.bandwidth?.bytes_sent || 0) + (stats.bandwidth?.bytes_recv || 0))} accent="blue" />
       </div>
 
+      {/* Protocol Distribution + Time Series */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Donut: Protocol Distribution */}
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
+          <h3 className="text-[13px] font-semibold text-[var(--fg-primary)]">Protocol Distribution</h3>
+          <div className="mt-4 flex items-center gap-5">
+            <svg viewBox="0 0 36 36" className="h-[140px] w-[140px] -rotate-90">
+              {donutSegments.map((seg, i) => {
+                const r = 15.5;
+                const circ = 2 * Math.PI * r;
+                const dash = ((seg.end - seg.start) / 360) * circ;
+                const offset = (seg.start / 360) * circ;
+                return (
+                  <circle key={i} cx="18" cy="18" r={r} fill="none" stroke={seg.color} strokeWidth="4" strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={-offset} />
+                );
+              })}
+            </svg>
+            <div className="flex-1 space-y-1.5">
+              {donutSegments.map((seg, i) => (
+                <div key={i} className="flex items-center gap-2 text-[11px]">
+                  <span className="h-2.5 w-2.5 rounded-sm" style={{ background: seg.color }} />
+                  <span className="text-[var(--fg-secondary)]">{seg.label}</span>
+                  <span className="ml-auto font-semibold text-[var(--fg-muted)]">{seg.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Time Series: Connections by Hour */}
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
+          <h3 className="text-[13px] font-semibold text-[var(--fg-primary)]">Connections by Hour</h3>
+          <div className="mt-4 flex items-end gap-1 h-[120px]">
+            {hours.map((h) => {
+              const count = timeMap[h] || 0;
+              return (
+                <div key={h} className="flex-1 flex flex-col items-center justify-end group relative">
+                  <div
+                    className="w-full rounded-t-[var(--radius-sm)] bg-gradient-to-t from-[var(--accent-cyan)]/40 to-[var(--accent-cyan)] transition-all duration-300 group-hover:from-[var(--accent-violet)]/40 group-hover:to-[var(--accent-violet)]"
+                    style={{ height: `${(count / maxCount) * 100}%`, minHeight: count > 0 ? "3px" : "0" }}
+                    title={`${h}: ${count} connections`}
+                  />
+                  <span className="absolute -bottom-4 text-[8px] text-[var(--fg-faint)] opacity-0 group-hover:opacity-100 transition-opacity">{h.slice(0, 2)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       {/* Top IPs + Top Ports */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle>Top Remote IPs</CardTitle></CardHeader>
-          <CardContent>
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
+          <h3 className="text-[13px] font-semibold text-[var(--fg-primary)]">Top Remote IPs</h3>
+          <div className="mt-4">
             <BarList items={stats.top_ips || []} labelKey="ip" countKey="count" color="var(--accent-cyan)" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Top Ports</CardTitle></CardHeader>
-          <CardContent>
+          </div>
+        </div>
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
+          <h3 className="text-[13px] font-semibold text-[var(--fg-primary)]">Top Ports</h3>
+          <div className="mt-4">
             <BarList items={(stats.top_ports || []).map((p) => ({ ...p, port: `${p.port} ${PORT_LABELS[p.port] || ""}` }))} labelKey="port" countKey="count" color="var(--accent-violet)" />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       {/* Top Processes + State Distribution */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle>Top Processes</CardTitle></CardHeader>
-          <CardContent>
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
+          <h3 className="text-[13px] font-semibold text-[var(--fg-primary)]">Top Processes</h3>
+          <div className="mt-4">
             <BarList items={stats.top_processes || []} labelKey="process" countKey="count" color="var(--status-healthy)" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Connection States</CardTitle></CardHeader>
-          <CardContent>
+          </div>
+        </div>
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
+          <h3 className="text-[13px] font-semibold text-[var(--fg-primary)]">Connection States</h3>
+          <div className="mt-4">
             <BarList items={(stats.state_distribution || []).map((s) => ({ ...s, state: s.state || "UNKNOWN" }))} labelKey="state" countKey="count" color="var(--severity-medium)" />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       {/* Top DNS + Top Hosts */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle>Top DNS Queries</CardTitle></CardHeader>
-          <CardContent>
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
+          <h3 className="text-[13px] font-semibold text-[var(--fg-primary)]">Top DNS Queries</h3>
+          <div className="mt-4">
             <BarList items={stats.top_dns || []} labelKey="query" countKey="count" color="var(--accent-violet)" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Top HTTP Hosts</CardTitle></CardHeader>
-          <CardContent>
+          </div>
+        </div>
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
+          <h3 className="text-[13px] font-semibold text-[var(--fg-primary)]">Top HTTP Hosts</h3>
+          <div className="mt-4">
             <BarList items={stats.top_hosts || []} labelKey="host" countKey="count" color="var(--status-healthy)" />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * IP Investigation View (stays within Network Analyzer)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+function IPInvestigation({ ip, connections, dnsQueries, httpRequests, onClose, navigate, toast }) {
+  const relatedConns = useMemo(() => connections.filter((c) => c.local_ip === ip || c.remote_ip === ip), [connections, ip]);
+  const relatedDns = useMemo(() => dnsQueries.filter((d) => d.response === ip || d.query?.includes(ip)), [dnsQueries, ip]);
+  const relatedHttp = useMemo(() => httpRequests.filter((h) => h.host === ip || h.host?.includes(ip)), [httpRequests, ip]);
+  const classification = classifyIP(ip);
+  const totalBytes = relatedConns.reduce((s, c) => s + (c.bytes_sent || 0) + (c.bytes_recv || 0), 0);
+  const externalConns = relatedConns.filter((c) => c.remote_ip && classifyIP(c.remote_ip) === "external");
+  const localConns = relatedConns.filter((c) => c.local_ip === ip);
+  const uniquePeers = new Set(relatedConns.map((c) => c.local_ip === ip ? c.remote_ip : c.local_ip));
+  const riskScore = classification === "external"
+    ? Math.min(100, 35 + externalConns.length * 3 + (totalBytes > 10 * 1024 * 1024 ? 20 : 0))
+    : Math.min(60, relatedConns.length + (totalBytes > 5 * 1024 * 1024 ? 15 : 0));
+  const riskColor = riskScore >= 70 ? "var(--severity-critical)" : riskScore >= 40 ? "var(--severity-high)" : riskScore >= 20 ? "var(--severity-medium)" : "var(--status-healthy)";
+
+  const tabs = [
+    { id: "connections", label: `Connections (${relatedConns.length})` },
+    { id: "dns", label: `DNS (${relatedDns.length})` },
+    { id: "http", label: `HTTP (${relatedHttp.length})` },
+  ];
+  const [activeTab, setActiveTab] = useState("connections");
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <button onClick={onClose} className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors">
+          <span className="text-[14px]">\u2190</span> Back to Network
+        </button>
+        <Button variant="danger-ghost" size="sm" onClick={async () => {
+          if (!confirm(`Block IP ${ip}?`)) return;
+          try {
+            await api.request("/api/alerts/suppressions", { method: "POST", body: JSON.stringify({ rule: ip, reason: "Manual block from Network Analyzer", expires_hours: 24 }) });
+            toast({ title: `IP ${ip} blocked`, type: "success" });
+          } catch (e) { toast({ title: "Block failed", description: e.message, type: "error" }); }
+        }}>Block IP</Button>
+      </div>
+
+      <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="font-mono text-[20px] font-bold text-[var(--fg-primary)]">{ip}</p>
+            <div className="mt-1.5 flex items-center gap-2">
+              <Badge severity={classification === "external" ? "medium" : "info"} size="sm">{classification.toUpperCase()}</Badge>
+              <Badge severity="low" size="sm">{uniquePeers.size} peers</Badge>
+            </div>
+          </div>
+          {/* Risk Gauge */}
+          <div className="text-center">
+            <div className="relative h-[72px] w-[72px]">
+              <svg viewBox="0 0 36 36" className="h-full w-full -rotate-90">
+                <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--border-subtle)" strokeWidth="3" />
+                <circle cx="18" cy="18" r="15.5" fill="none" stroke={riskColor} strokeWidth="3" strokeDasharray={`${(riskScore / 100) * 97.4} 97.4`} strokeLinecap="round" />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-[16px] font-bold" style={{ color: riskColor }}>{riskScore}</span>
+            </div>
+            <p className="mt-1 text-[9px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">Risk</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3 text-center">
+            <p className="text-[9px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Connections</p>
+            <p className="mt-0.5 text-[17px] font-bold text-[var(--fg-primary)]">{relatedConns.length}</p>
+          </div>
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3 text-center">
+            <p className="text-[9px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Total Bytes</p>
+            <p className="mt-0.5 text-[17px] font-bold text-[var(--fg-primary)]">{fmtBytes(totalBytes)}</p>
+          </div>
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3 text-center">
+            <p className="text-[9px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Outbound</p>
+            <p className="mt-0.5 text-[17px] font-bold text-[var(--fg-primary)]">{localConns.length}</p>
+          </div>
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3 text-center">
+            <p className="text-[9px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Unique Peers</p>
+            <p className="mt-0.5 text-[17px] font-bold text-[var(--fg-primary)]">{uniquePeers.size}</p>
+          </div>
+        </div>
+      </div>
+
+      <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
+
+      {activeTab === "connections" && (
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] overflow-hidden">
+          <ConnectionTable connections={relatedConns} onSelect={(c) => setSelectedEdge({ connection: c })} />
+        </div>
+      )}
+      {activeTab === "dns" && (
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] overflow-hidden">
+          <DNSTable queries={relatedDns} />
+        </div>
+      )}
+      {activeTab === "http" && (
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] overflow-hidden">
+          <HTTPTable requests={relatedHttp} />
+        </div>
+      )}
     </div>
   );
 }
@@ -759,6 +1054,7 @@ export default function NetworkAnalyzer() {
   const [selectedNode, setSelectedNode] = useState(null);
   const [selectedEdge, setSelectedEdge] = useState(null);
   const [live, setLive] = useState(true);
+  const [investigateIp, setInvestigateIp] = useState(null);
   const alive = useRef(true);
 
   const load = useCallback(async () => {
@@ -793,6 +1089,15 @@ export default function NetworkAnalyzer() {
     const id = setInterval(() => { if (!document.hidden) load(); }, 15000);
     return () => clearInterval(id);
   }, [live, load]);
+
+  // Read ?ip= query param to open IP investigation
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ip = params.get("ip");
+    if (ip && connections.some((c) => c.local_ip === ip || c.remote_ip === ip)) {
+      setInvestigateIp(ip);
+    }
+  }, [connections]);
 
   // Filtered data
   const filteredConnections = useMemo(() => {
@@ -829,6 +1134,20 @@ export default function NetworkAnalyzer() {
 
   if (loading) return <Loading label="Loading network traffic" />;
   if (error) return <ErrorBanner message={error} onRetry={load} />;
+
+  if (investigateIp) {
+    return (
+      <IPInvestigation
+        ip={investigateIp}
+        connections={connections}
+        dnsQueries={dnsQueries}
+        httpRequests={httpRequests}
+        onClose={() => { setInvestigateIp(null); navigate("/network"); }}
+        navigate={navigate}
+        toast={toast}
+      />
+    );
+  }
 
   return (
     <div className="space-y-5 pb-10">
@@ -916,7 +1235,7 @@ export default function NetworkAnalyzer() {
         </div>
       )}
 
-      {tab === "analytics" && <AnalyticsView stats={stats} />}
+      {tab === "analytics" && <AnalyticsView stats={stats} connections={connections} />}
 
       {/* Inspectors */}
       <NodeInspector node={selectedNode} connections={connections} onClose={() => setSelectedNode(null)} navigate={navigate} toast={toast} />
