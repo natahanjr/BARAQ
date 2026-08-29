@@ -1,26 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { api } from "../../api.js";
 import { ErrorBanner } from "../Feedback.jsx";
-import "./AppleDashboard.css";
+import { Badge, MetricCard, RiskGauge, Card, CardHeader, CardTitle, CardContent } from "../ui/index.js";
 
-/* ------------------------------------------------------------------ utils */
+const REFRESH_MS = 30000;
 
 const timeAgo = (iso) => {
   if (!iso) return "";
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "now";
+  if (s < 60) return "just now";
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
-};
-
-const SEV_COLOR = {
-  critical: "var(--bq-red)",
-  high: "var(--bq-orange)",
-  medium: "var(--bq-blue)",
-  low: "var(--bq-text-3)",
-  info: "var(--bq-text-3)",
 };
 
 const greeting = () => {
@@ -31,208 +23,99 @@ const greeting = () => {
   return "Good evening";
 };
 
-const prefersReducedMotion = () =>
+const reducedMotion = () =>
   window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
-/** Animate a number from `from` to `to` with Apple's ease-out feel. */
-function useCountUp(to, duration = 950) {
-  const [v, setV] = useState(() => to);
-  useEffect(() => {
-    if (prefersReducedMotion()) {
-      setV(to);
-      return;
-    }
-    let raf;
-    const t0 = performance.now();
-    const from = 0;
-    const tick = (t) => {
-      const p = Math.min(1, (t - t0) / duration);
-      const eased = 1 - Math.pow(2, -10 * p); // expo out
-      setV(from + (to - from) * eased);
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [to, duration]);
-  return v;
-}
+const SEV_COLOR = {
+  critical: "var(--severity-critical)",
+  high: "var(--severity-high)",
+  medium: "var(--severity-medium)",
+  low: "var(--severity-low)",
+  info: "var(--fg-muted)",
+};
 
-function CountUp({ value, format }) {
-  const v = useCountUp(Number(value) || 0);
-  return <>{format ? format(v) : Math.round(v).toLocaleString()}</>;
-}
+const SEV_DOT = {
+  critical: "bg-[var(--severity-critical)]",
+  high: "bg-[var(--severity-high)]",
+  medium: "bg-[var(--severity-medium)]",
+  low: "bg-[var(--severity-low)]",
+  info: "bg-[var(--fg-muted)]",
+};
 
-/* ------------------------------------------------------------- sub-views */
+/* ── Score Ring ─────────────────────────────────────────────────────── */
 
-function ScoreRing({ value, delay = 0 }) {
+function ScoreRing({ value }) {
+  const R = 56, C = 2 * Math.PI * R;
   const [shown, setShown] = useState(0);
   useEffect(() => {
-    if (prefersReducedMotion()) {
-      setShown(value);
-      return;
-    }
-    const t = setTimeout(() => setShown(value), 120 + delay * 1000);
+    if (reducedMotion()) { setShown(value); return; }
+    const t = setTimeout(() => setShown(value), 150);
     return () => clearTimeout(t);
-  }, [value, delay]);
-  const R = 66;
-  const C = 2 * Math.PI * R;
-  const tone =
-    value >= 70 ? "var(--bq-green)" : value >= 40 ? "var(--bq-orange)" : "var(--bq-red)";
-  const label = value >= 70 ? "Secure" : value >= 40 ? "Attention" : "At risk";
+  }, [value]);
+
+  const color = value >= 80 ? "var(--status-healthy)"
+    : value >= 60 ? "var(--severity-medium)"
+    : value >= 40 ? "var(--severity-high)"
+    : "var(--severity-critical)";
+
+  const label = value >= 80 ? "HEALTHY"
+    : value >= 60 ? "FAIR"
+    : value >= 40 ? "ATTENTION"
+    : "CRITICAL";
+
+  const glowColor = value >= 80 ? "rgba(34,197,94,0.15)"
+    : value >= 60 ? "rgba(234,179,8,0.15)"
+    : value >= 40 ? "rgba(249,115,22,0.15)"
+    : "rgba(239,68,68,0.15)";
+
   return (
-    <div className="relative flex items-center justify-center" style={{ width: 176, height: 176 }}>
-      <svg width="176" height="176" viewBox="0 0 176 176" aria-hidden>
-        <circle className="bq-ring-track" cx="88" cy="88" r={R} fill="none" strokeWidth="10" />
+    <div className="relative flex items-center justify-center" style={{ width: 160, height: 160 }}>
+      {/* Outer glow */}
+      <div
+        className="absolute inset-0 rounded-full blur-xl transition-all duration-1000"
+        style={{ background: glowColor, opacity: shown > 0 ? 0.6 : 0 }}
+      />
+      <svg width="160" height="160" viewBox="0 0 160 160">
+        {/* Track */}
+        <circle cx="80" cy="80" r={R} fill="none" stroke="var(--border-subtle)" strokeWidth="8" />
+        {/* Ticks */}
+        {[...Array(24)].map((_, i) => {
+          const angle = (i / 24) * 360 - 90;
+          const rad = (angle * Math.PI) / 180;
+          const x1 = 80 + (R + 8) * Math.cos(rad);
+          const y1 = 80 + (R + 8) * Math.sin(rad);
+          const x2 = 80 + (R + 12) * Math.cos(rad);
+          const y2 = 80 + (R + 12) * Math.sin(rad);
+          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--border-subtle)" strokeWidth="1" />;
+        })}
+        {/* Progress arc */}
         <circle
-          className="bq-ring-fg"
-          cx="88"
-          cy="88"
-          r={R}
-          fill="none"
-          stroke={tone}
-          strokeWidth="10"
-          strokeLinecap="round"
-          strokeDasharray={C}
-          strokeDashoffset={C - (C * shown) / 100}
-          transform="rotate(-90 88 88)"
-          style={{ color: tone }}
+          cx="80" cy="80" r={R} fill="none" strokeWidth="8" strokeLinecap="round"
+          stroke={color}
+          strokeDasharray={C} strokeDashoffset={C - (C * shown) / 100}
+          transform="rotate(-90 80 80)"
+          style={{ transition: "stroke-dashoffset 1.2s cubic-bezier(0.32,0.72,0,1)", filter: `drop-shadow(0 0 6px ${glowColor})` }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="bq-ring-num" style={{ color: tone }}>
-          <CountUp value={value} />
+        <span
+          className="text-[42px] font-bold tracking-tight text-[var(--fg-primary)] leading-none"
+          style={{ fontFeatureSettings: '"tnum"' }}
+        >
+          {value}
         </span>
-        <span className="bq-caption">{label}</span>
+        <span
+          className="mt-1.5 text-[10px] font-bold uppercase tracking-[var(--tracking-widest)]"
+          style={{ color }}
+        >
+          {label}
+        </span>
       </div>
     </div>
   );
 }
 
-function Stat({ label, value, tone, delay, to, note }) {
-  const body = (
-    <>
-      <span className="flex w-full items-center justify-between">
-        <span className="bq-caption">{label}</span>
-        <span aria-hidden className="stat-chevron text-[15px] leading-none"
-              style={{ color: "var(--bq-text-3)" }}>›</span>
-      </span>
-      <span className="flex w-full items-baseline justify-between gap-2">
-        <span className="bq-metric" style={tone ? { color: tone } : undefined}>
-          <CountUp value={value} />
-        </span>
-        {note ? (
-          <span className="text-[11px]" style={{ color: "var(--bq-text-3)" }}>{note}</span>
-        ) : null}
-      </span>
-    </>
-  );
-  const cls =
-    "bq-card bq-card--hover bq-in flex flex-col justify-between gap-6 p-5 group stat-tap";
-  if (to) {
-    return (
-      <Link to={to} className={cls} style={{ animationDelay: `${delay}s` }}
-            aria-label={`${label} — view details`}>
-        {body}
-      </Link>
-    );
-  }
-  return <div className={cls} style={{ animationDelay: `${delay}s` }}>{body}</div>;
-}
-
-function StateRow({ label, ok, note, pulse = false, warn = false }) {
-  const cls = !ok ? "bq-dot--crit" : warn ? "bq-dot--warn" : "bq-dot--ok";
-  return (
-    <div className="flex items-center justify-between py-[11px]">
-      <span className="text-[13px]">{label}</span>
-      <span className="flex items-center gap-2.5">
-        <span className="text-[13px]" style={{ color: "var(--bq-text-2)" }}>{note}</span>
-        <span className={`bq-dot ${cls} ${ok && pulse ? "bq-dot--pulse" : ""}`} />
-      </span>
-    </div>
-  );
-}
-
-function MlCard({ ml, delay }) {
-  if (!ml || Object.keys(ml).length === 0) return null;
-  const state = ml.model_state || "UNKNOWN";
-  const stateTone =
-    state === "HEALTHY" ? "var(--bq-green)" :
-    state === "WARNING" ? "var(--bq-orange)" : "var(--bq-red)";
-  const source =
-    ml.model_source === "bootstrap"
-      ? "Built-in seed model — armed on day one"
-      : ml.model_source === "user"
-        ? `Trained on this host · v${ml.version}`
-        : "Awaiting first training cycle";
-  const streams = Array.isArray(ml.streams) ? ml.streams : [];
-  return (
-    <section className="bq-card bq-in p-7" aria-label="ML detection engine"
-             style={{ animationDelay: `${delay}s`, height: "100%" }}>
-      <header className="mb-5 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-[17px] font-semibold tracking-[-0.01em]">Detection Intelligence</h2>
-          <p className="bq-subtitle mt-0.5">{source}</p>
-        </div>
-        <span className="flex items-center gap-2 rounded-full px-3 py-1.5"
-              style={{ background: "var(--bq-surface-strong)", border: "1px solid var(--bq-hairline)" }}>
-          <span
-            className={`bq-dot ${state === "HEALTHY" ? "bq-dot--ok bq-dot--pulse" : state === "WARNING" ? "bq-dot--warn" : "bq-dot--crit"}`}
-            style={{ background: stateTone }}
-          />
-          <span className="text-[12px] font-medium" style={{ color: stateTone }}>{state}</span>
-        </span>
-      </header>
-
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
-        {[
-          ["Engine", ml.supervised && ml.supervised !== "none" ? ml.supervised.split("+")[0] : "anomaly only", "/evaluation"],
-          ["Scored events", Number(ml.scored_events ?? 0).toLocaleString(), "/evaluation"],
-          ["Samples", Number(ml.samples ?? 0).toLocaleString(), "/evaluation"],
-          ["Drift", ml.drift ? "detected" : "none", ml.drift ? "/evaluation" : null],
-        ].map(([k, v, href]) => (
-          <div key={k}>
-            <div className="bq-caption mb-1">{k}</div>
-            {href ? (
-              <Link to={href} className="text-[15px] font-medium tracking-[-0.01em] transition-colors hover:underline"
-                    style={k === "Drift" && ml.drift ? { color: "var(--bq-orange)" } : { color: "var(--bq-text-1)" }}>
-                {v}
-              </Link>
-            ) : (
-              <div className="text-[15px] font-medium tracking-[-0.01em]"
-                   style={k === "Drift" ? { color: "var(--bq-text-3)" } : undefined}>
-                {v}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {streams.length > 0 && (
-        <div className="mt-5 flex flex-wrap gap-2">
-          {streams.map((s) => {
-            const t = ml.thresholds?.[s];
-            return (
-              <Link
-                key={s}
-                to={`/telemetry?stream=${s}`}
-                className="bq-chip transition-all hover:scale-[1.03] hover:shadow-[0_0_12px_-4px_rgba(56,189,248,0.3)]"
-              >
-                <span className="bq-dot bq-dot--ok" style={{ opacity: 0.9 }} />
-                {s}{t !== undefined ? ` · τ ${Number(t).toFixed(2)}` : ""}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-
-      <footer className="mt-5 border-t pt-4" style={{ borderColor: "var(--bq-hairline)" }}>
-        <Link to="/evaluation" className="bq-link text-[13px] font-medium" style={{ color: "var(--bq-blue)" }}>
-          Open evaluation →
-        </Link>
-      </footer>
-    </section>
-  );
-}
+/* ── Severity Bar ─────────────────────────────────────────────────────── */
 
 function SeverityBar({ counts }) {
   const order = ["critical", "high", "medium", "low", "info"];
@@ -240,26 +123,17 @@ function SeverityBar({ counts }) {
   if (!total) return null;
   return (
     <div className="mt-4">
-      <div className="bq-segbar" role="img" aria-label="Alert severity distribution">
-        {order.map((k, i) => {
+      <div className="flex overflow-hidden rounded-full" style={{ height: 4, background: "var(--border-subtle)", gap: 2 }}>
+        {order.map((k) => {
           const n = counts[k] || 0;
           if (!n) return null;
-          return (
-            <span key={k}
-                  title={`${k}: ${n}`}
-                  style={{
-                    width: `${(n / total) * 100}%`,
-                    background: SEV_COLOR[k],
-                    animationDelay: `${0.55 + i * 0.08}s`,
-                  }} />
-          );
+          return <div key={k} style={{ width: `${(n / total) * 100}%`, background: SEV_COLOR[k], borderRadius: 999, transition: "width 0.8s ease" }} />;
         })}
       </div>
-      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
         {order.filter((k) => (counts?.[k] || 0) > 0).map((k) => (
-          <span key={k} className="flex items-center gap-1.5 text-[11px]"
-                style={{ color: "var(--bq-text-3)" }}>
-            <span className="bq-sev" style={{ background: SEV_COLOR[k], width: 6, height: 6 }} />
+          <span key={k} className="flex items-center gap-1.5 text-[10px] text-[var(--fg-muted)]">
+            <span className={`h-1.5 w-1.5 rounded-full ${SEV_DOT[k]}`} />
             {k} · {counts[k]}
           </span>
         ))}
@@ -268,42 +142,104 @@ function SeverityBar({ counts }) {
   );
 }
 
-function Skeleton() {
+/* ── Alert Row ────────────────────────────────────────────────────────── */
+
+function AlertRow({ alert }) {
   return (
-    <div aria-label="Loading dashboard" className="grid grid-cols-1 gap-4">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="bq-skel h-[248px]" />
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:col-span-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="bq-skel h-[116px]" />
-          ))}
-        </div>
+    <Link
+      to={`/alerts/${alert.id}`}
+      className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-[var(--bg-surface-hover)]"
+    >
+      <span className={`h-2 w-2 shrink-0 rounded-full ${SEV_DOT[alert.severity] || SEV_DOT.info}`} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-medium text-[var(--fg-primary)]">{alert.name}</p>
+        <p className="truncate text-[11px] text-[var(--fg-muted)]">
+          {alert.host || "unknown"} · {alert.category || alert.rule || "detection"}
+        </p>
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="bq-skel h-[220px] lg:col-span-2" />
-        <div className="bq-skel h-[220px]" />
-      </div>
-      <div className="bq-skel h-[280px]" />
+      <span className="text-[11px] text-[var(--fg-muted)]">{timeAgo(alert.created_at)}</span>
+      <span className="text-[var(--fg-faint)]">›</span>
+    </Link>
+  );
+}
+
+/* ── Status Row ───────────────────────────────────────────────────────── */
+
+function StatusRow({ label, ok, note }) {
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-[var(--border-subtle)] last:border-0">
+      <span className="text-[13px] text-[var(--fg-secondary)]">{label}</span>
+      <span className="flex items-center gap-2.5">
+        <span className="text-[11px] text-[var(--fg-muted)]">{note}</span>
+        <span className="relative flex h-2 w-2">
+          {ok && <span className="pulse-dot absolute inline-flex h-full w-full rounded-full bg-[var(--status-healthy)] opacity-40" />}
+          <span className={`relative inline-flex h-2 w-2 rounded-full ${ok ? "bg-[var(--status-healthy)]" : "bg-[var(--severity-critical)]"}`} />
+        </span>
+      </span>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------- page */
+/* ── Skeleton ─────────────────────────────────────────────────────────── */
 
-const REFRESH_MS = 30000;
+function Skeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="skeleton h-[240px] rounded-[var(--radius-2xl)]" />
+        <div className="grid grid-cols-2 gap-4 lg:col-span-2">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="skeleton h-[120px] rounded-[var(--radius-2xl)]" />)}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="skeleton h-[200px] rounded-[var(--radius-2xl)] lg:col-span-2" />
+        <div className="skeleton h-[200px] rounded-[var(--radius-2xl)]" />
+      </div>
+    </div>
+  );
+}
+
+/* ── SVG Icons (stable refs) ──────────────────────────────────────────── */
+
+const EventsSvg = memo(() => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <path d="M2 13L6 9L10 11L16 5" stroke="var(--accent-cyan)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M12 5H16V9" stroke="var(--accent-cyan)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+));
+const AlertsSvg = memo(() => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <path d="M9 2L16 14H2L9 2Z" stroke="var(--severity-high)" strokeWidth="1.5" strokeLinejoin="round" />
+    <path d="M9 7V10" stroke="var(--severity-high)" strokeWidth="1.5" strokeLinecap="round" />
+    <circle cx="9" cy="12.5" r="0.75" fill="var(--severity-high)" />
+  </svg>
+));
+const CriticalSvg = memo(() => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <circle cx="9" cy="9" r="7" stroke="var(--severity-critical)" strokeWidth="1.5" />
+    <path d="M9 5V10" stroke="var(--severity-critical)" strokeWidth="1.5" strokeLinecap="round" />
+    <circle cx="9" cy="12.5" r="0.75" fill="var(--severity-critical)" />
+  </svg>
+));
+const AnomaliesSvg = memo(() => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <path d="M2 14L5 8L8 11L11 4L16 14" stroke="var(--accent-violet)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+));
+
+/* ═══════════════════════════════════════════════════════════════════════ PAGE */
 
 export default function AppleDashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [updated, setUpdated] = useState(null);
-  const [tick, setTick] = useState(0); // re-render for timeAgo freshness
   const alive = useRef(true);
 
   const load = useCallback(async () => {
     try {
       const [summary, alerts, mlStatus] = await Promise.all([
         api.summary(),
-        api.alerts({ page_size: 6 }),
+        api.alerts({ page_size: 5 }),
         api.get("/api/system/ml/status").catch(() => ({})),
       ]);
       if (!alive.current) return;
@@ -323,152 +259,195 @@ export default function AppleDashboard() {
   useEffect(() => {
     alive.current = true;
     load();
-    const timer = setInterval(() => {
-      if (!document.hidden) load();
-    }, REFRESH_MS);
-    const clock = setInterval(() => setTick((t) => t + 1), 60000);
-    return () => {
-      alive.current = false;
-      clearInterval(timer);
-      clearInterval(clock);
-    };
+    const timer = setInterval(() => { if (!document.hidden) load(); }, REFRESH_MS);
+    return () => { alive.current = false; clearInterval(timer); };
   }, [load]);
 
   if (error && !data) return <ErrorBanner message={error} onRetry={load} />;
   if (!data) {
     return (
-      <div className="bq pb-10 pt-1">
-        <p className="bq-caption mb-4">Security Operations</p>
+      <div className="pb-10 pt-1">
+        <p className="console-label mb-4">COMMAND CENTER</p>
         <Skeleton />
       </div>
     );
   }
 
   const { summary, alerts, ml } = data;
-  void tick; // refresh time-ago labels
   const score = summary?.security_score ?? 0;
 
   return (
-    <div className="bq pb-10 pt-1">
-      <div className="bq-ambient" aria-hidden />
-
-      <div className="relative" style={{ zIndex: 1 }}>
-        {/* ------------------------------------------------ header */}
-        <header className="bq-in mb-7 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="bq-caption mb-1.5">{greeting()} · Security Operations</p>
-            <h1 className="bq-title">Overview</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[12px]" style={{ color: "var(--bq-text-3)" }}>
-              {updated
-                ? `Updated ${updated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
-                : ""}
+    <div className="space-y-6 pb-10 pt-1">
+      {/* ── Header ────────────────────────────────────────────── */}
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">
+            {greeting()}
+          </p>
+          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">
+            Command Center
+          </h1>
+        </div>
+        <div className="flex items-center gap-3">
+          {updated && (
+            <span className="text-[11px] text-[var(--fg-muted)]">
+              Last evaluated {timeAgo(updated.toISOString())}
             </span>
-            <span className="flex items-center gap-2 rounded-full px-3 py-1.5"
-                  style={{ background: "var(--bq-surface)", border: "1px solid var(--bq-hairline)" }}>
-              <span className="bq-dot bq-dot--ok bq-dot--pulse" />
-              <span className="text-[12px] font-medium">Live</span>
+          )}
+          <span className="inline-flex items-center gap-2 rounded-full border border-[var(--status-healthy-muted)] bg-[var(--status-healthy-muted)] px-3 py-1">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="pulse-dot absolute inline-flex h-full w-full rounded-full bg-[var(--status-healthy)] opacity-40" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--status-healthy)]" />
             </span>
-          </div>
-        </header>
+            <span className="text-[11px] font-semibold text-[var(--status-healthy)]">Live</span>
+          </span>
+        </div>
+      </header>
 
-        {/* ---------------------------------------------- hero row */}
-        <section className="grid grid-cols-1 gap-4 lg:grid-cols-3" aria-label="Posture">
-          <div className="bq-card bq-in flex flex-col items-center justify-center gap-3 p-7 lg:col-span-1"
-               style={{ animationDelay: "0.05s" }}>
-            <ScoreRing value={score} delay={0.05} />
-            <p className="bq-subtitle">{summary?.system_status ?? ""}</p>
-          </div>
+      {/* ── Hero: Security Posture ───────────────────────────── */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/* Score Ring */}
+        <Card className="flex flex-col items-center justify-center gap-3 p-7">
+          <ScoreRing value={score} />
+          <p className="text-[13px] text-[var(--fg-muted)]">{summary?.system_status || "Analyzing..."}</p>
+        </Card>
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:col-span-2">
-            <Stat label="Events ingested" value={summary?.total_events ?? 0}
-                  to="/telemetry" note="browse" delay={0.12} />
-            <Stat label="Active alerts" value={summary?.active_alerts ?? 0}
-                  tone={(summary?.active_alerts ?? 0) > 0 ? "var(--bq-blue)" : undefined}
-                  to="/alerts?status=open" note="triage" delay={0.18} />
-            <Stat label="Critical + high" value={summary?.critical_threats ?? 0}
-                  tone={(summary?.critical_threats ?? 0) > 0 ? "var(--bq-red)" : undefined}
-                  to="/alerts?status=open&severity=critical,high" note="urgent" delay={0.24} />
-            <Stat label="Anomalies flagged" value={summary?.anomalies_detected ?? 0}
-                  tone={(summary?.anomalies_detected ?? 0) > 0 ? "var(--bq-purple)" : undefined}
-                  to="/telemetry?anomaly=true" note="ML flagged" delay={0.30} />
-          </div>
-        </section>
+        {/* KPI Cards */}
+        <div className="grid grid-cols-2 gap-4 lg:col-span-2">
+          <Link to="/telemetry">
+            <MetricCard label="Events" value={summary?.total_events ?? 0} icon={EventsSvg} accent="cyan" trendLabel="Total events processed" />
+          </Link>
+          <Link to="/alerts?status=open">
+            <MetricCard label="Active Alerts" value={summary?.active_alerts ?? 0} icon={AlertsSvg} accent={(summary?.active_alerts ?? 0) > 0 ? "orange" : "green"} trendLabel="Requiring attention" />
+          </Link>
+          <Link to="/alerts?severity=critical,high">
+            <MetricCard label="Critical" value={summary?.critical_threats ?? 0} icon={CriticalSvg} accent={(summary?.critical_threats ?? 0) > 0 ? "red" : "green"} trendLabel="Immediate response needed" />
+          </Link>
+          <Link to="/telemetry?anomaly=true">
+            <MetricCard label="Anomalies" value={summary?.anomalies_detected ?? 0} icon={AnomaliesSvg} accent={(summary?.anomalies_detected ?? 0) > 0 ? "violet" : "green"} trendLabel="ML-detected anomalies" />
+          </Link>
+        </div>
+      </section>
 
-        {/* ------------------------------------------- ML + status */}
-        <section className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <MlCard ml={ml} delay={0.38} />
-          </div>
-          <section className="bq-card bq-in p-7" aria-label="System health"
-                   style={{ animationDelay: "0.44s" }}>
-            <h2 className="mb-2 text-[17px] font-semibold tracking-[-0.01em]">System</h2>
-            <div>
-              <StateRow label="Telemetry collection" ok note="streaming" pulse />
-              <StateRow label="Detection engine" ok note="online" />
-              <StateRow
-                label="ML model"
-                ok={ml.model_state !== "CRITICAL"}
-                warn={ml.model_state === "WARNING"}
-                note={(ml.model_source === "bootstrap" ? "seed model" : ml.model_state?.toLowerCase()) || "—"}
+      {/* ── Risk Overview ─────────────────────────────────────── */}
+      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          { label: "Critical", value: summary?.severity_counts?.critical || 0, severity: "critical", icon: "\u26A0" },
+          { label: "High", value: summary?.severity_counts?.high || 0, severity: "high", icon: "\u25B2" },
+          { label: "Medium", value: summary?.severity_counts?.medium || 0, severity: "medium", icon: "\u25CF" },
+          { label: "Low", value: summary?.severity_counts?.low || 0, severity: "low", icon: "\u25CB" },
+        ].map((item) => {
+          const sevColor = SEV_COLOR[item.severity];
+          return (
+            <Card key={item.label} hover className="group relative overflow-hidden p-5">
+              <div
+                className="absolute -right-4 -top-4 h-20 w-20 rounded-full blur-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-60"
+                style={{ background: sevColor }}
               />
-              <StateRow label="Threat intel" ok={!ml.drift} warn={!!ml.drift}
-                        note={ml.drift ? "review drift" : "nominal"} />
-            </div>
-          </section>
-        </section>
+              <div className="relative">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">
+                    {item.label}
+                  </p>
+                  <span className="text-[14px] opacity-40" style={{ color: sevColor }}>{item.icon}</span>
+                </div>
+                <p
+                  className="mt-2 text-[28px] font-bold tabular-nums leading-none text-[var(--fg-primary)]"
+                  style={{ fontFeatureSettings: '"tnum"' }}
+                >
+                  {item.value}
+                </p>
+                {/* Mini bar */}
+                <div className="mt-3 h-1 overflow-hidden rounded-full" style={{ background: "var(--border-subtle)" }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: item.value > 0 ? `${Math.min(100, item.value * 10)}%` : "0%",
+                      background: sevColor,
+                    }}
+                  />
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </section>
 
-        {/* ------------------------------------------ recent alerts */}
-        <section className="bq-card bq-in mt-4 p-7" aria-label="Recent alerts"
-                 style={{ animationDelay: "0.50s" }}>
-          <header className="mb-3 flex items-baseline justify-between">
-            <h2 className="text-[17px] font-semibold tracking-[-0.01em]">Recent Alerts</h2>
-            <Link to="/alerts" className="bq-link text-[13px] font-medium"
-                  style={{ color: "var(--bq-blue)" }}>
-              View all{data.totalAlerts ? ` (${data.totalAlerts})` : ""} →
-            </Link>
-          </header>
+      {/* ── ML + System Health ────────────────────────────────── */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Link to="/ml-detection" className="lg:col-span-2">
+          <Card className="h-full cursor-pointer transition-all duration-200 hover:border-[var(--accent-cyan)]/20 hover:shadow-[0_0_30px_-8px_var(--accent-cyan)]">
+            <CardHeader>
+              <CardTitle>Detection Engine</CardTitle>
+              <div className="flex items-center gap-2">
+                {ml.model_state && (
+                  <Badge severity={ml.model_state === "HEALTHY" ? "info" : ml.model_state === "WARNING" ? "medium" : "critical"} size="sm">
+                    {ml.model_state}
+                  </Badge>
+                )}
+                <span className="text-[12px] font-semibold text-[var(--accent-cyan)]">View ML →</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4 mt-2">
+                {[
+                  ["Engine", ml.supervised?.split("+")[0] || "anomaly"],
+                  ["Scored", Number(ml.scored_events ?? 0).toLocaleString()],
+                  ["Samples", Number(ml.samples ?? 0).toLocaleString()],
+                ].map(([k, v]) => (
+                  <div key={k}>
+                    <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">{k}</p>
+                    <p className="mt-1 text-[14px] font-semibold text-[var(--fg-primary)]">{v}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
 
+        <Card>
+          <CardHeader>
+            <CardTitle>System Health</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <StatusRow label="Telemetry" ok note="streaming" />
+            <StatusRow label="Detection engine" ok note="online" />
+            <StatusRow label="ML model" ok={ml.model_state !== "CRITICAL"} note={ml.model_state?.toLowerCase() || "—"} />
+            <StatusRow label="Threat intel" ok={!ml.drift} note={ml.drift ? "drift detected" : "nominal"} />
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ── Recent Alerts ─────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Alerts</CardTitle>
+          <Link to="/alerts" className="text-[12px] font-semibold text-[var(--accent-cyan)] transition-colors hover:opacity-80">
+            View all{data.totalAlerts ? ` (${data.totalAlerts})` : ""} →
+          </Link>
+        </CardHeader>
+        <CardContent>
           {alerts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-14">
-              <svg width="44" height="52" viewBox="0 0 44 52" fill="none" aria-hidden>
-                <path d="M22 2 40 9v13c0 12.5-7.6 21.9-18 28C11.6 43.9 4 34.5 4 22V9L22 2Z"
-                      stroke="var(--bq-green)" strokeWidth="2.5" strokeLinejoin="round" />
-                <path d="M15 25l5 5 9-10" stroke="var(--bq-green)" strokeWidth="2.5"
-                      strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <h3 className="text-[17px] font-semibold tracking-[-0.01em]">All Clear</h3>
-              <p className="bq-subtitle">No alerts right now — we're still watching everything.</p>
+            <div className="flex flex-col items-center justify-center gap-3 py-12">
+              <div className="flex h-12 w-12 items-center justify-center rounded-[var(--radius-xl)] bg-[var(--status-healthy-muted)]">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 3L21 9V15C21 20.5 17 25 12 27C7 25 3 20.5 3 15V9L12 3Z" stroke="var(--status-healthy)" strokeWidth="2" strokeLinejoin="round" />
+                  <path d="M9 13L11 15L15 10" stroke="var(--status-healthy)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <h4 className="text-[15px] font-semibold text-[var(--fg-primary)]">All Clear</h4>
+              <p className="text-center text-[13px] text-[var(--fg-muted)]">No active threats. Your system is secure.</p>
             </div>
           ) : (
             <>
-              <div>
-                {alerts.map((a, i) => (
-                  <Link key={a.id} to={`/alerts/${a.id}`} className="bq-row bq-in"
-                        style={{ animationDelay: `${0.56 + i * 0.06}s` }}>
-                    <span className={`bq-sev ${a.severity === "critical" ? "bq-sev--critical" : ""}`}
-                          style={{ background: SEV_COLOR[a.severity] || "var(--bq-text-3)" }} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-medium tracking-[-0.01em]">
-                        {a.name}
-                      </span>
-                      <span className="bq-subtitle block truncate">
-                        {a.host || "unknown host"} · {a.category || a.rule || "detection"}
-                      </span>
-                    </span>
-                    <span className="text-[13px]" style={{ color: "var(--bq-text-3)" }}>
-                      {timeAgo(a.created_at)}
-                    </span>
-                    <span aria-hidden style={{ color: "var(--bq-text-3)" }}>›</span>
-                  </Link>
-                ))}
+              <div className="divide-y divide-[var(--border-subtle)]">
+                {alerts.slice(0, 5).map((a) => <AlertRow key={a.id} alert={a} />)}
               </div>
               <SeverityBar counts={summary?.severity_counts} />
             </>
           )}
-        </section>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
