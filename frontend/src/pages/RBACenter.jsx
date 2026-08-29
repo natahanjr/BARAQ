@@ -9,8 +9,6 @@ import {
   CartesianGrid,
 } from "recharts";
 import { api, isAdmin } from "../api.js";
-import Card from "../components/Card.jsx";
-import PageHeader from "../components/PageHeader.jsx";
 import ChartTooltip from "../components/ChartTooltip.jsx";
 import RiskBadge from "../components/RiskBadge.jsx";
 import { Loading, EmptyState, ErrorBanner } from "../components/Feedback.jsx";
@@ -143,44 +141,45 @@ export default function RBACenter() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Entity Risk Center"
-        subtitle="Risk-Based Alerting: accumulated risk per user, host and IP with exponential decay over time."
-        actions={
-          <div className="flex gap-2">
-            <button
-              onClick={runSync}
-              disabled={busy}
-              className="rounded-lg border border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-200 hover:border-violet-400 hover:text-violet-300 disabled:opacity-50"
-            >
-              Sync 24h
-            </button>
-            <button
-              onClick={runDecay}
-              disabled={busy}
-              className="rounded-lg border border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-200 hover:border-violet-400 hover:text-violet-300 disabled:opacity-50"
-            >
-              Apply Decay
-            </button>
-          </div>
-        }
-      />
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">Security</p>
+          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">Entity Risk Center</h1>
+          <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">Risk-Based Alerting: accumulated risk per user, host and IP with exponential decay over time.</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={runSync}
+            disabled={busy}
+            className="rounded-xl bg-[var(--accent-cyan)] px-4 py-1.5 text-sm font-medium text-white shadow-lg shadow-[var(--accent-cyan)]/25 hover:shadow-xl transition-all disabled:opacity-50"
+          >
+            Sync 24h
+          </button>
+          <button
+            onClick={runDecay}
+            disabled={busy}
+            className="rounded-xl bg-[var(--accent-cyan)] px-4 py-1.5 text-sm font-medium text-white shadow-lg shadow-[var(--accent-cyan)]/25 hover:shadow-xl transition-all disabled:opacity-50"
+          >
+            Apply Decay
+          </button>
+        </div>
+      </header>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError("")} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-lg font-semibold text-white">Risk Leaderboard</h3>
-            <div className="flex gap-1 rounded-lg border border-slate-700 p-0.5">
+            <h3 className="text-lg font-semibold text-[var(--fg-primary)]">Risk Leaderboard</h3>
+            <div className="flex gap-1 rounded-lg border border-[var(--border-default)] p-0.5">
               {Object.entries(KIND_LABELS).map(([key, label]) => (
                 <button
                   key={key}
                   onClick={() => setKind(key)}
                   className={`rounded-md px-3 py-1 text-xs font-medium ${
                     kind === key
-                      ? "bg-violet-500/20 text-violet-300"
-                      : "text-slate-400 hover:text-slate-200"
+                      ? "bg-[var(--accent-violet)]/20 text-[var(--accent-violet)]"
+                      : "text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
                   }`}
                 >
                   {label}
@@ -198,7 +197,7 @@ export default function RBACenter() {
           ) : (
             <div className="max-h-[520px] overflow-auto">
               <table className="data-table w-full">
-                <thead className="sticky top-0 bg-slate-900/90 text-xs uppercase tracking-wider text-slate-400 backdrop-blur">
+                <thead className="sticky top-0 bg-[var(--bg-surface)]/90 text-xs uppercase tracking-wider text-[var(--fg-muted)] backdrop-blur">
                   <tr>
                     <th className="px-3 py-2">Entity</th>
                     <th className="px-3 py-2">Level</th>
@@ -207,28 +206,28 @@ export default function RBACenter() {
                     <th className="px-3 py-2 text-right">Last Update</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800">
+                <tbody className="divide-y divide-[var(--border-subtle)]">
                   {entities.entities.map((e) => (
                     <tr
                       key={`${e.entity_kind}:${e.entity_name}`}
                       onClick={() => openEntity(e)}
-                      className={`cursor-pointer hover:bg-slate-800/40 ${
-                        selected?.entity_name === e.entity_name ? "bg-violet-500/10" : ""
+                      className={`cursor-pointer hover:bg-[var(--bg-inset)] ${
+                        selected?.entity_name === e.entity_name ? "bg-[var(--accent-violet)]/10" : ""
                       }`}
                     >
-                      <td className="px-3 py-2 font-mono text-xs text-slate-200">
+                      <td className="px-3 py-2 font-mono text-xs text-[var(--fg-primary)]">
                         {e.entity_name}
                       </td>
                       <td className="px-3 py-2">
                         <RiskBadge level={e.risk_level} score={e.score} />
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-xs text-slate-300">
+                      <td className="px-3 py-2 text-right font-mono text-xs text-[var(--fg-secondary)]">
                         {Number(e.score).toFixed(1)}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-xs text-slate-300">
+                      <td className="px-3 py-2 text-right font-mono text-xs text-[var(--fg-secondary)]">
                         {e.alerts_count}
                       </td>
-                      <td className="px-3 py-2 text-right text-xs text-slate-400">
+                      <td className="px-3 py-2 text-right text-xs text-[var(--fg-muted)]">
                         {formatTime(e.last_updated)}
                       </td>
                     </tr>
@@ -237,10 +236,10 @@ export default function RBACenter() {
               </table>
             </div>
           )}
-        </Card>
+        </div>
 
-        <Card tone="violet">
-          <h3 className="mb-4 text-lg font-semibold text-white">
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+          <h3 className="mb-4 text-lg font-semibold text-[var(--fg-primary)]">
             {selected ? `${KIND_LABELS[selected.entity_kind]}: ${selected.entity_name}` : "Entity Timeline"}
           </h3>
           {!selected && (
@@ -253,7 +252,7 @@ export default function RBACenter() {
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <RiskBadge level={selected.risk_level} score={selected.score} />
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-[var(--fg-muted)]">
                   {selected.alerts_count} contributing detection(s)
                 </span>
               </div>
@@ -283,22 +282,22 @@ export default function RBACenter() {
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <p className="text-sm text-slate-400">No timeline events yet.</p>
+                <p className="text-sm text-[var(--fg-muted)]">No timeline events yet.</p>
               )}
               {selected.contributions?.length > 0 && (
-                <div className="rounded-lg border border-slate-700/60 bg-slate-900/50 p-3">
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] p-3">
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
                     Recent contributions
                   </h4>
                   <ul className="space-y-1.5">
                     {selected.contributions.slice(-8).reverse().map((c, i) => (
                       <li key={i} className="flex flex-wrap items-center gap-2 text-xs">
-                        <span className="font-mono text-slate-300">{c.rule}</span>
-                        <span className="font-mono text-slate-500">{c.mitre_id}</span>
-                        <span className="font-mono text-violet-300">
+                        <span className="font-mono text-[var(--fg-secondary)]">{c.rule}</span>
+                        <span className="font-mono text-[var(--fg-faint)]">{c.mitre_id}</span>
+                        <span className="font-mono text-[var(--accent-violet)]">
                           +{Number(c.delta).toFixed(1)}
                         </span>
-                        <span className="text-slate-500">{formatTime(c.created_at)}</span>
+                        <span className="text-[var(--fg-faint)]">{formatTime(c.created_at)}</span>
                       </li>
                     ))}
                   </ul>
@@ -306,22 +305,22 @@ export default function RBACenter() {
               )}
             </div>
           )}
-        </Card>
+        </div>
       </div>
 
       {isAdmin() && tuningDraft && (
-        <Card tone="amber">
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold text-white">Risk Tuning</h3>
-              <p className="text-xs text-slate-400">
+              <h3 className="text-lg font-semibold text-[var(--fg-primary)]">Risk Tuning</h3>
+              <p className="text-xs text-[var(--fg-muted)]">
                 Live detection tuning - changes apply on the next accumulation, decay or escalation pass (no restart).
               </p>
             </div>
             <button
               onClick={saveTuning}
               disabled={busy}
-              className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+              className="rounded-xl bg-[var(--accent-cyan)] px-4 py-1.5 text-sm font-semibold text-white shadow-lg shadow-[var(--accent-cyan)]/25 hover:shadow-xl transition-all disabled:opacity-50"
             >
               {tuningSaved ? "Saved" : busy ? "Saving…" : "Save Tuning"}
             </button>
@@ -329,13 +328,13 @@ export default function RBACenter() {
 
           <div className="grid gap-6 md:grid-cols-2">
             <div>
-              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
                 Per-rule risk multipliers
               </h4>
               <div className="space-y-1.5">
                 {Object.entries(tuningDraft.rule_risk_weights).map(([rule, weight]) => (
                   <div key={rule} className="flex items-center gap-2">
-                    <span className="w-40 truncate font-mono text-xs text-slate-300">{rule}</span>
+                    <span className="w-40 truncate font-mono text-xs text-[var(--fg-secondary)]">{rule}</span>
                     <input
                       type="number"
                       step="0.1"
@@ -350,7 +349,7 @@ export default function RBACenter() {
                           },
                         }))
                       }
-                      className="w-24 rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-100"
+                      className="w-24 rounded-md bg-[var(--bg-inset)] border-[var(--border-default)] text-[var(--fg-primary)] focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20 px-2 py-1 text-xs"
                     />
                   </div>
                 ))}
@@ -358,13 +357,13 @@ export default function RBACenter() {
             </div>
 
             <div className="space-y-4">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
                 Escalation thresholds
               </h4>
               <div className="grid grid-cols-3 gap-3">
                 {["medium", "high", "critical"].map((lvl) => (
                   <label key={lvl} className="block">
-                    <span className="mb-1 block text-[11px] uppercase tracking-wide text-slate-400">{lvl}</span>
+                    <span className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--fg-muted)]">{lvl}</span>
                     <input
                       type="number"
                       value={tuningDraft.risk_thresholds[lvl]}
@@ -377,14 +376,14 @@ export default function RBACenter() {
                           },
                         }))
                       }
-                      className="w-full rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100"
+                      className="w-full rounded-md bg-[var(--bg-inset)] border-[var(--border-default)] text-[var(--fg-primary)] focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20 px-2 py-1 text-sm"
                     />
                   </label>
                 ))}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="mb-1 block text-[11px] uppercase tracking-wide text-slate-400">
+                  <span className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--fg-muted)]">
                     Decay half-life (days)
                   </span>
                   <input
@@ -394,11 +393,11 @@ export default function RBACenter() {
                     onChange={(e) =>
                       setTuningDraft((d) => ({ ...d, risk_decay_days: Number(e.target.value) }))
                     }
-                    className="w-full rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100"
+                    className="w-full rounded-md bg-[var(--bg-inset)] border-[var(--border-default)] text-[var(--fg-primary)] focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20 px-2 py-1 text-sm"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-[11px] uppercase tracking-wide text-slate-400">
+                  <span className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--fg-muted)]">
                     Notable dedup (hours)
                   </span>
                   <input
@@ -408,28 +407,28 @@ export default function RBACenter() {
                     onChange={(e) =>
                       setTuningDraft((d) => ({ ...d, risk_notable_window_hours: Number(e.target.value) }))
                     }
-                    className="w-full rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100"
+                    className="w-full rounded-md bg-[var(--bg-inset)] border-[var(--border-default)] text-[var(--fg-primary)] focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20 px-2 py-1 text-sm"
                   />
                 </label>
               </div>
-              <label className="flex items-center gap-2 text-sm text-slate-200">
+              <label className="flex items-center gap-2 text-sm text-[var(--fg-primary)]">
                 <input
                   type="checkbox"
                   checked={tuningDraft.entity_risk_enabled}
                   onChange={(e) =>
                     setTuningDraft((d) => ({ ...d, entity_risk_enabled: e.target.checked }))
                   }
-                  className="h-4 w-4 accent-violet-500"
+                  className="h-4 w-4 accent-[var(--accent-violet)]"
                 />
                 Entity risk accumulation enabled
               </label>
             </div>
           </div>
-        </Card>
+        </div>
       )}
 
-      <Card>
-        <h3 className="mb-3 text-lg font-semibold text-white">Declarative Correlation Rules</h3>
+      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+        <h3 className="mb-3 text-lg font-semibold text-[var(--fg-primary)]">Declarative Correlation Rules</h3>
         {rules === null ? (
           <Loading />
         ) : rules.rules.length === 0 ? (
@@ -442,26 +441,26 @@ export default function RBACenter() {
             {rules.rules.map((r) => (
               <div
                 key={r.name}
-                className="rounded-lg border border-slate-700/60 bg-slate-900/50 p-4"
+                className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] p-4"
               >
                 <div className="mb-1 flex items-center justify-between gap-2">
-                  <span className="font-mono text-sm font-semibold text-slate-100">
+                  <span className="font-mono text-sm font-semibold text-[var(--fg-primary)]">
                     {r.name}
                   </span>
                   <RiskBadge level={r.severity.toUpperCase()} />
                 </div>
-                <p className="mb-3 text-xs text-slate-400">{r.description}</p>
+                <p className="mb-3 text-xs text-[var(--fg-muted)]">{r.description}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {r.stages.map((s) => (
                     <span
                       key={s.label}
-                      className="rounded border border-slate-700 bg-slate-800/60 px-2 py-0.5 text-[11px] text-slate-300"
+                      className="rounded border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 py-0.5 text-[11px] text-[var(--fg-secondary)]"
                     >
                       {s.label}
                     </span>
                   ))}
                 </div>
-                <div className="mt-3 flex items-center gap-3 text-[11px] text-slate-500">
+                <div className="mt-3 flex items-center gap-3 text-[11px] text-[var(--fg-faint)]">
                   <span className="font-mono">{r.mitre_id}</span>
                   <span>group_by: {r.group_by}</span>
                   <span>match: {r.match}</span>
@@ -471,7 +470,7 @@ export default function RBACenter() {
             ))}
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 }

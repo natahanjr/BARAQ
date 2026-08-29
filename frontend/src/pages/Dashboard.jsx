@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { api, authStore } from "../api.js";
-import Card from "../components/Card.jsx";
-import PageHeader from "../components/PageHeader.jsx";
 import HeartbeatChart from "../components/HeartbeatChart.jsx";
 import Strike from "../components/Strike.jsx";
 import { Loading, EmptyState, ErrorBanner } from "../components/Feedback.jsx";
@@ -24,32 +22,30 @@ const RISK_COLORS = {
   LOW: "#00f0ff",
 };
 
-// Color-independent severity markers (plan: never rely on color alone).
 const SEVERITY_MARK = {
-  critical: { shape: "●", cls: "text-red-400" },
-  high: { shape: "▲", cls: "text-orange-400" },
-  medium: { shape: "◆", cls: "text-amber-400" },
-  low: { shape: "○", cls: "text-sky-400" },
-  info: { shape: "○", cls: "text-slate-400" },
+  critical: { shape: "●", cls: "text-[var(--severity-critical)]" },
+  high: { shape: "▲", cls: "text-[var(--severity-high)]" },
+  medium: { shape: "◆", cls: "text-[var(--severity-medium)]" },
+  low: { shape: "○", cls: "text-[var(--severity-low)]" },
+  info: { shape: "○", cls: "text-[var(--fg-muted)]" },
 };
 
 const SEVERITY_CHIP = {
-  critical: { chip: "border-red-500/40 bg-red-500/15 text-red-400", dot: "bg-red-500" },
-  high: { chip: "border-orange-500/40 bg-orange-500/15 text-orange-400", dot: "bg-orange-400" },
-  medium: { chip: "border-amber-500/40 bg-amber-500/15 text-amber-400", dot: "bg-amber-400" },
-  low: { chip: "border-sky-500/40 bg-sky-500/15 text-sky-400", dot: "bg-sky-400" },
-  info: { chip: "border-slate-500/40 bg-slate-500/15 text-slate-400", dot: "bg-slate-400" },
+  critical: { chip: "border-[var(--severity-critical)]/40 bg-[var(--severity-critical)]/15 text-[var(--severity-critical)]", dot: "bg-[var(--severity-critical)]" },
+  high: { chip: "border-[var(--severity-high)]/40 bg-[var(--severity-high)]/15 text-[var(--severity-high)]", dot: "bg-[var(--severity-high)]" },
+  medium: { chip: "border-[var(--severity-medium)]/40 bg-[var(--severity-medium)]/15 text-[var(--severity-medium)]", dot: "bg-[var(--severity-medium)]" },
+  low: { chip: "border-[var(--severity-low)]/40 bg-[var(--severity-low)]/15 text-[var(--severity-low)]", dot: "bg-[var(--severity-low)]" },
+  info: { chip: "border-[var(--border-default)]/40 bg-[var(--bg-surface)]/15 text-[var(--fg-muted)]", dot: "bg-[var(--fg-muted)]" },
 };
 
 const STATUS_CHIP = {
-  open: "border-sky-500/40 bg-sky-500/10 text-sky-300",
-  investigating: "border-violet-500/40 bg-violet-500/10 text-violet-300",
-  contained: "border-amber-500/40 bg-amber-500/10 text-amber-300",
-  resolved: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
-  closed: "border-slate-500/40 bg-slate-500/10 text-slate-400",
+  open: "border-[var(--severity-low)]/40 bg-[var(--severity-low)]/10 text-[var(--severity-low)]",
+  investigating: "border-[var(--accent-violet)]/40 bg-[var(--accent-violet)]/10 text-[var(--accent-violet)]",
+  contained: "border-[var(--severity-medium)]/40 bg-[var(--severity-medium)]/10 text-[var(--severity-medium)]",
+  resolved: "border-[var(--status-healthy)]/40 bg-[var(--status-healthy)]/10 text-[var(--status-healthy)]",
+  closed: "border-[var(--border-default)]/40 bg-[var(--bg-surface)]/10 text-[var(--fg-muted)]",
 };
 
-// All 14 ATT&CK tactics — gaps are tactics with no detection in the window.
 const MITRE_TACTICS = [
   "Initial Access",
   "Execution",
@@ -72,39 +68,39 @@ const TREND_OPTIONS = ["1h", "6h", "24h", "7d", "30d"];
 
 const KPI_ACCENT = {
   cyan: {
-    text: "text-cyan-300",
-    bubble: "from-cyan-500/25 to-blue-600/25 border-cyan-400/40 text-cyan-300",
-    bar: "from-cyan-400 to-violet-500",
-    glow: "bg-cyan-500",
-    grad: "from-cyan-500/12 via-slate-900/60 to-slate-900/80 border-cyan-400/20",
+    text: "text-[var(--accent-cyan)]",
+    bubble: "from-[var(--accent-cyan)]/25 to-[var(--severity-low)]/25 border-[var(--accent-cyan)]/40 text-[var(--accent-cyan)]",
+    bar: "from-[var(--accent-cyan)] to-[var(--accent-violet)]",
+    glow: "bg-[var(--accent-cyan)]",
+    grad: "from-[var(--accent-cyan)]/12 via-[var(--bg-inset)]/60 to-[var(--bg-inset)]/80 border-[var(--accent-cyan)]/20",
   },
   green: {
-    text: "text-emerald-300",
-    bubble: "from-emerald-500/25 to-teal-600/25 border-emerald-400/40 text-emerald-300",
-    bar: "from-emerald-400 to-teal-500",
-    glow: "bg-emerald-500",
-    grad: "from-emerald-500/12 via-slate-900/60 to-slate-900/80 border-emerald-400/20",
+    text: "text-[var(--status-healthy)]",
+    bubble: "from-[var(--status-healthy)]/25 to-[var(--status-healthy)]/25 border-[var(--status-healthy)]/40 text-[var(--status-healthy)]",
+    bar: "from-[var(--status-healthy)] to-[var(--status-healthy)]",
+    glow: "bg-[var(--status-healthy)]",
+    grad: "from-[var(--status-healthy)]/12 via-[var(--bg-inset)]/60 to-[var(--bg-inset)]/80 border-[var(--status-healthy)]/20",
   },
   violet: {
-    text: "text-violet-300",
-    bubble: "from-violet-500/25 to-fuchsia-600/25 border-violet-400/40 text-violet-300",
-    bar: "from-violet-400 to-fuchsia-500",
-    glow: "bg-violet-500",
-    grad: "from-violet-500/12 via-slate-900/60 to-slate-900/80 border-violet-400/20",
+    text: "text-[var(--accent-violet)]",
+    bubble: "from-[var(--accent-violet)]/25 to-[var(--accent-violet)]/25 border-[var(--accent-violet)]/40 text-[var(--accent-violet)]",
+    bar: "from-[var(--accent-violet)] to-[var(--accent-violet)]",
+    glow: "bg-[var(--accent-violet)]",
+    grad: "from-[var(--accent-violet)]/12 via-[var(--bg-inset)]/60 to-[var(--bg-inset)]/80 border-[var(--accent-violet)]/20",
   },
   orange: {
-    text: "text-orange-300",
-    bubble: "from-orange-500/25 to-amber-600/25 border-orange-400/40 text-orange-300",
-    bar: "from-orange-400 to-amber-500",
-    glow: "bg-orange-500",
-    grad: "from-orange-500/12 via-slate-900/60 to-slate-900/80 border-orange-400/20",
+    text: "text-[var(--severity-high)]",
+    bubble: "from-[var(--severity-high)]/25 to-[var(--severity-medium)]/25 border-[var(--severity-high)]/40 text-[var(--severity-high)]",
+    bar: "from-[var(--severity-high)] to-[var(--severity-medium)]",
+    glow: "bg-[var(--severity-high)]",
+    grad: "from-[var(--severity-high)]/12 via-[var(--bg-inset)]/60 to-[var(--bg-inset)]/80 border-[var(--severity-high)]/20",
   },
   red: {
-    text: "text-red-300",
-    bubble: "from-red-500/25 to-rose-600/25 border-red-400/40 text-red-300",
-    bar: "from-red-400 to-rose-500",
-    glow: "bg-red-500",
-    grad: "from-red-500/12 via-slate-900/60 to-slate-900/80 border-red-400/20",
+    text: "text-[var(--severity-critical)]",
+    bubble: "from-[var(--severity-critical)]/25 to-[var(--severity-critical)]/25 border-[var(--severity-critical)]/40 text-[var(--severity-critical)]",
+    bar: "from-[var(--severity-critical)] to-[var(--severity-critical)]",
+    glow: "bg-[var(--severity-critical)]",
+    grad: "from-[var(--severity-critical)]/12 via-[var(--bg-inset)]/60 to-[var(--bg-inset)]/80 border-[var(--severity-critical)]/20",
   },
 };
 
@@ -120,13 +116,13 @@ function MetricBox({ label, value, icon: Icon, color = "cyan", sub, gauge }) {
       />
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--fg-muted)]">
             {label}
           </p>
           <p className={`mt-1.5 text-3xl font-bold tracking-tight ${accent.text}`}>{value}</p>
-          {sub && <p className="mt-0.5 truncate text-xs text-slate-500">{sub}</p>}
+          {sub && <p className="mt-0.5 truncate text-xs text-[var(--fg-muted)]">{sub}</p>}
           {gauge !== undefined && (
-            <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/5">
+            <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-[var(--bg-inset)]">
               <div
                 className={`h-full rounded-full bg-gradient-to-r ${accent.bar}`}
                 style={{ width: `${Math.min(100, Math.max(0, gauge))}%` }}
@@ -146,22 +142,22 @@ function MetricBox({ label, value, icon: Icon, color = "cyan", sub, gauge }) {
 
 function Panel({ title, subtitle, action, children, className = "" }) {
   return (
-    <Card className={className}>
+    <div className={`rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 ${className}`}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
-          {subtitle && <p className="mt-0.5 truncate text-xs text-slate-500">{subtitle}</p>}
+          <h3 className="text-sm font-semibold text-[var(--fg-primary)]">{title}</h3>
+          {subtitle && <p className="mt-0.5 truncate text-xs text-[var(--fg-muted)]">{subtitle}</p>}
         </div>
         {action}
       </div>
       {children}
-    </Card>
+    </div>
   );
 }
 
 function RangePills({ options, value, onChange }) {
   return (
-    <div className="flex shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-0.5">
+    <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] p-0.5">
       {options.map((opt) => (
         <button
           key={opt}
@@ -169,8 +165,8 @@ function RangePills({ options, value, onChange }) {
           onClick={() => onChange(opt)}
           className={`rounded-md px-2 py-1 font-mono text-[10px] font-semibold transition-colors ${
             value === opt
-              ? "bg-cyan-500/20 text-cyan-300"
-              : "text-slate-500 hover:text-slate-300"
+              ? "bg-[var(--accent-cyan)]/20 text-[var(--accent-cyan)]"
+              : "text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
           }`}
         >
           {opt}
@@ -189,7 +185,7 @@ function StrikeButton({ alert, onStrike }) {
         onStrike(alert);
       }}
       title={`⚡ STRIKE — one-click containment of alert #${alert.id}`}
-      className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-300 transition-all hover:border-cyan-400/70 hover:bg-cyan-500/20"
+      className="inline-flex items-center gap-1 rounded-lg border border-[var(--accent-cyan)]/30 bg-[var(--accent-cyan)]/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--accent-cyan)] transition-all hover:border-[var(--accent-cyan)]/70 hover:bg-[var(--accent-cyan)]/20"
     >
       ⚡ Strike
     </button>
@@ -235,9 +231,6 @@ function fmtAge(min) {
   return `${Math.floor(min / 1440)}d`;
 }
 
-/* ------------------------------------------------------------------ */
-/* Incident queue — the analyst's triage table (P0 per the plan)       */
-/* ------------------------------------------------------------------ */
 function IncidentQueue({ incidents, onReload, showToast }) {
   const navigate = useNavigate();
   const [selected, setSelected] = useState(new Set());
@@ -291,7 +284,7 @@ function IncidentQueue({ incidents, onReload, showToast }) {
   };
 
   const selectCls =
-    "rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] font-medium text-slate-300 outline-none transition-colors hover:border-cyan-400/30 focus:border-cyan-400/50";
+    "rounded-lg bg-[var(--bg-inset)] border border-[var(--border-default)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--fg-secondary)] outline-none transition-colors focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20";
 
   return (
     <Panel
@@ -300,13 +293,12 @@ function IncidentQueue({ incidents, onReload, showToast }) {
       action={
         <Link
           to="/incidents"
-          className="shrink-0 text-xs font-semibold text-cyan-400 transition-colors hover:text-cyan-300"
+          className="shrink-0 text-xs font-semibold text-[var(--accent-cyan)] transition-colors hover:text-[var(--accent-cyan)]"
         >
           Incident Center →
         </Link>
       }
     >
-      {/* Filters */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input
           type="text"
@@ -329,15 +321,14 @@ function IncidentQueue({ incidents, onReload, showToast }) {
           <option value="contained">Contained</option>
           <option value="resolved">Resolved</option>
         </select>
-        <span className="ml-auto font-mono text-[10px] text-slate-500">
+        <span className="ml-auto font-mono text-[10px] text-[var(--fg-muted)]">
           {filtered.length} shown · {incidents.length} open
         </span>
       </div>
 
-      {/* Bulk triage bar */}
       {isAdmin && selected.size > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-500/[0.07] px-3 py-2">
-          <span className="font-mono text-[11px] font-semibold text-cyan-300">
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--accent-cyan)]/25 bg-[var(--accent-cyan)]/[0.07] px-3 py-2">
+          <span className="font-mono text-[11px] font-semibold text-[var(--accent-cyan)]">
             {selected.size} selected
           </span>
           <select
@@ -400,7 +391,7 @@ function IncidentQueue({ incidents, onReload, showToast }) {
           <button
             type="button"
             onClick={() => bulk({ status: "closed" })}
-            className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-1.5 text-[11px] font-semibold text-red-300 transition-colors hover:bg-red-500/20"
+            className="rounded-lg border border-[var(--severity-critical)]/30 bg-[var(--severity-critical)]/10 px-3 py-1.5 text-[11px] font-semibold text-[var(--severity-critical)] transition-colors hover:bg-[var(--severity-critical)]/20"
           >
             Close selected
           </button>
@@ -416,7 +407,7 @@ function IncidentQueue({ incidents, onReload, showToast }) {
                   type="checkbox"
                   checked={filtered.length > 0 && selected.size === filtered.length}
                   onChange={toggleAll}
-                  className="h-3.5 w-3.5 accent-cyan-400"
+                  className="h-3.5 w-3.5 accent-[var(--accent-cyan)]"
                   aria-label="Select all incidents"
                 />
               </th>
@@ -440,18 +431,18 @@ function IncidentQueue({ incidents, onReload, showToast }) {
                 <tr
                   key={inc.id}
                   onClick={() => navigate("/incidents")}
-                  className="group cursor-pointer transition-colors hover:bg-white/[0.03]"
+                  className="group cursor-pointer transition-colors hover:bg-[var(--bg-inset)]"
                 >
                   <td onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={selected.has(inc.id)}
                       onChange={() => toggle(inc.id)}
-                      className="h-3.5 w-3.5 accent-cyan-400"
+                      className="h-3.5 w-3.5 accent-[var(--accent-cyan)]"
                       aria-label={`Select ${inc.ref}`}
                     />
                   </td>
-                  <td className="whitespace-nowrap font-mono text-[11px] text-slate-400">
+                  <td className="whitespace-nowrap font-mono text-[11px] text-[var(--fg-muted)]">
                     {inc.ref}
                   </td>
                   <td>
@@ -460,29 +451,29 @@ function IncidentQueue({ incidents, onReload, showToast }) {
                   <td
                     className={`text-right font-mono text-[11px] ${
                       (inc.risk_score ?? 0) >= 80
-                        ? "text-red-400"
+                        ? "text-[var(--severity-critical)]"
                         : (inc.risk_score ?? 0) >= 50
-                          ? "text-orange-300"
-                          : "text-slate-300"
+                          ? "text-[var(--severity-high)]"
+                          : "text-[var(--fg-secondary)]"
                     }`}
                   >
                     {inc.risk_score ? Math.round(inc.risk_score) : "—"}
                   </td>
-                  <td className="max-w-[260px] truncate text-slate-200">{inc.title}</td>
-                  <td className="max-w-[120px] truncate font-mono text-[11px] text-slate-400">
+                  <td className="max-w-[260px] truncate text-[var(--fg-primary)]">{inc.title}</td>
+                  <td className="max-w-[120px] truncate font-mono text-[11px] text-[var(--fg-muted)]">
                     {inc.host || "—"}
                   </td>
-                  <td className="whitespace-nowrap font-mono text-[10px] text-slate-500">
+                  <td className="whitespace-nowrap font-mono text-[10px] text-[var(--fg-muted)]">
                     {inc.mitre_id === "T0000" ? "—" : inc.mitre_id}
                   </td>
                   <td>
                     <StatusBadge status={inc.status} />
                   </td>
-                  <td className="max-w-[100px] truncate text-[11px] text-slate-400">
-                    {inc.owner || <span className="text-slate-600">Unassigned</span>}
+                  <td className="max-w-[100px] truncate text-[11px] text-[var(--fg-muted)]">
+                    {inc.owner || <span className="text-[var(--fg-faint)]">Unassigned</span>}
                   </td>
                   <td
-                    className={`text-right font-mono text-[11px] ${overdue ? "text-red-400" : "text-slate-400"}`}
+                    className={`text-right font-mono text-[11px] ${overdue ? "text-[var(--severity-critical)]" : "text-[var(--fg-muted)]"}`}
                     title={overdue ? "SLA attention needed" : ""}
                   >
                     {fmtAge(age)}
@@ -492,7 +483,7 @@ function IncidentQueue({ incidents, onReload, showToast }) {
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={10} className="py-8 text-center text-xs text-slate-500">
+                <td colSpan={10} className="py-8 text-center text-xs text-[var(--fg-muted)]">
                   No incidents match the current filters
                 </td>
               </tr>
@@ -504,9 +495,6 @@ function IncidentQueue({ incidents, onReload, showToast }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Active threats — what needs attention RIGHT NOW                     */
-/* ------------------------------------------------------------------ */
 function ActiveThreats({ alerts, riskDistribution, onStrike }) {
   const navigate = useNavigate();
   const critical = alerts.filter((a) => (a.severity || "").toLowerCase() === "critical");
@@ -522,7 +510,7 @@ function ActiveThreats({ alerts, riskDistribution, onStrike }) {
       action={
         <Link
           to="/alerts"
-          className="shrink-0 text-xs font-semibold text-cyan-400 transition-colors hover:text-cyan-300"
+          className="shrink-0 text-xs font-semibold text-[var(--accent-cyan)] transition-colors hover:text-[var(--accent-cyan)]"
         >
           All alerts →
         </Link>
@@ -537,8 +525,8 @@ function ActiveThreats({ alerts, riskDistribution, onStrike }) {
               <li
                 key={alert.id}
                 onClick={() => navigate(`/alerts/${alert.id}`)}
-                className={`group cursor-pointer rounded-xl border p-3 transition-colors hover:bg-white/[0.03] ${
-                  isCritical ? "border-red-500/30 bg-red-500/[0.06]" : "border-orange-500/25 bg-orange-500/[0.04]"
+                className={`group cursor-pointer rounded-xl border p-3 transition-colors hover:bg-[var(--bg-inset)] ${
+                  isCritical ? "border-[var(--severity-critical)]/30 bg-[var(--severity-critical)]/[0.06]" : "border-[var(--severity-high)]/25 bg-[var(--severity-high)]/[0.04]"
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -546,22 +534,22 @@ function ActiveThreats({ alerts, riskDistribution, onStrike }) {
                     <div className="flex items-center gap-2">
                       {isCritical ? (
                         <span className="relative flex h-2 w-2 shrink-0">
-                          <span className="pulse-dot absolute inline-flex h-full w-full rounded-full bg-red-500" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                          <span className="pulse-dot absolute inline-flex h-full w-full rounded-full bg-[var(--severity-critical)]" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--severity-critical)]" />
                         </span>
                       ) : (
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-orange-400" />
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--severity-high)]" />
                       )}
-                      <p className="truncate text-xs font-medium text-slate-100">{alert.name}</p>
+                      <p className="truncate text-xs font-medium text-[var(--fg-primary)]">{alert.name}</p>
                     </div>
-                    <p className="mt-1 truncate font-mono text-[10px] text-slate-500">
+                    <p className="mt-1 truncate font-mono text-[10px] text-[var(--fg-muted)]">
                       {alert.host || "—"} · {alert.mitre_id === "T0000" ? "unmapped" : alert.mitre_id}{" "}
                       · {new Date(alert.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <span
-                      className={`font-mono text-[11px] font-semibold ${isCritical ? "text-red-400" : "text-orange-300"}`}
+                      className={`font-mono text-[11px] font-semibold ${isCritical ? "text-[var(--severity-critical)]" : "text-[var(--severity-high)]"}`}
                     >
                       {alert.risk_score ? Math.round(alert.risk_score) : "—"}
                     </span>
@@ -579,11 +567,11 @@ function ActiveThreats({ alerts, riskDistribution, onStrike }) {
       )}
 
       {riskMix.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-white/5 pt-3">
+        <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--border-subtle)] pt-3">
           {riskMix.map((r) => (
             <span
               key={r.risk_level}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-slate-400"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 py-0.5 text-[10px] font-medium text-[var(--fg-muted)]"
             >
               <span
                 className="h-1.5 w-1.5 rounded-full"
@@ -598,9 +586,6 @@ function ActiveThreats({ alerts, riskDistribution, onStrike }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Threat timeline — atomic event feed (expandable)                    */
-/* ------------------------------------------------------------------ */
 function ThreatTimeline({ events }) {
   const [range, setRange] = useState("1h");
   const [expanded, setExpanded] = useState(null);
@@ -625,8 +610,8 @@ function ThreatTimeline({ events }) {
                 key={ev.id}
                 className={`rounded-xl border transition-colors ${
                   ev.is_anomaly
-                    ? "border-violet-500/30 bg-violet-500/[0.06]"
-                    : "border-white/5 bg-white/[0.02] hover:bg-white/[0.04]"
+                    ? "border-[var(--accent-violet)]/30 bg-[var(--accent-violet)]/[0.06]"
+                    : "border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-inset)]"
                 }`}
               >
                 <button
@@ -634,31 +619,31 @@ function ThreatTimeline({ events }) {
                   onClick={() => setExpanded(open ? null : ev.id)}
                   className="flex w-full items-center gap-3 px-3 py-2 text-left"
                 >
-                  <span className="w-16 shrink-0 font-mono text-[11px] text-slate-400">{time}</span>
-                  <span className="w-16 shrink-0 truncate font-mono text-[10px] text-slate-500">
+                  <span className="w-16 shrink-0 font-mono text-[11px] text-[var(--fg-muted)]">{time}</span>
+                  <span className="w-16 shrink-0 truncate font-mono text-[10px] text-[var(--fg-muted)]">
                     {ev.category}
                   </span>
-                  <span className="hidden w-14 shrink-0 font-mono text-[10px] text-slate-600 sm:inline">
+                  <span className="hidden w-14 shrink-0 font-mono text-[10px] text-[var(--fg-faint)] sm:inline">
                     E{ev.event_id}
                   </span>
-                  <span className="hidden min-w-0 shrink-0 max-w-[150px] truncate font-mono text-[11px] text-slate-400 md:inline">
+                  <span className="hidden min-w-0 shrink-0 max-w-[150px] truncate font-mono text-[11px] text-[var(--fg-muted)] md:inline">
                     {ev.user !== "-" ? ev.user : ""}@{ev.host !== "-" ? ev.host : ""}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-xs text-slate-300">{ev.message}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-[var(--fg-secondary)]">{ev.message}</span>
                   {ev.is_anomaly && (
-                    <span className="shrink-0 rounded border border-violet-400/40 bg-violet-500/15 px-1.5 py-0.5 font-mono text-[9px] font-bold text-violet-300">
+                    <span className="shrink-0 rounded border border-[var(--accent-violet)]/40 bg-[var(--accent-violet)]/15 px-1.5 py-0.5 font-mono text-[9px] font-bold text-[var(--accent-violet)]">
                       ML {ev.ml_score ? ev.ml_score.toFixed(2) : ""}
                     </span>
                   )}
-                  <span className={`shrink-0 text-[10px] text-slate-600 transition-transform ${open ? "rotate-90" : ""}`}>
+                  <span className={`shrink-0 text-[10px] text-[var(--fg-faint)] transition-transform ${open ? "rotate-90" : ""}`}>
                     ›
                   </span>
                 </button>
                 {open && (
-                  <div className="border-t border-white/5 px-3 py-2.5">
-                    <p className="text-xs leading-relaxed text-slate-300">{ev.message}</p>
+                  <div className="border-t border-[var(--border-subtle)] px-3 py-2.5">
+                    <p className="text-xs leading-relaxed text-[var(--fg-secondary)]">{ev.message}</p>
                     {ev.raw && (
-                      <pre className="mt-2 max-h-40 overflow-auto rounded-lg border border-white/5 bg-black/30 p-2.5 font-mono text-[10px] leading-relaxed text-slate-500">
+                      <pre className="mt-2 max-h-40 overflow-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-2.5 font-mono text-[10px] leading-relaxed text-[var(--fg-muted)]">
                         {typeof ev.raw === "string" ? ev.raw : JSON.stringify(ev.raw, null, 2)}
                       </pre>
                     )}
@@ -675,9 +660,6 @@ function ThreatTimeline({ events }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Attack trends + detection performance                               */
-/* ------------------------------------------------------------------ */
 function AttackTrends({ timeline, attacks, userBehavior }) {
   const [range, setRange] = useState("24h");
   const [data, setData] = useState(timeline);
@@ -718,24 +700,24 @@ function AttackTrends({ timeline, attacks, userBehavior }) {
       </div>
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--fg-muted)]">
             Top attack types
           </p>
           {(attacks || []).slice(0, 4).map((a, idx) => (
             <div key={idx} className="mb-1.5 flex items-center gap-2">
-              <span className="w-36 truncate font-mono text-[11px] text-slate-300">{a.attack}</span>
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
+              <span className="w-36 truncate font-mono text-[11px] text-[var(--fg-secondary)]">{a.attack}</span>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--bg-inset)]">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-violet-500"
+                  className="h-full rounded-full bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-violet)]"
                   style={{ width: `${Math.max(3, (a.count / maxAttacks) * 100)}%` }}
                 />
               </div>
-              <span className="w-8 text-right font-mono text-[10px] text-slate-400">{a.count}</span>
+              <span className="w-8 text-right font-mono text-[10px] text-[var(--fg-muted)]">{a.count}</span>
             </div>
           ))}
         </div>
         <div>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--fg-muted)]">
             Targeted accounts
           </p>
           {(userBehavior || []).slice(0, 4).map((u, idx) => {
@@ -743,16 +725,16 @@ function AttackTrends({ timeline, attacks, userBehavior }) {
             const failPct = total > 0 ? Math.round(((u.failures || 0) / total) * 100) : 0;
             return (
               <div key={idx} className="mb-1.5 flex items-center gap-2">
-                <span className="w-36 truncate font-mono text-[11px] text-slate-300">
+                <span className="w-36 truncate font-mono text-[11px] text-[var(--fg-secondary)]">
                   {u.user || "Unknown"}
                 </span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--bg-inset)]">
                   <div
-                    className={`h-full rounded-full bg-gradient-to-r ${failPct > 30 ? "from-red-500 to-rose-500" : "from-emerald-400 to-teal-500"}`}
+                    className={`h-full rounded-full bg-gradient-to-r ${failPct > 30 ? "from-[var(--severity-critical)] to-[var(--severity-critical)]" : "from-[var(--status-healthy)] to-[var(--status-healthy)]"}`}
                     style={{ width: `${failPct}%` }}
                   />
                 </div>
-                <span className="w-8 text-right font-mono text-[10px] text-slate-400">{failPct}%</span>
+                <span className="w-8 text-right font-mono text-[10px] text-[var(--fg-muted)]">{failPct}%</span>
               </div>
             );
           })}
@@ -775,7 +757,7 @@ function DetectionPerformance({ evalData, detectionMethods }) {
       action={
         <Link
           to="/evaluation"
-          className="shrink-0 text-xs font-semibold text-cyan-400 transition-colors hover:text-cyan-300"
+          className="shrink-0 text-xs font-semibold text-[var(--accent-cyan)] transition-colors hover:text-[var(--accent-cyan)]"
         >
           Evaluation →
         </Link>
@@ -785,47 +767,47 @@ function DetectionPerformance({ evalData, detectionMethods }) {
         <>
           <div className="grid grid-cols-3 gap-2">
             {[
-              { label: "Precision", value: overall.precision, color: "text-cyan-300" },
-              { label: "Recall", value: overall.recall, color: "text-violet-300" },
-              { label: "F1", value: overall.f1_score, color: "text-emerald-300" },
+              { label: "Precision", value: overall.precision, color: "text-[var(--accent-cyan)]" },
+              { label: "Recall", value: overall.recall, color: "text-[var(--accent-violet)]" },
+              { label: "F1", value: overall.f1_score, color: "text-[var(--status-healthy)]" },
             ].map((m) => (
-              <div key={m.label} className="rounded-xl border border-white/5 bg-white/[0.03] p-3 text-center">
+              <div key={m.label} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 text-center">
                 <p className={`text-xl font-bold ${m.color}`}>{(m.value * 100).toFixed(1)}%</p>
-                <p className="mt-0.5 text-[10px] uppercase tracking-wider text-slate-500">{m.label}</p>
+                <p className="mt-0.5 text-[10px] uppercase tracking-wider text-[var(--fg-muted)]">{m.label}</p>
               </div>
             ))}
           </div>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500">
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[var(--fg-muted)]">
             <span>
-              FPR <strong className="font-mono text-slate-300">{(overall.false_positive_rate * 100).toFixed(1)}%</strong>
+              FPR <strong className="font-mono text-[var(--fg-secondary)]">{(overall.false_positive_rate * 100).toFixed(1)}%</strong>
             </span>
             <span>
               Accuracy{" "}
-              <strong className="font-mono text-slate-300">{(overall.accuracy * 100).toFixed(1)}%</strong>
+              <strong className="font-mono text-[var(--fg-secondary)]">{(overall.accuracy * 100).toFixed(1)}%</strong>
             </span>
             <span>
               Avg detection{" "}
-              <strong className="font-mono text-slate-300">
+              <strong className="font-mono text-[var(--fg-secondary)]">
                 {overall.detection_time_ms ? `${(overall.detection_time_ms / 1000).toFixed(1)}s` : "—"}
               </strong>
             </span>
           </div>
           {items.length > 0 && (
             <div className="mt-4">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--fg-muted)]">
                 By scenario
               </p>
               <ul className="space-y-1.5">
                 {items.map((s) => (
                   <li key={s.scenario} className="flex items-center gap-2">
-                    <span className="w-28 truncate text-[11px] text-slate-300">{s.scenario}</span>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
+                    <span className="w-28 truncate text-[11px] text-[var(--fg-secondary)]">{s.scenario}</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--bg-inset)]">
                       <div
-                        className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-500"
+                        className="h-full rounded-full bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-violet)]"
                         style={{ width: `${Math.max(2, (s.f1_score ?? 0) * 100)}%` }}
                       />
                     </div>
-                    <span className="w-10 text-right font-mono text-[10px] text-slate-400">
+                    <span className="w-10 text-right font-mono text-[10px] text-[var(--fg-muted)]">
                       {((s.f1_score ?? 0) * 100).toFixed(0)}%
                     </span>
                   </li>
@@ -839,18 +821,18 @@ function DetectionPerformance({ evalData, detectionMethods }) {
       )}
 
       {methods.length > 0 && (
-        <div className="mt-4 border-t border-white/5 pt-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+        <div className="mt-4 border-t border-[var(--border-subtle)] pt-3">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--fg-muted)]">
             Detection mix
           </p>
           <div className="flex flex-wrap gap-2">
             {methods.map((m) => (
               <span
                 key={m.method}
-                className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] text-slate-400"
+                className="inline-flex items-center gap-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-1 text-[10px] text-[var(--fg-muted)]"
               >
                 <span
-                  className={`h-1.5 w-1.5 rounded-full ${m.method === "rule" ? "bg-cyan-400" : "bg-violet-400"}`}
+                  className={`h-1.5 w-1.5 rounded-full ${m.method === "rule" ? "bg-[var(--accent-cyan)]" : "bg-[var(--accent-violet)]"}`}
                 />
                 {String(m.method || "rule").toUpperCase()} · {m.count}
               </span>
@@ -862,9 +844,6 @@ function DetectionPerformance({ evalData, detectionMethods }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* MITRE coverage — what we see AND what we miss                       */
-/* ------------------------------------------------------------------ */
 function MitreCoverage({ categories }) {
   const counts = useMemo(() => {
     const map = {};
@@ -889,7 +868,7 @@ function MitreCoverage({ categories }) {
       action={
         <Link
           to="/automation"
-          className="shrink-0 text-xs font-semibold text-cyan-400 transition-colors hover:text-cyan-300"
+          className="shrink-0 text-xs font-semibold text-[var(--accent-cyan)] transition-colors hover:text-[var(--accent-cyan)]"
         >
           Detection rules →
         </Link>
@@ -898,31 +877,31 @@ function MitreCoverage({ categories }) {
       <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
         {observed.map((c) => (
           <div key={c.tactic} className="flex items-center gap-2 py-0.5">
-            <span className="w-32 truncate text-[11px] text-slate-300">{c.tactic}</span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
+            <span className="w-32 truncate text-[11px] text-[var(--fg-secondary)]">{c.tactic}</span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--bg-inset)]">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-500"
+                className="h-full rounded-full bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-violet)]"
                 style={{ width: `${Math.min(100, 20 + c.count * 6)}%` }}
               />
             </div>
-            <span className="w-8 text-right font-mono text-[10px] text-slate-400">{c.count}</span>
+            <span className="w-8 text-right font-mono text-[10px] text-[var(--fg-muted)]">{c.count}</span>
           </div>
         ))}
       </div>
 
       {gaps.length > 0 && (
-        <div className="mt-4 border-t border-white/5 pt-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-400/90">
+        <div className="mt-4 border-t border-[var(--border-subtle)] pt-3">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--severity-medium)]">
             Coverage gaps — no detections in range
           </p>
           <div className="flex flex-wrap gap-2">
             {gaps.map((g) => (
               <span
                 key={g.tactic}
-                className="inline-flex items-center gap-2 rounded-lg border border-amber-400/20 bg-amber-500/[0.06] px-2.5 py-1 text-[10px] text-amber-300/90"
+                className="inline-flex items-center gap-2 rounded-lg border border-[var(--severity-medium)]/20 bg-[var(--severity-medium)]/[0.06] px-2.5 py-1 text-[10px] text-[var(--severity-medium)]"
               >
                 {g.tactic}
-                <Link to="/automation" className="text-[9px] font-semibold text-cyan-400 hover:underline">
+                <Link to="/automation" className="text-[9px] font-semibold text-[var(--accent-cyan)] hover:underline">
                   Create detection
                 </Link>
               </span>
@@ -934,9 +913,6 @@ function MitreCoverage({ categories }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* SOAR response status                                                */
-/* ------------------------------------------------------------------ */
 function SoarStatus({ runs }) {
   const today = useMemo(() => {
     const start = new Date();
@@ -957,7 +933,7 @@ function SoarStatus({ runs }) {
       action={
         <Link
           to="/automation"
-          className="shrink-0 text-xs font-semibold text-cyan-400 transition-colors hover:text-cyan-300"
+          className="shrink-0 text-xs font-semibold text-[var(--accent-cyan)] transition-colors hover:text-[var(--accent-cyan)]"
         >
           Automation →
         </Link>
@@ -967,45 +943,45 @@ function SoarStatus({ runs }) {
         <>
           <div className="flex items-end justify-between">
             <div>
-              <p className="text-3xl font-bold text-slate-100">{total}</p>
-              <p className="text-[10px] uppercase tracking-wider text-slate-500">actions today</p>
+              <p className="text-3xl font-bold text-[var(--fg-primary)]">{total}</p>
+              <p className="text-[10px] uppercase tracking-wider text-[var(--fg-muted)]">actions today</p>
             </div>
             <div className="text-right">
-              <p className="font-mono text-xl font-bold text-emerald-300">{successRate}%</p>
-              <p className="text-[10px] uppercase tracking-wider text-slate-500">success rate</p>
+              <p className="font-mono text-xl font-bold text-[var(--status-healthy)]">{successRate}%</p>
+              <p className="text-[10px] uppercase tracking-wider text-[var(--fg-muted)]">success rate</p>
             </div>
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--bg-inset)]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-500"
+              className="h-full rounded-full bg-gradient-to-r from-[var(--status-healthy)] to-[var(--status-healthy)]"
               style={{ width: `${successRate}%` }}
             />
           </div>
           <div className="mt-3 flex gap-2">
-            <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
+            <span className="rounded-full border border-[var(--status-healthy)]/25 bg-[var(--status-healthy)]/10 px-2 py-0.5 text-[10px] text-[var(--status-healthy)]">
               ✓ {done} completed
             </span>
             {partial > 0 && (
-              <span className="rounded-full border border-amber-400/25 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300">
+              <span className="rounded-full border border-[var(--severity-medium)]/25 bg-[var(--severity-medium)]/10 px-2 py-0.5 text-[10px] text-[var(--severity-medium)]">
                 ⚠ {partial} partial
               </span>
             )}
             {failed > 0 && (
-              <span className="rounded-full border border-red-400/30 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-300">
+              <span className="rounded-full border border-[var(--severity-critical)]/30 bg-[var(--severity-critical)]/10 px-2 py-0.5 text-[10px] text-[var(--severity-critical)]">
                 ✕ {failed} failed
               </span>
             )}
           </div>
           {failed > 0 && (
-            <div className="mt-3 rounded-xl border border-red-400/20 bg-red-500/[0.05] p-2.5">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-red-300/90">
+            <div className="mt-3 rounded-xl border border-[var(--severity-critical)]/20 bg-[var(--severity-critical)]/[0.05] p-2.5">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--severity-critical)]">
                 Failed actions — review
               </p>
               {today
                 .filter((r) => r.status === "failed")
                 .slice(0, 3)
                 .map((r) => (
-                  <p key={r.id} className="truncate font-mono text-[10px] text-slate-400">
+                  <p key={r.id} className="truncate font-mono text-[10px] text-[var(--fg-muted)]">
                     {r.playbook_name} → alert #{r.alert_id}
                   </p>
                 ))}
@@ -1019,9 +995,6 @@ function SoarStatus({ runs }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Risk intelligence + SOC workload (analysts / SLA aging)             */
-/* ------------------------------------------------------------------ */
 function RiskIntelligence({ entities }) {
   const navigate = useNavigate();
   return (
@@ -1031,7 +1004,7 @@ function RiskIntelligence({ entities }) {
       action={
         <Link
           to="/rba"
-          className="shrink-0 text-xs font-semibold text-cyan-400 transition-colors hover:text-cyan-300"
+          className="shrink-0 text-xs font-semibold text-[var(--accent-cyan)] transition-colors hover:text-[var(--accent-cyan)]"
         >
           Risk Center →
         </Link>
@@ -1047,14 +1020,14 @@ function RiskIntelligence({ entities }) {
               <li
                 key={`${ent.entity_kind}:${ent.entity_name}`}
                 onClick={() => navigate(`/rba?kind=${ent.entity_kind}&name=${encodeURIComponent(ent.entity_name)}`)}
-                className="cursor-pointer rounded-xl border border-white/5 bg-white/[0.03] p-3 transition-colors hover:bg-white/[0.05]"
+                className="cursor-pointer rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 transition-colors hover:bg-[var(--bg-inset)]"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="rounded-lg border border-white/10 bg-white/[0.05] px-1.5 py-0.5 font-mono text-[9px] uppercase text-slate-400">
+                    <span className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-1.5 py-0.5 font-mono text-[9px] uppercase text-[var(--fg-muted)]">
                       {ent.entity_kind}
                     </span>
-                    <p className="truncate font-mono text-xs font-medium text-slate-100">
+                    <p className="truncate font-mono text-xs font-medium text-[var(--fg-primary)]">
                       {ent.entity_name}
                     </p>
                   </div>
@@ -1070,7 +1043,7 @@ function RiskIntelligence({ entities }) {
                     </span>
                   </div>
                 </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5">
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--bg-inset)]">
                   <div
                     className="h-full rounded-full"
                     style={{
@@ -1084,7 +1057,7 @@ function RiskIntelligence({ entities }) {
                     {factors.map((f, idx) => (
                       <span
                         key={idx}
-                        className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono text-[9px] text-slate-400"
+                        className="rounded border border-[var(--border-default)] bg-[var(--bg-inset)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--fg-muted)]"
                         title={`${f.rule || f.mitre_id || "contribution"}`}
                       >
                         {f.mitre_id || f.rule || "finding"} +{Number(f.delta || 0).toFixed(0)}
@@ -1106,10 +1079,10 @@ function RiskIntelligence({ entities }) {
 function SocWorkload({ incidents }) {
   const buckets = useMemo(() => {
     const b = [
-      { label: "0–15m", min: 0, max: 15, count: 0, color: "from-emerald-400 to-teal-500" },
-      { label: "15–60m", min: 15, max: 60, count: 0, color: "from-cyan-400 to-violet-500" },
-      { label: "1–4h", min: 60, max: 240, count: 0, color: "from-amber-400 to-orange-500" },
-      { label: "4h+", min: 240, max: Infinity, count: 0, color: "from-red-500 to-rose-500" },
+      { label: "0–15m", min: 0, max: 15, count: 0, color: "from-[var(--status-healthy)] to-[var(--status-healthy)]" },
+      { label: "15–60m", min: 15, max: 60, count: 0, color: "from-[var(--accent-cyan)] to-[var(--accent-violet)]" },
+      { label: "1–4h", min: 60, max: 240, count: 0, color: "from-[var(--severity-medium)] to-[var(--severity-high)]" },
+      { label: "4h+", min: 240, max: Infinity, count: 0, color: "from-[var(--severity-critical)] to-[var(--severity-critical)]" },
     ];
     incidents.forEach((i) => {
       const age = ageMinutes(i.created_at);
@@ -1144,11 +1117,11 @@ function SocWorkload({ incidents }) {
       action={
         <span className="flex shrink-0 gap-2">
           {overdueCritical > 0 && (
-            <span className="rounded-full border border-red-400/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-300">
+            <span className="rounded-full border border-[var(--severity-critical)]/30 bg-[var(--severity-critical)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--severity-critical)]">
               {overdueCritical} critical overdue
             </span>
           )}
-          <span className="rounded-full border border-amber-400/25 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300">
+          <span className="rounded-full border border-[var(--severity-medium)]/25 bg-[var(--severity-medium)]/10 px-2 py-0.5 text-[10px] text-[var(--severity-medium)]">
             {aging} aging
           </span>
         </span>
@@ -1156,44 +1129,44 @@ function SocWorkload({ incidents }) {
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--fg-muted)]">
             Analyst workload
           </p>
           <ul className="space-y-1.5">
             {byOwner.map((o) => (
               <li key={o.owner} className="flex items-center gap-2">
                 <span
-                  className={`w-24 truncate text-[11px] ${o.owner === "Unassigned" ? "text-amber-300/90" : "text-slate-300"}`}
+                  className={`w-24 truncate text-[11px] ${o.owner === "Unassigned" ? "text-[var(--severity-medium)]" : "text-[var(--fg-secondary)]"}`}
                 >
                   {o.owner}
                 </span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--bg-inset)]">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400"
+                    className="h-full rounded-full bg-gradient-to-r from-[var(--accent-violet)] to-[var(--accent-cyan)]"
                     style={{ width: `${Math.max(4, (o.count / maxOwner) * 100)}%` }}
                   />
                 </div>
-                <span className="w-6 text-right font-mono text-[10px] text-slate-400">{o.count}</span>
+                <span className="w-6 text-right font-mono text-[10px] text-[var(--fg-muted)]">{o.count}</span>
               </li>
             ))}
-            {byOwner.length === 0 && <li className="text-[11px] text-slate-600">No open incidents</li>}
+            {byOwner.length === 0 && <li className="text-[11px] text-[var(--fg-faint)]">No open incidents</li>}
           </ul>
         </div>
         <div>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--fg-muted)]">
             Incident age
           </p>
           <ul className="space-y-1.5">
             {buckets.map((b) => (
               <li key={b.label} className="flex items-center gap-2">
-                <span className="w-12 shrink-0 font-mono text-[10px] text-slate-500">{b.label}</span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
+                <span className="w-12 shrink-0 font-mono text-[10px] text-[var(--fg-muted)]">{b.label}</span>
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--bg-inset)]">
                   <div
                     className={`h-full rounded-full bg-gradient-to-r ${b.color}`}
                     style={{ width: `${Math.max(3, (b.count / maxBucket) * 100)}%` }}
                   />
                 </div>
-                <span className="w-6 text-right font-mono text-[10px] text-slate-400">{b.count}</span>
+                <span className="w-6 text-right font-mono text-[10px] text-[var(--fg-muted)]">{b.count}</span>
               </li>
             ))}
           </ul>
@@ -1203,19 +1176,16 @@ function SocWorkload({ incidents }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* ML intelligence + platform health                                   */
-/* ------------------------------------------------------------------ */
 function MlIntelligence({ mlStatus, drift, anomalies }) {
   const streams = drift?.streams || {};
   const streamList = Object.entries(streams);
   const state = mlStatus?.model_state || (mlStatus ? (mlStatus.stale || !mlStatus.ready ? "WARNING" : "HEALTHY") : "—");
   const stateTone =
     state === "HEALTHY"
-      ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-300"
+      ? "border-[var(--status-healthy)]/40 bg-[var(--status-healthy)]/10 text-[var(--status-healthy)]"
       : state === "WARNING"
-        ? "border-amber-400/40 bg-amber-500/10 text-amber-300"
-        : "border-red-400/40 bg-red-500/10 text-red-300";
+        ? "border-[var(--severity-medium)]/40 bg-[var(--severity-medium)]/10 text-[var(--severity-medium)]"
+        : "border-[var(--severity-critical)]/40 bg-[var(--severity-critical)]/10 text-[var(--severity-critical)]";
 
   return (
     <Panel
@@ -1224,7 +1194,7 @@ function MlIntelligence({ mlStatus, drift, anomalies }) {
       action={
         <Link
           to="/evaluation"
-          className="shrink-0 text-xs font-semibold text-cyan-400 transition-colors hover:text-cyan-300"
+          className="shrink-0 text-xs font-semibold text-[var(--accent-cyan)] transition-colors hover:text-[var(--accent-cyan)]"
         >
           ML detail →
         </Link>
@@ -1236,27 +1206,27 @@ function MlIntelligence({ mlStatus, drift, anomalies }) {
         >
           {state === "HEALTHY" ? "●" : state === "WARNING" ? "▲" : "✕"} MODEL STATE · {state}
         </span>
-        <span className="text-[10px] text-slate-500">
+        <span className="text-[10px] text-[var(--fg-muted)]">
           {mlStatus?.trained_at ? `last training ${new Date(mlStatus.trained_at).toLocaleString()}` : "never trained"}
         </span>
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {[
-          { label: "Live scoring", value: (mlStatus?.scored_events ?? mlStatus?.samples ?? "—").toLocaleString?.() ?? "—", color: "text-cyan-300" },
-          { label: "Anomalies", value: anomalies ?? 0, color: "text-violet-300" },
-          { label: "Model version", value: mlStatus?.model_version != null ? `v${mlStatus.model_version}` : "—", color: "text-slate-200" },
-          { label: "Drift", value: mlStatus?.drift ? "DRIFTED" : mlStatus?.stale ? "STALE" : "CLEAN", color: mlStatus?.drift ? "text-red-300" : mlStatus?.stale ? "text-amber-300" : "text-emerald-300" },
+          { label: "Live scoring", value: (mlStatus?.scored_events ?? mlStatus?.samples ?? "—").toLocaleString?.() ?? "—", color: "text-[var(--accent-cyan)]" },
+          { label: "Anomalies", value: anomalies ?? 0, color: "text-[var(--accent-violet)]" },
+          { label: "Model version", value: mlStatus?.model_version != null ? `v${mlStatus.model_version}` : "—", color: "text-[var(--fg-primary)]" },
+          { label: "Drift", value: mlStatus?.drift ? "DRIFTED" : mlStatus?.stale ? "STALE" : "CLEAN", color: mlStatus?.drift ? "text-[var(--severity-critical)]" : mlStatus?.stale ? "text-[var(--severity-medium)]" : "text-[var(--status-healthy)]" },
         ].map((m) => (
-          <div key={m.label} className="rounded-xl border border-white/5 bg-white/[0.03] p-3">
+          <div key={m.label} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3">
             <p className={`truncate text-lg font-bold ${m.color}`}>{String(m.value).toUpperCase()}</p>
-            <p className="mt-0.5 text-[9px] uppercase tracking-wider text-slate-500">{m.label}</p>
+            <p className="mt-0.5 text-[9px] uppercase tracking-wider text-[var(--fg-muted)]">{m.label}</p>
           </div>
         ))}
       </div>
 
       <div className="mt-4">
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--fg-muted)]">
           Drift monitor · 24h window
         </p>
         {streamList.length > 0 ? (
@@ -1265,16 +1235,16 @@ function MlIntelligence({ mlStatus, drift, anomalies }) {
               const v = s.verdict || "ok";
               const cls =
                 v === "drift"
-                  ? "border-red-400/30 bg-red-500/10 text-red-300"
+                  ? "border-[var(--severity-critical)]/30 bg-[var(--severity-critical)]/10 text-[var(--severity-critical)]"
                   : v === "watch"
-                    ? "border-amber-400/25 bg-amber-500/10 text-amber-300"
-                    : "border-emerald-400/20 bg-emerald-500/10 text-emerald-300";
+                    ? "border-[var(--severity-medium)]/25 bg-[var(--severity-medium)]/10 text-[var(--severity-medium)]"
+                    : "border-[var(--status-healthy)]/20 bg-[var(--status-healthy)]/10 text-[var(--status-healthy)]";
               return (
                 <li key={name} className="flex items-center gap-2">
-                  <span className="w-20 capitalize text-[11px] text-slate-300">{name}</span>
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
+                  <span className="w-20 capitalize text-[11px] text-[var(--fg-secondary)]">{name}</span>
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--bg-inset)]">
                     <div
-                      className={`h-full rounded-full bg-gradient-to-r ${v === "drift" ? "from-red-500 to-rose-500" : v === "watch" ? "from-amber-400 to-orange-500" : "from-emerald-400 to-teal-500"}`}
+                      className={`h-full rounded-full bg-gradient-to-r ${v === "drift" ? "from-[var(--severity-critical)] to-[var(--severity-critical)]" : v === "watch" ? "from-[var(--severity-medium)] to-[var(--severity-high)]" : "from-[var(--status-healthy)] to-[var(--status-healthy)]"}`}
                       style={{ width: `${Math.min(100, s.psi * 250)}%` }}
                     />
                   </div>
@@ -1286,7 +1256,7 @@ function MlIntelligence({ mlStatus, drift, anomalies }) {
             })}
           </ul>
         ) : (
-          <p className="text-[11px] text-slate-600">
+          <p className="text-[11px] text-[var(--fg-faint)]">
             {drift?.status === "not-trained"
               ? "Detector not trained yet — train the model in the Evaluation center"
               : "Insufficient recent samples — scoring continues; drift verdict pending"}
@@ -1323,7 +1293,7 @@ function SystemHealth({ health, feeds }) {
       action={
         <Link
           to="/settings"
-          className="shrink-0 text-xs font-semibold text-cyan-400 transition-colors hover:text-cyan-300"
+          className="shrink-0 text-xs font-semibold text-[var(--accent-cyan)] transition-colors hover:text-[var(--accent-cyan)]"
         >
           Settings →
         </Link>
@@ -1333,57 +1303,57 @@ function SystemHealth({ health, feeds }) {
         {rows.map((r) => (
           <li key={r.label} className="flex items-center gap-2">
             <span
-              className={`h-1.5 w-1.5 shrink-0 rounded-full ${r.ok ? "bg-emerald-400" : "bg-red-400"}`}
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${r.ok ? "bg-[var(--status-healthy)]" : "bg-[var(--severity-critical)]"}`}
             />
-            <span className="w-32 text-[11px] text-slate-300">{r.label}</span>
-            <span className={`text-[10px] uppercase tracking-wide ${r.ok ? "text-emerald-300/90" : "text-red-300"}`}>
+            <span className="w-32 text-[11px] text-[var(--fg-secondary)]">{r.label}</span>
+            <span className={`text-[10px] uppercase tracking-wide ${r.ok ? "text-[var(--status-healthy)]" : "text-[var(--severity-critical)]"}`}>
               {r.ok ? "healthy" : "attention"}
             </span>
-            <span className="ml-auto truncate font-mono text-[10px] text-slate-600">{r.detail}</span>
+            <span className="ml-auto truncate font-mono text-[10px] text-[var(--fg-faint)]">{r.detail}</span>
           </li>
         ))}
         <li className="flex items-center gap-2">
           <span
             className={`h-1.5 w-1.5 shrink-0 rounded-full ${
               feedsTotal === 0
-                ? "bg-slate-500"
+                ? "bg-[var(--fg-muted)]"
                 : feedsHealthy === feedsTotal
-                  ? "bg-emerald-400"
-                  : "bg-orange-400"
+                  ? "bg-[var(--status-healthy)]"
+                  : "bg-[var(--severity-high)]"
             }`}
           />
-          <span className="w-32 text-[11px] text-slate-300">Threat intel</span>
+          <span className="w-32 text-[11px] text-[var(--fg-secondary)]">Threat intel</span>
           <span
             className={`text-[10px] uppercase tracking-wide ${
               feedsTotal === 0
-                ? "text-slate-400"
+                ? "text-[var(--fg-muted)]"
                 : feedsHealthy === feedsTotal
-                  ? "text-emerald-300/90"
-                  : "text-amber-300"
+                  ? "text-[var(--status-healthy)]"
+                  : "text-[var(--severity-medium)]"
             }`}
           >
             {feedsTotal === 0 ? "not configured" : feedsHealthy === feedsTotal ? "healthy" : "degraded"}
           </span>
-          <span className="ml-auto font-mono text-[10px] text-slate-600">
+          <span className="ml-auto font-mono text-[10px] text-[var(--fg-faint)]">
             {feedsTotal === 0 ? "no providers — 0/0" : `${feedsHealthy}/${feedsTotal} providers`}
           </span>
         </li>
       </ul>
 
       {feedsTotal > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-white/5 pt-3">
+        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[var(--border-subtle)] pt-3">
           {feeds.slice(0, 6).map((f) => (
             <span
               key={f.name || f.id}
               title={f.state?.last_error || f.name}
               className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[9px] ${
                 f.state && !f.state.last_error
-                  ? "border-white/10 bg-white/[0.03] text-slate-400"
-                  : "border-red-400/25 bg-red-500/[0.06] text-red-300"
+                  ? "border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--fg-muted)]"
+                  : "border-[var(--severity-critical)]/25 bg-[var(--severity-critical)]/[0.06] text-[var(--severity-critical)]"
               }`}
             >
               <span
-                className={`h-1 w-1 rounded-full ${f.state && !f.state.last_error ? "bg-emerald-400" : "bg-red-400"}`}
+                className={`h-1 w-1 rounded-full ${f.state && !f.state.last_error ? "bg-[var(--status-healthy)]" : "bg-[var(--severity-critical)]"}`}
               />
               {f.name || f.id}
             </span>
@@ -1394,9 +1364,6 @@ function SystemHealth({ health, feeds }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Page                                                               */
-/* ------------------------------------------------------------------ */
 export default function Dashboard() {
   const [summary, setSummary] = useState(null);
   const [timeline, setTimeline] = useState(null);
@@ -1459,8 +1426,6 @@ export default function Dashboard() {
       })
       .catch((e) => setError(e.message));
 
-    // Secondary panels load independently so a slow endpoint can never
-    // block the command center itself.
     api
       .rbaEntities({ min_level: "HIGH", limit: 5 })
       .then((r) => setEntities(r?.entities || []))
@@ -1503,29 +1468,28 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5 pb-12">
-      <PageHeader
-        label="War Room · Live"
-        title="Security Operations Center"
-        subtitle="Detect · Triage · Investigate · Respond — one command center"
-        actions={
-          <div className="flex items-center gap-2">
-            <span className="hidden items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-300 sm:inline-flex">
-              <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Live
-            </span>
-            <button
-              type="button"
-              onClick={load}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2 text-xs font-medium text-slate-300 transition-all hover:border-cyan-400/30 hover:bg-white/[0.08] hover:text-cyan-200"
-            >
-              <RefreshIcon className="h-3.5 w-3.5" />
-              Refresh
-            </button>
-          </div>
-        }
-      />
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">War Room · Live</p>
+          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">Security Operations Center</h1>
+          <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">Detect · Triage · Investigate · Respond — one command center</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="hidden items-center gap-1.5 rounded-full border border-[var(--status-healthy)]/25 bg-[var(--status-healthy)]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--status-healthy)] sm:inline-flex">
+            <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-[var(--status-healthy)]" />
+            Live
+          </span>
+          <button
+            type="button"
+            onClick={load}
+            className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent-cyan)] px-3.5 py-2 text-xs font-medium text-white shadow-lg shadow-[var(--accent-cyan)]/25 hover:shadow-xl transition-all"
+          >
+            <RefreshIcon className="h-3.5 w-3.5" />
+            Refresh
+          </button>
+        </div>
+      </header>
 
-      {/* KPI row — how healthy is the SOC right now */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <MetricBox
           label="Security Score"
@@ -1572,7 +1536,6 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Incident queue + active threats */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <IncidentQueue incidents={incidents} onReload={load} showToast={showToast} />
@@ -1580,10 +1543,8 @@ export default function Dashboard() {
         <ActiveThreats alerts={alerts} riskDistribution={riskDistribution} onStrike={setStrikeAlert} />
       </div>
 
-      {/* Threat timeline — full width */}
       <ThreatTimeline events={events} />
 
-      {/* Attack trends + detection performance */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <AttackTrends timeline={timeline} attacks={attacks} userBehavior={userBehavior} />
@@ -1591,7 +1552,6 @@ export default function Dashboard() {
         <DetectionPerformance evalData={evalData} detectionMethods={detectionMethods} />
       </div>
 
-      {/* MITRE coverage + SOAR */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <MitreCoverage categories={categories} />
@@ -1599,7 +1559,6 @@ export default function Dashboard() {
         <SoarStatus runs={runs} />
       </div>
 
-      {/* Risk intelligence + SOC workload */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <RiskIntelligence entities={entities} />
@@ -1607,7 +1566,6 @@ export default function Dashboard() {
         <SocWorkload incidents={incidents} />
       </div>
 
-      {/* ML intelligence + platform health */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <MlIntelligence
@@ -1620,7 +1578,7 @@ export default function Dashboard() {
       </div>
 
       {lastUpdated && (
-        <p className="text-right font-mono text-[10px] text-slate-600">
+        <p className="text-right font-mono text-[10px] text-[var(--fg-faint)]">
           LAST UPDATED {lastUpdated.toLocaleTimeString()}
         </p>
       )}

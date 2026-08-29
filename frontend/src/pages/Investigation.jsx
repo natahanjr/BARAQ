@@ -1,19 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { api } from "../api.js";
-import Card from "../components/Card.jsx";
-import PageHeader from "../components/PageHeader.jsx";
 import SeverityBadge from "../components/SeverityBadge.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import RiskBadge from "../components/RiskBadge.jsx";
 import { Loading, EmptyState, ErrorBanner } from "../components/Feedback.jsx";
 import TimelineGraph from "../components/TimelineGraph.jsx";
-import {
-  InvestigationIcon,
-  ActivityIcon,
-  AlertIcon,
-  NetworkIcon,
-} from "../components/icons.jsx";
 
 const KINDS_COLOR = {
   user: "#38bdf8",
@@ -30,8 +22,8 @@ function StepDot({ index, active }) {
     <span
       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border font-mono text-xs font-bold ${
         active
-          ? "border-cyan-500/50 bg-cyan-500/20 text-cyan-300"
-          : "border-slate-700 bg-slate-800/60 text-slate-400"
+          ? "border-[var(--accent-cyan)]/50 bg-[var(--accent-cyan)]/20 text-[var(--accent-cyan)]"
+          : "border-[var(--border-default)] bg-[var(--bg-inset)] text-[var(--fg-muted)]"
       }`}
     >
       {index}
@@ -41,29 +33,29 @@ function StepDot({ index, active }) {
 
 function EventChip({ event, compact }) {
   const colors = {
-    critical: "border-red-500/40 bg-red-500/10 text-red-300",
-    high: "border-orange-500/40 bg-orange-500/10 text-orange-300",
-    medium: "border-amber-500/40 bg-amber-500/10 text-amber-300",
-    low: "border-blue-500/40 bg-blue-500/10 text-blue-300",
+    critical: "border-[var(--severity-critical)]/40 bg-[var(--severity-critical)]/10 text-[var(--severity-critical)]",
+    high: "border-[var(--severity-high)]/40 bg-[var(--severity-high)]/10 text-[var(--severity-high)]",
+    medium: "border-[var(--severity-medium)]/40 bg-[var(--severity-medium)]/10 text-[var(--severity-medium)]",
+    low: "border-[var(--severity-low)]/40 bg-[var(--severity-low)]/10 text-[var(--severity-low)]",
   };
 
   const severity = (event.severity || "low").toLowerCase();
   const color = colors[severity] || colors.low;
 
   return (
-    <div className={`rounded-lg border ${color} p-3`}>
+    <div className={`rounded-[var(--radius-2xl)] border ${color} p-3`}>
       <div className="mb-1.5 flex items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded bg-black/30 px-2 py-0.5 font-mono text-[10px] text-slate-200">
+          <span className="rounded bg-[var(--bg-inset)] px-2 py-0.5 font-mono text-[10px] text-[var(--fg-primary)]">
             Event {event.event_id}
           </span>
           {event.is_anomaly && (
-            <span className="rounded bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-400">
+            <span className="rounded bg-[var(--accent-violet)]/15 px-2 py-0.5 text-[10px] font-semibold text-[var(--accent-violet)]">
               ML anomaly
             </span>
           )}
         </div>
-        <span className="text-[11px] text-slate-400">
+        <span className="text-[11px] text-[var(--fg-muted)]">
           {event.timestamp
             ? new Date(event.timestamp).toLocaleString([], {
                 month: "short",
@@ -71,18 +63,18 @@ function EventChip({ event, compact }) {
                 hour: "2-digit",
                 minute: "2-digit",
               })
-            : "—"}
+            : "\u2014"}
         </span>
       </div>
       {!compact && (
-        <p className="text-xs leading-relaxed text-slate-300">{event.message || event.category}</p>
+        <p className="text-xs leading-relaxed text-[var(--fg-secondary)]">{event.message || event.category}</p>
       )}
-      <p className="mt-1.5 text-[11px] text-slate-400">
-        User: <strong className="text-slate-200">{event.user || "—"}</strong>
+      <p className="mt-1.5 text-[11px] text-[var(--fg-muted)]">
+        User: <strong className="text-[var(--fg-primary)]">{event.user || "\u2014"}</strong>
         {event.risk_score != null && (
           <>
             {" "}
-            · Risk: <strong className="text-slate-200">{event.risk_score.toFixed(0)}</strong>
+            · Risk: <strong className="text-[var(--fg-primary)]">{event.risk_score.toFixed(0)}</strong>
           </>
         )}
       </p>
@@ -91,6 +83,9 @@ function EventChip({ event, compact }) {
 }
 
 function AttackTimeline({ events }) {
+  const [expanded, setExpanded] = useState(new Set());
+  const toggle = (i) => setExpanded((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
+
   const rows = (events || [])
     .filter((e) => e.timestamp)
     .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -99,62 +94,93 @@ function AttackTimeline({ events }) {
     return <EmptyState title="No timed events" subtitle="Nothing to lay out chronologically" />;
   }
 
-  const railColor = {
-    critical: "bg-red-500",
-    high: "bg-orange-500",
-    medium: "bg-amber-500",
-    low: "bg-blue-500",
+  const sevColors = {
+    critical: { dot: "bg-[var(--severity-critical)]", ring: "ring-[var(--severity-critical)]/30", bg: "border-[var(--severity-critical)]/40 bg-[var(--severity-critical)]/10", text: "text-[var(--severity-critical)]", line: "from-[var(--severity-critical)]/60" },
+    high: { dot: "bg-[var(--severity-high)]", ring: "ring-[var(--severity-high)]/30", bg: "border-[var(--severity-high)]/40 bg-[var(--severity-high)]/10", text: "text-[var(--severity-high)]", line: "from-[var(--severity-high)]/60" },
+    medium: { dot: "bg-[var(--severity-medium)]", ring: "ring-[var(--severity-medium)]/30", bg: "border-[var(--severity-medium)]/40 bg-[var(--severity-medium)]/10", text: "text-[var(--severity-medium)]", line: "from-[var(--severity-medium)]/60" },
+    low: { dot: "bg-[var(--severity-low)]", ring: "ring-[var(--severity-low)]/30", bg: "border-[var(--severity-low)]/40 bg-[var(--severity-low)]/10", text: "text-[var(--severity-low)]", line: "from-[var(--severity-low)]/60" },
   };
 
+  const chains = [];
+  let currentChain = [rows[0]];
+  for (let i = 1; i < rows.length; i++) {
+    const prev = new Date(rows[i - 1].timestamp).getTime();
+    const curr = new Date(rows[i].timestamp).getTime();
+    if (curr - prev < 5 * 60 * 1000) {
+      currentChain.push(rows[i]);
+    } else {
+      chains.push(currentChain);
+      currentChain = [rows[i]];
+    }
+  }
+  chains.push(currentChain);
+
   return (
-    <div className="relative ml-2 space-y-2 border-l border-slate-700/60 pl-6">
-      {rows.map((e, idx) => {
-        const sev = (e.severity || "low").toLowerCase();
+    <div className="space-y-3">
+      {chains.map((chain, ci) => {
+        const chainId = `chain-${ci}`;
+        const isExpanded = expanded.has(chainId) || chain.length <= 3;
+        const firstSev = (chain[0].severity || "low").toLowerCase();
+        const sc = sevColors[firstSev] || sevColors.low;
         return (
-          <div key={idx} className="relative">
-            <span
-              className={`absolute -left-[27px] top-3.5 h-3 w-3 rounded-full border-2 border-slate-950 ${
-                railColor[sev] || railColor.low
-              } ${e.is_anomaly ? "shadow-[0_0_8px_rgba(139,92,246,0.9)]" : ""}`}
-            />
-            <div className="rounded-lg border border-slate-700/50 bg-slate-900/40 px-3.5 py-2.5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-mono text-[10px] text-slate-500">
-                  Event {e.event_id}
-                  {e.is_anomaly && (
-                    <span className="ml-1.5 rounded bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-violet-400">
-                      ML anomaly
-                    </span>
-                  )}
+          <div key={ci}>
+            {chain.length > 3 && (
+              <button
+                onClick={() => toggle(chainId)}
+                className="mb-1 flex w-full items-center gap-2 rounded-t-[var(--radius-2xl)] border border-b-0 border-[var(--border-default)] bg-[var(--bg-surface)] px-3 py-2 text-left transition-colors hover:bg-[var(--bg-inset)]"
+              >
+                <span className="text-[10px] text-[var(--fg-faint)]">{isExpanded ? "\u25BC" : "\u25B6"}</span>
+                <span className="flex-1 text-[11px] font-medium text-[var(--fg-secondary)]">
+                  Chain #{ci + 1} — {chain.length} events
                 </span>
-                <span className="font-mono text-[10px] text-slate-400">
-                  {new Date(e.timestamp).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                  })}
+                <span className="font-mono text-[10px] text-[var(--fg-faint)]">
+                  {new Date(chain[0].timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {" \u2014 "}
+                  {new Date(chain[chain.length - 1].timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </span>
-              </div>
-              <p className="mt-1 text-xs leading-relaxed text-slate-300">
-                {e.message || e.category}
-              </p>
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
-                {e.user && (
-                  <span>
-                    user <strong className="text-slate-300">{e.user}</strong>
-                  </span>
-                )}
-                {e.host && (
-                  <span>
-                    host <strong className="text-slate-300">{e.host}</strong>
-                  </span>
-                )}
-                {e.risk_score != null && (
-                  <span>
-                    risk <strong className="text-slate-300">{e.risk_score.toFixed(0)}</strong>
-                  </span>
-                )}
-              </div>
+              </button>
+            )}
+            <div className="relative ml-2 border-l-2 border-[var(--border-subtle)]">
+              {(isExpanded ? chain : [chain[0]]).map((e, idx) => {
+                const sev = (e.severity || "low").toLowerCase();
+                const colors = sevColors[sev] || sevColors.low;
+                const isLast = idx === (isExpanded ? chain.length - 1 : 0);
+                return (
+                  <div key={idx} className="relative ml-4 pb-4">
+                    <span className={`absolute -left-[25px] top-3 h-3 w-3 rounded-full border-2 border-[var(--bg-primary)] ${colors.dot} ${e.is_anomaly ? `shadow-[0_0_10px_rgba(139,92,246,0.9)] ring-2 ${colors.ring}` : ""}`} />
+                    {!isLast && isExpanded && (
+                      <div className={`absolute -left-[23px] top-6 h-[calc(100%-12px)] w-0.5 bg-gradient-to-b ${colors.line} to-transparent`} />
+                    )}
+                    <div className={`rounded-[var(--radius-2xl)] border ${colors.bg} px-4 py-3 transition-all hover:shadow-md ${e.is_anomaly ? "ring-1 ring-[var(--accent-violet)]/30" : ""}`}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[10px] text-[var(--fg-faint)]">Event {e.event_id}</span>
+                          {e.is_anomaly && (
+                            <span className="rounded bg-[var(--accent-violet)]/20 px-1.5 py-0.5 text-[9px] font-bold text-[var(--accent-violet)]">ML ANOMALY</span>
+                          )}
+                        </div>
+                        <span className="font-mono text-[10px] text-[var(--fg-muted)]">
+                          {new Date(e.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-xs leading-relaxed text-[var(--fg-secondary)]">{e.message || e.category}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[var(--fg-faint)]">
+                        {e.user && <span>user <strong className="text-[var(--fg-secondary)]">{e.user}</strong></span>}
+                        {e.host && <span>host <strong className="text-[var(--fg-secondary)]">{e.host}</strong></span>}
+                        {e.risk_score != null && <span>risk <strong className="text-[var(--fg-secondary)]">{e.risk_score.toFixed(0)}</strong></span>}
+                      </div>
+                    </div>
+                    {isExpanded && chain.length > 1 && (
+                      <div className="absolute -left-[46px] top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--bg-inset)] text-[9px] font-bold text-[var(--fg-muted)] ring-1 ring-[var(--border-default)]">
+                        {idx + 1}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {!isExpanded && chain.length > 3 && (
+                <p className="ml-4 mt-1 text-[10px] text-[var(--fg-faint)]">+{chain.length - 3} more events...</p>
+              )}
             </div>
           </div>
         );
@@ -179,59 +205,59 @@ function InvolvedEntities({ data }) {
   if (rows.length === 0) return null;
 
   return (
-    <Card>
+    <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-white">Involved Entities</h3>
-          <p className="mt-0.5 text-sm text-slate-400">
+          <h3 className="text-base font-semibold text-[var(--fg-primary)]">Involved Entities</h3>
+          <p className="mt-0.5 text-sm text-[var(--fg-muted)]">
             Users and hosts touching this alert — click to open in the entity graph
           </p>
         </div>
-        <NetworkIcon className="h-5 w-5 text-cyan-400" />
+        <span className="text-[var(--accent-cyan)]">🔗</span>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {rows.map((e) => (
           <Link
             key={e.key}
-            to={`/entities?kind=${e.kind}&name=${encodeURIComponent(e.name)}`}
-            className="flex items-center justify-between gap-2 rounded-lg border border-slate-800/60 bg-slate-900/40 px-3 py-2 transition-colors hover:border-cyan-500/40"
+            to={`/rba?kind=${e.kind}&name=${encodeURIComponent(e.name)}`}
+            className="flex items-center justify-between gap-2 rounded-[var(--radius-2xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-3 py-2 transition-colors hover:border-[var(--accent-cyan)]/40"
           >
             <span className="flex min-w-0 items-center gap-2">
               <span
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[9px] font-bold text-slate-950"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[9px] font-bold"
                 style={{ backgroundColor: KINDS_COLOR[e.kind] || "#64748b" }}
               >
                 {e.kind.slice(0, 1).toUpperCase()}
               </span>
               <span className="min-w-0">
-                <span className="block truncate font-mono text-xs text-slate-200">{e.name}</span>
-                <span className="block text-[10px] text-slate-500">
+                <span className="block truncate font-mono text-xs text-[var(--fg-primary)]">{e.name}</span>
+                <span className="block text-[10px] text-[var(--fg-faint)]">
                   {e.kind} · {e.count} event{e.count === 1 ? "" : "s"}
                 </span>
               </span>
             </span>
-            <span className="shrink-0 text-[10px] text-cyan-400">→</span>
+            <span className="shrink-0 text-[10px] text-[var(--accent-cyan)]">→</span>
           </Link>
         ))}
       </div>
-    </Card>
+    </div>
   );
 }
 
 function ConfidenceMeter({ score, label }) {
   const pct = Math.round((score || 0) * 100);
   const color =
-    pct >= 75 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-500" : "bg-rose-500";
+    pct >= 75 ? "bg-[var(--status-healthy)]" : pct >= 50 ? "bg-[var(--severity-medium)]" : "bg-[var(--severity-critical)]";
   return (
     <div>
-      <div className="flex items-center justify-between text-[11px] text-slate-400">
+      <div className="flex items-center justify-between text-[11px] text-[var(--fg-muted)]">
         <span>
           Story confidence:{" "}
-          <strong className="uppercase text-slate-200">{label || "low"}</strong>
+          <strong className="uppercase text-[var(--fg-primary)]">{label || "low"}</strong>
         </span>
         <span className="font-mono">{pct}%</span>
       </div>
-      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-[var(--bg-inset)]">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
@@ -245,12 +271,12 @@ function ProcessTreeNode({ node, depth, children }) {
   return (
     <li>
       <div
-        className={`rounded-lg border px-3 py-2 ${
+        className={`rounded-[var(--radius-2xl)] border px-3 py-2 ${
           node.seed
-            ? "border-cyan-500/50 bg-cyan-500/10"
+            ? "border-[var(--accent-cyan)]/50 bg-[var(--accent-cyan)]/10"
             : isRoot
-              ? "border-violet-500/40 bg-violet-500/10"
-              : "border-slate-700/50 bg-slate-800/30"
+              ? "border-[var(--accent-violet)]/40 bg-[var(--accent-violet)]/10"
+              : "border-[var(--border-default)] bg-[var(--bg-inset)]"
         }`}
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -259,41 +285,41 @@ function ProcessTreeNode({ node, depth, children }) {
               type="button"
               onClick={() => setExpanded(!expanded)}
               aria-label={expanded ? "Collapse subtree" : "Expand subtree"}
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-black/30 font-mono text-[10px] text-slate-300 transition-colors hover:bg-slate-700"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--bg-inset)] font-mono text-[10px] text-[var(--fg-secondary)] transition-colors hover:bg-[var(--border-default)]"
             >
-              {expanded ? "−" : `${kids.length}+`}
+              {expanded ? "\u2212" : `${kids.length}+`}
             </button>
           )}
-          <span className="font-mono text-xs font-semibold text-slate-100">
+          <span className="font-mono text-xs font-semibold text-[var(--fg-primary)]">
             {node.name || "unknown"}
           </span>
-          <span className="rounded bg-black/30 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+          <span className="rounded bg-[var(--bg-inset)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--fg-muted)]">
             pid {node.pid}
           </span>
           {node.verified && (
             <span
-              className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300"
+              className="rounded bg-[var(--status-healthy)]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--status-healthy)]"
               title="Parent edge verified by telemetry"
             >
               ✓ verified
             </span>
           )}
           {node.seed && (
-            <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+            <span className="rounded bg-[var(--accent-cyan)]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--accent-cyan)]">
               seed
             </span>
           )}
           {isRoot && (
-            <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-violet-300">
+            <span className="rounded bg-[var(--accent-violet)]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--accent-violet)]">
               root
             </span>
           )}
           {node.source && (
-            <span className="rounded bg-slate-700/40 px-1.5 py-0.5 text-[10px] text-slate-400">
+            <span className="rounded bg-[var(--border-default)]/40 px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)]">
               {node.source}
             </span>
           )}
-          <span className="text-[10px] text-slate-500">
+          <span className="text-[10px] text-[var(--fg-faint)]">
             {node.first_seen
               ? new Date(node.first_seen).toLocaleTimeString([], {
                   hour: "2-digit",
@@ -304,13 +330,13 @@ function ProcessTreeNode({ node, depth, children }) {
           </span>
         </div>
         {node.cmdline && (
-          <p className="mt-1 truncate font-mono text-[10px] text-slate-500" title={node.cmdline}>
+          <p className="mt-1 truncate font-mono text-[10px] text-[var(--fg-faint)]" title={node.cmdline}>
             {node.cmdline}
           </p>
         )}
       </div>
       {expanded && kids.length > 0 && (
-        <ul className="ml-5 space-y-1.5 border-l border-slate-700/50 pl-3 pt-1.5">
+        <ul className="ml-5 space-y-1.5 border-l border-[var(--border-default)] pl-3 pt-1.5">
           {kids.map((c) => (
             <ProcessTreeNode key={c.pid} node={c} depth={depth + 1} children={children} />
           ))}
@@ -323,13 +349,13 @@ function ProcessTreeNode({ node, depth, children }) {
 function ProcessTreePanel({ tree }) {
   if (!tree || !tree.primary || tree.node_count === 0) {
     return (
-      <Card>
-        <h3 className="mb-2 text-base font-semibold text-white">Process Tree</h3>
-        <p className="text-sm text-slate-400">
+      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+        <h3 className="mb-2 text-base font-semibold text-[var(--fg-primary)]">Process Tree</h3>
+        <p className="text-sm text-[var(--fg-muted)]">
           No process-creation events found around this alert — the tree could not be
           reconstructed.
         </p>
-      </Card>
+      </div>
     );
   }
 
@@ -339,38 +365,38 @@ function ProcessTreePanel({ tree }) {
   const roots = (primary.nodes || []).filter((n) => !n.parent_pid);
 
   return (
-    <Card>
+    <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-white">
+          <h3 className="text-base font-semibold text-[var(--fg-primary)]">
             Process Tree{" "}
-            <span className="text-xs font-normal text-slate-500">
+            <span className="text-xs font-normal text-[var(--fg-faint)]">
               ({primary.node_count} nodes · host {primary.host})
             </span>
           </h3>
-          <p className="mt-0.5 text-sm text-slate-400">
+          <p className="mt-0.5 text-sm text-[var(--fg-muted)]">
             Reconstructed parent/child lineage · root → trigger process
           </p>
         </div>
-        <span className="shrink-0 rounded bg-slate-800 px-2 py-1 font-mono text-[10px] text-slate-400">
+        <span className="shrink-0 rounded bg-[var(--bg-inset)] px-2 py-1 font-mono text-[10px] text-[var(--fg-muted)]">
           completeness {Math.round((tree.completeness || 0) * 100)}%
         </span>
       </div>
 
       {tree.chain && tree.chain.length > 1 && (
-        <div className="mb-4 rounded-lg border border-violet-500/25 bg-violet-500/5 p-3">
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-violet-300">
+        <div className="mb-4 rounded-[var(--radius-2xl)] border border-[var(--accent-violet)]/25 bg-[var(--accent-violet)]/5 p-3">
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-violet)]">
             Root → trigger chain
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
             {tree.chain.map((n, i) => (
               <span key={i} className="flex items-center gap-1.5">
-                {i > 0 && <span className="text-[10px] text-slate-500">→</span>}
+                {i > 0 && <span className="text-[10px] text-[var(--fg-faint)]">→</span>}
                 <span
                   className={`rounded px-2 py-0.5 font-mono text-[11px] ${
                     n.seed
-                      ? "bg-cyan-500/20 font-semibold text-cyan-300"
-                      : "bg-slate-800 text-slate-300"
+                      ? "bg-[var(--accent-cyan)]/20 font-semibold text-[var(--accent-cyan)]"
+                      : "bg-[var(--bg-inset)] text-[var(--fg-secondary)]"
                   }`}
                 >
                   {n.name || `pid ${n.pid}`}
@@ -382,15 +408,15 @@ function ProcessTreePanel({ tree }) {
       )}
 
       {tree.aftermath && tree.aftermath.length > 0 && (
-        <div className="mb-4 rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-3">
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-cyan-300">
+        <div className="mb-4 rounded-[var(--radius-2xl)] border border-[var(--accent-cyan)]/25 bg-[var(--accent-cyan)]/5 p-3">
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-cyan)]">
             Launched after the trigger ({tree.aftermath.length})
           </p>
           <div className="flex flex-wrap gap-1.5">
             {tree.aftermath.map((n, i) => (
               <span
                 key={i}
-                className="rounded bg-slate-800 px-2 py-0.5 font-mono text-[11px] text-slate-300"
+                className="rounded bg-[var(--bg-inset)] px-2 py-0.5 font-mono text-[11px] text-[var(--fg-secondary)]"
               >
                 {n.name || `pid ${n.pid}`}
               </span>
@@ -414,7 +440,7 @@ function ProcessTreePanel({ tree }) {
           </ul>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -422,10 +448,10 @@ function VerdictPanel({ verdict, alertId, onApply }) {
   const [applying, setApplying] = useState("");
   const [applied, setApplied] = useState("");
   const colors = {
-    true_positive: "border-rose-500/50 bg-rose-500/10 text-rose-300",
-    false_positive: "border-emerald-500/50 bg-emerald-500/10 text-emerald-300",
-    expected_behavior: "border-sky-500/50 bg-sky-500/10 text-sky-300",
-    needs_review: "border-slate-600/50 bg-slate-800/50 text-slate-300",
+    true_positive: "border-[var(--severity-critical)]/50 bg-[var(--severity-critical)]/10 text-[var(--severity-critical)]",
+    false_positive: "border-[var(--status-healthy)]/50 bg-[var(--status-healthy)]/10 text-[var(--status-healthy)]",
+    expected_behavior: "border-[var(--accent-cyan)]/50 bg-[var(--accent-cyan)]/10 text-[var(--accent-cyan)]",
+    needs_review: "border-[var(--border-default)] bg-[var(--bg-inset)] text-[var(--fg-secondary)]",
   };
   if (!verdict) return null;
 
@@ -446,19 +472,19 @@ function VerdictPanel({ verdict, alertId, onApply }) {
   const pct = Math.round((verdict.confidence || 0) * 100);
 
   return (
-    <Card>
+    <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-base font-semibold text-white">Suggested Verdict</h3>
-        <span className="font-mono text-[10px] text-slate-500">auto-generated</span>
+        <h3 className="text-base font-semibold text-[var(--fg-primary)]">Suggested Verdict</h3>
+        <span className="font-mono text-[10px] text-[var(--fg-faint)]">auto-generated</span>
       </div>
       <div
-        className={`rounded-lg border px-4 py-3 ${colors[verdict.suggested] || colors.needs_review}`}
+        className={`rounded-[var(--radius-2xl)] border px-4 py-3 ${colors[verdict.suggested] || colors.needs_review}`}
       >
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm font-bold uppercase tracking-wide">{verdict.label}</span>
           <span className="font-mono text-xs">{pct}%</span>
         </div>
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-black/30">
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-inset)]">
           <div
             className="h-full rounded-full bg-current opacity-70"
             style={{ width: `${pct}%` }}
@@ -468,8 +494,8 @@ function VerdictPanel({ verdict, alertId, onApply }) {
       {verdict.reasons && verdict.reasons.length > 0 && (
         <ul className="mt-3 space-y-1">
           {verdict.reasons.map((r, i) => (
-            <li key={i} className="flex items-start gap-2 text-[11px] text-slate-400">
-              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-slate-600" />
+            <li key={i} className="flex items-start gap-2 text-[11px] text-[var(--fg-muted)]">
+              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[var(--fg-faint)]" />
               {r}
             </li>
           ))}
@@ -481,7 +507,7 @@ function VerdictPanel({ verdict, alertId, onApply }) {
             type="button"
             onClick={() => apply(verdict.suggested)}
             disabled={!!applying}
-            className="rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-cyan-500 disabled:opacity-50"
+            className="rounded-xl bg-[var(--accent-cyan)] px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-[var(--accent-cyan)]/25 transition-all hover:shadow-xl disabled:opacity-50"
           >
             {applying ? "Applying..." : `Apply: ${verdict.label}`}
           </button>
@@ -489,7 +515,7 @@ function VerdictPanel({ verdict, alertId, onApply }) {
             type="button"
             onClick={() => apply("false_positive")}
             disabled={!!applying}
-            className="rounded-lg border border-slate-700 px-4 py-2 text-xs text-slate-300 transition-colors hover:border-emerald-500/50 hover:text-emerald-300 disabled:opacity-50"
+            className="rounded-xl border border-[var(--border-default)] px-4 py-2 text-xs text-[var(--fg-secondary)] transition-colors hover:border-[var(--status-healthy)]/50 hover:text-[var(--status-healthy)] disabled:opacity-50"
           >
             Mark FP
           </button>
@@ -497,31 +523,31 @@ function VerdictPanel({ verdict, alertId, onApply }) {
             type="button"
             onClick={() => apply("expected_behavior")}
             disabled={!!applying}
-            className="rounded-lg border border-slate-700 px-4 py-2 text-xs text-slate-300 transition-colors hover:border-sky-500/50 hover:text-sky-300 disabled:opacity-50"
+            className="rounded-xl border border-[var(--border-default)] px-4 py-2 text-xs text-[var(--fg-secondary)] transition-colors hover:border-[var(--accent-cyan)]/50 hover:text-[var(--accent-cyan)] disabled:opacity-50"
           >
             Expected
           </button>
         </div>
       )}
       {applied && (
-        <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">
+        <p className="mt-3 text-sm text-[var(--status-healthy)]">
           {applied.startsWith("error") ? applied : "Verdict saved — feedback fed to ML"}
         </p>
       )}
-    </Card>
+    </div>
   );
 }
 
 function RelatedAlertsPanel({ related, onSelect }) {
   if (!related || related.length === 0) return null;
   return (
-    <Card>
+    <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
       <div className="mb-4 flex items-center justify-between gap-2">
         <div>
-          <h3 className="text-base font-semibold text-white">
+          <h3 className="text-base font-semibold text-[var(--fg-primary)]">
             Related Alerts ({related.length})
           </h3>
-          <p className="mt-0.5 text-sm text-slate-400">
+          <p className="mt-0.5 text-sm text-[var(--fg-muted)]">
             Same story: shared events, host, user or correlation chain
           </p>
         </div>
@@ -532,34 +558,34 @@ function RelatedAlertsPanel({ related, onSelect }) {
             key={r.id}
             type="button"
             onClick={() => onSelect(String(r.id))}
-            className="w-full rounded-lg border border-slate-800/60 bg-slate-900/40 px-3 py-2.5 text-left transition-colors hover:border-cyan-500/40"
+            className="w-full rounded-[var(--radius-2xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-3 py-2.5 text-left transition-colors hover:border-[var(--accent-cyan)]/40"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
                 <SeverityBadge severity={r.severity} />
-                <span className="truncate text-xs font-semibold text-slate-200">
+                <span className="truncate text-xs font-semibold text-[var(--fg-primary)]">
                   #{r.id} {r.name}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 {r.verdict && (
-                  <span className="rounded bg-black/30 px-1.5 py-0.5 font-mono text-[9px] text-slate-400">
+                  <span className="rounded bg-[var(--bg-inset)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--fg-muted)]">
                     {r.verdict}
                   </span>
                 )}
-                <span className="font-mono text-[10px] text-slate-500">
+                <span className="font-mono text-[10px] text-[var(--fg-faint)]">
                   rel {r.relevance_score?.toFixed?.(1) ?? r.relevance_score}
                 </span>
               </div>
             </div>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-[var(--fg-faint)]">
               <span className="font-mono">{r.rule}</span>
               <span>{r.reasons?.join(", ")}</span>
             </div>
           </button>
         ))}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -569,29 +595,29 @@ function RiskProfilePanel({ profile }) {
   const adj = profile.adjusted_risk || 0;
   const max = Math.max(100, orig, adj);
   return (
-    <Card>
-      <h3 className="mb-3 text-base font-semibold text-white">Context-Adjusted Risk</h3>
+    <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+      <h3 className="mb-3 text-base font-semibold text-[var(--fg-primary)]">Context-Adjusted Risk</h3>
       <div className="space-y-2">
         <div>
-          <div className="flex justify-between text-[11px] text-slate-400">
+          <div className="flex justify-between text-[11px] text-[var(--fg-muted)]">
             <span>Raw risk score</span>
-            <span className="font-mono text-slate-200">{orig.toFixed(1)}</span>
+            <span className="font-mono text-[var(--fg-primary)]">{orig.toFixed(1)}</span>
           </div>
-          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-inset)]">
             <div
-              className="h-full rounded-full bg-orange-500"
+              className="h-full rounded-full bg-[var(--severity-high)]"
               style={{ width: `${(orig / max) * 100}%` }}
             />
           </div>
         </div>
         <div>
-          <div className="flex justify-between text-[11px] text-slate-400">
+          <div className="flex justify-between text-[11px] text-[var(--fg-muted)]">
             <span>Adjusted by context (×{profile.modifier})</span>
-            <span className="font-mono text-emerald-300">{adj.toFixed(1)}</span>
+            <span className="font-mono text-[var(--status-healthy)]">{adj.toFixed(1)}</span>
           </div>
-          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-inset)]">
             <div
-              className="h-full rounded-full bg-emerald-500"
+              className="h-full rounded-full bg-[var(--status-healthy)]"
               style={{ width: `${(adj / max) * 100}%` }}
             />
           </div>
@@ -600,7 +626,7 @@ function RiskProfilePanel({ profile }) {
       {profile.notes && profile.notes.length > 0 && (
         <ul className="mt-3 space-y-1">
           {profile.notes.map((n, i) => (
-            <li key={i} className="text-[11px] text-slate-500">
+            <li key={i} className="text-[11px] text-[var(--fg-faint)]">
               · {n}
             </li>
           ))}
@@ -611,54 +637,54 @@ function RiskProfilePanel({ profile }) {
           {profile.entities.map((e, i) => (
             <span
               key={i}
-              className="rounded bg-slate-800 px-2 py-0.5 font-mono text-[10px] text-slate-300"
+              className="rounded bg-[var(--bg-inset)] px-2 py-0.5 font-mono text-[10px] text-[var(--fg-secondary)]"
             >
               {e.kind}:{e.name} {e.risk_level} ({e.risk_score})
             </span>
           ))}
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
 function StoryTimeline({ timeline }) {
   if (!timeline || timeline.length === 0) return null;
   const kindColor = {
-    alert: "border-rose-500/40 text-rose-300",
-    network: "border-sky-500/40 text-sky-300",
-    event: "border-slate-600/50 text-slate-300",
+    alert: "border-[var(--severity-critical)]/40 text-[var(--severity-critical)]",
+    network: "border-[var(--accent-cyan)]/40 text-[var(--accent-cyan)]",
+    event: "border-[var(--border-default)] text-[var(--fg-secondary)]",
   };
   return (
-    <Card>
+    <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
       <div className="mb-4 flex items-center justify-between gap-2">
         <div>
-          <h3 className="text-base font-semibold text-white">
+          <h3 className="text-base font-semibold text-[var(--fg-primary)]">
             Full Story Timeline ({timeline.length})
           </h3>
-          <p className="mt-0.5 text-sm text-slate-400">
+          <p className="mt-0.5 text-sm text-[var(--fg-muted)]">
             Evidence, process activity, network and related alerts in one view
           </p>
         </div>
       </div>
-      <div className="relative ml-2 max-h-96 space-y-2 overflow-y-auto border-l border-slate-700/60 pl-6">
+      <div className="relative ml-2 max-h-96 space-y-2 overflow-y-auto border-l border-[var(--border-subtle)] pl-6">
         {timeline.map((t, idx) => (
           <div key={idx} className="relative">
             <span
-              className={`absolute -left-[27px] top-3 h-2.5 w-2.5 rounded-full border-2 border-slate-950 ${
+              className={`absolute -left-[27px] top-3 h-2.5 w-2.5 rounded-full border-2 border-[var(--bg-primary)] ${
                 t.kind === "alert"
-                  ? "bg-rose-500"
+                  ? "bg-[var(--severity-critical)]"
                   : t.kind === "network"
-                    ? "bg-sky-500"
+                    ? "bg-[var(--accent-cyan)]"
                     : t.tag === "evidence"
-                      ? "bg-cyan-400"
-                      : "bg-slate-600"
+                      ? "bg-[var(--accent-cyan)]"
+                      : "bg-[var(--fg-faint)]"
               }`}
             />
-            <div className="rounded-lg border border-slate-700/40 bg-slate-900/30 px-3 py-2">
+            <div className="rounded-[var(--radius-2xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-3 py-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold text-slate-200">{t.title}</span>
-                <span className="font-mono text-[10px] text-slate-500">
+                <span className="text-[11px] font-semibold text-[var(--fg-primary)]">{t.title}</span>
+                <span className="font-mono text-[10px] text-[var(--fg-faint)]">
                   {new Date(t.ts).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
@@ -673,13 +699,114 @@ function StoryTimeline({ timeline }) {
                   {t.kind}
                   {t.tag ? `·${t.tag}` : ""}
                 </span>
-                {t.detail && <span className="text-[10px] text-slate-500">{t.detail}</span>}
+                {t.detail && <span className="text-[10px] text-[var(--fg-faint)]">{t.detail}</span>}
               </div>
             </div>
           </div>
         ))}
       </div>
-    </Card>
+    </div>
+  );
+}
+
+function AIAnalysisContent({ text }) {
+  if (!text) return null;
+
+  const lines = text.split("\n");
+  const sections = [];
+  let current = null;
+
+  for (const line of lines) {
+    if (line.startsWith("### ")) {
+      if (current) sections.push(current);
+      current = { title: line.slice(4).trim(), items: [], type: "section" };
+    } else if (line.startsWith("## ")) {
+      if (current) sections.push(current);
+      current = { title: line.slice(3).trim(), items: [], type: "section" };
+    } else if (line.startsWith("> ")) {
+      if (!current) current = { title: "", items: [], type: "section" };
+      current.items.push({ kind: "quote", text: line.slice(2).trim() });
+    } else if (line.startsWith("- ") || line.startsWith("* ")) {
+      if (!current) current = { title: "", items: [], type: "section" };
+      current.items.push({ kind: "bullet", text: line.slice(2).trim() });
+    } else if (line.match(/^\d+\.\s/)) {
+      if (!current) current = { title: "", items: [], type: "section" };
+      current.items.push({ kind: "numbered", text: line.replace(/^\d+\.\s/, "").trim() });
+    } else if (line.trim()) {
+      if (!current) current = { title: "", items: [], type: "section" };
+      current.items.push({ kind: "text", text: line.trim() });
+    }
+  }
+  if (current) sections.push(current);
+
+  const fmtInline = (s) => {
+    const parts = [];
+    let rest = s;
+    let key = 0;
+    while (rest) {
+      const boldMatch = rest.match(/\*\*(.+?)\*\*/);
+      const codeMatch = rest.match(/`(.+?)`/);
+      let next = null;
+      if (boldMatch && (!codeMatch || boldMatch.index <= codeMatch.index)) {
+        if (boldMatch.index > 0) parts.push(<span key={key++}>{rest.slice(0, boldMatch.index)}</span>);
+        parts.push(<strong key={key++} className="font-semibold text-[var(--fg-primary)]">{boldMatch[1]}</strong>);
+        rest = rest.slice(boldMatch.index + boldMatch[0].length);
+      } else if (codeMatch) {
+        if (codeMatch.index > 0) parts.push(<span key={key++}>{rest.slice(0, codeMatch.index)}</span>);
+        parts.push(<code key={key++} className="rounded bg-[var(--bg-inset)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--accent-violet)]">{codeMatch[1]}</code>);
+        rest = rest.slice(codeMatch.index + codeMatch[0].length);
+      } else {
+        parts.push(<span key={key++}>{rest}</span>);
+        break;
+      }
+    }
+    return parts;
+  };
+
+  return (
+    <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
+      {sections.map((sec, i) => (
+        <div key={i}>
+          {sec.title && (
+            <div className="flex items-center gap-2 mb-2.5">
+              <div className="h-px flex-1 bg-gradient-to-r from-[var(--accent-violet)]/20 to-transparent" />
+              <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--accent-violet)] shrink-0">{sec.title}</h4>
+              <div className="h-px flex-1 bg-gradient-to-l from-[var(--accent-violet)]/20 to-transparent" />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            {sec.items.map((item, j) => {
+              if (item.kind === "quote") {
+                return (
+                  <div key={j} className="rounded-[var(--radius-2xl)] border-l-2 border-[var(--accent-violet)]/40 bg-[var(--accent-violet)]/[0.06] px-3 py-2">
+                    <p className="text-[12px] leading-relaxed text-[var(--fg-secondary)]">{fmtInline(item.text)}</p>
+                  </div>
+                );
+              }
+              if (item.kind === "bullet") {
+                return (
+                  <div key={j} className="flex items-start gap-2 pl-1">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[var(--accent-violet)]" />
+                    <p className="text-[12px] leading-relaxed text-[var(--fg-secondary)]">{fmtInline(item.text)}</p>
+                  </div>
+                );
+              }
+              if (item.kind === "numbered") {
+                return (
+                  <div key={j} className="flex items-start gap-2.5 pl-1">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent-violet)]/20 text-[10px] font-semibold text-[var(--accent-violet)]">
+                      {j + 1}
+                    </span>
+                    <p className="text-[12px] leading-relaxed text-[var(--fg-secondary)]">{fmtInline(item.text)}</p>
+                  </div>
+                );
+              }
+              return <p key={j} className="text-[12px] leading-relaxed text-[var(--fg-secondary)]">{fmtInline(item.text)}</p>;
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -716,7 +843,6 @@ export default function Investigation() {
       .investigate(selected)
       .then((d) => {
         setData(d);
-        // Auto-run the AI analyst once the investigation context is loaded.
         api
           .assistantExplain(selected ? Number(selected) : undefined)
           .then((r) => setExplanation(r.reply))
@@ -756,14 +882,16 @@ export default function Investigation() {
 
   return (
     <div className="space-y-6 pb-12">
-      <PageHeader
-        title="Threat Investigation"
-        subtitle="Analyze attack chains, evidence and related events"
-      />
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">Investigation</p>
+          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">Threat Investigation</h1>
+          <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">Analyze attack chains, evidence and related events</p>
+        </div>
+      </header>
 
-      {/* Alert selection */}
-      <Card>
-        <label htmlFor="investigate-select" className="mb-3 block text-sm font-medium text-slate-300">
+      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+        <label htmlFor="investigate-select" className="mb-3 block text-sm font-medium text-[var(--fg-secondary)]">
           Select Alert to Investigate
         </label>
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -771,7 +899,7 @@ export default function Investigation() {
             id="investigate-select"
             value={selected}
             onChange={(e) => chooseAlert(e.target.value)}
-            className="flex-1 rounded-lg border border-slate-700 bg-slate-800/70 px-4 py-2.5 text-sm text-slate-200 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+            className="flex-1 rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] px-4 py-2.5 text-sm text-[var(--fg-primary)] focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
           >
             <option value="">Select an alert...</option>
             {alerts.map((a) => (
@@ -785,13 +913,30 @@ export default function Investigation() {
               type="button"
               onClick={explain}
               disabled={explaining}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-violet-600 to-violet-500 px-6 py-2.5 font-medium text-white transition-all hover:from-violet-500 hover:to-violet-400 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-violet-600 via-violet-500 to-indigo-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/25 transition-all hover:shadow-xl hover:shadow-violet-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:scale-100 disabled:shadow-none"
             >
-              {explaining ? "Analyzing..." : "AI Analysis"}
+              {explaining ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                    <path d="M2 17l10 5 10-5" />
+                    <path d="M2 12l10 5 10-5" />
+                  </svg>
+                  AI Analysis
+                </>
+              )}
             </button>
           )}
         </div>
-      </Card>
+      </div>
 
       {error && <ErrorBanner message={error} />}
 
@@ -799,7 +944,7 @@ export default function Investigation() {
         <EmptyState
           title="No alert selected"
           subtitle="Choose an alert from the list above to start investigating"
-          icon={<InvestigationIcon className="h-6 w-6" />}
+          icon={<span className="text-2xl">🔍</span>}
         />
       )}
 
@@ -807,19 +952,18 @@ export default function Investigation() {
 
       {data && alert && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Alert summary */}
           <div className="lg:col-span-1">
-            <Card>
-              <h3 className="mb-4 text-base font-semibold text-white">Alert Summary</h3>
+            <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+              <h3 className="mb-4 text-base font-semibold text-[var(--fg-primary)]">Alert Summary</h3>
               <div className="space-y-4">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-faint)]">
                     Alert Name
                   </p>
-                  <p className="mt-1 text-sm font-semibold text-white">{alert.name}</p>
+                  <p className="mt-1 text-sm font-semibold text-[var(--fg-primary)]">{alert.name}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-faint)]">
                     Severity
                   </p>
                   <div className="mt-1.5">
@@ -827,7 +971,7 @@ export default function Investigation() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-faint)]">
                     Risk
                   </p>
                   <div className="mt-1.5">
@@ -835,13 +979,13 @@ export default function Investigation() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-faint)]">
                     MITRE ATT&CK
                   </p>
-                  <p className="mt-1 font-mono text-sm text-white">{alert.mitre_id}</p>
+                  <p className="mt-1 font-mono text-sm text-[var(--fg-primary)]">{alert.mitre_id}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-faint)]">
                     Status
                   </p>
                   <div className="mt-1.5">
@@ -849,52 +993,54 @@ export default function Investigation() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-faint)]">
                     Detection Method
                   </p>
-                  <p className="mt-1 text-sm capitalize text-slate-300">
+                  <p className="mt-1 text-sm capitalize text-[var(--fg-secondary)]">
                     {alert.detection_method || "rule"}
                   </p>
                 </div>
               </div>
-            </Card>
+            </div>
 
-            <Card>
+            <div className="mt-6 rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
               <ConfidenceMeter
                 score={data.story_confidence?.score}
                 label={data.story_confidence?.label}
               />
               {data.story_confidence?.breakdown && (
-                <ul className="mt-3 space-y-1 border-t border-slate-800/60 pt-3">
+                <ul className="mt-3 space-y-1 border-t border-[var(--border-subtle)] pt-3">
                   {data.story_confidence.breakdown.map((b, i) => (
-                    <li key={i} className="flex items-center justify-between text-[10px] text-slate-500">
+                    <li key={i} className="flex items-center justify-between text-[10px] text-[var(--fg-faint)]">
                       <span>{b.factor}</span>
                       <span className="font-mono">{Math.round((b.score || 0) * 100)}%</span>
                     </li>
                   ))}
                 </ul>
               )}
-            </Card>
+            </div>
 
-            <VerdictPanel
-              verdict={data.suggested_verdict}
-              alertId={selected}
-              onApply={reload}
-            />
+            <div className="mt-6">
+              <VerdictPanel
+                verdict={data.suggested_verdict}
+                alertId={selected}
+                onApply={reload}
+              />
+            </div>
 
-            <RiskProfilePanel profile={data.risk_profile} />
+            <div className="mt-6">
+              <RiskProfilePanel profile={data.risk_profile} />
+            </div>
           </div>
 
-          {/* Main investigation area */}
           <div className="space-y-6 lg:col-span-2">
-            {/* Event timeline visualization */}
-            <Card>
+            <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
               <div className="mb-5 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <ActivityIcon className="h-5 w-5 text-cyan-400" />
-                  <h3 className="text-base font-semibold text-white">Incident Timeline</h3>
+                  <span className="text-[var(--accent-cyan)]">📊</span>
+                  <h3 className="text-base font-semibold text-[var(--fg-primary)]">Incident Timeline</h3>
                 </div>
-                <span className="text-[11px] text-slate-500">
+                <span className="text-[11px] text-[var(--fg-faint)]">
                   {new Date().toLocaleDateString()} · {data.evidence_events?.length || 0} evidence +{" "}
                   {data.related_events?.length || 0} related events
                 </span>
@@ -907,26 +1053,21 @@ export default function Investigation() {
                 attackChain={data.attack_chain}
                 windowMinutes={30}
               />
-            </Card>
+            </div>
 
-            {/* Full story timeline */}
             <StoryTimeline timeline={data.timeline} />
 
-            {/* Process tree */}
             <ProcessTreePanel tree={data.process_tree} />
 
-            {/* Related alerts */}
             <RelatedAlertsPanel related={data.related_alerts} onSelect={chooseAlert} />
 
-            {/* Involved entities */}
             <InvolvedEntities data={data} />
 
-            {/* Attack timeline */}
-            <Card>
+            <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
               <div className="mb-4 flex items-center gap-2">
-                <ActivityIcon className="h-5 w-5 text-cyan-400" />
-                <h3 className="text-base font-semibold text-white">Attack Timeline</h3>
-                <span className="text-[11px] text-slate-500">
+                <span className="text-[var(--accent-cyan)]">⏱</span>
+                <h3 className="text-base font-semibold text-[var(--fg-primary)]">Attack Timeline</h3>
+                <span className="text-[11px] text-[var(--fg-faint)]">
                   {[data.evidence_events, data.related_events]
                     .flat()
                     .filter((e) => e && e.timestamp).length}{" "}
@@ -936,13 +1077,12 @@ export default function Investigation() {
               <AttackTimeline
                 events={[...(data.evidence_events || []), ...(data.related_events || [])]}
               />
-            </Card>
+            </div>
 
-            {/* Attack chain */}
-            <Card>
+            <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
               <div className="mb-5 flex items-center gap-2">
-                <AlertIcon className="h-5 w-5 text-cyan-400" />
-                <h3 className="text-base font-semibold text-white">
+                <span className="text-[var(--accent-cyan)]">⛓</span>
+                <h3 className="text-base font-semibold text-[var(--fg-primary)]">
                   Attack Chain ({data.attack_chain?.length || 0} steps)
                 </h3>
               </div>
@@ -953,16 +1093,16 @@ export default function Investigation() {
                       <div className="flex flex-col items-center">
                         <StepDot index={idx + 1} active />
                         {idx < data.attack_chain.length - 1 && (
-                          <div className="w-px flex-1 bg-gradient-to-b from-cyan-500/40 to-slate-700/40" />
+                          <div className="w-px flex-1 bg-gradient-to-b from-[var(--accent-cyan)]/40 to-[var(--border-default)]/40" />
                         )}
                       </div>
                       <div className="pb-6">
-                        <p className="text-sm font-semibold text-slate-100">{step.step}</p>
+                        <p className="text-sm font-semibold text-[var(--fg-primary)]">{step.step}</p>
                         <div className="mt-2 space-y-1.5">
                           {step.details.map((line, li) => (
                             <p
                               key={li}
-                              className="rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2 font-mono text-[11px] leading-relaxed text-slate-400"
+                              className="rounded-[var(--radius-2xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-3 py-2 font-mono text-[11px] leading-relaxed text-[var(--fg-muted)]"
                             >
                               {line}
                             </p>
@@ -973,15 +1113,14 @@ export default function Investigation() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-400">No attack chain steps available</p>
+                <p className="text-sm text-[var(--fg-muted)]">No attack chain steps available</p>
               )}
-            </Card>
+            </div>
 
-            {/* Evidence events */}
-            <Card>
+            <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
               <div className="mb-4 flex items-center gap-2">
-                <ActivityIcon className="h-5 w-5 text-cyan-400" />
-                <h3 className="text-base font-semibold text-white">
+                <span className="text-[var(--accent-cyan)]">📋</span>
+                <h3 className="text-base font-semibold text-[var(--fg-primary)]">
                   Evidence Events ({data.evidence_events?.length || 0})
                 </h3>
               </div>
@@ -994,16 +1133,15 @@ export default function Investigation() {
               ) : (
                 <EmptyState title="No evidence events" subtitle="No linked events recorded" />
               )}
-            </Card>
+            </div>
 
-            {/* Related events */}
             {data.related_events && data.related_events.length > 0 && (
-              <Card>
+              <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
                 <div className="mb-4">
-                  <h3 className="text-base font-semibold text-white">
+                  <h3 className="text-base font-semibold text-[var(--fg-primary)]">
                     Related Events ({data.related_events.length})
                   </h3>
-                  <p className="mt-0.5 text-sm text-slate-400">
+                  <p className="mt-0.5 text-sm text-[var(--fg-muted)]">
                     Events recorded ±30 minutes around the alert window
                   </p>
                 </div>
@@ -1012,26 +1150,25 @@ export default function Investigation() {
                     <EventChip key={idx} event={event} compact />
                   ))}
                 </div>
-              </Card>
+              </div>
             )}
 
-            {/* Network context */}
             {data.network_context && data.network_context.length > 0 && (
-              <Card>
-                <h3 className="mb-4 text-base font-semibold text-white">Network Context</h3>
+              <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+                <h3 className="mb-4 text-base font-semibold text-[var(--fg-primary)]">Network Context</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {data.network_context.map((ctx, idx) => (
                     <div
                       key={idx}
-                      className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-3"
+                      className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-inset)] p-3"
                     >
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-faint)]">
                         Connection
                       </p>
-                      <p className="font-mono text-sm text-cyan-400">
+                      <p className="font-mono text-sm text-[var(--accent-cyan)]">
                         {ctx.local_ip}:{ctx.local_port} → {ctx.remote_ip}:{ctx.remote_port}
                       </p>
-                      <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+                      <div className="mt-2 flex items-center justify-between text-[11px] text-[var(--fg-muted)]">
                         <span>
                           Port: <strong className="font-mono">{ctx.remote_port}</strong>
                         </span>
@@ -1040,45 +1177,53 @@ export default function Investigation() {
                     </div>
                   ))}
                 </div>
-              </Card>
+              </div>
             )}
 
-            {/* Similar past incidents (RAG) */}
             {data.similar_incidents && data.similar_incidents.length > 0 && (
-              <Card>
-                <h3 className="mb-4 text-base font-semibold text-white">
+              <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+                <h3 className="mb-4 text-base font-semibold text-[var(--fg-primary)]">
                   Similar Past Incidents (resolved)
                 </h3>
                 <div className="space-y-3">
                   {data.similar_incidents.map((sim, idx) => (
-                    <div key={idx} className="rounded-lg border border-violet-500/25 bg-violet-500/5 p-3">
+                    <div key={idx} className="rounded-[var(--radius-2xl)] border border-[var(--accent-violet)]/25 bg-[var(--accent-violet)]/5 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-slate-100">
+                        <p className="text-sm font-semibold text-[var(--fg-primary)]">
                           #{sim.id} {sim.name}
                         </p>
-                        <span className="rounded bg-black/30 px-2 py-0.5 text-[10px] font-mono text-slate-400">
+                        <span className="rounded bg-[var(--bg-inset)] px-2 py-0.5 text-[10px] font-mono text-[var(--fg-muted)]">
                           {sim.mitre_id} · {sim.severity}
                         </span>
                       </div>
-                      <p className="mt-1.5 text-xs text-slate-400">{sim.evidence}</p>
-                      <p className="mt-1.5 text-xs text-cyan-300/80">
-                        <span className="font-semibold text-cyan-400">Resolved via:</span>{" "}
+                      <p className="mt-1.5 text-xs text-[var(--fg-muted)]">{sim.evidence}</p>
+                      <p className="mt-1.5 text-xs text-[var(--accent-cyan)]/80">
+                        <span className="font-semibold text-[var(--accent-cyan)]">Resolved via:</span>{" "}
                         {sim.recommendation}
                       </p>
                     </div>
                   ))}
                 </div>
-              </Card>
+              </div>
             )}
 
-            {/* AI analysis */}
             {explanation && (
-              <Card tone="violet">
-                <h3 className="mb-3 text-base font-semibold text-white">AI Analysis</h3>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">
-                  {explanation}
-                </p>
-              </Card>
+              <div className="rounded-[var(--radius-2xl)] border border-[var(--accent-violet)]/20 bg-gradient-to-br from-[var(--accent-violet)]/[0.06] via-[var(--bg-surface)] to-indigo-500/[0.04] p-6 shadow-xl shadow-[var(--accent-violet)]/[0.03]">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-500 shadow-lg shadow-violet-500/25">
+                    <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                      <path d="M2 17l10 5 10-5" />
+                      <path d="M2 12l10 5 10-5" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-[15px] font-semibold text-[var(--fg-primary)]">BARAQ AI Analysis</h3>
+                    <p className="text-[11px] text-[var(--fg-muted)]">AI-powered investigation summary</p>
+                  </div>
+                </div>
+                <AIAnalysisContent text={explanation} />
+              </div>
             )}
           </div>
         </div>

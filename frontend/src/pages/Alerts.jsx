@@ -1,14 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { api, isAdmin } from "../api.js";
-import Card from "../components/Card.jsx";
-import PageHeader from "../components/PageHeader.jsx";
-import Pagination from "../components/Pagination.jsx";
 import SeverityBadge from "../components/SeverityBadge.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import RiskBadge from "../components/RiskBadge.jsx";
 import { Loading, EmptyState, ErrorBanner } from "../components/Feedback.jsx";
-import { AlertsIcon } from "../components/icons.jsx";
 
 const PAGE_SIZE = 25;
 
@@ -18,7 +14,8 @@ function OrgChip({ org }) {
   if (!org) return null;
   return (
     <span
-      className="max-w-[120px] truncate rounded-md bg-violet-500/8 px-2.5 py-1 font-mono text-[10px] font-semibold tracking-wide text-violet-300 ring-1 ring-violet-500/15"
+      className="max-w-[120px] truncate rounded-md px-2.5 py-1 font-mono text-[10px] font-semibold tracking-wide"
+      style={{ background: "var(--accent-violet)", color: "var(--fg-primary)", opacity: 0.7 }}
       title={`Organization: ${org}`}
     >
       {org}
@@ -29,26 +26,30 @@ function OrgChip({ org }) {
 function AlertRow({ alert, selected, onToggle, onFix, onQuickStatus }) {
   const [hovered, setHovered] = useState(false);
 
+  const formatTime = (iso) => {
+    if (!iso) return "\u2014";
+    return new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={`group relative flex items-start gap-4 rounded-2xl border p-5 transition-all duration-300 ${
+      className={`group relative flex items-start gap-4 rounded-[var(--radius-xl)] border p-5 transition-all duration-300 ${
         selected
-          ? "border-cyan-400/40 bg-gradient-to-br from-cyan-500/[0.08] via-transparent to-violet-500/[0.04] shadow-[0_0_30px_-8px_rgba(0,240,255,0.15)]"
-          : "border-white/[0.06] bg-white/[0.025] hover:border-white/[0.12] hover:bg-white/[0.04] hover:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.4)]"
+          ? "border-[var(--accent-cyan)] bg-[var(--bg-surface)] shadow-lg"
+          : "border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] hover:shadow-lg"
       }`}
     >
-      {/* Subtle left accent line */}
       <div
         className={`absolute left-0 top-4 bottom-4 w-[2px] rounded-full transition-all duration-300 ${
           alert.severity === "critical"
-            ? "bg-gradient-to-b from-red-400 via-red-500 to-transparent"
+            ? "bg-gradient-to-b from-[var(--severity-critical)] to-transparent"
             : alert.severity === "high"
-            ? "bg-gradient-to-b from-orange-400 via-orange-500/60 to-transparent"
+            ? "bg-gradient-to-b from-[var(--severity-high)] to-transparent"
             : alert.severity === "medium"
-            ? "bg-gradient-to-b from-blue-400 via-blue-500/60 to-transparent"
-            : "bg-gradient-to-b from-slate-400/40 via-slate-500/20 to-transparent"
+            ? "bg-gradient-to-b from-[var(--severity-low)] to-transparent"
+            : "bg-gradient-to-b from-[var(--fg-faint)] to-transparent"
         }`}
       />
 
@@ -58,42 +59,44 @@ function AlertRow({ alert, selected, onToggle, onFix, onQuickStatus }) {
         onChange={() => onToggle(alert.id)}
         title="Select for bulk triage"
         aria-label={`Select alert ${alert.id}`}
-        className="mt-1.5 h-[15px] w-[15px] shrink-0 cursor-pointer rounded-[4px] border-[1.5px] border-white/20 bg-transparent accent-cyan-500 transition-all checked:border-cyan-500 checked:bg-cyan-500"
+        className="mt-1.5 h-[15px] w-[15px] shrink-0 cursor-pointer rounded-[4px] border-[1.5px] border-[var(--border-default)] bg-transparent accent-[var(--accent-cyan)] transition-all checked:border-[var(--accent-cyan)] checked:bg-[var(--accent-cyan)]"
       />
 
       <Link to={`/alerts/${alert.id}`} className="block min-w-0 flex-1">
         <div className="flex items-start justify-between gap-5">
           <div className="min-w-0 flex-1">
-            {/* Header row */}
             <div className="flex items-center gap-3">
-              <span className="font-mono text-[11px] font-medium text-slate-500/70">
+              <span className="font-mono text-[11px] font-medium text-[var(--fg-muted)]">
                 #{alert.id}
               </span>
-              <h3 className="truncate text-[14px] font-semibold leading-snug tracking-[-0.01em] text-white/90 transition-colors group-hover:text-cyan-200">
+              <h3 className="truncate text-[14px] font-semibold leading-snug tracking-[-0.01em] text-[var(--fg-primary)] transition-colors group-hover:text-[var(--accent-cyan)]">
                 {alert.name}
               </h3>
             </div>
 
-            {/* Evidence */}
-            <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-slate-400/90">
+            <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-[var(--fg-secondary)]">
               {alert.evidence}
             </p>
 
-            {/* Badges row */}
             <div className="mt-3.5 flex flex-wrap items-center gap-2">
               <SeverityBadge severity={alert.severity} />
               <StatusBadge status={alert.status} />
               <RiskBadge level={alert.risk_level} score={alert.risk_score} />
+              {alert.host && (
+                <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] font-medium text-[var(--fg-secondary)] ring-1 ring-[var(--border-subtle)]">
+                  {alert.host}
+                </span>
+              )}
               {isAdmin() && <OrgChip org={alert.org} />}
               {alert.mitre_id && (
-                <span className="rounded-md bg-white/[0.04] px-2.5 py-1 font-mono text-[10px] font-medium text-slate-400 ring-1 ring-white/[0.06]">
+                <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] font-medium text-[var(--fg-secondary)] ring-1 ring-[var(--border-subtle)]">
                   {alert.mitre_id}
                 </span>
               )}
               {(alert.intel_hits || 0) > 0 && (
                 <span
                   title="Known-bad indicator(s) flagged at detection time"
-                  className="inline-flex items-center gap-1 rounded-md border border-rose-500/25 bg-rose-500/[0.08] px-2.5 py-1 text-[10px] font-semibold text-rose-300"
+                  className="inline-flex items-center gap-1 rounded-md border border-[var(--severity-critical)]/25 bg-[var(--severity-critical)]/[0.08] px-2.5 py-1 text-[10px] font-semibold text-[var(--severity-critical)]"
                 >
                   <span className="text-[11px]">&#9889;</span>
                   {alert.intel_hits} intel hit{alert.intel_hits > 1 ? "s" : ""}
@@ -102,33 +105,31 @@ function AlertRow({ alert, selected, onToggle, onFix, onQuickStatus }) {
             </div>
           </div>
 
-          {/* Right side: method + time */}
           <div className="shrink-0 text-right">
-            <span className="inline-block rounded-md bg-white/[0.04] px-2.5 py-1 text-[11px] font-medium text-slate-400 ring-1 ring-white/[0.06]">
+            <span className="inline-block rounded-md bg-[var(--bg-inset)] px-2.5 py-1 text-[11px] font-medium text-[var(--fg-secondary)] ring-1 ring-[var(--border-subtle)]">
               {alert.detection_method || "rule"}
             </span>
-            <p className="mt-2.5 text-[11px] font-medium text-slate-500/70">
-              {alert.created_at
-                ? new Date(alert.created_at).toLocaleString([], {
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "\u2014"}
-            </p>
+            <div className="mt-2 space-y-1">
+              {alert.first_seen && (
+                <p className="text-[10px] text-[var(--fg-muted)]" title="First seen">
+                  {formatTime(alert.first_seen)}
+                </p>
+              )}
+              <p className="text-[11px] font-medium text-[var(--fg-muted)]" title="Last seen">
+                {alert.last_seen ? formatTime(alert.last_seen) : formatTime(alert.created_at)}
+              </p>
+            </div>
           </div>
         </div>
       </Link>
 
-      {/* Right actions */}
       <div className="flex shrink-0 flex-col items-end gap-2.5">
         <select
           value={alert.status}
           onChange={(e) => onQuickStatus(alert.id, e.target.value)}
           title="Quick triage status"
           aria-label={`Quick status for alert ${alert.id}`}
-          className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[11px] font-medium text-slate-300 transition-all focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/15"
+          className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3 py-2 text-[11px] font-medium text-[var(--fg-secondary)] transition-all focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
         >
           {STATUSES.map((s) => (
             <option key={s} value={s}>
@@ -141,7 +142,7 @@ function AlertRow({ alert, selected, onToggle, onFix, onQuickStatus }) {
             type="button"
             title="Fix alert and restore security score"
             onClick={() => onFix(alert.id)}
-            className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.08] px-3.5 py-2 text-[11px] font-semibold text-emerald-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-500/15 hover:shadow-[0_0_16px_-4px_rgba(0,230,118,0.3)]"
+            className="rounded-lg border border-[var(--status-healthy)]/25 bg-[var(--status-healthy)]/[0.08] px-3.5 py-2 text-[11px] font-semibold text-[var(--status-healthy)] transition-all hover:border-[var(--status-healthy)]/40 hover:bg-[var(--status-healthy)]/15"
           >
             Fix
           </button>
@@ -160,6 +161,8 @@ export default function Alerts() {
     return ["open", "in_progress", "contained", "closed"].includes(v) ? v : "";
   });
   const [severity, setSeverity] = useState(() => searchParams.get("severity") || "");
+  const [sortBy, setSortBy] = useState(() => searchParams.get("sort") || "created_at");
+  const [sortDir, setSortDir] = useState(() => searchParams.get("dir") || "desc");
   const [error, setError] = useState("");
   const [clearing, setClearing] = useState(false);
   const [clearResult, setClearResult] = useState(null);
@@ -191,20 +194,22 @@ export default function Alerts() {
     const next = new URLSearchParams();
     if (status) next.set("status", status);
     if (severity) next.set("severity", severity);
+    if (sortBy !== "created_at") next.set("sort", sortBy);
+    if (sortDir !== "desc") next.set("dir", sortDir);
     setSearchParams(next, { replace: true });
-  }, [status, severity]);
+  }, [status, severity, sortBy, sortDir]);
 
   const load = () => {
     setError("");
     api
-      .alerts({ page, page_size: PAGE_SIZE, status, severity })
+      .alerts({ page, page_size: PAGE_SIZE, status, severity, sort: sortBy, dir: sortDir })
       .then(setData)
       .catch((e) => setError(e.message));
   };
 
   useEffect(() => {
     load();
-  }, [page, status, severity]);
+  }, [page, status, severity, sortBy, sortDir]);
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
   const hasFilters = status !== "" || severity !== "";
@@ -212,6 +217,8 @@ export default function Alerts() {
   const reset = () => {
     setStatus("");
     setSeverity("");
+    setSortBy("created_at");
+    setSortDir("desc");
     setPage(1);
   };
 
@@ -314,33 +321,22 @@ export default function Alerts() {
 
   return (
     <div className="space-y-6 pb-16">
-      {/* Page header */}
-      <div className="flex flex-wrap items-end justify-between gap-5">
-        <div className="min-w-0">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Security Operations
-          </p>
-          <h1 className="text-[32px] font-bold leading-tight tracking-[-0.035em] text-white">
-            Alerts
-          </h1>
-          <p className="mt-1.5 text-[13px] font-normal text-slate-400/80">
-            All detected threats and security events
-          </p>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">Security Operations</p>
+          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">Alerts</h1>
+          <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">All detected threats and security events</p>
         </div>
-
         <div className="flex items-center gap-3">
           {data && (
-            <div className="flex items-center gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.025] px-4 py-2.5">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-500/10">
-                <AlertsIcon className="h-3.5 w-3.5 text-cyan-400" />
-              </span>
-              <div>
-                <p className="text-[18px] font-bold tabular-nums tracking-tight text-white">
-                  {data.total.toLocaleString()}
-                </p>
-                <p className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
-                  alerts
-                </p>
+            <div className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 transition-all duration-300 hover:border-[var(--border-strong)] hover:shadow-lg">
+              <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-40" style={{ background: "var(--accent-cyan)" }} />
+              <div className="relative flex items-start justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Alerts</p>
+                  <p className="mt-2 text-[28px] font-bold tabular-nums leading-none" style={{ color: "var(--accent-cyan)", fontFeatureSettings: '"tnum"' }}>{data.total.toLocaleString()}</p>
+                </div>
+                <span className="text-[18px] opacity-50">&#9888;</span>
               </div>
             </div>
           )}
@@ -350,11 +346,11 @@ export default function Alerts() {
               onClick={clearAll}
               disabled={clearing || !data || data.total === 0}
               title="Close all open alerts and force-generate an incident report"
-              className="rounded-xl border border-rose-500/25 bg-rose-500/[0.06] px-4 py-2.5 text-[13px] font-semibold text-rose-400 transition-all hover:border-rose-500/40 hover:bg-rose-500/12 hover:shadow-[0_0_20px_-4px_rgba(255,61,113,0.2)] disabled:opacity-40"
+              className="rounded-xl bg-[var(--accent-cyan)] px-4 py-2.5 text-[13px] font-semibold text-white shadow-lg shadow-[var(--accent-cyan)]/25 transition-all hover:shadow-xl disabled:opacity-40"
             >
               {clearing ? (
                 <span className="flex items-center gap-2">
-                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-rose-400 border-t-transparent" />
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   Clearing...
                 </span>
               ) : (
@@ -363,23 +359,22 @@ export default function Alerts() {
             </button>
           )}
         </div>
-      </div>
+      </header>
 
-      {/* Clear result */}
       {clearResult && (
-        <div className="rounded-2xl border p-5" style={{ background: "var(--success-bg, #ecfdf5)", borderColor: "var(--success-border, #a7f3d0)" }}>
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-5">
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs" style={{ background: "rgba(16,185,129,0.15)", color: "var(--success-text, #065f46)" }}>
+            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--status-healthy)]/15 text-xs text-[var(--status-healthy)]">
               &#10003;
             </span>
             <div>
-              <p className="text-sm font-semibold" style={{ color: "var(--success-text, #065f46)" }}>{clearResult.message}</p>
+              <p className="text-sm font-semibold text-[var(--fg-primary)]">{clearResult.message}</p>
               {clearResult.report && (
                 <a
                   href={`/reports/${clearResult.report.file_path.split(/[\\/]/).pop()}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-1.5 inline-flex items-center gap-1 text-[13px] font-medium text-cyan-400 transition-colors hover:text-cyan-300"
+                  className="mt-1.5 inline-flex items-center gap-1 text-[13px] font-medium text-[var(--accent-cyan)] transition-colors hover:text-[var(--accent-cyan)]/80"
                 >
                   View incident report ({clearResult.report.title}, {clearResult.report.format})
                   <span className="text-[11px]">&rarr;</span>
@@ -390,22 +385,21 @@ export default function Alerts() {
         </div>
       )}
 
-      {/* Bulk triage bar */}
       {selected.size > 0 && (
-        <div className="animate-in slide-in-from-top-2 rounded-2xl border border-cyan-400/25 bg-gradient-to-r from-cyan-500/[0.08] via-cyan-500/[0.04] to-transparent p-4">
+        <div className="animate-in slide-in-from-top-2 rounded-[var(--radius-2xl)] border border-[var(--accent-cyan)]/25 bg-[var(--bg-surface)] p-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/15 text-[11px] font-bold text-cyan-300">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent-cyan)]/15 text-[11px] font-bold text-[var(--accent-cyan)]">
                 {selected.size}
               </span>
-              <span className="text-[13px] font-semibold text-cyan-200">selected</span>
+              <span className="text-[13px] font-semibold text-[var(--accent-cyan)]">selected</span>
             </div>
-            <div className="h-4 w-px bg-white/10" />
+            <div className="h-4 w-px bg-[var(--border-default)]" />
             <button
               type="button"
               onClick={() => bulkStatus("in_progress")}
               disabled={bulkBusy}
-              className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-1.5 text-[11px] font-semibold text-amber-300 transition-all hover:bg-amber-500/12 disabled:opacity-40"
+              className="rounded-lg border border-[var(--severity-medium)]/25 bg-[var(--severity-medium)]/[0.06] px-3.5 py-1.5 text-[11px] font-semibold text-[var(--severity-medium)] transition-all hover:bg-[var(--severity-medium)]/12 disabled:opacity-40"
             >
               Investigating
             </button>
@@ -413,7 +407,7 @@ export default function Alerts() {
               type="button"
               onClick={() => bulkStatus("contained")}
               disabled={bulkBusy}
-              className="rounded-lg border border-violet-500/25 bg-violet-500/[0.06] px-3.5 py-1.5 text-[11px] font-semibold text-violet-300 transition-all hover:bg-violet-500/12 disabled:opacity-40"
+              className="rounded-lg border border-[var(--accent-violet)]/25 bg-[var(--accent-violet)]/[0.06] px-3.5 py-1.5 text-[11px] font-semibold text-[var(--accent-violet)] transition-all hover:bg-[var(--accent-violet)]/12 disabled:opacity-40"
             >
               Contained
             </button>
@@ -421,7 +415,7 @@ export default function Alerts() {
               type="button"
               onClick={() => bulkStatus("closed")}
               disabled={bulkBusy}
-              className="rounded-lg border border-white/[0.1] bg-white/[0.03] px-3.5 py-1.5 text-[11px] font-semibold text-slate-200 transition-all hover:bg-white/[0.06] disabled:opacity-40"
+              className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-1.5 text-[11px] font-semibold text-[var(--fg-secondary)] transition-all hover:bg-[var(--bg-surface)] disabled:opacity-40"
             >
               Close
             </button>
@@ -430,7 +424,7 @@ export default function Alerts() {
                 type="button"
                 onClick={bulkFix}
                 disabled={bulkBusy}
-                className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.06] px-3.5 py-1.5 text-[11px] font-semibold text-emerald-400 transition-all hover:bg-emerald-500/12 disabled:opacity-40"
+                className="rounded-lg border border-[var(--status-healthy)]/25 bg-[var(--status-healthy)]/[0.06] px-3.5 py-1.5 text-[11px] font-semibold text-[var(--status-healthy)] transition-all hover:bg-[var(--status-healthy)]/12 disabled:opacity-40"
               >
                 Fix all
               </button>
@@ -439,7 +433,7 @@ export default function Alerts() {
               type="button"
               onClick={() => setSelected(new Set())}
               disabled={bulkBusy}
-              className="ml-auto rounded-lg border border-white/[0.08] bg-white/[0.03] px-3.5 py-1.5 text-[11px] font-medium text-slate-400 transition-all hover:bg-white/[0.06] disabled:opacity-40"
+              className="ml-auto rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition-all hover:bg-[var(--bg-surface)] disabled:opacity-40"
             >
               Clear selection
             </button>
@@ -447,19 +441,18 @@ export default function Alerts() {
         </div>
       )}
 
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+      <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-4">
+        <span className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">
           Filter
         </span>
-        <div className="h-4 w-px bg-white/[0.06]" />
+        <div className="h-4 w-px bg-[var(--border-default)]" />
         <select
           value={status}
           onChange={(e) => {
             setStatus(e.target.value);
             setPage(1);
           }}
-          className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3.5 py-2 text-[12px] font-medium text-slate-300 transition-all focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/15"
+          className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2 text-[12px] font-medium text-[var(--fg-secondary)] transition-all focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
           aria-label="Filter by status"
         >
           <option value="">All Statuses</option>
@@ -475,7 +468,7 @@ export default function Alerts() {
             setSeverity(e.target.value);
             setPage(1);
           }}
-          className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3.5 py-2 text-[12px] font-medium text-slate-300 transition-all focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/15"
+          className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2 text-[12px] font-medium text-[var(--fg-secondary)] transition-all focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
           aria-label="Filter by severity"
         >
           <option value="">All Severities</option>
@@ -491,23 +484,45 @@ export default function Alerts() {
           <button
             type="button"
             onClick={reset}
-            className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3.5 py-2 text-[12px] font-medium text-slate-400 transition-all hover:bg-white/[0.06] hover:text-slate-200"
+            className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2 text-[12px] font-medium text-[var(--fg-muted)] transition-all hover:bg-[var(--bg-surface)] hover:text-[var(--fg-secondary)]"
           >
             Reset
           </button>
         )}
 
+        <div className="h-4 w-px bg-[var(--border-default)]" />
+        <select
+          value={sortBy}
+          onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+          className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2 text-[12px] font-medium text-[var(--fg-secondary)] transition-all focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
+          aria-label="Sort alerts by"
+        >
+          <option value="created_at">Last Seen</option>
+          <option value="first_seen">First Seen</option>
+          <option value="severity">Severity</option>
+          <option value="risk_score">Risk Score</option>
+          <option value="name">Alert Name</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => setSortDir((d) => d === "desc" ? "asc" : "desc")}
+          className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-2.5 py-2 text-[12px] font-medium text-[var(--fg-muted)] transition-all hover:bg-[var(--bg-surface)] hover:text-[var(--fg-secondary)]"
+          aria-label={`Sort ${sortDir === "desc" ? "ascending" : "descending"}`}
+        >
+          {sortDir === "desc" ? "↓" : "↑"}
+        </button>
+
         {hasFilters && (
-          <span className="ml-auto text-[11px] text-slate-500">
+          <span className="ml-auto text-[11px] text-[var(--fg-muted)]">
             Filtering active
           </span>
         )}
       </div>
 
       {clusters && clusters.cluster_count > 1 && (
-        <div className="mb-4 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
+        <div className="mb-4 rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-4">
           <div className="mb-2.5 flex items-baseline justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+            <span className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">
               Behaviour clusters — {clusters.cluster_count} patterns covering{" "}
               {clusters.alerts_covered} open alerts
             </span>
@@ -515,7 +530,7 @@ export default function Alerts() {
               <button
                 type="button"
                 onClick={() => setActiveCluster(null)}
-                className="text-[11px] font-medium text-cyan-400 hover:text-cyan-300"
+                className="text-[11px] font-medium text-[var(--accent-cyan)] hover:text-[var(--accent-cyan)]/80"
               >
                 Show all
               </button>
@@ -535,11 +550,11 @@ export default function Alerts() {
                   title={`Select ${c.count} alert(s) for bulk triage`}
                   className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-all ${
                     isActive
-                      ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-300"
-                      : "border-white/[0.08] bg-white/[0.03] text-slate-400 hover:border-white/[0.16] hover:text-slate-200"
+                      ? "border-[var(--accent-cyan)]/50 bg-[var(--accent-cyan)]/10 text-[var(--accent-cyan)]"
+                      : "border-[var(--border-default)] bg-[var(--bg-inset)] text-[var(--fg-muted)] hover:border-[var(--border-strong)] hover:text-[var(--fg-secondary)]"
                   }`}
                 >
-                  <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--fg-muted)]" />
                   {c.rule}
                   <span className="opacity-60">·</span>
                   <span className="tabular-nums">{c.count}</span>
@@ -555,16 +570,16 @@ export default function Alerts() {
       {!data && !error && <Loading label="Loading alerts" />}
 
       {data && data.items.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-3xl border border-white/[0.04] bg-white/[0.015] px-8 py-20 text-center">
-          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500/10 to-violet-500/10 ring-1 ring-white/[0.06]">
-            <svg className="h-8 w-8 text-cyan-400/60" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <div className="flex flex-col items-center justify-center rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-8 py-20 text-center">
+          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-[var(--radius-xl)] bg-[var(--accent-cyan)]/10 ring-1 ring-[var(--border-subtle)]">
+            <svg className="h-8 w-8 text-[var(--accent-cyan)]/60" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
             </svg>
           </div>
-          <h3 className="text-[17px] font-semibold text-white/90">
+          <h3 className="text-[17px] font-semibold text-[var(--fg-primary)]">
             {hasFilters ? "No alerts match your filters" : "No alerts detected"}
           </h3>
-          <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-slate-400/80">
+          <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-[var(--fg-secondary)]">
             {hasFilters
               ? "Try adjusting your filters to see more results"
               : "The system is monitoring for threats. Alerts will appear here when detected."}
@@ -573,7 +588,7 @@ export default function Alerts() {
             <button
               type="button"
               onClick={reset}
-              className="mt-5 rounded-xl border border-cyan-500/25 bg-cyan-500/[0.06] px-5 py-2.5 text-[13px] font-semibold text-cyan-400 transition-all hover:bg-cyan-500/12"
+              className="mt-5 rounded-xl bg-[var(--accent-cyan)] px-5 py-2.5 text-[13px] font-semibold text-white shadow-lg shadow-[var(--accent-cyan)]/25 transition-all hover:shadow-xl"
             >
               Clear filters
             </button>
@@ -583,24 +598,22 @@ export default function Alerts() {
 
       {data && data.items.length > 0 && (
         <div className="space-y-2">
-          {/* Select all bar */}
           <div className="flex items-center justify-between px-1">
-            <label className="flex cursor-pointer items-center gap-2.5 text-[12px] font-medium text-slate-400/80">
+            <label className="flex cursor-pointer items-center gap-2.5 text-[12px] font-medium text-[var(--fg-secondary)]">
               <input
                 type="checkbox"
                 checked={data.items.every((a) => selected.has(a.id))}
                 onChange={(e) => selectVisible(e.target.checked)}
                 aria-label="Select all visible alerts"
-                className="h-[14px] w-[14px] cursor-pointer rounded-[3px] border-[1.5px] border-white/15 bg-transparent accent-cyan-500"
+                className="h-[14px] w-[14px] cursor-pointer rounded-[3px] border-[1.5px] border-[var(--border-default)] bg-transparent accent-[var(--accent-cyan)]"
               />
               Select all on this page
             </label>
-            <span className="text-[11px] text-slate-500/60">
+            <span className="text-[11px] text-[var(--fg-muted)]">
               {data.items.length} of {data.total.toLocaleString()} alerts
             </span>
           </div>
 
-          {/* Alert rows */}
           <div className="space-y-1.5">
             {(activeCluster
               ? data.items.filter((a) => (activeCluster.alert_ids || []).includes(a.id))
@@ -616,7 +629,7 @@ export default function Alerts() {
               />
             ))}
             {activeCluster && data.items.length > 0 && !data.items.some((a) => (activeCluster.alert_ids || []).includes(a.id)) && (
-              <p className="py-6 text-center text-[13px] text-slate-500">
+              <p className="py-6 text-center text-[13px] text-[var(--fg-muted)]">
                 This cluster's alerts are on other pages — use bulk selection from the cluster chip.
               </p>
             )}
@@ -624,10 +637,27 @@ export default function Alerts() {
         </div>
       )}
 
-      {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex justify-center pt-4">
-          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+        <div className="flex items-center justify-center gap-2 pt-4">
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] px-4 py-2 text-[12px] font-medium text-[var(--fg-secondary)] transition-all hover:bg-[var(--bg-surface)] disabled:opacity-40"
+          >
+            Prev
+          </button>
+          <span className="text-[12px] text-[var(--fg-muted)]">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+            className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] px-4 py-2 text-[12px] font-medium text-[var(--fg-secondary)] transition-all hover:bg-[var(--bg-surface)] disabled:opacity-40"
+          >
+            Next
+          </button>
         </div>
       )}
     </div>
