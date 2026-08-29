@@ -484,10 +484,24 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
         )
     # Startup collector permission probe: report unreadable channels up
     # front (with the fix command) instead of failing silently each cycle.
+    # Run in background thread so 24+ channel probes don't block startup.
     from backend.collectors.health import check_collector_permissions
-    from backend.config import POWERSHELL_CHANNELS, SECURITY_LOG_CHANNELS, SYSMON_CHANNELS
+    from backend.config import (
+        POWERSHELL_CHANNELS,
+        SECURITY_LOG_CHANNELS,
+        SYSMON_CHANNELS,
+        ALL_EXTENDED_CHANNELS,
+    )
 
-    check_collector_permissions([*SECURITY_LOG_CHANNELS, *POWERSHELL_CHANNELS, *SYSMON_CHANNELS])
+    def _bg_collector_check():
+        check_collector_permissions([
+            *SECURITY_LOG_CHANNELS,
+            *POWERSHELL_CHANNELS,
+            *SYSMON_CHANNELS,
+            *ALL_EXTENDED_CHANNELS,
+        ])
+
+    threading.Thread(target=_bg_collector_check, daemon=True).start()
     # Capability banner: many high-value detections depend on the Sysmon channel.
     # When it is absent the platform silently loses in-memory / process-tree
     # coverage, so call it out loudly at startup (see red_team_validation.md #2/#4).
@@ -906,6 +920,8 @@ def health():
     overall_status = "ok"
     status_code = 200
 
+    from fastapi.responses import JSONResponse as _JSONResp
+
     # Database check
     try:
         db = SessionLocal()
@@ -917,20 +933,20 @@ def health():
         overall_status = "error"
         status_code = 503
 
-    # ML model check (if ML is enabled)
+    # ML model check (if ML is enabled) - WARNING only, never blocks startup
     if settings.ml_rule_weight > 0 or settings.ml_detection_weight > 0:
         try:
             from backend.ml.anomaly import get_detector
             if get_detector().is_ready:
                 checks["ml_model"] = {"status": "ok", "message": "ML model is ready"}
             else:
-                checks["ml_model"] = {"status": "error", "message": "ML model is not ready"}
-                overall_status = "error"
-                status_code = 503
+                checks["ml_model"] = {"status": "warning", "message": "ML model not trained yet (will train on first data cycle)"}
+                if overall_status == "ok":
+                    overall_status = "warning"
         except Exception as e:
-            checks["ml_model"] = {"status": "error", "message": str(e)}
-            overall_status = "error"
-            status_code = 503
+            checks["ml_model"] = {"status": "warning", "message": f"ML model check skipped: {e}"}
+            if overall_status == "ok":
+                overall_status = "warning"
     else:
         checks["ml_model"] = {"status": "skipped", "message": "ML model check skipped (ML weights are zero)"}
 
@@ -965,25 +981,23 @@ def health():
     # If we have any critical errors (database or ml_model), we already set status_code to 503
     # and overall_status to "error". Otherwise, we return 200 with the overall status.
 
+    _no_cache = {"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"}
+    health_body = {
+        "status": overall_status,
+        "checks": checks,
+        "data_quality": {
+            "status": status_for_rate(rate),
+            "corruption_rate": round(rate, 4),
+        },
+    }
+
     if status_code == 200:
-        return {
-            "status": overall_status,
-            "checks": checks,
-            # Top-level data-quality block (healthy/warning/degraded/critical
-            # vocabulary) so consoles and tests read it without digging
-            # through the raw dependency checks.
-            "data_quality": {
-                "status": status_for_rate(rate),
-                "corruption_rate": round(rate, 4),
-            },
-        }
+        return JSONResponse(content=health_body, headers=_no_cache)
     else:
         return JSONResponse(
             status_code=status_code,
-            content={
-                "status": overall_status,
-                "checks": checks,
-            }
+            content=health_body,
+            headers=_no_cache,
         )
 
 

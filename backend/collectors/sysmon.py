@@ -89,7 +89,33 @@ class SysmonCollector(BaseCollector):
     name = "sysmon"
 
     #: Sysmon event IDs this collector cares about.
-    EVENT_IDS = {1, 3, 10, 11, 13, 23}
+    #: Expanded in Phase 3 to cover 18 of 28+ Sysmon event types.
+    EVENT_IDS = {
+        1,   # Process Create
+        2,   # File creation time changed (timestomping)
+        3,   # Network Connect
+        4,   # Sysmon service state changed
+        5,   # Process Terminated
+        6,   # Driver Loaded (kernel driver loading)
+        7,   # Image loaded (DLL side-loading, search order hijacking)
+        8,   # CreateRemoteThread (process injection)
+        9,   # RawAccessRead (direct disk access)
+        10,  # Process Access (LSASS / credential access)
+        11,  # File Create (binary drop)
+        12,  # Registry Object Add/Delete (registry persistence)
+        13,  # Registry Event (Run-key persistence)
+        14,  # Registry Value Rename
+        15,  # FileCreateStreamHash (ADS abuse)
+        17,  # Pipe Created (lateral movement)
+        18,  # Pipe Connected (lateral movement)
+        19,  # WMI Event Filter (WMI persistence)
+        20,  # WMI Event Consumer
+        21,  # WMI Event Consumer to Filter Binding
+        22,  # DNS Query
+        23,  # File Delete Tracked
+        24,  # Clipboard Change
+        25,  # Process Tampering (memory modification)
+    }
 
     def __init__(self, channels: list[str] | None = None):
         super().__init__()

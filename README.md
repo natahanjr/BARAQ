@@ -54,7 +54,7 @@ BARAQ turns a Windows endpoint into a working Security Operations Center: it col
 
 | Layer | Capabilities |
 |---|---|
-| **Collection** | Windows security event log (4624, 4625, 4720, 4726, 4732, 4740, 4672...), running/new processes with parent-child relationships, active TCP connections + listening ports, PowerShell operational log, **Sysmon (process tree E1 / network E3 / process access E10 / file events E11 / registry E13 / file delete E23)**, plus a realistic attack simulator |
+| **Collection** | Windows event logs (Security, PowerShell, and **24+ extended channels: Defender, Firewall, Task Scheduler, RDP, WMI, Code Integrity, AppLocker, Group Policy, NTLM, Kerberos, Print Service, DNS Client, Hardware, USB, BitLocker, Disk, WFP**), running/new processes with parent-child relationships, active TCP connections + listening ports, **Sysmon (process tree E1 / network E3 / process access E10 / file events E11 / registry E13 / file delete E23)**, plus a realistic attack simulator |
 | **Processing** | Event normalization (Event ID / Category / User / Risk / Timestamp / Host) with **numeric risk scoring (0-100)** per event |
 | **Rule-Based Detection** | **100 native rules** covering all 14 MITRE ATT&CK tactic groups — Brute Force (T1110), Suspicious PowerShell (T1059.001), Privilege Escalation (T1068), Persistence (T1547), Network Reconnaissance (T1046), Lateral Movement (T1021), Data Staging (T1074), Malware File, Email Phishing, DNS/HTTP Exfiltration, USB Device, Kill-Chain Correlation (T1071), **Vulnerability Exploitation (T1190), Credential Access (T1003), Registry Run Keys (T1547.001), Scheduled Task Abuse (T1053.005), WMI Event Subscriptions (T1546.003), Account Tampering (T1098), Binary Masquerading (T1564), Artifact Hiding (T1564), LOLBins (T1218), Bulk Exfiltration (T1041), Log Clearing (T1070.001), C2 Beaconing (T1071), Ransomware Impact (T1486), Recovery Inhibition (T1490), Credential Store Theft (T1003), BITS Jobs (T1197), Shortcut Modification (T1547.009)** — each mapped to MITRE ATT&CK with confidence + remediation, plus a **Sigma engine** running the community rule set (2,512 rules, pulled via scripts/sigma_pull.py) |
 | **Correlation Rules** | **11 declarative YAML correlation chains** — multi-stage, multi-source joins (alert stages + raw-telemetry event stages on the same entity): initial-access→execution, persistence→credential access, discovery→lateral movement, collection→exfiltration, defense evasion→impact (ransomware), download→C2 beacon, plus event-telemetry brute-force→credential-theft chains |
@@ -167,7 +167,7 @@ BARAQ/
 │   ├── streaming/      # Kafka / Redis Streams / ES forwarding
 │   ├── threatintel/   # IOC enrichment (AbuseIPDB / OTX / VirusTotal)
 │   └── vulnscan/      # CVE database + local inventory matching
-├── frontend/          # React 18 + Tailwind CSS 4 + Recharts dashboard (login/MFA/SSO, alerts, incidents, users & audit, realtime, Search, Dashboards, Automation, Entity Risk Center)
+├── frontend/          # React 18 + Tailwind CSS 4 + Recharts dashboard (login/MFA/SSO, alerts, incidents, users & audit, realtime, Dashboards, Automation, Entity Risk Center, Detection Rules, MITRE ATT&CK Map, ML Detection, Network Analyzer, Threat Intelligence)
 ├── database/          # Local database (SQLite by default, PostgreSQL for fleets)
 ├── logs/              # Runtime logs
 ├── reports/           # Generated security reports

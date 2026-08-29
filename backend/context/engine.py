@@ -75,6 +75,10 @@ _KNOWN_TOOL_PROCESSES = {
     "outlook.exe", "winword.exe", "excel.exe", "powerpnt.exe", "onenote.exe",
     "teams.exe", "slack.exe", "discord.exe", "zoom.exe", "code.exe",
     "code-insiders.exe", "winpty.exe", "agent.exe", "grep.exe", "find.exe",
+    # Communication / collaboration apps (legitimate external connections).
+    "spotify.exe", "telegram.exe", "signal.exe", "whatsapp.exe",
+    # System update / security agents.
+    "MpCmdRun.exe", "MpDlpCmd.exe", "MsMpEng.exe",
 }
 
 _DEV_PROCESSES = {

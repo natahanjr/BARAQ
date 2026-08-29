@@ -363,6 +363,53 @@ POWERSHELL_CHANNELS = [
     "Microsoft-Windows-PowerShell/Operational",
     "Windows PowerShell",
 ]
+# Extended channels for comprehensive endpoint detection (Phase 3)
+APPLICATION_LOG_CHANNEL = ["Application"]
+DEFENDER_LOG_CHANNEL = ["Microsoft-Windows-Windows Defender/Operational"]
+FIREWALL_LOG_CHANNEL = [
+    "Microsoft-Windows-Windows Firewall With Advanced Security/Firewall",
+]
+WFP_LOG_CHANNEL = ["Microsoft-Windows-WFP/Operational"]
+TASK_SCHEDULER_CHANNEL = ["Microsoft-Windows-TaskScheduler/Operational"]
+TERMINAL_SERVICES_CHANNEL = [
+    "Microsoft-Windows-TerminalServices-LocalSessionManager/Operational",
+    "Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational",
+]
+WMI_ACTIVITY_CHANNEL = ["Microsoft-Windows-WMI-Activity/Operational"]
+CODE_INTEGRITY_CHANNEL = ["Microsoft-Windows-CodeIntegrity/Operational"]
+DRIVER_FRAMEWORKS_CHANNEL = [
+    "Microsoft-Windows-DriverFrameworks-UserMode/Operational",
+]
+GROUP_POLICY_CHANNEL = ["Microsoft-Windows-GroupPolicy/Operational"]
+NTLM_LOG_CHANNEL = ["Microsoft-Windows-NTLM/Operational"]
+KERBEROS_LOG_CHANNEL = ["Microsoft-Windows-Kerberos/Operational"]
+PRINT_SERVICE_CHANNEL = ["Microsoft-Windows-PrintService/Operational"]
+APPLOCKER_CHANNEL = ["Microsoft-Windows-AppLocker/Operational"]
+
+#: All extended channels combined for the expanded collector
+DNS_CLIENT_CHANNEL = ["Microsoft-Windows-DNS-Client/Operational"]
+HARDWARE_EVENTS_CHANNEL = ["Hardware Events"]
+USB_CHANNEL = ["Microsoft-Windows-Partition/Diagnostic"]
+PRINT_SERVICE_FULL_CHANNEL = ["Microsoft-Windows-PrintService/Operational"]
+BITLocker_CHANNEL = ["Microsoft-Windows-BitLocker-API/Management"]
+DISK_CHANNEL = ["Microsoft-Windows-DiskDiagnostic/Operational"]
+WINDOWS_DEFENDER_ALPHA_CHANNEL = ["Microsoft-Windows-Windows Defender/Operational"]
+WINDOWS_FIREWALL_CONNECTION_CHANNEL = [
+    "Microsoft-Windows-Windows Firewall With Advanced Security/ConnectionSuccess",
+    "Microsoft-Windows-Windows Firewall With Advanced Security/ConnectionFailure",
+]
+
+ALL_EXTENDED_CHANNELS = (
+    APPLICATION_LOG_CHANNEL + DEFENDER_LOG_CHANNEL + FIREWALL_LOG_CHANNEL
+    + WFP_LOG_CHANNEL + TASK_SCHEDULER_CHANNEL + TERMINAL_SERVICES_CHANNEL
+    + WMI_ACTIVITY_CHANNEL + CODE_INTEGRITY_CHANNEL + DRIVER_FRAMEWORKS_CHANNEL
+    + GROUP_POLICY_CHANNEL + NTLM_LOG_CHANNEL + KERBEROS_LOG_CHANNEL
+    + PRINT_SERVICE_CHANNEL + APPLOCKER_CHANNEL + DNS_CLIENT_CHANNEL
+    + HARDWARE_EVENTS_CHANNEL + USB_CHANNEL + PRINT_SERVICE_FULL_CHANNEL
+    + BITLocker_CHANNEL + DISK_CHANNEL + WINDOWS_DEFENDER_ALPHA_CHANNEL
+    + WINDOWS_FIREWALL_CONNECTION_CHANNEL
+)
+
 MAX_RAW_EVENT_SIZE = 64 * 1024
 
 # --------------------------------------------------------------------------
@@ -1132,7 +1179,7 @@ INGEST_ASYNC_DETECT = os.environ.get("BARAQ_INGEST_ASYNC_DETECT", "0").lower() i
 # Leave empty to use the fully local rule/TF-IDF engine (default).
 AI_API_URL = os.environ.get("BARAQ_AI_API_URL", "https://integrate.api.nvidia.com/v1")
 AI_API_KEY = _secret("BARAQ_AI_API_KEY", "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")
-AI_MODEL = os.environ.get("BARAQ_AI_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
+AI_MODEL = os.environ.get("BARAQ_AI_MODEL", "nvidia/nemotron-3-nano-30b-a3b")
 
 # --------------------------------------------------------------------------
 # Threat intelligence
