@@ -1,4 +1,4 @@
-"""Events, processes, network API endpoints."""
+"""Events, processes, network, DNS, HTTP API endpoints."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
-from backend.database.models import NetworkConnection, NormalizedEvent, ProcessRecord
+from backend.database.models import DnsQuery, HttpRequest, NetworkConnection, NormalizedEvent, ProcessRecord
 from backend.security import require_auth, tenant_scope
 
 router = APIRouter(prefix="/api", tags=["events"], dependencies=[Depends(require_auth)])
@@ -107,3 +107,108 @@ def list_network(
         stmt = stmt.where(NetworkConnection.remote_ip == remote_ip)
     rows = db.scalars(stmt.order_by(NetworkConnection.observed_at.desc()).limit(limit)).all()
     return {"total": len(rows), "items": [c.to_dict() for c in rows]}
+
+
+@router.get("/dns")
+def list_dns(
+    limit: int = Query(200, ge=1, le=1000),
+    process: str | None = None,
+    db: Session = Depends(get_db),
+):
+    stmt = select(DnsQuery)
+    if process:
+        stmt = stmt.where(DnsQuery.process.ilike(f"%{process}%"))
+    rows = db.scalars(stmt.order_by(DnsQuery.observed_at.desc()).limit(limit)).all()
+    return {"total": len(rows), "items": [d.to_dict() for d in rows]}
+
+
+@router.get("/http")
+def list_http(
+    limit: int = Query(200, ge=1, le=1000),
+    host: str | None = None,
+    method: str | None = None,
+    db: Session = Depends(get_db),
+):
+    stmt = select(HttpRequest)
+    if host:
+        stmt = stmt.where(HttpRequest.host.ilike(f"%{host}%"))
+    if method:
+        stmt = stmt.where(HttpRequest.method == method.upper())
+    rows = db.scalars(stmt.order_by(HttpRequest.observed_at.desc()).limit(limit)).all()
+    return {"total": len(rows), "items": [h.to_dict() for h in rows]}
+
+
+@router.get("/network/stats")
+def network_stats(db: Session = Depends(get_db)):
+    """Aggregated network stats for the traffic analyzer dashboard."""
+    # Total counts
+    conn_count = db.scalar(select(func.count(NetworkConnection.id))) or 0
+    dns_count = db.scalar(select(func.count(DnsQuery.id))) or 0
+    http_count = db.scalar(select(func.count(HttpRequest.id))) or 0
+
+    # Bandwidth totals
+    total_sent = db.scalar(select(func.coalesce(func.sum(NetworkConnection.bytes_sent), 0))) or 0
+    total_recv = db.scalar(select(func.coalesce(func.sum(NetworkConnection.bytes_recv), 0))) or 0
+
+    # Top remote IPs by connection count
+    top_ips = db.execute(
+        select(NetworkConnection.remote_ip, func.count(NetworkConnection.id).label("cnt"))
+        .where(NetworkConnection.remote_ip != "")
+        .group_by(NetworkConnection.remote_ip)
+        .order_by(func.count(NetworkConnection.id).desc())
+        .limit(10)
+    ).all()
+
+    # Top ports by connection count
+    top_ports = db.execute(
+        select(NetworkConnection.remote_port, func.count(NetworkConnection.id).label("cnt"))
+        .where(NetworkConnection.remote_port > 0)
+        .group_by(NetworkConnection.remote_port)
+        .order_by(func.count(NetworkConnection.id).desc())
+        .limit(10)
+    ).all()
+
+    # Top processes by connection count
+    top_processes = db.execute(
+        select(NetworkConnection.process, func.count(NetworkConnection.id).label("cnt"))
+        .where(NetworkConnection.process != "")
+        .group_by(NetworkConnection.process)
+        .order_by(func.count(NetworkConnection.id).desc())
+        .limit(10)
+    ).all()
+
+    # Top DNS query domains
+    top_dns = db.execute(
+        select(DnsQuery.query, func.count(DnsQuery.id).label("cnt"))
+        .group_by(DnsQuery.query)
+        .order_by(func.count(DnsQuery.id).desc())
+        .limit(10)
+    ).all()
+
+    # Top HTTP hosts
+    top_hosts = db.execute(
+        select(HttpRequest.host, func.count(HttpRequest.id).label("cnt"))
+        .where(HttpRequest.host != "")
+        .group_by(HttpRequest.host)
+        .order_by(func.count(HttpRequest.id).desc())
+        .limit(10)
+    ).all()
+
+    # Connection state distribution
+    state_dist = db.execute(
+        select(NetworkConnection.state, func.count(NetworkConnection.id).label("cnt"))
+        .where(NetworkConnection.state != "")
+        .group_by(NetworkConnection.state)
+        .order_by(func.count(NetworkConnection.id).desc())
+    ).all()
+
+    return {
+        "counts": {"connections": conn_count, "dns": dns_count, "http": http_count},
+        "bandwidth": {"bytes_sent": total_sent, "bytes_recv": total_recv},
+        "top_ips": [{"ip": r[0], "count": r[1]} for r in top_ips],
+        "top_ports": [{"port": r[0], "count": r[1]} for r in top_ports],
+        "top_processes": [{"process": r[0], "count": r[1]} for r in top_processes],
+        "top_dns": [{"query": r[0], "count": r[1]} for r in top_dns],
+        "top_hosts": [{"host": r[0], "count": r[1]} for r in top_hosts],
+        "state_distribution": [{"state": r[0], "count": r[1]} for r in state_dist],
+    }
