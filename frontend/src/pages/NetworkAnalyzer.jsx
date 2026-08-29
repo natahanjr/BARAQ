@@ -384,15 +384,22 @@ function NodeInspector({ node, connections, onClose, navigate, toast }) {
         <div>
           <h4 className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)] mb-2">Recent Connections ({relatedConns.length})</h4>
           <div className="space-y-1.5 max-h-[220px] overflow-y-auto">
-            {relatedConns.slice(0, 20).map((c) => (
-              <div key={c.id} className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[11px] bg-[var(--bg-inset)]">
-                <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: STATE_COLORS[c.state] || "var(--fg-muted)" }} />
-                <span className="font-mono text-[var(--fg-secondary)] truncate">
-                  {c.local_ip === node.id ? `→ ${c.remote_ip}:${c.remote_port || "—"}` : `${c.local_ip}:${c.local_port || "—"} →`}
-                </span>
-                <span className="ml-auto text-[var(--fg-muted)]">{c.state}</span>
-              </div>
-            ))}
+            {relatedConns.slice(0, 20).map((c) => {
+              const total = (c.bytes_sent || 0) + (c.bytes_recv || 0);
+              const upPct = total > 0 ? (c.bytes_sent / total) * 100 : 50;
+              return (
+                <div key={c.id} className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[11px] bg-[var(--bg-inset)]">
+                  <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: STATE_COLORS[c.state] || "var(--fg-muted)" }} />
+                  <span className="font-mono text-[var(--fg-secondary)] truncate">
+                    {c.local_ip === node.id ? `→ ${c.remote_ip}:${c.remote_port || "—"}` : `${c.local_ip}:${c.local_port || "—"} →`}
+                  </span>
+                  <span className="ml-auto flex items-center gap-1.5 text-[10px]">
+                    <span className="text-[var(--severity-high)]" title={`Sent: ${fmtBytes(c.bytes_sent)}`}>\u2191{fmtBytes(c.bytes_sent)}</span>
+                    <span className="text-[var(--accent-cyan)]" title={`Recv: ${fmtBytes(c.bytes_recv)}`}>\u2193{fmtBytes(c.bytes_recv)}</span>
+                  </span>
+                </div>
+              );
+            })}
             {relatedConns.length > 20 && (
               <p className="text-center text-[10px] text-[var(--fg-faint)] py-1">+{relatedConns.length - 20} more</p>
             )}
@@ -446,12 +453,40 @@ function ConnectionInspector({ edge, onClose, navigate, toast }) {
         {/* Stats */}
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface-active)] p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Bytes Sent</p>
-            <p className="mt-0.5 text-lg font-bold text-[var(--fg-primary)]">{fmtBytes(conn.bytes_sent)}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Bytes Sent \u2191</p>
+            <p className="mt-0.5 text-lg font-bold text-[var(--severity-high)]">{fmtBytes(conn.bytes_sent)}</p>
           </div>
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface-active)] p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Bytes Recv</p>
-            <p className="mt-0.5 text-lg font-bold text-[var(--fg-primary)]">{fmtBytes(conn.bytes_recv)}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Bytes Recv \u2193</p>
+            <p className="mt-0.5 text-lg font-bold text-[var(--accent-cyan)]">{fmtBytes(conn.bytes_recv)}</p>
+          </div>
+        </div>
+
+        {/* Byte Flow Split Bar */}
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Byte Flow</span>
+            <span className="text-[11px] font-medium text-[var(--fg-secondary)]">
+              {conn.bytes_sent + conn.bytes_recv > 0
+                ? `${Math.round((conn.bytes_sent / (conn.bytes_sent + conn.bytes_recv)) * 100)}% up`
+                : "—"}
+            </span>
+          </div>
+          <div className="flex h-3 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[var(--severity-high)] transition-all duration-500"
+              style={{ width: `${(conn.bytes_sent / Math.max(conn.bytes_sent + conn.bytes_recv, 1)) * 100}%` }}
+              title={`Sent: ${fmtBytes(conn.bytes_sent)}`}
+            />
+            <div
+              className="h-full bg-[var(--accent-cyan)] transition-all duration-500"
+              style={{ width: `${(conn.bytes_recv / Math.max(conn.bytes_sent + conn.bytes_recv, 1)) * 100}%` }}
+              title={`Recv: ${fmtBytes(conn.bytes_recv)}`}
+            />
+          </div>
+          <div className="mt-1.5 flex items-center justify-between text-[9px]">
+            <span className="inline-flex items-center gap-1 text-[var(--severity-high)]">\u25A0 Upload</span>
+            <span className="inline-flex items-center gap-1 text-[var(--accent-cyan)]">\u25A0 Download</span>
           </div>
         </div>
 
@@ -535,7 +570,8 @@ function ConnectionTable({ connections, onSelect }) {
             <SortHeader field="remote_ip">Destination</SortHeader>
             <SortHeader field="remote_port">Port</SortHeader>
             <SortHeader field="state">State</SortHeader>
-            <SortHeader field="bytes_sent">Bytes</SortHeader>
+            <SortHeader field="bytes_sent">Sent \u2191</SortHeader>
+            <SortHeader field="bytes_recv">Recv \u2193</SortHeader>
             <SortHeader field="process">Process</SortHeader>
             <SortHeader field="observed_at">Last Seen</SortHeader>
           </tr>
@@ -574,8 +610,11 @@ function ConnectionTable({ connections, onSelect }) {
                     {conn.state || "NONE"}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-[11px] font-mono text-[var(--fg-muted)] tabular-nums">
-                  {conn.bytes_sent || conn.bytes_recv ? fmtBytes((conn.bytes_sent || 0) + (conn.bytes_recv || 0)) : "\u2014"}
+                <td className="px-4 py-3 text-[11px] font-mono text-[var(--severity-high)] tabular-nums font-medium">
+                  {conn.bytes_sent ? fmtBytes(conn.bytes_sent) : <span className="text-[var(--fg-faint)]">—</span>}
+                </td>
+                <td className="px-4 py-3 text-[11px] font-mono text-[var(--accent-cyan)] tabular-nums font-medium">
+                  {conn.bytes_recv ? fmtBytes(conn.bytes_recv) : <span className="text-[var(--fg-faint)]">—</span>}
                 </td>
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--fg-secondary)] max-w-[140px]">
@@ -816,6 +855,47 @@ function AnalyticsView({ stats, connections }) {
   const hours = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0") + ":00");
   const maxCount = Math.max(...Object.values(timeMap), 1);
 
+  // Top talkers by total bytes (remote IP)
+  const talkerMap = {};
+  (connections || []).forEach((c) => {
+    if (!c.remote_ip) return;
+    const key = c.remote_ip;
+    if (!talkerMap[key]) talkerMap[key] = { ip: key, sent: 0, recv: 0, count: 0 };
+    talkerMap[key].sent += c.bytes_sent || 0;
+    talkerMap[key].recv += c.bytes_recv || 0;
+    talkerMap[key].count += 1;
+  });
+  const topTalkers = Object.values(talkerMap)
+    .map((t) => ({ ...t, total: t.sent + t.recv }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8);
+
+  // Per-process bandwidth
+  const procMap = {};
+  (connections || []).forEach((c) => {
+    const key = c.process || "unknown";
+    if (!procMap[key]) procMap[key] = { process: key, sent: 0, recv: 0, count: 0 };
+    procMap[key].sent += c.bytes_sent || 0;
+    procMap[key].recv += c.bytes_recv || 0;
+    procMap[key].count += 1;
+  });
+  const topProcessesBytes = Object.values(procMap)
+    .map((t) => ({ ...t, total: t.sent + t.recv }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8);
+
+  // Bandwidth time series (sent vs recv by hour)
+  const bwMap = {};
+  (connections || []).forEach((c) => {
+    if (!c.observed_at) return;
+    const d = new Date(c.observed_at);
+    const key = `${d.getHours()}:00`;
+    if (!bwMap[key]) bwMap[key] = { sent: 0, recv: 0 };
+    bwMap[key].sent += c.bytes_sent || 0;
+    bwMap[key].recv += c.bytes_recv || 0;
+  });
+  const maxBw = Math.max(...hours.map((h) => (bwMap[h]?.sent || 0) + (bwMap[h]?.recv || 0)), 1);
+
   const BarList = ({ items, labelKey, countKey, color }) => {
     const max = Math.max(...items.map((i) => i[countKey] || 0), 1);
     return (
@@ -891,6 +971,75 @@ function AnalyticsView({ stats, connections }) {
                 </div>
               );
             })}
+          </div>
+        </div>
+      </div>
+
+      {/* Bandwidth Time Series: Sent vs Recv */}
+      <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
+        <h3 className="text-[13px] font-semibold text-[var(--fg-primary)]">Bandwidth by Hour (Sent vs Recv)</h3>
+        <div className="mt-4 flex items-end gap-1 h-[120px]">
+          {hours.map((h) => {
+            const sent = bwMap[h]?.sent || 0;
+            const recv = bwMap[h]?.recv || 0;
+            const total = sent + recv;
+            return (
+              <div key={h} className="flex-1 flex flex-col items-center justify-end group relative">
+                <div className="w-full flex flex-col-reverse rounded-t-[var(--radius-sm)] overflow-hidden" style={{ height: `${(total / maxBw) * 100}%`, minHeight: total > 0 ? "3px" : "0" }}>
+                  <div className="w-full bg-[var(--severity-high)] transition-all duration-300 group-hover:opacity-80" style={{ height: `${sent / Math.max(total, 1) * 100}%` }} title={`Sent: ${fmtBytes(sent)}`} />
+                  <div className="w-full bg-[var(--accent-cyan)] transition-all duration-300 group-hover:opacity-80" style={{ height: `${recv / Math.max(total, 1) * 100}%` }} title={`Recv: ${fmtBytes(recv)}`} />
+                </div>
+                <span className="absolute -bottom-4 text-[8px] text-[var(--fg-faint)] opacity-0 group-hover:opacity-100 transition-opacity">{h.slice(0, 2)}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-5 flex items-center gap-4 text-[10px]">
+          <span className="inline-flex items-center gap-1.5 text-[var(--severity-high)]"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: "var(--severity-high)" }} /> Upload (Sent)</span>
+          <span className="inline-flex items-center gap-1.5 text-[var(--accent-cyan)]"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: "var(--accent-cyan)" }} /> Download (Recv)</span>
+        </div>
+      </div>
+
+      {/* Top Talkers by Bandwidth + Per-Process Bandwidth */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
+          <h3 className="text-[13px] font-semibold text-[var(--fg-primary)]">Top Talkers by Bandwidth</h3>
+          <div className="mt-4 space-y-2">
+            {topTalkers.map((t) => {
+              const total = t.total || 1;
+              const sentPct = (t.sent / total) * 100;
+              return (
+                <div key={t.ip} className="flex items-center gap-3">
+                  <span className="w-[120px] truncate text-[11px] font-mono text-[var(--fg-secondary)]" title={t.ip}>{t.ip}</span>
+                  <div className="flex-1 h-4 rounded-full overflow-hidden flex">
+                    <div className="h-full bg-[var(--severity-high)]" style={{ width: `${sentPct}%` }} title={`Sent: ${fmtBytes(t.sent)}`} />
+                    <div className="h-full bg-[var(--accent-cyan)]" style={{ width: `${100 - sentPct}%` }} title={`Recv: ${fmtBytes(t.recv)}`} />
+                  </div>
+                  <span className="w-[52px] text-right text-[11px] font-semibold text-[var(--fg-muted)]">{fmtBytes(t.total)}</span>
+                </div>
+              );
+            })}
+            {topTalkers.length === 0 && <p className="text-[11px] text-[var(--fg-faint)]">No bandwidth data</p>}
+          </div>
+        </div>
+        <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5">
+          <h3 className="text-[13px] font-semibold text-[var(--fg-primary)]">Bandwidth by Process</h3>
+          <div className="mt-4 space-y-2">
+            {topProcessesBytes.map((t) => {
+              const total = t.total || 1;
+              const sentPct = (t.sent / total) * 100;
+              return (
+                <div key={t.process} className="flex items-center gap-3">
+                  <span className="w-[120px] truncate text-[11px] font-mono text-[var(--fg-secondary)]" title={t.process}>{t.process}</span>
+                  <div className="flex-1 h-4 rounded-full overflow-hidden flex">
+                    <div className="h-full bg-[var(--severity-high)]" style={{ width: `${sentPct}%` }} title={`Sent: ${fmtBytes(t.sent)}`} />
+                    <div className="h-full bg-[var(--accent-cyan)]" style={{ width: `${100 - sentPct}%` }} title={`Recv: ${fmtBytes(t.recv)}`} />
+                  </div>
+                  <span className="w-[52px] text-right text-[11px] font-semibold text-[var(--fg-muted)]">{fmtBytes(t.total)}</span>
+                </div>
+              );
+            })}
+            {topProcessesBytes.length === 0 && <p className="text-[11px] text-[var(--fg-faint)]">No bandwidth data</p>}
           </div>
         </div>
       </div>
