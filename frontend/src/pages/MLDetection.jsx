@@ -36,15 +36,18 @@ function MLDetection() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Poll ML status every 10s when training is active or stale
+  // Poll ML status every 5s when training is active
   useEffect(() => {
     if (!training) return;
     const iv = setInterval(() => {
       api.mlStatus().then((s) => {
         setMlStatus(s || {});
-        if (s?.model_state === "HEALTHY" || s?.training === false) {
+        if (s && !s.training) {
           setTraining(false);
-          setTrainingResult((prev) => prev || { trained: true, window: "auto", message: "Training completed" });
+          setTrainingResult((prev) => {
+            if (prev?.status === "error") return prev;
+            return { trained: true, window: prev?.window || "auto", message: "Training completed" };
+          });
         }
       }).catch(() => {});
     }, 5000);
@@ -71,11 +74,15 @@ function MLDetection() {
     try {
       const result = await api.mlTrain({ force, sync: false });
       setTrainingResult(result);
-      toast({ title: "Training started", type: "success" });
+      if (result.scheduled) {
+        toast({ title: "Background training started", type: "success" });
+        return;
+      }
+      toast({ title: "Training complete", type: "success" });
+      setTraining(false);
     } catch (err) {
       setTrainingResult({ status: "error", message: err.message });
       toast({ title: "Training failed", description: err.message, type: "error" });
-    } finally {
       setTraining(false);
     }
   }, [toast]);
@@ -84,10 +91,10 @@ function MLDetection() {
   if (error) return <ErrorBanner message={error} onRetry={load} />;
 
   const models = [
-    { id: "isolation-forest", name: "Isolation Forest", type: "anomaly", desc: "Unsupervised outlier detection via isolation", state: mlStatus.model_state || "WARNING", version: mlStatus.version || 1, accuracy: 94, features: ["outlier_detection", "unsupervised", "feature_isolation"], trained: mlStatus.last_trained || "2026-08-28" },
-    { id: "xgboost", name: "XGBoost", type: "supervised", desc: "Gradient-boosted trees for supervised classification", state: "HEALTHY", version: 1, accuracy: 91, features: ["classification", "gradient_boosting", "feature_importance"], trained: mlStatus.last_trained || "2026-08-28" },
-    { id: "random-forest", name: "Random Forest", type: "supervised", desc: "Ensemble of decision trees for robust predictions", state: "HEALTHY", version: 1, accuracy: 89, features: ["ensemble", "bagging", "robustness"], trained: mlStatus.last_trained || "2026-08-28" },
-    { id: "hybrid-fusion", name: "Hybrid Fusion", type: "ensemble", desc: "Meta-learner combining all models with 60/40 rule/ML split", state: mlStatus.model_state || "WARNING", version: mlStatus.version || 1, accuracy: 96, features: ["meta_learning", "stacking", "hybrid_risk"], trained: mlStatus.last_trained || "2026-08-28" },
+    { id: "isolation-forest", name: "Isolation Forest", type: "anomaly", desc: "Unsupervised outlier detection via isolation", state: mlStatus.model_state || "WARNING", version: mlStatus.version || 1, accuracy: 94, features: ["outlier_detection", "unsupervised", "feature_isolation"], trained: mlStatus.trained_at || "2026-08-28" },
+    { id: "xgboost", name: "XGBoost", type: "supervised", desc: "Gradient-boosted trees for supervised classification", state: "HEALTHY", version: 1, accuracy: 91, features: ["classification", "gradient_boosting", "feature_importance"], trained: mlStatus.trained_at || "2026-08-28" },
+    { id: "random-forest", name: "Random Forest", type: "supervised", desc: "Ensemble of decision trees for robust predictions", state: "HEALTHY", version: 1, accuracy: 89, features: ["ensemble", "bagging", "robustness"], trained: mlStatus.trained_at || "2026-08-28" },
+    { id: "hybrid-fusion", name: "Hybrid Fusion", type: "ensemble", desc: "Meta-learner combining all models with 60/40 rule/ML split", state: mlStatus.model_state || "WARNING", version: mlStatus.version || 1, accuracy: 96, features: ["meta_learning", "stacking", "hybrid_risk"], trained: mlStatus.trained_at || "2026-08-28" },
   ];
 
   const overallState = mlStatus.model_state || "WARNING";
@@ -95,7 +102,7 @@ function MLDetection() {
   const trainingSamples = Number(mlStatus.samples || 1388).toLocaleString();
   const driftStatus = mlStatus.drift ? "Detected" : "Nominal";
   const autoTrainEnabled = !mlStatus.drift && overallState !== "UNTRAINED";
-  const lastTrained = mlStatus.last_trained ? new Date(mlStatus.last_trained).toLocaleString() : null;
+  const lastTrained = mlStatus.trained_at ? new Date(mlStatus.trained_at).toLocaleString() : null;
 
   const statCards = [
     { label: "Model State", value: overallState, color: overallState === "HEALTHY" ? "var(--status-healthy)" : overallState === "WARNING" ? "var(--severity-medium)" : "var(--severity-critical)", icon: training ? "\u23F3" : "\uD83D\uDD27" },

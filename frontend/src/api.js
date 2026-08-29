@@ -212,7 +212,13 @@ export const api = {
     return request(`/api/events?${qs.toString()}`);
   },
   processes: (limit = 200) => request(`/api/processes?limit=${limit}`),
-  network: (limit = 200) => request(`/api/network?limit=${limit}`),
+  network: (limit = 500, opts = {}) => {
+    const p = new URLSearchParams({ limit });
+    if (opts.since) p.set("since", opts.since);
+    if (opts.direction) p.set("direction", opts.direction);
+    if (opts.remote_ip) p.set("remote_ip", opts.remote_ip);
+    return request(`/api/network?${p.toString()}`);
+  },
   dns: (limit = 200, process = null) => {
     const p = new URLSearchParams({ limit });
     if (process) p.set("process", process);
@@ -225,6 +231,8 @@ export const api = {
     return request(`/api/http?${p.toString()}`);
   },
   networkStats: () => request("/api/network/stats"),
+  ipGeo: (ip) => request(`/api/network/geo?ip=${encodeURIComponent(ip)}`),
+  suppressions: () => request("/api/alerts/suppressions"),
   eventStatistics: () => request("/api/events/statistics"),
 
   datasetStatus: () => request("/api/telemetry/dataset"),

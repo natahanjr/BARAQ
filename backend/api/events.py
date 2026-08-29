@@ -98,13 +98,44 @@ def list_processes(limit: int = Query(200, ge=1, le=1000), db: Session = Depends
 
 @router.get("/network")
 def list_network(
-    limit: int = Query(200, ge=1, le=1000),
+    limit: int = Query(500, ge=1, le=2000),
     remote_ip: str | None = None,
+    since: str | None = None,
+    direction: str | None = None,
     db: Session = Depends(get_db),
 ):
     stmt = select(NetworkConnection)
     if remote_ip:
         stmt = stmt.where(NetworkConnection.remote_ip == remote_ip)
+    if since:
+        from datetime import datetime as _dt
+        try:
+            since_dt = _dt.fromisoformat(since)
+            stmt = stmt.where(NetworkConnection.observed_at >= since_dt)
+        except ValueError:
+            pass
+    if direction == "outbound":
+        # local is internal/private, remote is external
+        stmt = stmt.where(NetworkConnection.remote_ip != "").where(
+            ~NetworkConnection.remote_ip.like("10.%"),
+            ~NetworkConnection.remote_ip.like("192.168.%"),
+            ~NetworkConnection.remote_ip.like("172.16.%"),
+            ~NetworkConnection.remote_ip.like("172.17.%"),
+            ~NetworkConnection.remote_ip.like("172.18.%"),
+            ~NetworkConnection.remote_ip.like("172.19.%"),
+            ~NetworkConnection.remote_ip.like("172.2%"),
+            ~NetworkConnection.remote_ip.like("172.3%"),
+            ~NetworkConnection.remote_ip.like("127.%"),
+            ~NetworkConnection.remote_ip.like("0.%"),
+            ~NetworkConnection.remote_ip.like("::1"),
+        )
+    elif direction == "inbound":
+        stmt = stmt.where(NetworkConnection.remote_ip != "").where(
+            NetworkConnection.remote_ip.like("10.%"),
+            NetworkConnection.remote_ip.like("192.168.%"),
+            NetworkConnection.remote_ip.like("172.1%"),
+            NetworkConnection.remote_ip.like("127.%"),
+        )
     rows = db.scalars(stmt.order_by(NetworkConnection.observed_at.desc()).limit(limit)).all()
     return {"total": len(rows), "items": [c.to_dict() for c in rows]}
 
@@ -211,4 +242,62 @@ def network_stats(db: Session = Depends(get_db)):
         "top_dns": [{"query": r[0], "count": r[1]} for r in top_dns],
         "top_hosts": [{"host": r[0], "count": r[1]} for r in top_hosts],
         "state_distribution": [{"state": r[0], "count": r[1]} for r in state_dist],
+    }
+
+
+@router.get("/network/geo")
+def ip_geo(ip: str = Query(...)):
+    """Lightweight IP geolocation / classification enrichment (no external calls).
+
+    Returns country/region/org heuristics for external IPs so the UI can show
+    context without leaking data to third parties.
+    """
+    import ipaddress
+
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return {"ip": ip, "valid": False, "classification": "unknown"}
+
+    if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+        classification = "internal"
+    elif addr.is_multicast:
+        classification = "multicast"
+    else:
+        classification = "external"
+
+    # Heuristic org tagging by well-known ranges (no network egress)
+    org = "Unknown"
+    asn_hint = ""
+    ip_str = str(addr)
+    if classification == "external":
+        if ip_str.startswith("13.107") or ip_str.startswith("52.96") or ip_str.startswith("204.79.197"):
+            org = "Microsoft"
+        elif ip_str.startswith("142.250") or ip_str.startswith("142.251") or ip_str.startswith("172.217") or ip_str.startswith("216.58"):
+            org = "Google"
+        elif ip_str.startswith("149.154") or ip_str.startswith("91.108"):
+            org = "Telegram"
+        elif ip_str.startswith("162.159") or ip_str.startswith("104.16") or ip_str.startswith("172.64"):
+            org = "Cloudflare"
+        elif ip_str.startswith("20.190") or ip_str.startswith("20.86") or ip_str.startswith("40.1"):
+            org = "Azure"
+        elif ip_str.startswith("52.123") or ip_str.startswith("52.110"):
+            org = "Microsoft 365"
+        elif ip_str.startswith("135.116") or ip_str.startswith("13.107"):
+            org = "Microsoft"
+        elif ip_str.startswith("98.66") or ip_str.startswith("20.86"):
+            org = "Azure"
+        elif ip_str.startswith("140.82") or ip_str.startswith("199.232"):
+            org = "GitHub"
+        elif ip_str.startswith("173.194") or ip_str.startswith("74.125"):
+            org = "Google"
+
+    return {
+        "ip": ip,
+        "valid": True,
+        "classification": classification,
+        "version": addr.version,
+        "org": org,
+        "asn_hint": asn_hint,
+        "private": addr.is_private,
     }
