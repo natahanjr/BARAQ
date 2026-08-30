@@ -165,6 +165,24 @@ function AlertRow({ alert }) {
 
 /* ── Status Row ───────────────────────────────────────────────────────── */
 
+function collectorHealthOk(collectors) {
+  if (!collectors || !collectors.channels) return true;
+  const channels = collectors.channels;
+  if (!Array.isArray(channels) || channels.length === 0) return true;
+  const healthy = channels.filter((ch) => ch.ok).length;
+  return healthy > 0;
+}
+
+function collectorHealthNote(collectors) {
+  if (!collectors || !collectors.channels) return "initializing";
+  const channels = collectors.channels;
+  if (!Array.isArray(channels) || channels.length === 0) return "no channels";
+  const healthy = channels.filter((ch) => ch.ok).length;
+  const total = channels.length;
+  if (healthy === total) return `${total} channels active`;
+  return `${healthy}/${total} channels`;
+}
+
 function StatusRow({ label, ok, note }) {
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-[var(--border-subtle)] last:border-0">
@@ -237,10 +255,12 @@ export default function AppleDashboard() {
 
   const load = useCallback(async () => {
     try {
-      const [summary, alerts, mlStatus] = await Promise.all([
+      const [summary, alerts, mlStatus, systemHealth, collectorHealth] = await Promise.all([
         api.summary(),
         api.alerts({ page_size: 5 }),
         api.get("/api/system/ml/status").catch(() => ({})),
+        api.get("/api/health").catch(() => ({})),
+        api.get("/api/system/collectors/health").catch(() => ({})),
       ]);
       if (!alive.current) return;
       setData({
@@ -248,6 +268,8 @@ export default function AppleDashboard() {
         alerts: alerts.items || [],
         totalAlerts: alerts.total ?? (alerts.items || []).length,
         ml: mlStatus || {},
+        health: systemHealth || {},
+        collectors: collectorHealth || {},
       });
       setUpdated(new Date());
       setError("");
@@ -273,7 +295,7 @@ export default function AppleDashboard() {
     );
   }
 
-  const { summary, alerts, ml } = data;
+  const { summary, alerts, ml, health, collectors } = data;
   const score = summary?.security_score ?? 0;
 
   return (
@@ -410,10 +432,26 @@ export default function AppleDashboard() {
             <CardTitle>System Health</CardTitle>
           </CardHeader>
           <CardContent>
-            <StatusRow label="Telemetry" ok note="streaming" />
-            <StatusRow label="Detection engine" ok note="online" />
-            <StatusRow label="ML model" ok={ml.model_state !== "CRITICAL"} note={ml.model_state?.toLowerCase() || "—"} />
-            <StatusRow label="Threat intel" ok={!ml.drift} note={ml.drift ? "drift detected" : "nominal"} />
+            <StatusRow
+              label="Telemetry"
+              ok={collectorHealthOk(collectors)}
+              note={collectorHealthNote(collectors)}
+            />
+            <StatusRow
+              label="Detection engine"
+              ok={health.checks?.database?.status === "ok"}
+              note={health.checks?.database?.status === "ok" ? "online" : health.checks?.database?.message || "offline"}
+            />
+            <StatusRow
+              label="ML model"
+              ok={ml.model_state && ml.model_state !== "CRITICAL" && ml.model_state !== "UNTRAINED"}
+              note={ml.model_state === "HEALTHY" ? `v${ml.version} healthy` : ml.model_state?.toLowerCase() || "untrained"}
+            />
+            <StatusRow
+              label="Threat intel"
+              ok={!ml.drift && ml.ready}
+              note={ml.drift ? "drift detected" : ml.ready ? "nominal" : "not ready"}
+            />
           </CardContent>
         </Card>
       </section>
