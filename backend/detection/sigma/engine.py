@@ -7,12 +7,13 @@ the Sigma matcher, and evaluates them against the normalized event window.
 Performance: rules are cached per directory fingerprint; a per-rule EventID
 index prefilters candidates so only plausible rules are matched per event.
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import select
@@ -95,18 +96,26 @@ def _rule_uses_process_fields(rule: SigmaRule) -> bool:
     """True when a rule's selections depend on process identity/activity
     fields - matches are meaningless on events whose process data is
     incomplete (no image / command line captured)."""
-    candidates = {f.replace("_", "").replace(".", "").replace("-", "") for f in PROCESS_FIELDS}
+    candidates = {
+        f.replace("_", "").replace(".", "").replace("-", "") for f in PROCESS_FIELDS
+    }
     for selection in rule.detection.values():
         if not isinstance(selection, dict):
             continue
         for key in selection:
             field = (
-                str(key).split("|")[0].strip().lower()
-                .replace("_", "").replace(".", "").replace("-", "")
+                str(key)
+                .split("|")[0]
+                .strip()
+                .lower()
+                .replace("_", "")
+                .replace(".", "")
+                .replace("-", "")
             )
             if field in candidates:
                 return True
     return False
+
 
 _cache: dict[tuple, list[SigmaRule]] = {}
 
@@ -194,11 +203,13 @@ class SigmaRuleEngine(BaseRule):
         self.rules_dir = Path(rules_dir or SIGMA_RULES_DIR)
         self.rules = load_rules_cached(self.rules_dir)
 
-    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
+    def evaluate(
+        self, window_minutes: int, since_id: int | None = None
+    ) -> list[DetectionResult]:
         if not self.rules:
             return []
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         def _query_events(extra_id_cond=None):
             stmt = select(NormalizedEvent).where(
@@ -229,7 +240,7 @@ class SigmaRuleEngine(BaseRule):
 
         # EventID universe for cheap rule-level pruning: a rule whose required
         # EventIDs do not intersect the window can never fire.
-        window_ids: set[int] = {event.event_id for event in events}
+        {event.event_id for event in events}
 
         # Fields cache: build_event_fields() is pure per event - rebuild once
         # per cycle instead of once per (rule x event) pair.
@@ -351,7 +362,9 @@ class SigmaRuleEngine(BaseRule):
                     logger.debug(
                         "Sigma: skipping '%s' for event %s - process data "
                         "incomplete (%s)",
-                        rule.title, event.id, ", ".join(integrity["truncated_fields"]),
+                        rule.title,
+                        event.id,
+                        ", ".join(integrity["truncated_fields"]),
                     )
                     continue
                 cond = compiled.get(rule.rule_id)
@@ -365,9 +378,9 @@ class SigmaRuleEngine(BaseRule):
                 # regardless of which Sigma rule they trip.
                 if is_trusted_agent_activity(event.message, *fields.values()):
                     logger.info(
-                        "FP-suppressed (trusted agent path): rule '%s' on "
-                        "event %s",
-                        rule.title, event.id,
+                        "FP-suppressed (trusted agent path): rule '%s' on " "event %s",
+                        rule.title,
+                        event.id,
                     )
                     continue
                 # FP filter: known-benign Windows operations that sigma rules
@@ -377,7 +390,9 @@ class SigmaRuleEngine(BaseRule):
                     logger.info(
                         "FP-suppressed (benign Windows operation): rule '%s' "
                         "on event %s: %s",
-                        rule.title, event.id, (event.message or "")[:120],
+                        rule.title,
+                        event.id,
+                        (event.message or "")[:120],
                     )
                     continue
                 emitted[rule.rule_id] = emitted.get(rule.rule_id, 0) + 1

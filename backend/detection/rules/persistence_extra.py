@@ -5,17 +5,21 @@ persistence (T1543.003), AppInit_DLLs (T1546.010), accessibility-feature
 backdoors (T1546.008), Image File Execution Options debuggers (T1546.012),
 Netsh helper DLLs (T1546.007) and login scripts (T1037.001).
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
 from backend.database.models import NormalizedEvent
 from backend.detection.rules.base import BaseRule, DetectionResult
 
-_SUSPICIOUS_DIRS = re.compile(r"\\Temp\\|\\Users\\Public\\|\\AppData\\|\\Downloads\\|\\ProgramData\\", re.IGNORECASE)
+_SUSPICIOUS_DIRS = re.compile(
+    r"\\Temp\\|\\Users\\Public\\|\\AppData\\|\\Downloads\\|\\ProgramData\\",
+    re.IGNORECASE,
+)
 
 _STARTUP_FOLDERS = re.compile(
     r"\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\|"
@@ -26,9 +30,12 @@ _SERVICE_IMAGE = re.compile(
     r"\\CurrentControlSet\\Services\\[^\\]+\\ImagePath|\\CurrentControlSet\\Services\\[^\\]+\\Parameters\\ServiceDll",
     re.IGNORECASE,
 )
-_APPINIT = re.compile(r"\\Windows NT\\CurrentVersion\\Windows\\AppInit_DLLs", re.IGNORECASE)
+_APPINIT = re.compile(
+    r"\\Windows NT\\CurrentVersion\\Windows\\AppInit_DLLs", re.IGNORECASE
+)
 _ACC_FEATURE = re.compile(
-    r"\\(sethc|utilman|narrator|magnify|osk|displayswitch|atbroker)\.exe", re.IGNORECASE,
+    r"\\(sethc|utilman|narrator|magnify|osk|displayswitch|atbroker)\.exe",
+    re.IGNORECASE,
 )
 _IFEO = re.compile(r"\\Image File Execution Options\\[^\\]+\\Debugger", re.IGNORECASE)
 _NETSH_HELPER = re.compile(r"\bnetsh(?:\.exe)?\b[^\n]*\badd\s+helper\b", re.IGNORECASE)
@@ -58,7 +65,7 @@ class StartupFolderRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 11,
@@ -100,7 +107,7 @@ class ServiceImagePathPersistenceRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 13,
@@ -123,7 +130,9 @@ class ServiceImagePathPersistenceRule(BaseRule):
                         f"'{facts.get('image', '?')}' as '{event.user}'."
                     ),
                     event_ids=[event.id],
-                    confidence=min(0.95, self.confidence + (0.1 if suspicious else 0.0)),
+                    confidence=min(
+                        0.95, self.confidence + (0.1 if suspicious else 0.0)
+                    ),
                 )
             )
         return findings
@@ -146,7 +155,7 @@ class AppInitDllRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 13,
@@ -191,7 +200,7 @@ class AccessibilityFeatureRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         # 1) File create (Sysmon 11) replacing an accessibility binary.
         rows = self.session.scalars(
@@ -258,7 +267,7 @@ class IfeoDebuggerRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 13,
@@ -303,7 +312,7 @@ class NetshHelperRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _NETSH_HELPER.search(cmdline):
                 continue
@@ -336,7 +345,7 @@ class LogonScriptRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 13,
@@ -350,7 +359,9 @@ class LogonScriptRule(BaseRule):
             if not _LOGON_SCRIPT.search(target):
                 continue
             details = facts.get("details") or ""
-            suspicious = bool(_SUSPICIOUS_DIRS.search(details)) or bool(details and "C:\\Windows" not in details)
+            suspicious = bool(_SUSPICIOUS_DIRS.search(details)) or bool(
+                details and "C:\\Windows" not in details
+            )
             findings.append(
                 self._result(
                     evidence=(
@@ -358,7 +369,9 @@ class LogonScriptRule(BaseRule):
                         f"'{facts.get('image', '?')}' as '{event.user}'."
                     ),
                     event_ids=[event.id],
-                    confidence=min(0.95, self.confidence + (0.15 if suspicious else 0.0)),
+                    confidence=min(
+                        0.95, self.confidence + (0.15 if suspicious else 0.0)
+                    ),
                 )
             )
         return findings

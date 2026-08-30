@@ -6,6 +6,7 @@ over-grouping and under-grouping. No accuracy percentage is ever
 fabricated - there is no claim of "99% grouping accuracy" without a
 proper labeled dataset.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -14,7 +15,6 @@ from sqlalchemy.orm import Session
 from backend.aggregation.engine import process_alerts
 from backend.aggregation.evaluation_data import SCENARIOS
 from backend.aggregation.models import BehaviorGroupMember
-from backend.alerting.models import AlertRecord
 
 
 def run_evaluation(db: Session) -> dict:

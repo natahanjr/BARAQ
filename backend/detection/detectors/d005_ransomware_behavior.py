@@ -8,6 +8,7 @@ Requires behavioral evidence, never a single file event:
 
 Produces a DETECTION only - never a CRITICAL INCIDENT by itself.
 """
+
 from __future__ import annotations
 
 from collections import Counter
@@ -21,14 +22,24 @@ from backend.telemetry.contract import EVENT
 FILE_THRESHOLD = 20
 HIGH_RATE_COUNT = 50
 WINDOW_MINUTES = 5
-SHADOW_MARKERS = ("vssadmin", "delete shadows", "shadowcopy", "shadow_delete", "wmic shadowcopy delete")
+SHADOW_MARKERS = (
+    "vssadmin",
+    "delete shadows",
+    "shadowcopy",
+    "shadow_delete",
+    "wmic shadowcopy delete",
+)
 
 
 def _is_file_modification(event: EVENT) -> bool:
     action = event.action.lower()
     if event.event_type in ("file",):
-        return any(k in action for k in ("modify", "write", "create", "change", "rename"))
-    return any(k in action for k in ("file_modify", "file_write", "file_create", "file_rename"))
+        return any(
+            k in action for k in ("modify", "write", "create", "change", "rename")
+        )
+    return any(
+        k in action for k in ("file_modify", "file_write", "file_create", "file_rename")
+    )
 
 
 def _is_shadow_delete(event: EVENT) -> bool:
@@ -36,7 +47,9 @@ def _is_shadow_delete(event: EVENT) -> bool:
     if "shadow" in action and ("delete" in action or "remove" in action):
         return True
     proc = event.process or {}
-    command_line = str(proc.get("command_line") or event.facts.get("command_line") or "").lower()
+    command_line = str(
+        proc.get("command_line") or event.facts.get("command_line") or ""
+    ).lower()
     return "vssadmin" in command_line and "delete" in command_line
 
 
@@ -53,7 +66,9 @@ class RansomwareBehaviorDetector(Detector):
     enabled = True
     supported_event_types = ()  # file events may arrive under any event_type
 
-    def evaluate(self, event: EVENT, context: DetectionContext | None = None) -> DETECTION | None:
+    def evaluate(
+        self, event: EVENT, context: DetectionContext | None = None
+    ) -> DETECTION | None:
         if not _is_file_modification(event):
             return None
 
@@ -90,13 +105,25 @@ class RansomwareBehaviorDetector(Detector):
         event_ids = tuple(e.fingerprint for e in file_events) + (event.fingerprint(),)
 
         evidence = [
-            ev("file_modifications", count, f"within {WINDOW_MINUTES} minutes (threshold {FILE_THRESHOLD})"),
+            ev(
+                "file_modifications",
+                count,
+                f"within {WINDOW_MINUTES} minutes (threshold {FILE_THRESHOLD})",
+            ),
             ev("window_minutes", WINDOW_MINUTES, "defined evaluation window"),
             ev("host", event.host, "Target endpoint"),
-            ev("process", top_process, "Most frequent process performing modifications"),
+            ev(
+                "process", top_process, "Most frequent process performing modifications"
+            ),
         ]
         if shadow:
-            evidence.append(ev("shadow_copy_deletion", True, "Shadow copy deletion observed - recovery undermined"))
+            evidence.append(
+                ev(
+                    "shadow_copy_deletion",
+                    True,
+                    "Shadow copy deletion observed - recovery undermined",
+                )
+            )
 
         return DETECTION(
             detector_id=self.id,

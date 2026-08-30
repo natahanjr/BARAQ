@@ -10,7 +10,7 @@ cron job) do not create duplicates merely because of sub-minute jitter.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 #: Fields used to build the fingerprint string.
 _FP_PARTS = (
@@ -47,12 +47,12 @@ def fingerprint_timestamp(ts: datetime) -> str:
     sub-second clock jitter does not split logically identical events."""
     if ts is None:
         return ""
-    return ts.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return ts.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def fingerprint_row(ts: datetime | None, attrs: dict) -> str:
     """Fingerprint for a DB row already shaped as normalized attributes."""
-    ts_clean = ts.astimezone(timezone.utc) if ts else None
+    ts_clean = ts.astimezone(UTC) if ts else None
     row = dict(attrs)
     if ts_clean is not None:
         row["ts"] = ts_clean.replace(second=0, microsecond=0).isoformat()

@@ -4,14 +4,15 @@ rule precision auto-tuning, and alert clustering.
 These are the four closed-loop mechanisms that let the system LEARN false
 positives instead of merely hardcoding them.
 """
+
 from __future__ import annotations
 
-import pytest
-
+from datetime import UTC
 
 # ---------------------------------------------------------------------------
 # S1 - verdict-driven auto-suppression
 # ---------------------------------------------------------------------------
+
 
 def _mk_alert(db, rule="sigma_rules", host="ws-01", evidence=None, name="Test"):
     from backend.database.models import Alert
@@ -24,7 +25,8 @@ def _mk_alert(db, rule="sigma_rules", host="ws-01", evidence=None, name="Test"):
         confidence=0.8,
         rule=rule,
         host=host,
-        evidence=evidence or (
+        evidence=evidence
+        or (
             "Sigma 'X' matched event 4688 (Process) - user 'bob': "
             "process 'powershell.exe' reputation=trusted "
             "(C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe) "
@@ -39,12 +41,17 @@ def _mk_alert(db, rule="sigma_rules", host="ws-01", evidence=None, name="Test"):
 def _verdict_fp(db, alert):
     from backend.database.models import AlertVerdict
 
-    db.add(AlertVerdict(alert_id=alert.id, verdict="false_positive", created_by="analyst"))
+    db.add(
+        AlertVerdict(alert_id=alert.id, verdict="false_positive", created_by="analyst")
+    )
     db.commit()
 
 
 def test_auto_suppress_creates_rule_at_threshold(db):
-    from backend.detection.auto_suppress import maybe_auto_suppress, FP_AUTO_SUPPRESS_THRESHOLD
+    from backend.detection.auto_suppress import (
+        FP_AUTO_SUPPRESS_THRESHOLD,
+        maybe_auto_suppress,
+    )
     from backend.detection.suppression import list_rules
 
     # Same host: the signature is rule+subject+parent+host-scoped.
@@ -54,11 +61,15 @@ def test_auto_suppress_creates_rule_at_threshold(db):
         _verdict_fp(db, a)
         results.append(maybe_auto_suppress(db, a, actor="analyst"))
 
-    assert [r["suppressed"] for r in results[: FP_AUTO_SUPPRESS_THRESHOLD - 1]] == [False] * (FP_AUTO_SUPPRESS_THRESHOLD - 1)
+    assert [r["suppressed"] for r in results[: FP_AUTO_SUPPRESS_THRESHOLD - 1]] == [
+        False
+    ] * (FP_AUTO_SUPPRESS_THRESHOLD - 1)
     assert any(r["suppressed"] for r in results)
 
     rules = list_rules(db)
-    target = next((r for r in rules if r.reason.startswith("Auto-suppressed after")), None)
+    target = next(
+        (r for r in rules if r.reason.startswith("Auto-suppressed after")), None
+    )
     assert target is not None
     assert target.rule == "sigma_rules"
     assert target.host == "ws-01"  # scoped to the affected host
@@ -78,7 +89,7 @@ def test_no_autosuppress_below_threshold(db):
 
 def test_distinct_behaviours_do_not_accumulate(db):
     """FPs on different parents are different signatures - never merged."""
-    from backend.detection.auto_suppress import maybe_auto_suppress, fp_signature
+    from backend.detection.auto_suppress import fp_signature, maybe_auto_suppress
 
     a1 = _mk_alert(
         db,
@@ -108,23 +119,31 @@ def test_distinct_behaviours_do_not_accumulate(db):
 # S2 - per-host behavioural baseline
 # ---------------------------------------------------------------------------
 
+
 def test_baseline_learn_lookup_novel(db):
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from backend.context.baseline import learn_chains, lookup_chain
     from backend.database.models import NormalizedEvent
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for i in range(4):  # >= MIN_OCCURRENCES
         db.add(
             NormalizedEvent(
-                source="test", event_id=4688, category="process",
-                severity="info", message="proc", user="u", host="BASE-HOST",
+                source="test",
+                event_id=4688,
+                category="process",
+                severity="info",
+                message="proc",
+                user="u",
+                host="BASE-HOST",
                 timestamp=now - timedelta(minutes=i),
-                raw_json={"facts": {
-                    "new_process_name": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-                    "parent_process_name": "C:\\tools\\opencode.exe",
-                }},
+                raw_json={
+                    "facts": {
+                        "new_process_name": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                        "parent_process_name": "C:\\tools\\opencode.exe",
+                    }
+                },
             )
         )
     db.commit()
@@ -149,9 +168,10 @@ def test_baseline_requires_min_occurrences(db):
 # Reopen-guard: analyst-closed findings must not resurrect as new alerts.
 # ---------------------------------------------------------------------------
 
+
 def test_closed_alert_stays_closed_on_retrigger(db):
     """Same finding after an analyst close -> counters refresh, no new alert."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from sqlalchemy import select
 
@@ -160,7 +180,7 @@ def test_closed_alert_stays_closed_on_retrigger(db):
 
     a = _mk_alert(db, rule="unusual_port", host="ws-01")
     a.status = "closed"
-    a.updated_at = datetime.now(timezone.utc)
+    a.updated_at = datetime.now(UTC)
     db.commit()
 
     class _R:
@@ -175,12 +195,8 @@ def test_closed_alert_stays_closed_on_retrigger(db):
     svc = AlertingService(db)
     # The dedup path needs at least one linked-event-free pass; run the gate
     # by calling handle_findings with our synthetic result.
-    res = svc.handle_findings([_R()], org="")
-    remaining = [
-        x for x in db.scalars(
-            select(Alert).where(Alert.name == a.name)
-        ).all()
-    ]
+    svc.handle_findings([_R()], org="")
+    remaining = [x for x in db.scalars(select(Alert).where(Alert.name == a.name)).all()]
     assert len(remaining) == 1, "reopen-guard must not create a duplicate"
     assert remaining[0].status == "closed"
 
@@ -189,10 +205,11 @@ def test_closed_alert_stays_closed_on_retrigger(db):
 # S3 - rule precision auto-tuning
 # ---------------------------------------------------------------------------
 
+
 def test_precision_tuner_damps_broken_rules(db):
     """A rule with many closed-quiet alerts gets its risk weight damped."""
-    from backend.detection.rule_precision import auto_tune
     from backend.database.models import Alert
+    from backend.detection.rule_precision import auto_tune
     from backend.detection.tuning import get_raw
 
     # Classic noise profile: closed, never actioned, saturated repeats,
@@ -200,8 +217,12 @@ def test_precision_tuner_damps_broken_rules(db):
     for i in range(12):
         db.add(
             Alert(
-                name=f"noise {i}", description="d", severity="low",
-                status="closed", confidence=0.5, rule="noisy_sigma",
+                name=f"noise {i}",
+                description="d",
+                severity="low",
+                status="closed",
+                confidence=0.5,
+                rule="noisy_sigma",
                 trigger_count=20,
             )
         )
@@ -215,13 +236,21 @@ def test_precision_tuner_damps_broken_rules(db):
 
 
 def test_precision_tuner_ignores_small_samples(db):
-    from backend.detection.rule_precision import auto_tune
     from backend.database.models import Alert
+    from backend.detection.rule_precision import auto_tune
     from backend.detection.tuning import get_raw
 
     for i in range(3):
-        db.add(Alert(name=f"tiny {i}", description="d", severity="low",
-                     status="open", confidence=0.5, rule="tiny_rule"))
+        db.add(
+            Alert(
+                name=f"tiny {i}",
+                description="d",
+                severity="low",
+                status="open",
+                confidence=0.5,
+                rule="tiny_rule",
+            )
+        )
     db.commit()
     auto_tune(db)
     weights = get_raw(db).get("rule_risk_weights") or {}
@@ -231,6 +260,7 @@ def test_precision_tuner_ignores_small_samples(db):
 # ---------------------------------------------------------------------------
 # S4 - FP clustering
 # ---------------------------------------------------------------------------
+
 
 def test_clusters_group_by_signature(db):
     from backend.api.fp_analysis import clusters

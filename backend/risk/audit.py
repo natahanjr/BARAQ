@@ -4,9 +4,10 @@ Every state-changing operation is recorded with old/new score and state, the
 factor or source involved and the model version. Audit rows are append-only
 and never deleted (spec 6.72).
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -14,7 +15,7 @@ from backend.risk.models import EntityRiskV2AuditEvent
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def audit(

@@ -1,13 +1,13 @@
 """Phase 7 incident audit trail (spec 7.20)."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
 from backend.incidents.contract import AUDIT_ACTIONS
-from backend.incidents.models import IncidentV2AuditEvent, IncidentV2
+from backend.incidents.models import IncidentV2, IncidentV2AuditEvent
 
 
 def audit(
@@ -34,7 +34,7 @@ def audit(
         old_value=old_value,
         new_value=new_value,
         reason=reason,
-        created_at=now or datetime.now(timezone.utc).replace(tzinfo=None),
+        created_at=now or datetime.now(UTC).replace(tzinfo=None),
     )
     db.add(row)
     db.flush()
@@ -49,5 +49,3 @@ def get_audit(db, incident_id: str) -> list[IncidentV2AuditEvent]:
             .order_by(IncidentV2AuditEvent.id)
         ).all()
     )
-
-

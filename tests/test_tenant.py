@@ -4,6 +4,7 @@ An analyst may only read/act on records tagged with their organization;
 admins (and API keys) see everything. The ingest channel attaches the
 organization configured for the reporting agent.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -15,7 +16,6 @@ from backend.auth import create_token, hash_password
 from backend.database.connection import SessionLocal
 from backend.database.models import Alert, Endpoint, NormalizedEvent, User
 from tests.fixtures import brute_force
-
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -61,19 +61,13 @@ def admin_client():
 def test_pipeline_attaches_org_to_events_and_alerts(db):
     run_pipeline(db, brute_force(), org="univ-a")
     assert db.scalar(select(func.count(NormalizedEvent.id))) > 0
-    assert (
-        db.scalar(
-            select(func.count(NormalizedEvent.id)).where(NormalizedEvent.org == "univ-a")
-        )
-        == db.scalar(select(func.count(NormalizedEvent.id)))
-    )
+    assert db.scalar(
+        select(func.count(NormalizedEvent.id)).where(NormalizedEvent.org == "univ-a")
+    ) == db.scalar(select(func.count(NormalizedEvent.id)))
     assert db.scalar(select(func.count(Alert.id))) > 0
-    assert (
-        db.scalar(
-            select(func.count(Alert.id)).where(Alert.org == "univ-a")
-        )
-        == db.scalar(select(func.count(Alert.id)))
-    )
+    assert db.scalar(
+        select(func.count(Alert.id)).where(Alert.org == "univ-a")
+    ) == db.scalar(select(func.count(Alert.id)))
 
 
 def test_pipeline_default_org_is_empty(db):
@@ -90,7 +84,7 @@ def test_pipeline_default_org_is_empty(db):
 
 
 def test_ingest_attributes_org_from_agent_mapping(admin_client, monkeypatch):
-    import backend.config as config
+    from backend import config
 
     monkeypatch.setitem(config.AGENT_ORGS, "agent-dev", "univ-a")
     body = {
@@ -106,7 +100,9 @@ def test_ingest_attributes_org_from_agent_mapping(admin_client, monkeypatch):
     assert resp.json()["org"] == "univ-a"
 
     with SessionLocal() as s:
-        events = s.scalars(select(NormalizedEvent).where(NormalizedEvent.org == "univ-a")).all()
+        events = s.scalars(
+            select(NormalizedEvent).where(NormalizedEvent.org == "univ-a")
+        ).all()
         assert events, "ingested events must carry the agent org"
         ep = s.get(Endpoint, "agent-dev")
         assert ep is not None and ep.org == "univ-a"
@@ -156,18 +152,21 @@ def test_alerts_are_scoped_per_org(seeded, admin_client):
 
 
 def test_alert_detail_is_404_across_orgs(seeded, admin_client):
-    org_a_alert = db_scalar(
-        select(Alert).where(Alert.org == "univ-a")
-    )
+    org_a_alert = db_scalar(select(Alert).where(Alert.org == "univ-a"))
     analyst_b = _make_user(seeded, "analyst-bb", org="univ-b")
-    resp = admin_client.get(f"/api/alerts/{org_a_alert.id}", headers=_headers(analyst_b))
+    resp = admin_client.get(
+        f"/api/alerts/{org_a_alert.id}", headers=_headers(analyst_b)
+    )
     assert resp.status_code == 404
-    own = admin_client.get(f"/api/alerts/{org_a_alert.id}", headers=_headers(_make_user(seeded, "analyst-aa", org="univ-a")))
+    own = admin_client.get(
+        f"/api/alerts/{org_a_alert.id}",
+        headers=_headers(_make_user(seeded, "analyst-aa", org="univ-a")),
+    )
     assert own.status_code == 200
 
 
 def test_alert_queries_are_scoped_by_org(seeded, db):
-    analyst_a = _make_user(db, "analyst-count", org="univ-a")
+    _make_user(db, "analyst-count", org="univ-a")
     total_a = db.scalar(select(func.count(Alert.id)).where(Alert.org == "univ-a"))
     total_all = db.scalar(select(func.count(Alert.id)))
     from backend.analyzers import dashboard
@@ -189,10 +188,26 @@ def db_scalar(select_stmt):
 
 def test_endpoints_are_scoped_per_org(seeded, db, admin_client):
     with SessionLocal() as s:
-        s.add(Endpoint(agent_id="ep-a", host="host-a", org="univ-a", records_total=1,
-                       events_total=1, alerts_total=0))
-        s.add(Endpoint(agent_id="ep-b", host="host-b", org="univ-b", records_total=1,
-                       events_total=1, alerts_total=0))
+        s.add(
+            Endpoint(
+                agent_id="ep-a",
+                host="host-a",
+                org="univ-a",
+                records_total=1,
+                events_total=1,
+                alerts_total=0,
+            )
+        )
+        s.add(
+            Endpoint(
+                agent_id="ep-b",
+                host="host-b",
+                org="univ-b",
+                records_total=1,
+                events_total=1,
+                alerts_total=0,
+            )
+        )
         s.commit()
 
     analyst_a = _make_user(db, "endpoint-analyst", org="univ-a")
@@ -216,10 +231,14 @@ def test_tenant_scope_helper():
     from fastapi import Request
 
     def req(**extra):
-        scope = dict(
-            type="http", method="GET", path="/", scheme="http",
-            query_string=b"", headers=[(b"host", b"test")],
-        )
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "scheme": "http",
+            "query_string": b"",
+            "headers": [(b"host", b"test")],
+        }
         for k, v in extra.items():
             scope[k] = v
         return Request(scope)
@@ -227,12 +246,27 @@ def test_tenant_scope_helper():
     from backend.security import tenant_scope
 
     assert tenant_scope(req(state={"api_role": "admin"})) is None
-    assert tenant_scope(req(state={"api_role": "analyst", "token_user": {"role": "analyst", "org": "univ-a"}})) == "univ-a"
+    assert (
+        tenant_scope(
+            req(
+                state={
+                    "api_role": "analyst",
+                    "token_user": {"role": "analyst", "org": "univ-a"},
+                }
+            )
+        )
+        == "univ-a"
+    )
     assert tenant_scope(req(state={"api_role": "analyst"})) == ""
     # Admins can narrow via X-Org; nobody else can widen.
     scoped = req(state={"api_role": "admin"})
     scoped.scope["headers"] = [(b"host", b"test"), (b"x-org", b"univ-a")]
     assert tenant_scope(scoped) == "univ-a"
-    wide = req(state={"api_role": "analyst", "token_user": {"role": "analyst", "org": "univ-b"}})
+    wide = req(
+        state={
+            "api_role": "analyst",
+            "token_user": {"role": "analyst", "org": "univ-b"},
+        }
+    )
     wide.scope["headers"] = [(b"host", b"test"), (b"x-org", b"univ-a")]
     assert tenant_scope(wide) == "univ-b"

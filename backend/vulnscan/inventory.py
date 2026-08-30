@@ -3,6 +3,7 @@
 Windows: enumerates the installed-products registry keys. Non-Windows
 hosts return an empty product list so the collector simply stays silent.
 """
+
 from __future__ import annotations
 
 import logging
@@ -78,7 +79,7 @@ def host_inventory() -> dict:
     if platform.system() == "Windows":
         try:
             inventory["products"] = _windows_products()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("Software inventory failed: %s", exc)
     else:
         inventory["products"] = []

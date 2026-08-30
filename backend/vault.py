@@ -17,6 +17,7 @@ Storage layout: the file is one encrypted JSON object:
 Set ``BARAQ_VAULT_ENFORCED=1`` to refuse to boot when no encryption backend is
 available (fail-closed) instead of degrading to plaintext.
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -130,6 +131,7 @@ def _load_fernet():
 try:
     from cryptography.fernet import InvalidToken
 except Exception:  # pragma: no cover - cryptography is a required dependency
+
     class InvalidToken(Exception):  # type: ignore[no-redef]
         """Fallback so the except tuple stays valid if cryptography is missing."""
 
@@ -174,7 +176,7 @@ def _restrict_key_file(key_path: Path) -> None:
             )
         else:
             os.chmod(key_path, stat.S_IRUSR | stat.S_IWUSR)
-    except Exception as exc:  # noqa: BLE001 - best-effort hardening
+    except Exception as exc:
         import logging
 
         logging.getLogger("baraq.vault").warning(
@@ -231,13 +233,19 @@ DEFAULT_VAULT_FILE = "secrets.dat"
 
 #: When "1", the vault refuses to operate without an encryption backend.
 VAULT_ENFORCED = os.environ.get("BARAQ_VAULT_ENFORCED", "0").lower() in (
-    "1", "true", "yes", "on",
+    "1",
+    "true",
+    "yes",
+    "on",
 )
 #: Opt-in escape hatch: when "1", allow the (unsafe) plaintext backend to
 #: actually persist secrets. Default is fail-closed - the plaintext backend
 #: raises rather than writing cleartext to disk.
 VAULT_ALLOW_PLAINTEXT = os.environ.get("BARAQ_VAULT_ALLOW_PLAINTEXT", "0").lower() in (
-    "1", "true", "yes", "on",
+    "1",
+    "true",
+    "yes",
+    "on",
 )
 
 

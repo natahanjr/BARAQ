@@ -13,16 +13,18 @@ Hard boundaries (3.28-3.31): never creates incidents, never mutates risk,
 never executes SOAR, no ML. The ONLY tables this engine writes are the
 five v2 alert tables.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-import backend.config as config
-from backend.alerting import audit, deduplication, fingerprint as fingerprint_mod
+from backend import config
+from backend.alerting import audit, deduplication
+from backend.alerting import fingerprint as fingerprint_mod
 from backend.alerting.eligibility import evaluate_detection
 from backend.alerting.models import AlertOccurrence, AlertRecord
 from backend.alerting.suppression import is_suppressed
@@ -30,7 +32,10 @@ from backend.detection.contract import DETECTION
 
 
 def _ensure_not_production_db() -> None:
-    if not config.V2_ENGINES_ALLOW_PROD and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
+    if (
+        not config.V2_ENGINES_ALLOW_PROD
+        and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME
+    ):
         raise RuntimeError(
             f"alert engine refuses the v1 production database "
             f"({config.PRODUCTION_DB_NAME!r}) by name"
@@ -57,7 +62,7 @@ def process_detection(
     eligible or is suppressed. Never creates incidents/risk/SOAR.
     """
     _ensure_not_production_db()
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     detection_time = detection.timestamp or now
 
     # 1. Eligibility (spec 3.5/3.6) - detector-aware policy.
@@ -74,7 +79,10 @@ def process_detection(
             alert_id="-",
             action="SUPPRESSED",
             actor=actor,
-            details={"policy_id": rule.policy_id, "detection_id": detection.detection_id},
+            details={
+                "policy_id": rule.policy_id,
+                "detection_id": detection.detection_id,
+            },
         )
         db.commit()
         return None
@@ -83,7 +91,9 @@ def process_detection(
     fp = fingerprint_mod.fingerprint(detection)
 
     # 4. Deduplication (spec 3.8-3.10).
-    existing = deduplication.find_existing(db, fp, detection.detector_id, detection_time, now)
+    existing = deduplication.find_existing(
+        db, fp, detection.detector_id, detection_time, now
+    )
     if existing is not None:
         deduplication.merge(db, existing, detection_time)
         ids = list(existing.detection_ids or [])
@@ -105,7 +115,10 @@ def process_detection(
             previous_status=existing.status,
             new_status=existing.status,
             actor=actor,
-            details={"detection_id": detection.detection_id, "occurrence_count": existing.occurrence_count},
+            details={
+                "detection_id": detection.detection_id,
+                "occurrence_count": existing.occurrence_count,
+            },
         )
         db.commit()
         return existing
@@ -157,7 +170,10 @@ def process_detection(
         previous_status="",
         new_status="OPEN",
         actor=actor,
-        details={"detection_id": detection.detection_id, "policy_id": decision.policy_id},
+        details={
+            "detection_id": detection.detection_id,
+            "policy_id": decision.policy_id,
+        },
     )
     db.commit()
     return alert

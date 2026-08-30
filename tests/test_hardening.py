@@ -1,4 +1,5 @@
 """API hardening (roadmap 5.3): security headers, rate limiting, IP ACLs."""
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -7,7 +8,6 @@ from fastapi.testclient import TestClient
 def test_security_headers_present():
     import backend.config as cfg
     import backend.main as main_mod
-
     from backend.main import app
 
     old = cfg.SECURITY_HEADERS
@@ -30,7 +30,6 @@ def test_api_csp_is_lockdown():
     """API responses must keep the strictest possible policy."""
     import backend.config as cfg
     import backend.main as main_mod
-
     from backend.main import app
 
     old = cfg.SECURITY_HEADERS
@@ -58,7 +57,6 @@ def test_spa_page_csp_allows_bundles():
     """
     import backend.config as cfg
     import backend.main as main_mod
-
     from backend.main import app
 
     old = cfg.SECURITY_HEADERS
@@ -85,7 +83,6 @@ def test_spa_assets_served_with_spa_csp():
     """Hashed /assets/* bundles must be reachable under the SPA policy."""
     import backend.config as cfg
     import backend.main as main_mod
-
     from backend.main import app
 
     old = cfg.SECURITY_HEADERS
@@ -104,7 +101,9 @@ def test_spa_assets_served_with_spa_csp():
             csp = r.headers.get("content-security-policy", "")
             assert "default-src 'none'" not in csp
             assert "script-src 'self'" in csp
-            assert r.headers.get("cache-control") == "public, max-age=31536000, immutable"
+            assert (
+                r.headers.get("cache-control") == "public, max-age=31536000, immutable"
+            )
     finally:
         cfg.SECURITY_HEADERS = old
         main_mod.SECURITY_HEADERS = old
@@ -113,7 +112,6 @@ def test_spa_assets_served_with_spa_csp():
 def test_rate_limit_returns_429():
     import backend.config as cfg
     import backend.main as main_mod
-
     from backend.main import app
 
     old_limit, old_burst = cfg.API_RATE_LIMIT, cfg.API_RATE_BURST
@@ -135,7 +133,6 @@ def test_rate_limit_returns_429():
 def test_rate_limit_bypass_when_disabled():
     import backend.config as cfg
     import backend.main as main_mod
-
     from backend.main import app
 
     old_limit = cfg.API_RATE_LIMIT
@@ -152,8 +149,6 @@ def test_rate_limit_bypass_when_disabled():
 
 def test_ip_whitelist_blocks_unknown_client(monkeypatch):
     import backend.config as cfg
-    import backend.main as main_mod
-
     from backend.main import app
 
     monkeypatch.setattr(cfg, "API_IP_WHITELIST", ["192.0.2.0/24"])
@@ -166,7 +161,6 @@ def test_ip_whitelist_blocks_unknown_client(monkeypatch):
 
 def test_ip_blocklist_denies(monkeypatch):
     import backend.config as cfg
-
     from backend.main import app
 
     monkeypatch.setattr(cfg, "API_IP_BLOCKLIST", ["127.0.0.0/8"])
@@ -178,7 +172,6 @@ def test_ip_blocklist_denies(monkeypatch):
 
 def test_ip_acls_empty_allow_all(monkeypatch):
     import backend.config as cfg
-
     from backend.main import app
 
     monkeypatch.setattr(cfg, "API_IP_WHITELIST", [])
@@ -190,7 +183,6 @@ def test_ip_acls_empty_allow_all(monkeypatch):
 def test_health_endpoint_skips_rate_limit():
     import backend.config as cfg
     import backend.main as main_mod
-
     from backend.main import app
 
     old_limit, old_burst = cfg.API_RATE_LIMIT, cfg.API_RATE_BURST

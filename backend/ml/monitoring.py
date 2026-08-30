@@ -9,18 +9,13 @@ This module tracks ML model performance in production by:
 Metrics are stored in memory and periodically flushed to the database
 for historical analysis and alerting.
 """
+
 from __future__ import annotations
 
 import logging
 import time
 from collections import deque
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
-
-from sqlalchemy import select, func
-
-from backend.database.connection import SessionLocal
-from backend.database.models import NormalizedEvent, Verdict
+from datetime import UTC, datetime
 
 logger = logging.getLogger("baraq.ml.monitoring")
 
@@ -41,33 +36,37 @@ class ModelMetrics:
         predicted_anomaly: bool,
         anomaly_score: float,
         behavior: str,
-        timestamp: Optional[datetime] = None,
+        timestamp: datetime | None = None,
     ):
         """Record a prediction for later comparison with analyst verdict."""
-        self.predictions.append({
-            "event_id": event_id,
-            "predicted_anomaly": predicted_anomaly,
-            "anomaly_score": anomaly_score,
-            "behavior": behavior,
-        })
-        self.timestamps.append(timestamp or datetime.now(timezone.utc))
+        self.predictions.append(
+            {
+                "event_id": event_id,
+                "predicted_anomaly": predicted_anomaly,
+                "anomaly_score": anomaly_score,
+                "behavior": behavior,
+            }
+        )
+        self.timestamps.append(timestamp or datetime.now(UTC))
 
     def record_verdict(
         self,
         event_id: int,
         true_label: str,  # "true_positive" or "false_positive"
         analyst: str,
-        timestamp: Optional[datetime] = None,
+        timestamp: datetime | None = None,
     ):
         """Record analyst verdict for ground truth comparison."""
-        self.verdicts.append({
-            "event_id": event_id,
-            "true_label": true_label,
-            "analyst": analyst,
-            "timestamp": timestamp or datetime.now(timezone.utc),
-        })
+        self.verdicts.append(
+            {
+                "event_id": event_id,
+                "true_label": true_label,
+                "analyst": analyst,
+                "timestamp": timestamp or datetime.now(UTC),
+            }
+        )
 
-    def compute_metrics(self) -> Dict[str, float]:
+    def compute_metrics(self) -> dict[str, float]:
         """Compute current rolling metrics."""
         if not self.predictions or not self.verdicts:
             return self._empty_metrics()
@@ -100,7 +99,11 @@ class ModelMetrics:
 
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+        f1 = (
+            2 * precision * recall / (precision + recall)
+            if (precision + recall) > 0
+            else 0.0
+        )
         fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
         accuracy = (tp + tn) / total
 
@@ -116,10 +119,10 @@ class ModelMetrics:
             "false_positive_rate": round(fpr, 4),
             "accuracy": round(accuracy, 4),
             "window_size": self.window_size,
-            "last_update": datetime.now(timezone.utc).isoformat(),
+            "last_update": datetime.now(UTC).isoformat(),
         }
 
-    def _empty_metrics(self) -> Dict[str, float]:
+    def _empty_metrics(self) -> dict[str, float]:
         return {
             "total_samples": 0,
             "true_positives": 0,
@@ -132,10 +135,10 @@ class ModelMetrics:
             "false_positive_rate": 0.0,
             "accuracy": 0.0,
             "window_size": self.window_size,
-            "last_update": datetime.now(timezone.utc).isoformat(),
+            "last_update": datetime.now(UTC).isoformat(),
         }
 
-    def detect_degradation(self, threshold: float = 0.1) -> Optional[str]:
+    def detect_degradation(self, threshold: float = 0.1) -> str | None:
         """Detect if model performance has degraded."""
         metrics = self.compute_metrics()
         if metrics["total_samples"] < 10:
@@ -188,11 +191,11 @@ class ModelMonitor:
         """Record an analyst verdict."""
         self.metrics.record_verdict(event_id, true_label, analyst)
 
-    def get_metrics(self) -> Dict:
+    def get_metrics(self) -> dict:
         """Get current metrics."""
         return self.metrics.compute_metrics()
 
-    def check_health(self) -> Dict:
+    def check_health(self) -> dict:
         """Check model health and return status."""
         metrics = self.get_metrics()
         degradation = self.metrics.detect_degradation()
@@ -201,34 +204,34 @@ class ModelMonitor:
             "status": "degraded" if degradation else "healthy",
             "degradation_reason": degradation,
             "metrics": metrics,
-            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "checked_at": datetime.now(UTC).isoformat(),
         }
 
     def get_prometheus_metrics(self) -> str:
         """Export metrics in Prometheus format."""
         metrics = self.get_metrics()
         lines = [
-            f'# HELP baraq_ml_predictions_total Total predictions made',
-            f'# TYPE baraq_ml_predictions_total counter',
+            "# HELP baraq_ml_predictions_total Total predictions made",
+            "# TYPE baraq_ml_predictions_total counter",
             f'baraq_ml_predictions_total {metrics["total_samples"]}',
-            f'# HELP baraq_ml_precision Model precision',
-            f'# TYPE baraq_ml_precision gauge',
+            "# HELP baraq_ml_precision Model precision",
+            "# TYPE baraq_ml_precision gauge",
             f'baraq_ml_precision {metrics["precision"]}',
-            f'# HELP baraq_ml_recall Model recall',
-            f'# TYPE baraq_ml_recall gauge',
+            "# HELP baraq_ml_recall Model recall",
+            "# TYPE baraq_ml_recall gauge",
             f'baraq_ml_recall {metrics["recall"]}',
-            f'# HELP baraq_ml_f1_score Model F1 score',
-            f'# TYPE baraq_ml_f1_score gauge',
+            "# HELP baraq_ml_f1_score Model F1 score",
+            "# TYPE baraq_ml_f1_score gauge",
             f'baraq_ml_f1_score {metrics["f1_score"]}',
-            f'# HELP baraq_ml_false_positive_rate False positive rate',
-            f'# TYPE baraq_ml_false_positive_rate gauge',
+            "# HELP baraq_ml_false_positive_rate False positive rate",
+            "# TYPE baraq_ml_false_positive_rate gauge",
             f'baraq_ml_false_positive_rate {metrics["false_positive_rate"]}',
         ]
         return "\n".join(lines)
 
 
 # Singleton instance
-_monitor: Optional[ModelMonitor] = None
+_monitor: ModelMonitor | None = None
 
 
 def get_model_monitor() -> ModelMonitor:

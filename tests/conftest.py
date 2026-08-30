@@ -8,6 +8,7 @@ PostgreSQL cluster (service ``BARAQ-PostgreSQL``). Every table is
 truncated (with identity restart) before each test, so primary keys stay
 deterministic and the suite is fully isolated from ``baraq``.
 """
+
 from __future__ import annotations
 
 import os
@@ -34,7 +35,9 @@ os.environ["BARAQ_ML_META_FILE"] = os.path.join(_test_tmp, "model_meta.json")
 os.environ["BARAQ_SKIP_SECRET_GEN"] = "1"
 # Override the project .env credentials so tests always run with the dev keys
 # (the config loader is non-overriding, so these take precedence over .env).
-os.environ["BARAQ_API_KEYS"] = '{"baraq-dev-admin": "admin", "baraq-dev-analyst": "analyst"}'
+os.environ["BARAQ_API_KEYS"] = (
+    '{"baraq-dev-admin": "admin", "baraq-dev-analyst": "analyst"}'
+)
 os.environ["BARAQ_ADMIN_PASSWORD"] = "baraq-test-admin"
 os.environ["BARAQ_TOKEN_SECRET"] = "baraq-test-token-secret"
 # Pin agent keys too: _secret() falls back to the real DPAPI vault, which
@@ -51,15 +54,15 @@ os.environ["BARAQ_SCHEDULER_ENABLED"] = "0"  # no background collector in tests
 os.environ["BARAQ_TOAST_ENABLED"] = "0"
 # Point the Sigma engine at an empty scratch dir: the full community rule set
 # (2,400+ YAML) takes ~25s to parse and would slow every RulesEngine test.
-os.environ["SIGMA_RULES_DIR"] = os.path.join(tempfile.gettempdir(), "baraq_test_sigma_rules_empty")
+os.environ["SIGMA_RULES_DIR"] = os.path.join(
+    tempfile.gettempdir(), "baraq_test_sigma_rules_empty"
+)
 
-import pytest  # noqa: E402
+import pytest
+from sqlalchemy import text
 
-from sqlalchemy import text  # noqa: E402
-
-from backend.config import DATABASE_URL  # noqa: E402
-from backend.database.connection import SessionLocal, engine, init_db  # noqa: E402
-from backend.database.models import Base  # noqa: E402
+from backend.database.connection import SessionLocal, engine, init_db
+from backend.database.models import Base
 
 _TABLE_NAMES = list(Base.metadata.tables.keys())
 
@@ -115,7 +118,7 @@ def _clean_database():
     engine.dispose()
     try:
         _reset_database()
-    except Exception:  # noqa: BLE001 - leaked straggler; terminate + retry once
+    except Exception:
         engine.dispose()
         _reset_database(terminate_stragglers=True)
     yield

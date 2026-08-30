@@ -43,12 +43,13 @@ its tactics. ``source: events`` stages consume raw telemetry instead.
 ``match: any`` fires on the first matched stage; ``match: all`` requires
 every stage to have at least one match on the same entity.
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import select
@@ -89,13 +90,14 @@ class EventConditions:
             return False
         if self.min_risk and (event.risk or "Low").lower() not in self._risk_ge():
             return False
-        if self.severity and (event.severity or "").lower() not in [s.lower() for s in self.severity]:
-            return False
-        return True
+        return not (
+            self.severity
+            and (event.severity or "").lower() not in [s.lower() for s in self.severity]
+        )
 
     def _risk_ge(self) -> list[str]:
         base = self.min_risk.lower()
-        return _RISK_LEVELS[_RISK_LEVELS.index(base):] if base in _RISK_LEVELS else []
+        return _RISK_LEVELS[_RISK_LEVELS.index(base) :] if base in _RISK_LEVELS else []
 
     def to_dict(self) -> dict:
         return {
@@ -123,9 +125,7 @@ class CorrelationStage:
             return False
         if self.rules and alert.rule in self.rules:
             return True
-        if self.tactics and alert.mitre_tactic in self.tactics:
-            return True
-        return False
+        return bool(self.tactics and alert.mitre_tactic in self.tactics)
 
     def matches_event(self, event: NormalizedEvent) -> bool:
         if self.source == "alerts":
@@ -202,10 +202,17 @@ def _parse_events(data: dict | None, source: str) -> EventConditions:
     severity = [s.lower() for s in _to_list(data.get("severity"))]
     unknown = [s for s in severity if s not in _LEVELS]
     if unknown:
-        raise ValueError(f"[{source}] stage severity contains unknown level(s): {unknown}")
+        raise ValueError(
+            f"[{source}] stage severity contains unknown level(s): {unknown}"
+        )
     min_count = max(1, int(data.get("min_count", 1)))
-    if not (event_ids or data.get("categories") or data.get("sources") or
-            min_risk or severity):
+    if not (
+        event_ids
+        or data.get("categories")
+        or data.get("sources")
+        or min_risk
+        or severity
+    ):
         raise ValueError(
             f"[{source}] event stage needs at least one of event_ids / "
             "categories / sources / min_risk / severity"
@@ -225,7 +232,9 @@ def parse_correlation_yaml(data: dict, source: str = "inline") -> CorrelationSpe
     stages = []
     for raw in data.get("stages") or []:
         if not isinstance(raw, dict):
-            raise ValueError(f"[{source}] stage must be a mapping, got {type(raw).__name__}")
+            raise ValueError(
+                f"[{source}] stage must be a mapping, got {type(raw).__name__}"
+            )
         stage_source = str(raw.get("source", "alerts")).lower()
         if stage_source not in _SOURCES:
             raise ValueError(f"[{source}] stage source must be one of {_SOURCES}")
@@ -237,9 +246,11 @@ def parse_correlation_yaml(data: dict, source: str = "inline") -> CorrelationSpe
                 rules=_to_list(raw.get("rules")),
                 tactics=_to_list(raw.get("tactics")),
                 source=stage_source,
-                events=_parse_events(raw.get("events"), source)
-                if stage_source in ("events", "any")
-                else EventConditions(),
+                events=(
+                    _parse_events(raw.get("events"), source)
+                    if stage_source in ("events", "any")
+                    else EventConditions()
+                ),
             )
         )
     if not stages:
@@ -271,7 +282,9 @@ def parse_correlation_yaml(data: dict, source: str = "inline") -> CorrelationSpe
     return spec
 
 
-def load_correlation_rules(directory: str | Path | None = None) -> list[CorrelationSpec]:
+def load_correlation_rules(
+    directory: str | Path | None = None,
+) -> list[CorrelationSpec]:
     """Load and parse every YAML rule under ``directory``.
 
     Files with a ``.disabled`` suffix (``rule.yml.disabled``) are skipped so
@@ -293,8 +306,10 @@ def load_correlation_rules(directory: str | Path | None = None) -> list[Correlat
                 specs.append(spec)
                 logger.info("Loaded correlation rule '%s' (%s)", spec.name, path.name)
             else:
-                logger.info("Correlation rule '%s' disabled in %s", spec.name, path.name)
-        except Exception as exc:  # noqa: BLE001 - one bad rule must not kill the set
+                logger.info(
+                    "Correlation rule '%s' disabled in %s", spec.name, path.name
+                )
+        except Exception as exc:
             logger.warning("Correlation rule %s skipped: %s", path.name, exc)
     return specs
 
@@ -346,11 +361,13 @@ class CorrelationEngine(BaseRule):
             return (event.user or "").strip() or None
         return "all"
 
-    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
+    def evaluate(
+        self, window_minutes: int, since_id: int | None = None
+    ) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         if not self.specs:
             return findings
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes or 10)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes or 10)
         alerts = self.session.scalars(
             select(Alert).where(
                 Alert.created_at >= since,
@@ -429,8 +446,10 @@ class CorrelationEngine(BaseRule):
             if spec.match == "any" and not matched_stages:
                 continue
             evidence_lines = [
-                f"Correlated {len(matched_stages)}/{len(spec.stages)} stages for '{key}' "
-                f"within {spec.window_minutes} min (match={spec.match}):"
+                (
+                    f"Correlated {len(matched_stages)}/{len(spec.stages)} stages for '{key}' "
+                    f"within {spec.window_minutes} min (match={spec.match}):"
+                )
             ]
             for idx, items in stage_ok:
                 stage = spec.stages[idx]
@@ -472,9 +491,14 @@ class CorrelationEngine(BaseRule):
 
         from backend.database.models import Alert
 
-        day = datetime.now(timezone.utc).strftime("%Y%m%d")
+        day = datetime.now(UTC).strftime("%Y%m%d")
         prefix = f"CORR-{day}-"
-        count = self.session.scalar(
-            select(func.count(Alert.id)).where(Alert.correlation_id.like(f"{prefix}%"))
-        ) or 0
+        count = (
+            self.session.scalar(
+                select(func.count(Alert.id)).where(
+                    Alert.correlation_id.like(f"{prefix}%")
+                )
+            )
+            or 0
+        )
         return f"{prefix}{count + 1:05d}"

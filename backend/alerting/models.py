@@ -12,9 +12,10 @@ Tables:
     alert_audit_events        - every state-changing operation
     alert_suppression_rules   - auditable, expiring suppression policies
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, Float, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -24,7 +25,7 @@ from backend.database.models import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class AlertRecord(Base):
@@ -70,20 +71,34 @@ class AlertRecord(Base):
     #: detection_ids merged into this alert (spec 3.8).
     detection_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
-    assigned_to: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    assigned_to: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, index=True
+    )
+    assigned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     acknowledged_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     feedback: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     def to_dict(self) -> dict:
         return {
             "alert_id": self.alert_id,
-            "detection_id": (self.detection_ids or [""])[0] if self.detection_ids else "",
+            "detection_id": (
+                (self.detection_ids or [""])[0] if self.detection_ids else ""
+            ),
             "detection_ids": list(self.detection_ids or []),
             "alert_fingerprint": self.alert_fingerprint,
             "title": self.title,
@@ -110,7 +125,9 @@ class AlertRecord(Base):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "assigned_to": self.assigned_to,
             "assigned_at": self.assigned_at.isoformat() if self.assigned_at else None,
-            "acknowledged_at": self.acknowledged_at.isoformat() if self.acknowledged_at else None,
+            "acknowledged_at": (
+                self.acknowledged_at.isoformat() if self.acknowledged_at else None
+            ),
             "acknowledged_by": self.acknowledged_by,
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
             "feedback": self.feedback,
@@ -128,7 +145,9 @@ class AlertOccurrence(Base):
     event_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     evidence: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
 
 class AlertFeedback(Base):
@@ -141,7 +160,9 @@ class AlertFeedback(Base):
     feedback_type: Mapped[str] = mapped_column(String(32), index=True)
     analyst_id: Mapped[str] = mapped_column(String(128), default="system")
     comment: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
 
 class AlertAuditEvent(Base):
@@ -158,7 +179,9 @@ class AlertAuditEvent(Base):
     #: JSON payload for the action (spec 3.35 "metadata"). Named ``details``
     #: because ``metadata`` is a reserved declarative attribute name.
     details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
 
 class AlertSuppressionRule(Base):
@@ -174,7 +197,9 @@ class AlertSuppressionRule(Base):
     policy_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     reason: Mapped[str] = mapped_column(Text)
     created_by: Mapped[str] = mapped_column(String(128), default="system")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     #: Scope matchers, e.g. {"detector_id": "D001", "host": "ml-host",
     #: "user": "*", "source_ip": "185.0.0.0/8"}. "*" matches anything.

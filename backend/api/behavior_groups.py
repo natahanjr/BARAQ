@@ -6,15 +6,16 @@ No arbitrary manual regrouping is exposed (spec 4.31). Gated by
 ``BEHAVIOR_GROUPS_ENABLED`` (PEP 562, mirroring telemetry/alerting) and
 inert against the production database.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-import backend.config as config
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend import config
 from backend.aggregation import audit
 from backend.aggregation import metrics as metrics_module
 from backend.aggregation.contract import GROUP_STATUSES
@@ -23,7 +24,6 @@ from backend.aggregation.lifecycle import IllegalTransition, apply_transition
 from backend.aggregation.models import (
     BehaviorGroupAuditEvent,
     BehaviorGroupEvidence,
-    BehaviorGroupMember,
     BehaviorGroupRecord,
 )
 from backend.alerting.models import AlertRecord
@@ -61,7 +61,9 @@ def _fetch(db: Session, group_id: str) -> BehaviorGroupRecord:
         )
     ).first()
     if row is None:
-        raise HTTPException(status_code=404, detail=f"unknown behavior group {group_id}")
+        raise HTTPException(
+            status_code=404, detail=f"unknown behavior group {group_id}"
+        )
     return row
 
 
@@ -103,7 +105,9 @@ def list_groups(
     if mitre_tactic is not None:
         stmt = stmt.where(BehaviorGroupRecord.mitre_tactics.contains([mitre_tactic]))
     if mitre_technique is not None:
-        stmt = stmt.where(BehaviorGroupRecord.mitre_techniques.contains([mitre_technique]))
+        stmt = stmt.where(
+            BehaviorGroupRecord.mitre_techniques.contains([mitre_technique])
+        )
     if severity is not None:
         _validate_severity(severity)
         stmt = stmt.where(BehaviorGroupRecord.highest_severity == severity)
@@ -141,10 +145,19 @@ def group_detail(group_id: str, db: Session = Depends(get_db)) -> dict:
     ).all()
     return {
         "behavior_group": group.to_dict(),
-        "audit": [e.to_dict() if hasattr(e, "to_dict") else {
-            "action": e.action, "actor": e.actor,
-            "details": e.details or {}, "created_at": e.created_at.isoformat(),
-        } for e in events],
+        "audit": [
+            (
+                e.to_dict()
+                if hasattr(e, "to_dict")
+                else {
+                    "action": e.action,
+                    "actor": e.actor,
+                    "details": e.details or {},
+                    "created_at": e.created_at.isoformat(),
+                }
+            )
+            for e in events
+        ],
     }
 
 
@@ -252,7 +265,7 @@ def close_group(group_id: str, request: Request, db: Session = Depends(get_db)) 
     _gate()
     group = _fetch(db, group_id)
     try:
-        action = apply_transition(group, "CLOSED", datetime.now(timezone.utc))
+        action = apply_transition(group, "CLOSED", datetime.now(UTC))
     except IllegalTransition as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     audit.record(

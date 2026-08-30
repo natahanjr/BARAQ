@@ -1,11 +1,12 @@
 """Phase 7 incident engine (spec 7.1-7.8, 7.15-7.17, 7.21, 7.23-7.25, 7.26-7.29, 7.34, 7.42, 7.45-7.47)."""
+
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from backend.incidents.audit import audit
@@ -20,36 +21,27 @@ from backend.incidents.config import (
     INCIDENT_MODEL_VERSION,
     INCIDENT_SUPPRESSION_MAX_DAYS,
 )
-from backend.incidents.evidence import add_evidence
 from backend.incidents.contract import (
-    AUDIT_ACTIONS,
     BANNED_INCIDENT_PHRASES,
-    EVIDENCE_SOURCE_TYPES,
-    GRAPH_RELATIONSHIP_TYPES,
-    INCIDENT_PRIORITIES,
-    INCIDENT_SEVERITIES,
-    INCIDENT_STATES,
 )
+from backend.incidents.evidence import add_evidence
 from backend.incidents.fingerprint import compute_fingerprint
-from backend.incidents.lifecycle import can_transition, is_terminal
+from backend.incidents.lifecycle import is_terminal
 from backend.incidents.models import (
+    IncidentV2,
     IncidentV2AlertLink,
+    IncidentV2AuditEvent,
     IncidentV2BehaviorGroupLink,
     IncidentV2CorrelationLink,
-    IncidentV2Evidence,
     IncidentV2GraphEdge,
     IncidentV2RiskLink,
     IncidentV2Suppression,
-    IncidentV2AuditEvent,
-    IncidentV2,
 )
-from backend.incidents.registry import evaluate_policy, list_policies
+from backend.incidents.registry import evaluate_policy
 
 
 def _next_incident_id(db) -> str:
-    row = db.scalars(
-        select(IncidentV2).order_by(IncidentV2.id.desc()).limit(1)
-    ).first()
+    row = db.scalars(select(IncidentV2).order_by(IncidentV2.id.desc()).limit(1)).first()
     return f"INC-{(row.id + 1) if row else 1:06d}"
 
 
@@ -64,9 +56,13 @@ def _validate_title(title: str) -> None:
             raise ValueError(f"banned incident phrase detected in title: {phrase!r}")
 
 
-def _primary_entity(groups: list[dict], findings: list[dict], risk: dict | None) -> tuple[str, str]:
+def _primary_entity(
+    groups: list[dict], findings: list[dict], risk: dict | None
+) -> tuple[str, str]:
     if risk:
-        return risk.get("primary_entity_type", "HOST"), risk.get("primary_entity_id", "")
+        return risk.get("primary_entity_type", "HOST"), risk.get(
+            "primary_entity_id", ""
+        )
     for g in groups:
         hosts = g.get("hosts", [])
         if hosts:
@@ -114,7 +110,9 @@ def _observables(groups: list[dict], findings: list[dict]) -> dict[str, Any]:
     }
 
 
-def _aggregate_severity(groups: list[dict], findings: list[dict], risk: dict | None) -> str:
+def _aggregate_severity(
+    groups: list[dict], findings: list[dict], risk: dict | None
+) -> str:
     order = {"critical": 4, "high": 3, "medium": 2, "low": 1}
     best = "low"
     best_val = order.get(best, 0)
@@ -186,7 +184,7 @@ def _is_suppressed(db, fingerprint: str | None) -> bool:
     row = db.scalars(
         select(IncidentV2Suppression).where(
             IncidentV2Suppression.fingerprint == fingerprint,
-            IncidentV2Suppression.expires_at > datetime.now(timezone.utc),
+            IncidentV2Suppression.expires_at > datetime.now(UTC),
         )
     ).first()
     return row is not None
@@ -288,15 +286,17 @@ def _link_sources(
             rid = r.get("risk_id")
             if rid:
                 db.add(
-                IncidentV2RiskLink(
-                    incident_id=incident_id,
-                    risk_id=rid,
-                    membership_reason="entity risk context",
-                )
+                    IncidentV2RiskLink(
+                        incident_id=incident_id,
+                        risk_id=rid,
+                        membership_reason="entity risk context",
+                    )
                 )
 
 
-def _suppress_reopen(db, incident_id: str, new_fingerprint: str, actor: str = "system") -> None:
+def _suppress_reopen(
+    db, incident_id: str, new_fingerprint: str, actor: str = "system"
+) -> None:
     closed = db.scalars(
         select(IncidentV2).where(
             IncidentV2.incident_id == incident_id,
@@ -310,7 +310,7 @@ def _suppress_reopen(db, incident_id: str, new_fingerprint: str, actor: str = "s
             "INCIDENT_REOPEN_REJECTED",
             actor=actor,
             reason="closed incident cannot be reopened; creating new incident",
-            now=datetime.now(timezone.utc),
+            now=datetime.now(UTC),
         )
 
 
@@ -328,10 +328,12 @@ def create_incident(
     now: datetime | None = None,
 ) -> dict:
     """Create a single deterministic, deduplicated incident (spec 7.5, 7.45-7.47)."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     start = time.perf_counter()
     try:
-        primary_entity_type, primary_entity_id = _primary_entity(groups, findings, risks[0] if risks else None)
+        primary_entity_type, primary_entity_id = _primary_entity(
+            groups, findings, risks[0] if risks else None
+        )
         relevant_entities = list(
             dict.fromkeys(
                 [f"{primary_entity_type}:{primary_entity_id}"]
@@ -365,14 +367,22 @@ def create_incident(
                 select(IncidentV2).where(IncidentV2.fingerprint == fingerprint)
             ).first()
             if existing and existing.status == "SUPPRESSED":
-                return {"incident_id": existing.incident_id, "status": "SUPPRESSED", "fingerprint": fingerprint}
+                return {
+                    "incident_id": existing.incident_id,
+                    "status": "SUPPRESSED",
+                    "fingerprint": fingerprint,
+                }
 
         existing = db.scalars(
             select(IncidentV2).where(IncidentV2.fingerprint == fingerprint)
         ).first()
         if existing and not is_terminal(existing.status):
             _suppress_reopen(db, existing.incident_id, fingerprint, actor=actor)
-            return {"incident_id": existing.incident_id, "status": existing.status, "fingerprint": fingerprint}
+            return {
+                "incident_id": existing.incident_id,
+                "status": existing.status,
+                "fingerprint": fingerprint,
+            }
 
         policy_context = {
             "groups": groups,
@@ -383,10 +393,16 @@ def create_incident(
         }
         policy_result = evaluate_policy(policy_id, policy_context)
         if not policy_result.eligible:
-            return {"incident_created": False, "reason": policy_result.reason, "policy_id": policy_id}
+            return {
+                "incident_created": False,
+                "reason": policy_result.reason,
+                "policy_id": policy_id,
+            }
 
         severity = _aggregate_severity(groups, findings, risks[0] if risks else None)
-        confidence, confidence_factors = _compute_confidence(groups, findings, risks[0] if risks else None)
+        confidence, confidence_factors = _compute_confidence(
+            groups, findings, risks[0] if risks else None
+        )
         risk_score = float(risks[0].get("score", 0)) if risks else 0.0
         entity_count = len(
             dict.fromkeys(
@@ -417,7 +433,8 @@ def create_incident(
             incident_id=claim_id,
             fingerprint=fingerprint,
             title=title,
-            description=description or "Incident created from aggregated security evidence.",
+            description=description
+            or "Incident created from aggregated security evidence.",
             status="NEW",
             priority=priority,
             severity=severity,
@@ -430,14 +447,27 @@ def create_incident(
             closed_at=None,
             primary_entity_type=primary_entity_type,
             primary_entity_id=primary_entity_id,
-            entity_ids=list(dict.fromkeys([primary_entity_id] + [e for g in groups for e in (g.get("hosts", []) + g.get("users", []))])),
+            entity_ids=list(
+                dict.fromkeys(
+                    [primary_entity_id]
+                    + [
+                        e
+                        for g in groups
+                        for e in (g.get("hosts", []) + g.get("users", []))
+                    ]
+                )
+            ),
             observables=_observables(groups, findings),
             investigation_state=None,
             assigned_to=None,
             assigned_team=None,
             assigned_at=None,
             source_type="CORRELATION" if findings else "BEHAVIOR_GROUP",
-            source_id=correlation_finding_ids[0] if correlation_finding_ids else (behavior_group_ids[0] if behavior_group_ids else ""),
+            source_id=(
+                correlation_finding_ids[0]
+                if correlation_finding_ids
+                else (behavior_group_ids[0] if behavior_group_ids else "")
+            ),
             incident_version="1.0.0",
             model_version=INCIDENT_MODEL_VERSION,
             policy_id=policy_id,
@@ -454,11 +484,15 @@ def create_incident(
                 select(IncidentV2).where(IncidentV2.fingerprint == fingerprint)
             ).first()
             if existing:
-                return {"incident_id": existing.incident_id, "status": existing.status, "fingerprint": fingerprint}
+                return {
+                    "incident_id": existing.incident_id,
+                    "status": existing.status,
+                    "fingerprint": fingerprint,
+                }
             raise
 
         _link_sources(db, claim_id, groups, findings, risks)
-        for alert in (alerts or []):
+        for alert in alerts or []:
             db.add(
                 IncidentV2AlertLink(
                     incident_id=claim_id,
@@ -550,7 +584,7 @@ def create_incident(
             "policy_id": policy_id,
             "incident_created": True,
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         db.rollback()
         try:
             audit(
@@ -561,7 +595,7 @@ def create_incident(
                 reason=str(exc),
                 now=now,
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
         raise
 
@@ -579,12 +613,13 @@ def transition_incident(
     if incident is None:
         raise ValueError(f"unknown incident {incident_id!r}")
     from backend.incidents.lifecycle import transition_status
+
     transition = transition_status(incident.status, target_status, actor, reason)
     incident.status = target_status
-    incident.updated_at = datetime.now(timezone.utc)
+    incident.updated_at = datetime.now(UTC)
     incident.updated_by = actor
     if target_status == "CLOSED":
-        incident.closed_at = datetime.now(timezone.utc)
+        incident.closed_at = datetime.now(UTC)
     db.flush()
     audit(
         db,
@@ -612,7 +647,9 @@ def suppress_incident(
     ).first()
     if incident is None:
         raise ValueError(f"unknown incident {incident_id!r}")
-    if (expires_at - datetime.now(timezone.utc)).total_seconds() > INCIDENT_SUPPRESSION_MAX_DAYS * 86400:
+    if (
+        expires_at - datetime.now(UTC)
+    ).total_seconds() > INCIDENT_SUPPRESSION_MAX_DAYS * 86400:
         raise ValueError(f"suppression exceeds {INCIDENT_SUPPRESSION_MAX_DAYS} days")
     row = IncidentV2Suppression(
         incident_id=incident_id,
@@ -630,16 +667,13 @@ def suppress_incident(
         "INCIDENT_SUPPRESSED",
         actor=created_by,
         new_value=reason,
-        now=datetime.now(timezone.utc),
+        now=datetime.now(UTC),
     )
     incident.status = "SUPPRESSED"
-    incident.updated_at = datetime.now(timezone.utc)
+    incident.updated_at = datetime.now(UTC)
     incident.suppression_reason = reason
     incident.suppression_scope = scope
     incident.suppression_expires_at = expires_at
     incident.suppression_created_by = created_by
     db.flush()
     return row
-
-
-

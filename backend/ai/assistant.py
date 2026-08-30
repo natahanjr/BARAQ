@@ -8,13 +8,14 @@ Implements a lightweight, fully-local AI using:
 An optional BARAQ AI endpoint can be enabled through config for
 richer prose, but the platform ships and works 100% offline by default.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 
@@ -62,7 +63,7 @@ class SecurityAssistant:
         self._index_built = True
 
     def _build_intent_index(self):
-        docs = [i["examples"] for i in INTENTS]
+        [i["examples"] for i in INTENTS]
         corpus = [" ".join(i["examples"]) for i in INTENTS]
         self._vectorizer = TfidfVectorizer(
             lowercase=True, stop_words="english", ngram_range=(1, 2)
@@ -86,7 +87,9 @@ class SecurityAssistant:
             return "explain_alert"
         if any(k in msg for k in ("summar", "summary", "overview", "incident")):
             return "summarize"
-        if any(k in msg for k in ("remediat", "mitigat", "fix", "how to respond", "action")):
+        if any(
+            k in msg for k in ("remediat", "mitigat", "fix", "how to respond", "action")
+        ):
             return "remediate"
         if any(k in msg for k in ("score", "health", "status", "security posture")):
             return "security_score"
@@ -151,18 +154,25 @@ class SecurityAssistant:
             return []
         rows = list(
             self.session.scalars(
-                select(Alert).where(Alert.status != "open").order_by(Alert.updated_at.desc())
+                select(Alert)
+                .where(Alert.status != "open")
+                .order_by(Alert.updated_at.desc())
             )
         )
         if not rows:
             return []
         if self._rag_docs != rows or len(rows) != self._rag_indexed:
             corpus = [
-                str(a.name or "") + " " + str(a.evidence or "")[:500]
-                + " " + str(a.recommendation or "")[:300]
+                str(a.name or "")
+                + " "
+                + str(a.evidence or "")[:500]
+                + " "
+                + str(a.recommendation or "")[:300]
                 for a in rows
             ]
-            vec = TfidfVectorizer(lowercase=True, stop_words="english", ngram_range=(1, 2))
+            vec = TfidfVectorizer(
+                lowercase=True, stop_words="english", ngram_range=(1, 2)
+            )
             self._rag_matrix = vec.fit_transform(corpus)
             self._rag_vectorizer = vec
             self._rag_docs = rows
@@ -170,7 +180,7 @@ class SecurityAssistant:
         try:
             q = self._rag_vectorizer.transform([query])
             scores = cosine_similarity(q, self._rag_matrix)[0]
-        except Exception:  # noqa: BLE001
+        except Exception:
             return []
         best = scores.argsort()[::-1][:limit]
         return [rows[int(i)] for i in best if scores[int(i)] > 0.15]
@@ -221,8 +231,10 @@ class SecurityAssistant:
             )
 
         lines = [
-            f"Entity Analysis - {entity['display_name']}"
-            f" [risk {entity['risk_level']} {entity['risk_score']:.0f}/100]",
+            (
+                f"Entity Analysis - {entity['display_name']}"
+                f" [risk {entity['risk_level']} {entity['risk_score']:.0f}/100]"
+            ),
         ]
         if entity.get("first_seen"):
             lines.append(
@@ -233,9 +245,7 @@ class SecurityAssistant:
         subgraph = store.graph(
             self.session, center_kind=kind, center_name=name, depth=1
         )
-        edges = sorted(
-            subgraph.get("edges", []), key=lambda e: -(e.get("weight") or 0)
-        )
+        edges = sorted(subgraph.get("edges", []), key=lambda e: -(e.get("weight") or 0))
 
         evidences: list[str] = []
         relations: list[str] = []
@@ -259,7 +269,7 @@ class SecurityAssistant:
                         f"Threat-intel: {kind} flagged {cat} "
                         f"({label}) confidence {conf:.0%}"
                     )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.debug("entity intel lookup failed: %s", exc)
 
         # 2) Related alerts + anomalies
@@ -369,32 +379,38 @@ class SecurityAssistant:
                 reasoning_parts: list[str] = []
                 content_parts: list[str] = []
 
-                with httpx.Client(timeout=httpx.Timeout(connect=5, read=15, write=5, pool=5)) as hclient:
-                    with hclient.stream(
-                        "POST", url, json=payload,
-                        headers={"Content-Type": "application/json", "Authorization": f"Bearer {AI_API_KEY}"},
-                    ) as resp:
-                        resp.raise_for_status()
-                        for line in resp.iter_lines():
-                            if not line.startswith("data: "):
-                                continue
-                            data = line[6:]
-                            if data.strip() == "[DONE]":
-                                break
-                            try:
-                                chunk = json.loads(data)
-                            except json.JSONDecodeError:
-                                continue
-                            choices = chunk.get("choices", [])
-                            if not choices:
-                                continue
-                            delta = choices[0].get("delta", {})
-                            reasoning = delta.get("reasoning_content")
-                            if reasoning:
-                                reasoning_parts.append(reasoning)
-                            content = delta.get("content")
-                            if content is not None:
-                                content_parts.append(content)
+                with httpx.Client(
+                    timeout=httpx.Timeout(connect=5, read=15, write=5, pool=5)
+                ) as hclient, hclient.stream(
+                    "POST",
+                    url,
+                    json=payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {AI_API_KEY}",
+                    },
+                ) as resp:
+                    resp.raise_for_status()
+                    for line in resp.iter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:]
+                        if data.strip() == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+                        choices = chunk.get("choices", [])
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta", {})
+                        reasoning = delta.get("reasoning_content")
+                        if reasoning:
+                            reasoning_parts.append(reasoning)
+                        content = delta.get("content")
+                        if content is not None:
+                            content_parts.append(content)
 
                 if reasoning_parts:
                     logger.info(
@@ -406,8 +422,10 @@ class SecurityAssistant:
                 answer = "".join(content_parts).strip()
                 if answer:
                     return answer
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("BARAQ AI entity explanation failed (%s); using local", exc)
+            except Exception as exc:
+                logger.warning(
+                    "BARAQ AI entity explanation failed (%s); using local", exc
+                )
 
         return "\n".join(header + body)
 
@@ -429,7 +447,7 @@ class SecurityAssistant:
             if alerts:
                 top = alerts[0]
                 return (
-                    f"I don't see a specific alert in your question, so here's the most recent one.\n"
+                    "I don't see a specific alert in your question, so here's the most recent one.\n"
                     + self._alert_explanation(top)
                 )
             return "No alerts are currently open to explain. Run a collection or simulation first."
@@ -449,9 +467,11 @@ class SecurityAssistant:
             lines.append("")
             lines.append(
                 "Overall posture: "
-                + ("CRITICAL - immediate response required."
-                   if any(a.severity == "critical" for a in alerts)
-                   else "ATTENTION - investigate all open alerts.")
+                + (
+                    "CRITICAL - immediate response required."
+                    if any(a.severity == "critical" for a in alerts)
+                    else "ATTENTION - investigate all open alerts."
+                )
             )
             return "\n".join(lines)
 
@@ -464,7 +484,9 @@ class SecurityAssistant:
                 if a.recommendation not in seen:
                     lines.append(f"- {a.name}: {a.recommendation}")
                     seen.add(a.recommendation)
-            return "\n".join(lines) if alerts else "No open alerts requiring remediation."
+            return (
+                "\n".join(lines) if alerts else "No open alerts requiring remediation."
+            )
 
         if intent == "security_score":
             score = self._compute_score()
@@ -480,9 +502,11 @@ class SecurityAssistant:
                 f"Open alerts by severity: "
                 + (", ".join(f"{k}: {v}" for k, v in counts.items()) or "none")
                 + ".\n"
-                + ("The environment shows elevated threat activity."
-                   if score < 70
-                   else "The environment is in a healthy state.")
+                + (
+                    "The environment shows elevated threat activity."
+                    if score < 70
+                    else "The environment is in a healthy state."
+                )
             )
 
         if intent == "mitre":
@@ -521,7 +545,10 @@ class SecurityAssistant:
         # general fallback with context
         msg_lower = message.lower().strip()
         # Conversational follow-ups that don't match a specific SOC intent
-        if any(k in msg_lower for k in ("how are", "how is", "how's", "what's up", "who are you")):
+        if any(
+            k in msg_lower
+            for k in ("how are", "how is", "how's", "what's up", "who are you")
+        ):
             return (
                 f"I'm the BARAQ Security Assistant, running strong. "
                 f"Current SOC status: {len(alerts)} open alerts, "
@@ -583,7 +610,8 @@ class SecurityAssistant:
             stripped = re.sub(
                 r"\b(?:alerts?|show|list|what|any|find|open|closed|about|for|host|"
                 r"from|today|me|the|do|we|have|are|there|with|severity|severe)\b",
-                " ", lowered,
+                " ",
+                lowered,
             )
             stripped = re.sub(r"\s+", " ", stripped).strip()
             if len(stripped) >= 3:
@@ -592,7 +620,8 @@ class SecurityAssistant:
         if keyword:
             kw = keyword.lower()
             rows = [
-                r for r in rows
+                r
+                for r in rows
                 if kw in (r.name or "").lower()
                 or kw in (r.rule or "").lower()
                 or kw in (r.mitre_id or "").lower()
@@ -609,9 +638,7 @@ class SecurityAssistant:
             )
         lines = [f"{len(rows)} {'open' if status == 'open' else 'closed'} alert(s):"]
         for a in rows[:15]:
-            lines.append(
-                f"- #{a.id} {a.name} [{a.severity}] ({a.rule}, {a.mitre_id})"
-            )
+            lines.append(f"- #{a.id} {a.name} [{a.severity}] ({a.rule}, {a.mitre_id})")
         if len(rows) > 15:
             lines.append(f"  ... and {len(rows) - 15} more")
         return "\n".join(lines)
@@ -638,7 +665,11 @@ class SecurityAssistant:
         if not rows:
             scope = f" for {host or user}" if (host or user) else ""
             return f"No events in the database{scope} yet."
-        lines = [f"Latest {len(rows)} events" + (f" - {host or user}" if (host or user) else "") + ":"]
+        lines = [
+            f"Latest {len(rows)} events"
+            + (f" - {host or user}" if (host or user) else "")
+            + ":"
+        ]
         for e in rows:
             flags = []
             if e.is_anomaly:
@@ -652,7 +683,9 @@ class SecurityAssistant:
             )
         return "\n".join(lines)
 
-    _DOMAIN_RE = re.compile(r"\b(?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.)+[a-z]{2,}\b", re.IGNORECASE)
+    _DOMAIN_RE = re.compile(
+        r"\b(?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.)+[a-z]{2,}\b", re.IGNORECASE
+    )
 
     def _extract_indicator(self, message: str) -> str | None:
         import ipaddress
@@ -664,7 +697,9 @@ class SecurityAssistant:
                 return candidate
             except ValueError:
                 pass
-            if re.fullmatch(r"[0-9a-fA-F]{64}|[0-9a-fA-F]{40}|[0-9a-fA-F]{32}", candidate):
+            if re.fullmatch(
+                r"[0-9a-fA-F]{64}|[0-9a-fA-F]{40}|[0-9a-fA-F]{32}", candidate
+            ):
                 return candidate
         m = self._DOMAIN_RE.search(message)
         if m and "lookup" not in m.group(0):
@@ -682,7 +717,7 @@ class SecurityAssistant:
             )
         try:
             verdict = lookup_indicator(self.session, indicator) or {}
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("threat intel lookup failed: %s", exc)
             verdict = {}
         if not verdict:
@@ -715,15 +750,17 @@ class SecurityAssistant:
                 "No endpoints are registered yet. Install the fleet agent "
                 "on target hosts and they will appear here automatically."
             )
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         online, stale = [], []
         for ep in endpoints:
             last = ep.last_seen
             age = (now - last).total_seconds() if last else float("inf")
             (online if age <= 300 else stale).append((ep, age))
         lines = [
-            f"Fleet status: {len(endpoints)} endpoint(s) - "
-            f"{len(online)} reporting (within 5 min), {len(stale)} stale."
+            (
+                f"Fleet status: {len(endpoints)} endpoint(s) - "
+                f"{len(online)} reporting (within 5 min), {len(stale)} stale."
+            )
         ]
         for ep, age in sorted(online, key=lambda x: -x[0].alerts_total):
             lines.append(
@@ -763,16 +800,21 @@ class SecurityAssistant:
         if not alerts:
             return "Analyst note: no active threats. Environment normal; continue routine monitoring."
         lines = [
-            f"ANALYST NOTE - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+            f"ANALYST NOTE - {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}",
             f"During this shift {len(alerts)} alert(s) required attention.",
         ]
         for a in alerts[:5]:
-            lines.append(f"  - {a.name} ({a.mitre_id}/{a.mitre_tactic}) severity={a.severity}")
-        lines.append("Actions taken: initial triage; evidence preserved; MITRE mapping recorded.")
+            lines.append(
+                f"  - {a.name} ({a.mitre_id}/{a.mitre_tactic}) severity={a.severity}"
+            )
+        lines.append(
+            "Actions taken: initial triage; evidence preserved; MITRE mapping recorded."
+        )
         return "\n".join(lines)
 
     def _compute_score(self) -> float:
         from backend.analyzers.dashboard import compute_security_score
+
         return compute_security_score(self.session)
 
     # ------------------------------------------------------------------
@@ -781,9 +823,7 @@ class SecurityAssistant:
     def _recent_history(self, limit: int = 8) -> list[AssistantMessage]:
         """Last N stored turns, oldest first (multi-turn conversation memory)."""
         rows = self.session.scalars(
-            select(AssistantMessage)
-            .order_by(AssistantMessage.id.desc())
-            .limit(limit)
+            select(AssistantMessage).order_by(AssistantMessage.id.desc()).limit(limit)
         ).all()
         return list(reversed(rows))
 
@@ -852,14 +892,16 @@ class SecurityAssistant:
                 )
         try:
             from backend.database.models import Endpoint
+
             eps = list(self.session.scalars(select(Endpoint)))
             online = sum(
-                1 for e in eps
+                1
+                for e in eps
                 if e.last_seen
-                and (datetime.now(timezone.utc) - e.last_seen).total_seconds() <= 300
+                and (datetime.now(UTC) - e.last_seen).total_seconds() <= 300
             )
             lines.append(f"Endpoints: {online}/{len(eps)} reporting")
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
         return "\n".join(lines)
 
@@ -910,37 +952,38 @@ class SecurityAssistant:
             reasoning_parts: list[str] = []
             content_parts: list[str] = []
 
-            with httpx.Client(timeout=httpx.Timeout(connect=5, read=15, write=5, pool=5)) as client:
-                with client.stream(
-                    "POST",
-                    url,
-                    json=payload,
-                    headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {AI_API_KEY}",
-                    },
-                ) as resp:
-                    resp.raise_for_status()
-                    for line in resp.iter_lines():
-                        if not line.startswith("data: "):
-                            continue
-                        data = line[6:]
-                        if data.strip() == "[DONE]":
-                            break
-                        try:
-                            chunk = json.loads(data)
-                        except json.JSONDecodeError:
-                            continue
-                        choices = chunk.get("choices", [])
-                        if not choices:
-                            continue
-                        delta = choices[0].get("delta", {})
-                        reasoning = delta.get("reasoning_content")
-                        if reasoning:
-                            reasoning_parts.append(reasoning)
-                        content = delta.get("content")
-                        if content is not None:
-                            content_parts.append(content)
+            with httpx.Client(
+                timeout=httpx.Timeout(connect=5, read=15, write=5, pool=5)
+            ) as client, client.stream(
+                "POST",
+                url,
+                json=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {AI_API_KEY}",
+                },
+            ) as resp:
+                resp.raise_for_status()
+                for line in resp.iter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = chunk.get("choices", [])
+                    if not choices:
+                        continue
+                    delta = choices[0].get("delta", {})
+                    reasoning = delta.get("reasoning_content")
+                    if reasoning:
+                        reasoning_parts.append(reasoning)
+                    content = delta.get("content")
+                    if content is not None:
+                        content_parts.append(content)
 
             elapsed = time.monotonic() - t0
 
@@ -948,7 +991,9 @@ class SecurityAssistant:
                 full_reasoning = "".join(reasoning_parts)
                 logger.info(
                     "BARAQ AI reasoning (%d tokens, %.1fs): %s",
-                    len(full_reasoning), elapsed, full_reasoning[:500],
+                    len(full_reasoning),
+                    elapsed,
+                    full_reasoning[:500],
                 )
 
             answer = "".join(content_parts).strip()
@@ -957,7 +1002,7 @@ class SecurityAssistant:
                 return answer
             raise RuntimeError("Empty response from BARAQ AI")
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "BARAQ AI remote completion failed (%s: %s); using local engine",
                 type(exc).__name__,

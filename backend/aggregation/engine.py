@@ -23,19 +23,24 @@ Hard boundaries (4.44/4.45): the ONLY tables written are the four
 behavior-group tables; incidents/risk/playbooks/SOAR are never touched;
 no ML anywhere.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-import backend.config as config
+from backend import config
 from backend.aggregation import audit
 from backend.aggregation.contract import group_title
-from backend.aggregation.evidence import aggregate_observables, evidence_rows, merge_observables
+from backend.aggregation.evidence import (
+    aggregate_observables,
+    evidence_rows,
+    merge_observables,
+)
 from backend.aggregation.fingerprint import group_fingerprint
 from backend.aggregation.grouping import (
     behavior_family,
@@ -59,7 +64,10 @@ _SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
 
 def _ensure_not_production_db() -> None:
-    if not config.V2_ENGINES_ALLOW_PROD and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
+    if (
+        not config.V2_ENGINES_ALLOW_PROD
+        and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME
+    ):
         raise RuntimeError(
             f"aggregation engine refuses the v1 production database "
             f"({config.PRODUCTION_DB_NAME!r}) by name"
@@ -127,12 +135,26 @@ def _claim_group(
                 **{
                     col: getattr(candidate, col)
                     for col in (
-                        "behavior_group_id", "group_fingerprint", "title", "description",
-                        "status", "first_seen", "last_seen", "alert_count",
-                        "occurrence_count", "alert_ids", "host_ids", "user_ids",
-                        "source_ips", "mitre_tactics", "mitre_techniques",
-                        "observables", "confidence", "highest_severity",
-                        "created_at", "updated_at",
+                        "behavior_group_id",
+                        "group_fingerprint",
+                        "title",
+                        "description",
+                        "status",
+                        "first_seen",
+                        "last_seen",
+                        "alert_count",
+                        "occurrence_count",
+                        "alert_ids",
+                        "host_ids",
+                        "user_ids",
+                        "source_ips",
+                        "mitre_tactics",
+                        "mitre_techniques",
+                        "observables",
+                        "confidence",
+                        "highest_severity",
+                        "created_at",
+                        "updated_at",
                     )
                 }
             )
@@ -220,10 +242,16 @@ def _attach(
     group.user_ids = _merge_unique(group.user_ids, [alert.user_id or alert.username])
     group.source_ips = _merge_unique(group.source_ips, [alert.source_ip])
     group.mitre_tactics = _merge_unique(group.mitre_tactics, [alert.mitre_tactic])
-    group.mitre_techniques = _merge_unique(group.mitre_techniques, [alert.mitre_technique])
-    group.observables = merge_observables(group.observables, aggregate_observables([alert]))
+    group.mitre_techniques = _merge_unique(
+        group.mitre_techniques, [alert.mitre_technique]
+    )
+    group.observables = merge_observables(
+        group.observables, aggregate_observables([alert])
+    )
     group.confidence = _recompute_confidence(group, alert)
-    if _SEVERITY_RANK.get(alert.severity, 0) > _SEVERITY_RANK.get(group.highest_severity, 0):
+    if _SEVERITY_RANK.get(alert.severity, 0) > _SEVERITY_RANK.get(
+        group.highest_severity, 0
+    ):
         group.highest_severity = alert.severity
     group.description = _describe(group)
     group.updated_at = now
@@ -302,7 +330,7 @@ def process_alerts(
     never raw events (spec 4.4).
     """
     _ensure_not_production_db()
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     touched: list[BehaviorGroupRecord] = []
     ordered = sorted(alerts, key=lambda a: (a.first_seen, a.alert_id))
 
@@ -332,7 +360,10 @@ def process_alerts(
                 group_id=live.behavior_group_id,
                 action="GROUP_CLOSED",
                 actor=actor,
-                details={"reason": "aggregation window expired", "alert_id": alert.alert_id},
+                details={
+                    "reason": "aggregation window expired",
+                    "alert_id": alert.alert_id,
+                },
             )
             db.flush()
 
@@ -367,7 +398,8 @@ def process_alerts(
     db.commit()
     seen: set[str] = set()
     return [
-        g for g in touched
+        g
+        for g in touched
         if not (g.behavior_group_id in seen or seen.add(g.behavior_group_id))
     ]
 
@@ -379,7 +411,7 @@ def expire_groups(
 ) -> list[BehaviorGroupRecord]:
     """Inactivity lifecycle (spec 4.15): ACTIVE -> QUIET -> CLOSED."""
     _ensure_not_production_db()
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     touched: list[BehaviorGroupRecord] = []
     quiet_after = config.AGGREGATION_QUIET_AFTER_MINUTES
     close_after = config.AGGREGATION_CLOSE_AFTER_MINUTES
@@ -390,14 +422,22 @@ def expire_groups(
         if group.status == "ACTIVE" and quiet_cutoff(group.last_seen, now, quiet_after):
             action = apply_transition(group, "QUIET", now)
             audit.record(
-                db, group_id=group.behavior_group_id, action=action, actor=actor,
+                db,
+                group_id=group.behavior_group_id,
+                action=action,
+                actor=actor,
                 details={"inactive_minutes": quiet_after},
             )
             touched.append(group)
-        elif group.status == "QUIET" and close_cutoff(group.last_seen, now, close_after):
+        elif group.status == "QUIET" and close_cutoff(
+            group.last_seen, now, close_after
+        ):
             action = apply_transition(group, "CLOSED", now)
             audit.record(
-                db, group_id=group.behavior_group_id, action=action, actor=actor,
+                db,
+                group_id=group.behavior_group_id,
+                action=action,
+                actor=actor,
                 details={"inactive_minutes": close_after},
             )
             touched.append(group)

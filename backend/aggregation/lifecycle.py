@@ -10,6 +10,7 @@ Groups never silently absorb new alerts after closing (4.16), and an
 outside-window alert against a still-live group closes it first so the new
 episode gets its own group (4.14).
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -45,7 +46,9 @@ def can_transition(current: str, target: str) -> bool:
 def transition(current: str, target: str) -> str:
     action = TRANSITIONS.get((current, target))
     if action is None:
-        raise IllegalTransition(f"{current} -> {target} is not a legal group transition")
+        raise IllegalTransition(
+            f"{current} -> {target} is not a legal group transition"
+        )
     return action
 
 

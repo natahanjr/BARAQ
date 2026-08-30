@@ -4,6 +4,7 @@ Detects remote interactive logons (logon type 10) originating from an
 external / public source IP. Deterministic, evidence-explainable, and with
 zero side effects beyond producing a DETECTION.
 """
+
 from __future__ import annotations
 
 from backend.detection.context import DetectionContext
@@ -26,7 +27,9 @@ class ExternalRDPDetector(Detector):
     enabled = True
     supported_event_types = ("authentication",)
 
-    def evaluate(self, event: EVENT, context: DetectionContext | None = None) -> DETECTION | None:
+    def evaluate(
+        self, event: EVENT, context: DetectionContext | None = None
+    ) -> DETECTION | None:
         if event.action != "logon":
             return None
         logon_type = event.facts.get("logon_type")

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -15,8 +13,8 @@ router = APIRouter(prefix="/api/hunting", tags=["Hunting"])
 
 class HuntRequest(BaseModel):
     query: str
-    earliest: Optional[str] = None
-    latest: Optional[str] = None
+    earliest: str | None = None
+    latest: str | None = None
     limit: int = 100
 
 
@@ -56,8 +54,8 @@ async def hunt_events(
 @router.get("/search")
 async def hunt_events_get(
     q: str = Query(..., description="query"),
-    earliest: Optional[str] = None,
-    latest: Optional[str] = None,
+    earliest: str | None = None,
+    latest: str | None = None,
     limit: int = Query(100, ge=1, le=10000),
     request: Request = None,
     db: Session = Depends(get_db),

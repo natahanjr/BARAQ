@@ -4,9 +4,10 @@ A suppression policy needs a documented reason, a defined scope and an
 expiration - never "too many alerts" as the reason, never permanent by
 default. Every suppression is auditable via ``alert_suppression_rules``.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from ipaddress import ip_address, ip_network
 
 from sqlalchemy import select
@@ -37,20 +38,27 @@ def _match_ip(value: str, pattern: str) -> bool:
 def matches(rule: AlertSuppressionRule, detection: DETECTION) -> bool:
     """Does this suppression rule cover this detection?"""
     scope = rule.scope or {}
-    if scope.get("detector_id") and not _match(detection.detector_id, str(scope["detector_id"])):
+    if scope.get("detector_id") and not _match(
+        detection.detector_id, str(scope["detector_id"])
+    ):
         return False
     if scope.get("host") and not _match(detection.host_name, str(scope["host"])):
         return False
-    if scope.get("user") and not _match(detection.username or detection.user_id, str(scope["user"])):
+    if scope.get("user") and not _match(
+        detection.username or detection.user_id, str(scope["user"])
+    ):
         return False
-    if scope.get("source_ip") and not _match_ip(detection.source_ip, str(scope["source_ip"])):
-        return False
-    return True
+    return not (
+        scope.get("source_ip")
+        and not _match_ip(detection.source_ip, str(scope["source_ip"]))
+    )
 
 
-def is_suppressed(db: Session, detection: DETECTION, now: datetime | None = None) -> AlertSuppressionRule | None:
+def is_suppressed(
+    db: Session, detection: DETECTION, now: datetime | None = None
+) -> AlertSuppressionRule | None:
     """First non-expired rule covering the detection, or None."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     rules = db.scalars(
         select(AlertSuppressionRule).where(AlertSuppressionRule.expires_at > now)
     ).all()
@@ -71,7 +79,7 @@ def create_rule(
     now: datetime | None = None,
 ) -> AlertSuppressionRule:
     """Create an auditable suppression rule. Reason and expiration required."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     if not reason.strip():
         raise ValueError("a suppression rule needs a documented reason")
     if expires_at <= now:

@@ -1,8 +1,7 @@
 """Notification formatting + dispatch (webhook/Slack/Teams/Telegram)."""
+
 import json
 import queue
-
-import pytest
 
 from backend import notify
 
@@ -52,20 +51,34 @@ def test_teams_payload():
     p = notify._teams_payload(_alert())
     assert p["@type"] == "MessageCard"
     assert p["themeColor"] == "attention"
-    assert any(f["name"] == "mitre_id" and f["value"] == "T1071.001" for f in p["sections"][0]["facts"])
+    assert any(
+        f["name"] == "mitre_id" and f["value"] == "T1071.001"
+        for f in p["sections"][0]["facts"]
+    )
 
 
 def test_webhook_selects_slack_format(monkeypatch):
     captured = {}
+
     def fake_urlopen(req, timeout=10):
         captured["url"] = req.full_url
         captured["body"] = req.data.decode("utf-8")
+
         class Resp:
-            def __enter__(self): return self
-            def __exit__(self, *a): return False
-            def read(self): return b"ok"
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b"ok"
+
         return Resp()
-    monkeypatch.setattr(notify, "WEBHOOK_URL", "https://hooks.slack.com/services/T0/B0/x")
+
+    monkeypatch.setattr(
+        notify, "WEBHOOK_URL", "https://hooks.slack.com/services/T0/B0/x"
+    )
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
     notify._send_webhook(_alert())
     assert "attachments" in captured["body"]
@@ -74,20 +87,30 @@ def test_webhook_selects_slack_format(monkeypatch):
 
 def test_telegram_message(monkeypatch):
     captured = {}
+
     def fake_urlopen(req, timeout=10):
         captured["url"] = req.full_url
         captured["body"] = req.data.decode("utf-8")
+
         class Resp:
-            def __enter__(self): return self
-            def __exit__(self, *a): return False
-            def read(self): return b"ok"
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b"ok"
+
         return Resp()
+
     monkeypatch.setattr(notify, "TELEGRAM_BOT_TOKEN", "111:AAA")
     monkeypatch.setattr(notify, "TELEGRAM_CHAT_ID", "-100123")
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
     notify._send_telegram(_alert())
     assert "bot111:AAA" in captured["url"]
     import json as _json
+
     body = _json.loads(captured["body"])
     assert body["chat_id"] == "-100123"
     assert "Malicious C2 beacon" in body["text"]
@@ -107,7 +130,6 @@ def test_deliver_retries_then_falls_back(monkeypatch, tmp_path):
     """Failed channels are retried with backoff, then the alert is written to
     the JSON fallback directory instead of being silently dropped."""
     calls = {"webhook": 0}
-    notified = {"ok": False}
     monkeypatch.setattr(notify, "NOTIFY_RETRIES", 2)
     monkeypatch.setattr(notify, "NOTIFY_FALLBACK_DIR", str(tmp_path))
     monkeypatch.setattr(notify, "_configured", lambda name: True)
@@ -154,7 +176,6 @@ def test_deliver_success_marks_channel_healthy(monkeypatch):
 
 def test_notify_alert_enqueues(monkeypatch):
     """notify_alert() must stay non-blocking and land on the worker queue."""
-    seen = {}
     monkeypatch.setattr(notify, "_wanted", lambda sev: True)
     monkeypatch.setattr(notify, "_configured", lambda name: name == "webhook")
     monkeypatch.setattr(notify, "_start_worker", lambda: None)

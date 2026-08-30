@@ -1,6 +1,8 @@
 @echo off
 rem ===========================================================================
-rem  BARAQ - one-click launcher (Windows) - Updated 2026-08-28
+rem  BARAQ - one-click launcher (Windows) - Updated 2026-08-30
+rem  UI/UX: token-driven system, WCAG-AA contrast, focus-trapped overlays,
+rem  accessible badges/menus/tooltips, automated axe-core a11y gate.
 rem  Usage:
 rem    start.bat secure       -> STANDARD: HTTPS (TLS) with self-signed cert
 rem    start.bat secure lan   -> standard + exposed to the local network
@@ -23,7 +25,7 @@ echo.
 echo  ============================================
 echo   BARAQ - Live Threat Detection
 echo   Version: v6 (Phase 2 - ML Enhancements)
-echo   Date: 2026-08-28
+echo   Date: 2026-08-30
 if /i "%LAN_MODE%"=="lan" echo   MODE: LAN (accessible from your network)
 if /i "%SECURE_MODE%"=="secure" echo   MODE: HTTPS (TLS encrypted)
 echo  ============================================
@@ -32,7 +34,7 @@ echo.
 rem ---------------------------------------------------------------------------
 rem  STEP 1: Python version check
 rem ---------------------------------------------------------------------------
-echo  [1/10] Checking Python...
+echo  [1/12] Checking Python...
 where python >nul 2>nul
 if errorlevel 1 (
     echo  [ERROR] Python not found on PATH. Install Python 3.11+ first:
@@ -46,7 +48,7 @@ echo        Python %PYVER%: OK
 rem ---------------------------------------------------------------------------
 rem  STEP 2: Virtual environment
 rem ---------------------------------------------------------------------------
-echo  [2/10] Checking virtual environment...
+echo  [2/12] Checking virtual environment...
 if not exist "venv\Scripts\python.exe" (
     echo        Creating virtual environment...
     python -m venv venv
@@ -69,14 +71,14 @@ echo        Virtual environment: OK
 rem ---------------------------------------------------------------------------
 rem  STEP 3: Logs directory
 rem ---------------------------------------------------------------------------
-echo  [3/10] Checking logs directory...
+echo  [3/12] Checking logs directory...
 if not exist "logs" mkdir logs
 echo        Logs: OK
 
 rem ---------------------------------------------------------------------------
 rem  STEP 4: Environment config (.env)
 rem ---------------------------------------------------------------------------
-echo  [4/10] Checking configuration...
+echo  [4/12] Checking configuration...
 if not exist ".env" (
     echo  [ERROR] .env file not found. Copy .env.example to .env and configure:
     echo          BARAQ_DATABASE_URL=postgresql+psycopg://user:pass@host:port/db
@@ -86,41 +88,61 @@ if not exist ".env" (
 echo        Configuration: OK
 
 rem ---------------------------------------------------------------------------
-rem  STEP 5: Dashboard build
+rem  STEP 5: Dashboard build (non-fatal — backend starts even if build fails)
 rem ---------------------------------------------------------------------------
-echo  [5/10] Checking dashboard...
-if not exist "frontend\dist\index.html" (
-    where node >nul 2>nul
+echo  [5/12] Building dashboard (UI/UX hardened build)...
+set "FRONTEND_BUILD_OK=0"
+where node >nul 2>nul
+if errorlevel 1 (
+    echo  [WARN] Node.js not found - dashboard UI will not be served.
+    echo         Install Node.js 18+ then run:  cd frontend ^&^& npm install ^&^& npm run build
+) else (
+    pushd frontend
+    call npm install
     if errorlevel 1 (
-        echo  [WARN] Node.js not found - dashboard UI will not be served.
-        echo         Install Node.js 18+ then run:  cd frontend ^&^& npm install ^&^& npm run build
+        echo  [WARN] npm install failed - dashboard will not be rebuilt.
+        echo         Backend server will still start.
+        popd
     ) else (
-        echo        Building dashboard ^(first run only^)...
-        pushd frontend
-        call npm install
-        if errorlevel 1 (
-            echo  [ERROR] npm install failed.
-            popd
-            pause
-            exit /b 1
-        )
         call npm run build
         if errorlevel 1 (
-            echo  [ERROR] Dashboard build failed.
+            echo  [WARN] Dashboard build failed - backend server will still start.
             popd
-            pause
-            exit /b 1
+        ) else (
+            popd
+            echo        Dashboard: OK
+            set "FRONTEND_BUILD_OK=1"
         )
-        popd
     )
 )
-echo        Dashboard: OK
+
+rem ---------------------------------------------------------------------------
+rem  STEP 5b: Accessibility gate (axe-core smoke tests)
+rem ---------------------------------------------------------------------------
+echo  [5b/12] Running a11y gate (axe-core)...
+where node >nul 2>nul
+if errorlevel 1 (
+    echo  [SKIP] Node.js missing - skipping a11y gate.
+) else (
+    if exist "frontend\node_modules\.package-lock.json" (
+        pushd frontend
+        call npx vitest run --reporter=verbose 2>nul
+        if errorlevel 1 (
+            echo  [WARN] a11y gate reported issues - review src/test/a11y.test.jsx
+        ) else (
+            echo        a11y gate: OK
+        )
+        popd
+    ) else (
+        echo  [SKIP] frontend\node_modules missing - skipping a11y gate.
+    )
+)
 
 rem ---------------------------------------------------------------------------
 rem  STEP 6: TLS (if secure mode)
 rem ---------------------------------------------------------------------------
 if /i "%SECURE_MODE%"=="secure" (
-    echo  [6/10] Generating TLS certificate...
+    echo  [6/12] Generating TLS certificate...
     powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\gen_cert.ps1" >nul 2>&1
     if not exist "certs\baraq.crt" (
         echo  [ERROR] Certificate generation failed.
@@ -129,7 +151,7 @@ if /i "%SECURE_MODE%"=="secure" (
     )
     echo        TLS certificate: OK
 ) else (
-    echo  [6/10] TLS: Skipped (not in secure mode)
+    echo  [6/12] TLS: Skipped (not in secure mode)
 )
 
 rem ---------------------------------------------------------------------------
@@ -143,13 +165,13 @@ if /i "%LAN_MODE%"=="lan" (
         set "FW_PORT=8001"
         set "FW_PROTO=http"
     )
-    echo  [7/10] Opening port %FW_PORT% in Windows Firewall...
+    echo  [7/12] Opening port %FW_PORT% in Windows Firewall...
     netsh advfirewall firewall add rule name="BARAQ" dir=in action=allow protocol=TCP localport=%FW_PORT% >nul 2>&1
     if errorlevel 1 (
         echo  [WARN] Firewall rule not added - run this as Administrator.
     )
     echo.
-    for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do set "MY_IP=%%a"
+    for /f "tokens=2 delims=: " %%a in ('ipconfig ^| findstr /c:"IPv4"') do set "MY_IP=%%a"
     echo  Other devices on your network can now open:
     echo   %FW_PROTO%://%MY_IP%:%FW_PORT%
     echo.
@@ -162,13 +184,13 @@ if /i "%LAN_MODE%"=="lan" (
         echo.
     )
 ) else (
-    echo  [7/10] Firewall: Skipped (not in LAN mode)
+    echo  [7/12] Firewall: Skipped (not in LAN mode)
 )
 
 rem ---------------------------------------------------------------------------
 rem  STEP 8: PostgreSQL database
 rem ---------------------------------------------------------------------------
-echo  [8/10] Ensuring PostgreSQL database...
+echo  [8/12] Ensuring PostgreSQL database...
 powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\pg_setup.ps1" -Action ensure
 if errorlevel 1 (
     echo  [ERROR] PostgreSQL could not be started. Run scripts\download_postgres.ps1
@@ -181,7 +203,7 @@ echo        Database: OK
 rem ---------------------------------------------------------------------------
 rem  STEP 9: ML modules check
 rem ---------------------------------------------------------------------------
-echo  [9/10] Checking ML modules...
+echo  [9/12] Checking ML modules...
 set "ML_OK=1"
 if not exist "backend\ml\anomaly.py" (
     echo  [WARN] backend\ml\anomaly.py missing
@@ -228,7 +250,7 @@ if "%ML_OK%"=="1" (
 rem ---------------------------------------------------------------------------
 rem  STEP 9b: ML bootstrap model
 rem ---------------------------------------------------------------------------
-echo  [9/10] Checking ML bootstrap model...
+echo  [9b/12] Checking ML bootstrap model...
 if not exist "backend\ml\assets\bootstrap_model.joblib" (
     echo        Building day-1 bootstrap detection model ^(one-time^)...
     venv\Scripts\python tools\build_bootstrap_model.py >nul 2>&1
@@ -244,10 +266,10 @@ if not exist "backend\ml\assets\bootstrap_model.joblib" (
 rem ---------------------------------------------------------------------------
 rem  STEP 10: Kill old server and start
 rem ---------------------------------------------------------------------------
-echo  [10/10] Starting BARAQ server...
+echo  [10/12] Starting BARAQ server...
 set "TARGET_PORT=8001"
 if /i "%SECURE_MODE%"=="secure" set "TARGET_PORT=8443"
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:":%TARGET_PORT% .*LISTENING"') do (
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c":%TARGET_PORT% .*LISTENING"') do (
     echo        Stopping previous server on port %TARGET_PORT% ^(PID %%p^)...
     taskkill /f /pid %%p >nul 2>&1
 )
@@ -261,13 +283,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "%TLS_PREFIX%Start-Proces
 rem ---------------------------------------------------------------------------
 rem  STEP 11: Frontend dev server (Vite)
 rem ---------------------------------------------------------------------------
-echo  [11/11] Starting frontend dev server...
+echo  [11/12] Starting frontend dev server...
 where node >nul 2>nul
 if errorlevel 1 (
     echo  [WARN] Node.js not found - frontend dev server skipped.
     echo         Dashboard available at http://127.0.0.1:8001 (served by backend)
 ) else (
-    for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:":5173 .*LISTENING"') do (
+    for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c":5173 .*LISTENING"') do (
         echo        Stopping previous Vite dev server on port 5173 ^(PID %%p^)...
         taskkill /f /pid %%p >nul 2>&1
     )
@@ -275,6 +297,36 @@ if errorlevel 1 (
     start "" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-Location '%CD%'; npx vite --host 127.0.0.1 *> '..\logs\vite.out.log'"
     popd
     echo        Frontend dev server: OK (http://127.0.0.1:5173)
+)
+
+rem ---------------------------------------------------------------------------
+rem  STEP 12: Wait for server and open browser
+rem ---------------------------------------------------------------------------
+echo  [12/12] Waiting for server to be ready and opening browser...
+set "URL=http://127.0.0.1:8001"
+if /i "%SECURE_MODE%"=="secure" set "URL=https://127.0.0.1:8443"
+
+rem Wait up to 30 seconds for the server to come up
+set "READY=0"
+set /a "TRIES=0"
+:WAIT_LOOP
+if %TRIES% geq 30 goto DONE_WAIT
+curl.exe -k -s -o nul "%URL%/api/health" >nul 2>&1
+if %errorlevel% equ 0 (
+    set "READY=1"
+    goto DONE_WAIT
+)
+timeout /t 1 /nobreak >nul
+set /a "TRIES+=1"
+goto WAIT_LOOP
+:DONE_WAIT
+
+if "%READY%"=="1" (
+    echo        Server is ready!
+    start "" "%URL%"
+) else (
+    echo  [WARN] Server did not respond within 30 seconds. Try opening manually:
+    echo         %URL%
 )
 
 rem ---------------------------------------------------------------------------
@@ -316,6 +368,7 @@ echo    NTLM, Kerberos, PrintService, AppLocker
 echo    DNS Client, Hardware Events, USB, BitLocker, DiskDiagnostic
 echo.
 echo  Dashboard:    http://127.0.0.1:5173 (dev) or %URL% (prod)
+echo  A11y gate:    axe-core smoke tests (npm test in frontend) - runs each launch
 echo.
 echo  [DONE]  BARAQ is starting in the background. Closing this window...
 ping -n 3 127.0.0.1 >nul

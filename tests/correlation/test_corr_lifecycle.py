@@ -1,4 +1,5 @@
 """Phase 5 lifecycle tests (spec 5.31, 5.32, 5.63)."""
+
 from datetime import timedelta
 
 import pytest
@@ -11,7 +12,6 @@ from backend.correlation.lifecycle import (
     transition,
 )
 from backend.correlation.models import CorrelationFindingRecord
-
 from tests.correlation.helpers import (
     CORR_T0,
     canonical_specs,
@@ -75,10 +75,24 @@ def test_closed_finding_never_silently_reopens(db):
     make_groups(
         db,
         [
-            dict(detector_id="D002", host="10.0.0.9", user="u-r1", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=0, destination_ip="10.0.0.8"),
-            dict(detector_id="D002", host="10.0.0.8", user="u-r1", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=1, destination_ip="10.0.0.7"),
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.9",
+                "user": "u-r1",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 0,
+                "destination_ip": "10.0.0.8",
+            },
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.8",
+                "user": "u-r1",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 1,
+                "destination_ip": "10.0.0.7",
+            },
         ],
         now=CORR_T0 + timedelta(hours=8),
     )
@@ -88,8 +102,7 @@ def test_closed_finding_never_silently_reopens(db):
     old = next(f for f in findings if f.correlation_id == closed_id)
     assert old.status == "CLOSED"
     assert "CORRELATION_REOPEN_REJECTED" in {
-        e.action for e in stored_corr_audit(db)
-        if e.correlation_id == closed_id
+        e.action for e in stored_corr_audit(db) if e.correlation_id == closed_id
     }
     # A NEW finding exists for the new episode instead.
     assert len(findings) == 2
@@ -97,7 +110,6 @@ def test_closed_finding_never_silently_reopens(db):
 
 
 def test_finding_model_rejects_reopen_transition():
-    from backend.correlation.models import CorrelationFindingRecord
 
     finding = CorrelationFindingRecord(status="CLOSED")
     with pytest.raises(IllegalTransition):

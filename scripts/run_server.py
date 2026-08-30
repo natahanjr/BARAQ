@@ -8,6 +8,7 @@ Usage:
 The executable is built windowed (PyInstaller console=False), so double
 clicking it starts the SOC in the background with no console window.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -105,7 +106,9 @@ def main() -> None:
     _add_file_logging()
 
     host = os.environ.get("BARAQ_HOST", "0.0.0.0" if args.lan else "127.0.0.1")
-    port = args.port or int(os.environ.get("BARAQ_PORT", str(TLS_PORT if TLS_ENABLED else 8001)))
+    port = args.port or int(
+        os.environ.get("BARAQ_PORT", str(TLS_PORT if TLS_ENABLED else 8001))
+    )
     ssl_kwargs = {}
     if TLS_ENABLED:
         ssl_kwargs = {
@@ -117,7 +120,7 @@ def main() -> None:
         uvicorn.run(
             "backend.main:app", host=host, port=port, log_level="info", **ssl_kwargs
         )
-    except BaseException as exc:  # noqa: BLE001 - surface daemon crashes in log
+    except BaseException as exc:
         _log_failure(exc)
         raise
 

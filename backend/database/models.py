@@ -1,8 +1,9 @@
 """SQLAlchemy ORM models for the BARAQ local database (PostgreSQL)."""
+
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -68,7 +69,7 @@ class EncryptedColumn(TypeDecorator):
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def canonical_timestamp(ts: datetime | None) -> str:
@@ -80,8 +81,8 @@ def canonical_timestamp(ts: datetime | None) -> str:
     if ts is None:
         return ""
     if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
-    return ts.astimezone(timezone.utc).replace(microsecond=0).isoformat()
+        ts = ts.replace(tzinfo=UTC)
+    return ts.astimezone(UTC).replace(microsecond=0).isoformat()
 
 
 class Base(DeclarativeBase):
@@ -117,8 +118,12 @@ class User(Base):
     #: True while the account still signs in with the default bootstrap
     #: password; the console forces a change before the account is usable.
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -132,7 +137,9 @@ class User(Base):
             "totp_enabled": self.totp_enabled,
             "must_change_password": bool(self.must_change_password),
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "last_login_at": self.last_login_at.isoformat() if self.last_login_at else None,
+            "last_login_at": (
+                self.last_login_at.isoformat() if self.last_login_at else None
+            ),
         }
 
 
@@ -149,13 +156,19 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    actor: Mapped[str] = mapped_column(String(64), index=True)  # username / api key / system
-    action: Mapped[str] = mapped_column(String(64), index=True)  # login, alert.status, command.queue, ...
+    actor: Mapped[str] = mapped_column(
+        String(64), index=True
+    )  # username / api key / system
+    action: Mapped[str] = mapped_column(
+        String(64), index=True
+    )  # login, alert.status, command.queue, ...
     entity_type: Mapped[str] = mapped_column(String(32), default="")
     entity_id: Mapped[str] = mapped_column(String(64), default="")
     detail: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # AuditLog
     ip: Mapped[str] = mapped_column(String(64), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
     #: SHA-256 of the previous audit entry's canonical form ("0"*64 for genesis).
     prev_hash: Mapped[str] = mapped_column(String(64), default="0" * 64)
     #: SHA-256 chain hash of this entry.
@@ -216,17 +229,21 @@ class NormalizedEvent(Base):
     demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     risk: Mapped[str] = mapped_column(String(16), index=True, default="Low")
     severity: Mapped[str] = mapped_column(String(16), index=True, default="info")
-    message: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # NormalizedEvent
+    message: Mapped[str] = mapped_column(
+        EncryptedColumn(), default=""
+    )  # NormalizedEvent
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     #: Data-integrity status: "complete" or "truncated" when the collector or
     #: message formatter lost part of the event (detail in raw_json["data_integrity"]).
-    data_integrity: Mapped[str] = mapped_column(String(16), default="complete", index=True)
+    data_integrity: Mapped[str] = mapped_column(
+        String(16), default="complete", index=True
+    )
     raw_json: Mapped[dict | None] = mapped_column(JSONColumnType, nullable=True)
     is_anomaly: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     ml_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     risk_score: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
 
-    verdict: Mapped["Verdict | None"] = relationship(
+    verdict: Mapped[Verdict | None] = relationship(
         "Verdict", back_populates="event", uselist=False, passive_deletes=True
     )
 
@@ -282,7 +299,9 @@ class Alert(Base):
     correlation_id: Mapped[str] = mapped_column(String(64), default="", index=True)
     event_count: Mapped[int] = mapped_column(Integer, default=0)
     trigger_count: Mapped[int] = mapped_column(Integer, default=1)
-    detection_method: Mapped[str] = mapped_column(String(16), index=True, default="rule")
+    detection_method: Mapped[str] = mapped_column(
+        String(16), index=True, default="rule"
+    )
     risk_score: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     risk_level: Mapped[str] = mapped_column(String(16), index=True, default="MEDIUM")
     #: P1 explainable risk: structured breakdown of how the score was built
@@ -296,10 +315,10 @@ class Alert(Base):
     #: Ticket links from ticketing integrations (roadmap 6.3), e.g.
     #: [{"system": "jira", "key": "SOC-42", "url": "..."}].
     ticket_links: Mapped[list] = mapped_column(JSONColumnType, default=list)
-    events: Mapped[list["AlertEventLink"]] = relationship(
+    events: Mapped[list[AlertEventLink]] = relationship(
         "AlertEventLink", back_populates="alert", cascade="all, delete-orphan"
     )
-    notes: Mapped[list["AnalystNote"]] = relationship(
+    notes: Mapped[list[AnalystNote]] = relationship(
         "AnalystNote", back_populates="alert", cascade="all, delete-orphan"
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -337,7 +356,8 @@ class Alert(Base):
         }
         if include_events:
             data["events"] = [
-                link.event.to_dict() for link in sorted(self.events, key=lambda l: l.event_id)
+                link.event.to_dict()
+                for link in sorted(self.events, key=lambda l: l.event_id)
             ]
             data["notes"] = [
                 {"id": n.id, "note": n.note, "created_at": n.created_at.isoformat()}
@@ -397,9 +417,7 @@ class Endpoint(Base):
     host: Mapped[str] = mapped_column(String(128), index=True, default="")
     #: Tenant scoping: the organization owning this agent ("" = system fleet).
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
-    last_seen: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow
-    )
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     records_total: Mapped[int] = mapped_column(Integer, default=0)
     events_total: Mapped[int] = mapped_column(Integer, default=0)
     alerts_total: Mapped[int] = mapped_column(Integer, default=0)
@@ -448,7 +466,9 @@ class ProcessRecord(Base):
     parent_guid: Mapped[str] = mapped_column(String(64), default="")
     name: Mapped[str] = mapped_column(String(256), index=True)
     path: Mapped[str] = mapped_column(Text, default="")
-    command_line: Mapped[str] = mapped_column(EncryptedColumn(), default="")  # ProcessRecord
+    command_line: Mapped[str] = mapped_column(
+        EncryptedColumn(), default=""
+    )  # ProcessRecord
     parent_name: Mapped[str] = mapped_column(String(256), default="")
     user: Mapped[str] = mapped_column(String(128), default="")
     is_new: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -761,10 +781,12 @@ class ReportRecord(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     report_type: Mapped[str] = mapped_column(String(32))  # executive | technical
-    format: Mapped[str] = mapped_column(String(16))       # pdf | html | json | csv
+    format: Mapped[str] = mapped_column(String(16))  # pdf | html | json | csv
     title: Mapped[str] = mapped_column(String(256))
     file_path: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -830,7 +852,9 @@ class AnalystNote(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     alert_id: Mapped[int] = mapped_column(ForeignKey("alerts.id", ondelete="CASCADE"))
     note: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
     alert: Mapped[Alert] = relationship(back_populates="notes")
 
 
@@ -842,7 +866,9 @@ class AssistantMessage(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     role: Mapped[str] = mapped_column(String(16))  # user | assistant
     content: Mapped[str] = mapped_column(EncryptedColumn())  # AssistantMessage
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -862,12 +888,18 @@ class AlertAction(Base):
     alert_id: Mapped[int] = mapped_column(
         ForeignKey("alerts.id", ondelete="CASCADE"), index=True
     )
-    action: Mapped[str] = mapped_column(String(32))  # block_ip | kill_process | quarantine | escalate | ack
+    action: Mapped[str] = mapped_column(
+        String(32)
+    )  # block_ip | kill_process | quarantine | escalate | ack
     target: Mapped[str] = mapped_column(String(256), default="")
-    status: Mapped[str] = mapped_column(String(16), default="queued")  # queued | success | failed
+    status: Mapped[str] = mapped_column(
+        String(16), default="queued"
+    )  # queued | success | failed
     detail: Mapped[str] = mapped_column(Text, default="")
     triggered_by: Mapped[str] = mapped_column(String(64), default="auto")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -895,12 +927,20 @@ class AgentCommand(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     agent_id: Mapped[str] = mapped_column(String(64), index=True)
-    action: Mapped[str] = mapped_column(String(32))  # block_ip | kill_process | quarantine | escalate
+    action: Mapped[str] = mapped_column(
+        String(32)
+    )  # block_ip | kill_process | quarantine | escalate
     target: Mapped[str] = mapped_column(String(256), default="")
-    status: Mapped[str] = mapped_column(String(16), index=True, default="pending")  # pending | success | failed
+    status: Mapped[str] = mapped_column(
+        String(16), index=True, default="pending"
+    )  # pending | success | failed
     detail: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    executed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -935,7 +975,9 @@ class EvaluationRun(Base):
     f1_score: Mapped[float] = mapped_column(Float, default=0.0)
     false_positive_rate: Mapped[float] = mapped_column(Float, default=0.0)
     detection_time_ms: Mapped[float] = mapped_column(Float, default=0.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -980,10 +1022,13 @@ class Verdict(Base):
     verdict: Mapped[str] = mapped_column(String(32))  # true_positive | false_positive
     note: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(64), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
-    event: Mapped["NormalizedEvent"] = relationship("NormalizedEvent", back_populates="verdict")
-    __table_args__ = (UniqueConstraint("event_id", name="uq_verdict_event"),)
+    event: Mapped[NormalizedEvent] = relationship(
+        "NormalizedEvent", back_populates="verdict"
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -1045,20 +1090,28 @@ class Incident(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
-    opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    opened_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     #: First-response SLA clock: set when an analyst first engages the case
     #: (status leaves "open" or an owner is assigned). Never overwritten.
-    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    responded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
-    alerts: Mapped[list["IncidentAlertLink"]] = relationship(
+    alerts: Mapped[list[IncidentAlertLink]] = relationship(
         "IncidentAlertLink",
         back_populates="incident",
         cascade="all, delete-orphan",
         order_by="IncidentAlertLink.alert_id",
     )
-    comments: Mapped[list["IncidentComment"]] = relationship(
+    comments: Mapped[list[IncidentComment]] = relationship(
         "IncidentComment",
         back_populates="incident",
         cascade="all, delete-orphan",
@@ -1092,11 +1145,17 @@ class Incident(Base):
             "opened_at": self.opened_at.isoformat() if self.opened_at else None,
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
             "closed_at": self.closed_at.isoformat() if self.closed_at else None,
-            "responded_at": self.responded_at.isoformat() if self.responded_at else None,
+            "responded_at": (
+                self.responded_at.isoformat() if self.responded_at else None
+            ),
         }
         if include_links:
             data["alerts"] = [
-                {"alert_id": l.alert_id, "name": l.alert.name, "severity": l.alert.severity}
+                {
+                    "alert_id": l.alert_id,
+                    "name": l.alert.name,
+                    "severity": l.alert.severity,
+                }
                 for l in self.alerts
             ]
             data["comments"] = [c.to_dict() for c in self.comments]
@@ -1139,8 +1198,12 @@ class IncidentComment(Base):
     )
     author: Mapped[str] = mapped_column(String(128), default="analyst")
     body: Mapped[str] = mapped_column(Text)
-    kind: Mapped[str] = mapped_column(String(16), default="comment")  # comment | action | status
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    kind: Mapped[str] = mapped_column(
+        String(16), default="comment"
+    )  # comment | action | status
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
     incident: Mapped[Incident] = relationship(back_populates="comments")
 
@@ -1172,10 +1235,14 @@ class AlertVerdict(Base):
     alert_id: Mapped[int] = mapped_column(
         ForeignKey("alerts.id", ondelete="CASCADE"), index=True, nullable=False
     )
-    verdict: Mapped[str] = mapped_column(String(32))  # true_positive | false_positive | expected_behavior
+    verdict: Mapped[str] = mapped_column(
+        String(32)
+    )  # true_positive | false_positive | expected_behavior
     note: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(128), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
     alert: Mapped[Alert] = relationship()
 
@@ -1203,14 +1270,22 @@ class SuppressionRule(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     rule: Mapped[str] = mapped_column(String(64), index=True)  # rule id or "*"
-    host: Mapped[str] = mapped_column(String(128), default="*", index=True)  # host or "*"
-    user: Mapped[str] = mapped_column(String(128), default="*", index=True)  # user or "*"
+    host: Mapped[str] = mapped_column(
+        String(128), default="*", index=True
+    )  # host or "*"
+    user: Mapped[str] = mapped_column(
+        String(128), default="*", index=True
+    )  # user or "*"
     reason: Mapped[str] = mapped_column(String(512), default="")
     created_by: Mapped[str] = mapped_column(String(128), default="")
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     suppressed_count: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -1235,7 +1310,9 @@ class ThreatIntelRecord(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     indicator: Mapped[str] = mapped_column(String(256), unique=True, index=True)
     kind: Mapped[str] = mapped_column(String(16), default="ip")  # ip | domain | hash
-    category: Mapped[str] = mapped_column(String(16), index=True, default="unknown")  # abusive | malicious | suspicious | benign | unknown
+    category: Mapped[str] = mapped_column(
+        String(16), index=True, default="unknown"
+    )  # abusive | malicious | suspicious | benign | unknown
     label: Mapped[str] = mapped_column(Text, default="")
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
     sources: Mapped[list] = mapped_column(JSONColumnType, default=list)
@@ -1280,7 +1357,9 @@ class ThreatIntelFeedState(Base):
             "name": self.name,
             "feed_type": self.feed_type,
             "url": self.url,
-            "last_success_at": self.last_success_at.isoformat() if self.last_success_at else None,
+            "last_success_at": (
+                self.last_success_at.isoformat() if self.last_success_at else None
+            ),
             "last_error": self.last_error,
             "ioc_count": self.ioc_count,
             "total_fetched": self.total_fetched,
@@ -1338,7 +1417,9 @@ class EntityNode(Base):
     __table_args__ = (UniqueConstraint("kind", "name"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    kind: Mapped[str] = mapped_column(String(24), index=True)  # user | device | process | ip | domain | file | technique | threat_actor
+    kind: Mapped[str] = mapped_column(
+        String(24), index=True
+    )  # user | device | process | ip | domain | file | technique | threat_actor
     name: Mapped[str] = mapped_column(String(512), index=True)
     display_name: Mapped[str] = mapped_column(String(512), default="")
     label: Mapped[str] = mapped_column(String(256), default="")
@@ -1348,7 +1429,9 @@ class EntityNode(Base):
     events_count: Mapped[int] = mapped_column(Integer, default=0)
     properties: Mapped[dict] = mapped_column(JSONColumnType, default=dict)
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    last_seen: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     provider: Mapped[str] = mapped_column(String(16), default="postgres")
 
     def to_dict(self, include_props: bool = True) -> dict:
@@ -1379,7 +1462,9 @@ class EntityEdge(Base):
     """
 
     __tablename__ = "entity_edges"
-    __table_args__ = (UniqueConstraint("src_kind", "src_name", "rel", "dst_kind", "dst_name"),)
+    __table_args__ = (
+        UniqueConstraint("src_kind", "src_name", "rel", "dst_kind", "dst_name"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     src_kind: Mapped[str] = mapped_column(String(24), index=True)
@@ -1389,7 +1474,9 @@ class EntityEdge(Base):
     dst_name: Mapped[str] = mapped_column(String(512), index=True)
     weight: Mapped[int] = mapped_column(Integer, default=1)
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    last_seen: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     properties: Mapped[dict] = mapped_column(JSONColumnType, default=dict)
     provider: Mapped[str] = mapped_column(String(16), default="postgres")
 
@@ -1419,13 +1506,15 @@ class LicenseRecord(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     license_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     customer: Mapped[str] = mapped_column(String(256), default="")
-    edition: Mapped[str] = mapped_column(String(24), default="trial")  # trial | standard | professional
+    edition: Mapped[str] = mapped_column(
+        String(24), default="trial"
+    )  # trial | standard | professional
     seats: Mapped[int] = mapped_column(Integer, default=1)
     license_key: Mapped[str] = mapped_column(Text, default="")
     payload_json: Mapped[str] = mapped_column(Text, default="{}")
     expires_at: Mapped[str] = mapped_column(String(64), default="")
     activated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.now(timezone.utc)
+        DateTime(timezone=True), default=datetime.now(UTC)
     )
 
     def to_dict(self) -> dict:
@@ -1436,7 +1525,9 @@ class LicenseRecord(Base):
             "edition": self.edition,
             "seats": self.seats,
             "expires_at": self.expires_at,
-            "activated_at": self.activated_at.isoformat() if self.activated_at else None,
+            "activated_at": (
+                self.activated_at.isoformat() if self.activated_at else None
+            ),
         }
 
 
@@ -1520,8 +1611,12 @@ class EntityRisk(Base):
             "alerts_count": self.alerts_count,
             "contributions": self.contributions or [],
             "last_escalated_level": self.last_escalated_level,
-            "last_escalated_at": self.last_escalated_at.isoformat() if self.last_escalated_at else None,
-            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
+            "last_escalated_at": (
+                self.last_escalated_at.isoformat() if self.last_escalated_at else None
+            ),
+            "last_updated": (
+                self.last_updated.isoformat() if self.last_updated else None
+            ),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -1656,8 +1751,12 @@ class PlaybookRun(Base):
     org: Mapped[str] = mapped_column(String(64), default="", index=True)
     #: [{"action": "block_ip", "status": "success", "detail": "..."}]
     results: Mapped[list] = mapped_column(JSONColumnType, default=list)
-    status: Mapped[str] = mapped_column(String(16), default="completed")  # completed | partial | failed
-    triggered_by: Mapped[str] = mapped_column(String(32), default="auto")  # auto | manual
+    status: Mapped[str] = mapped_column(
+        String(16), default="completed"
+    )  # completed | partial | failed
+    triggered_by: Mapped[str] = mapped_column(
+        String(32), default="auto"
+    )  # auto | manual
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
     )
@@ -1815,8 +1914,12 @@ class DatasetCollection(Base):
             "total_events": self.total_events,
             "parts": self.parts,
             "started_at": self.started_at.isoformat() if self.started_at else None,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
-            "last_export_at": self.last_export_at.isoformat() if self.last_export_at else None,
+            "completed_at": (
+                self.completed_at.isoformat() if self.completed_at else None
+            ),
+            "last_export_at": (
+                self.last_export_at.isoformat() if self.last_export_at else None
+            ),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -1842,14 +1945,10 @@ class DatasetEvent(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    collection_id: Mapped[int] = mapped_column(
-        Integer, index=True, nullable=False
-    )
+    collection_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     event_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
     source_event_id: Mapped[int] = mapped_column(Integer, index=True)
-    timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), index=True
-    )
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     event_type: Mapped[str] = mapped_column(String(64), default="", index=True)
     event_source: Mapped[str] = mapped_column(String(32), default="")
     payload_normalized: Mapped[dict] = mapped_column(JSONColumnType, default=dict)
@@ -1894,7 +1993,9 @@ class DatasetExport(Base):
             "collection_id": self.collection_id,
             "trigger": self.trigger,
             "started_at": self.started_at.isoformat() if self.started_at else None,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "completed_at": (
+                self.completed_at.isoformat() if self.completed_at else None
+            ),
             "event_count": self.event_count,
             "files_count": self.files_count,
             "status": self.status,
@@ -1908,9 +2009,7 @@ class DatasetExportFile(Base):
     independent verification (thesis reproducibility)."""
 
     __tablename__ = "dataset_export_files"
-    __table_args__ = (
-        UniqueConstraint("filename", name="uq_dataset_filename"),
-    )
+    __table_args__ = (UniqueConstraint("filename", name="uq_dataset_filename"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     export_id: Mapped[int] = mapped_column(Integer, index=True)
@@ -1940,8 +2039,12 @@ class DatasetExportFile(Base):
             "part_number": self.part_number,
             "event_count": self.event_count,
             "sha256": self.sha256,
-            "first_timestamp": self.first_timestamp.isoformat() if self.first_timestamp else None,
-            "last_timestamp": self.last_timestamp.isoformat() if self.last_timestamp else None,
+            "first_timestamp": (
+                self.first_timestamp.isoformat() if self.first_timestamp else None
+            ),
+            "last_timestamp": (
+                self.last_timestamp.isoformat() if self.last_timestamp else None
+            ),
             "status": self.status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
@@ -1971,7 +2074,9 @@ class HostProcessChain(Base):
     parent_name: Mapped[str] = mapped_column(String(128))
     child_name: Mapped[str] = mapped_column(String(128))
     occurrences: Mapped[int] = mapped_column(Integer, default=0)
-    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    first_seen: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
     last_seen: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )

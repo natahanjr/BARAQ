@@ -10,12 +10,13 @@ fingerprint used for idempotent ingestion.
 Owned by ``telemetry/``. Nothing in this module may import detection,
 correlation, risk or incident code.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 

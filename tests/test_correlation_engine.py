@@ -1,19 +1,23 @@
 """Tests for the declarative YAML correlation engine."""
+
 from __future__ import annotations
+
+from datetime import UTC
 
 import pytest
 
 from backend.database.models import Alert
 from backend.detection.correlation_engine import (
     CorrelationEngine,
-    CorrelationSpec,
     CorrelationStage,
     load_correlation_rules,
     parse_correlation_yaml,
 )
 
 
-def _mk_alert(db, rule: str, tactic: str, host: str = "WS-01", evidence: str = "") -> Alert:
+def _mk_alert(
+    db, rule: str, tactic: str, host: str = "WS-01", evidence: str = ""
+) -> Alert:
     alert = Alert(
         name=f"{rule} detection",
         description="test",
@@ -47,8 +51,16 @@ SAMPLE_YAML = {
     "group_by": "host",
     "match": "all",
     "stages": [
-        {"label": "Credential Access", "rules": ["brute_force"], "tactics": ["Credential Access"]},
-        {"label": "Privilege Escalation", "rules": ["privilege_escalation"], "tactics": ["Privilege Escalation"]},
+        {
+            "label": "Credential Access",
+            "rules": ["brute_force"],
+            "tactics": ["Credential Access"],
+        },
+        {
+            "label": "Privilege Escalation",
+            "rules": ["privilege_escalation"],
+            "tactics": ["Privilege Escalation"],
+        },
     ],
 }
 
@@ -77,11 +89,15 @@ def _mk_alert_proxy(rule: str, tactic: str) -> object:
 
 def test_parse_invalid_yaml_raises():
     with pytest.raises(ValueError):
-        parse_correlation_yaml({"name": "x", "group_by": "banana", "stages": [{"label": "s"}]})
+        parse_correlation_yaml(
+            {"name": "x", "group_by": "banana", "stages": [{"label": "s"}]}
+        )
     with pytest.raises(ValueError):
         parse_correlation_yaml({"name": "x", "stages": []})
     with pytest.raises(ValueError):
-        parse_correlation_yaml({"name": "x", "stages": [{"label": "s"}], "match": "sometimes"})
+        parse_correlation_yaml(
+            {"name": "x", "stages": [{"label": "s"}], "match": "sometimes"}
+        )
 
 
 def test_stage_match_by_rule_and_tactic():
@@ -169,8 +185,16 @@ def test_correlation_engine_group_by_host_isolates_entities(db):
 
 def test_correlation_engine_group_by_user(db):
     yaml = dict(SAMPLE_YAML, group_by="user")
-    _mk_alert(db, "brute_force", "Credential Access", host="WS-01", evidence="User 'alice'")
-    _mk_alert(db, "privilege_escalation", "Privilege Escalation", host="WS-02", evidence="User 'alice'")
+    _mk_alert(
+        db, "brute_force", "Credential Access", host="WS-01", evidence="User 'alice'"
+    )
+    _mk_alert(
+        db,
+        "privilege_escalation",
+        "Privilege Escalation",
+        host="WS-02",
+        evidence="User 'alice'",
+    )
     engine = CorrelationEngine(db)
     engine.specs = [parse_correlation_yaml(yaml, source="test.yml")]
     findings = engine.evaluate(window_minutes=60)
@@ -248,8 +272,14 @@ MULTI_SOURCE_YAML = {
 }
 
 
-def _mk_event(db, event_id: int, host: str = "WS-01", risk: str = "Medium", severity: str = "medium") -> None:
-    from datetime import datetime, timezone
+def _mk_event(
+    db,
+    event_id: int,
+    host: str = "WS-01",
+    risk: str = "Medium",
+    severity: str = "medium",
+) -> None:
+    from datetime import datetime
 
     from backend.database.models import NormalizedEvent
 
@@ -264,7 +294,7 @@ def _mk_event(db, event_id: int, host: str = "WS-01", risk: str = "Medium", seve
             risk=risk,
             severity=severity,
             message=f"Logon failure for user alice (event {event_id})",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             data_integrity="complete",
         )
     )
@@ -292,9 +322,7 @@ def test_parse_event_stage_requires_condition():
 
 def test_parse_alert_stage_requires_rules_or_tactics():
     with pytest.raises(ValueError):
-        parse_correlation_yaml(
-            {"name": "x", "stages": [{"label": "s", "rules": []}]}
-        )
+        parse_correlation_yaml({"name": "x", "stages": [{"label": "s", "rules": []}]})
 
 
 def test_event_stage_matches_raw_events(db):
@@ -311,7 +339,6 @@ def test_event_stage_matches_raw_events(db):
 
 def test_event_stage_risk_and_severity_conditions(db):
     from backend.database.models import NormalizedEvent
-
     from backend.detection.correlation_engine import EventConditions
 
     cond = EventConditions(event_ids=[4625], min_risk="Medium")
@@ -323,7 +350,9 @@ def test_event_stage_risk_and_severity_conditions(db):
 
     sev = EventConditions(severity=["critical"])
     _mk_event(db, 4625, risk="High", severity="critical")
-    crit = db.query(NormalizedEvent).filter(NormalizedEvent.severity == "critical").one()
+    crit = (
+        db.query(NormalizedEvent).filter(NormalizedEvent.severity == "critical").one()
+    )
     assert sev.matches(crit)
     _mk_event(db, 4625, risk="High", severity="low")
     low_sev = db.query(NormalizedEvent).filter(NormalizedEvent.severity == "low").one()

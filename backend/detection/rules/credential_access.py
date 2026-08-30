@@ -4,10 +4,11 @@ Flags Sysmon Event 10 (Process Access) operations that open a handle on
 lsass.exe from a process outside the small set that legitimately queries
 it (Windows services and AV agents).
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -18,9 +19,18 @@ _LSASS = re.compile(r"lsass\.exe$", re.IGNORECASE)
 
 # Processes that routinely hold handles to lsass.exe.
 BENIGN_SOURCES = (
-    "svchost.exe", "wininit.exe", "winlogon.exe", "services.exe",
-    "csrss.exe", "lsass.exe", "msmpeng.exe", "taskmgr.exe", "sihost.exe",
-    "dllhost.exe", "fontdrvhost.exe", "conhost.exe",
+    "svchost.exe",
+    "wininit.exe",
+    "winlogon.exe",
+    "services.exe",
+    "csrss.exe",
+    "lsass.exe",
+    "msmpeng.exe",
+    "taskmgr.exe",
+    "sihost.exe",
+    "dllhost.exe",
+    "fontdrvhost.exe",
+    "conhost.exe",
 )
 
 
@@ -41,7 +51,7 @@ class CredentialAccessRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 10,

@@ -1,13 +1,12 @@
 """Phase 5 metrics + evaluation tests (spec 5.61, 5.62)."""
+
+from backend.correlation.engine import correlate
 from backend.correlation.evaluation import run_evaluation
 from backend.correlation.metrics import metrics
-from backend.correlation.engine import correlate
-
 from tests.correlation.helpers import (
     CORR_T0,
     canonical_specs,
     make_groups,
-    stored_correlations,
 )
 
 
@@ -38,14 +37,20 @@ def test_metrics_empty_database_is_zero_safe(db):
 def test_evaluation_reports_raw_counts_only(db):
     counts = run_evaluation(db)
     assert set(counts) == {
-        "labeled_chains", "true_positives", "false_positives",
-        "true_negatives", "false_negatives", "over_correlation",
+        "labeled_chains",
+        "true_positives",
+        "false_positives",
+        "true_negatives",
+        "false_negatives",
+        "over_correlation",
         "under_correlation",
     }
     assert counts["true_positives"] >= 1
     assert counts["labeled_chains"] == (
-        counts["true_positives"] + counts["false_positives"]
-        + counts["true_negatives"] + counts["false_negatives"]
+        counts["true_positives"]
+        + counts["false_positives"]
+        + counts["true_negatives"]
+        + counts["false_negatives"]
     )
 
 

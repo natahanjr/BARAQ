@@ -1,4 +1,5 @@
 """AI Assistant API endpoints."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -49,9 +50,13 @@ def clear_history(request: Request, db: Session = Depends(get_db)):
     assistant = SecurityAssistant(db)
     count = assistant.clear_history()
     log_action(
-        db, actor_name(request), "assistant.clear_history",
-        "assistant_messages", str(count),
-        f"deleted {count} conversation message(s)", client_ip(request),
+        db,
+        actor_name(request),
+        "assistant.clear_history",
+        "assistant_messages",
+        str(count),
+        f"deleted {count} conversation message(s)",
+        client_ip(request),
     )
     return {"cleared": count, "message": "Conversation history cleared."}
 
@@ -59,7 +64,11 @@ def clear_history(request: Request, db: Session = Depends(get_db)):
 @router.post("/explain")
 def explain(body: ExplainRequest, db: Session = Depends(get_db)):
     assistant = SecurityAssistant(db)
-    query = body.query or f"explain alert {body.alert_id}" if body.alert_id else "explain the latest alert"
+    query = (
+        body.query or f"explain alert {body.alert_id}"
+        if body.alert_id
+        else "explain the latest alert"
+    )
     response = assistant.chat(query, persist=False)
     return {"reply": response}
 

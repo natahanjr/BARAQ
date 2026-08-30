@@ -6,10 +6,11 @@ This rule flags the key abuse surface: bitsadmin /transfer (and job-creation
 with a notification command line), Start-BitsTransfer, and BITS transfers that
 land in user-writable or temp directories.
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from backend.detection.rules.base import BaseRule, DetectionResult
 
@@ -46,7 +47,7 @@ class BitsJobRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _BITS_TRANSFER.search(cmdline):
                 continue

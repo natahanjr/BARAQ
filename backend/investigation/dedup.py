@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -37,7 +37,11 @@ PROCESS_CREATE_EVENT = 4688
 def _evidence_user(alert: Alert) -> str:
     """Best-effort user extraction from evidence text + linked events."""
     text = alert.evidence or ""
-    m = re.search(r"\b(?:user|account|subject user name)\s*[':=]\s*([^\s',]+)", text, re.IGNORECASE)
+    m = re.search(
+        r"\b(?:user|account|subject user name)\s*[':=]\s*([^\s',]+)",
+        text,
+        re.IGNORECASE,
+    )
     if m:
         return m.group(1)
     for link in list(alert.events)[:8]:
@@ -55,7 +59,11 @@ def _root_process(session, alert: Alert, window_minutes: int = 90) -> str:
     try:
         pids = []
         for link in list(alert.events)[:50]:
-            facts = (link.event.raw_json or {}).get("facts", {}) if link.event and link.event.raw_json else {}
+            facts = (
+                (link.event.raw_json or {}).get("facts", {})
+                if link.event and link.event.raw_json
+                else {}
+            )
             pid = None
             for key in ("NewProcessId", "ProcessId", "pid"):
                 for k, v in facts.items():
@@ -69,7 +77,9 @@ def _root_process(session, alert: Alert, window_minutes: int = 90) -> str:
         if not pids:
             return ""
 
-        timestamps = [l.event.timestamp for l in alert.events if l.event and l.event.timestamp]
+        timestamps = [
+            l.event.timestamp for l in alert.events if l.event and l.event.timestamp
+        ]
         if not timestamps:
             return ""
         ts_min = min(timestamps) - timedelta(minutes=window_minutes)
@@ -141,14 +151,16 @@ def _root_process(session, alert: Alert, window_minutes: int = 90) -> str:
             elif best:
                 root_name = best
         return root_name
-    except Exception:  # noqa: BLE001 - dedup must never break alerting
-        log.debug("root process derivation failed for alert %s", alert.id, exc_info=True)
+    except Exception:
+        log.debug(
+            "root process derivation failed for alert %s", alert.id, exc_info=True
+        )
         return ""
 
 
 def correlation_key(session, alert: Alert, now: datetime | None = None) -> str:
     """Compute the dedup key for an alert."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     bucket = int(now.timestamp() // (WINDOW_BUCKET_MINUTES * 60))
     user = _evidence_user(alert) or "?"
     host = alert.host or "?"
@@ -172,15 +184,15 @@ def find_open_incident(session, key: str, org: str = "") -> Incident | None:
 
 def merge_alert(session, incident: Incident, alert: Alert) -> bool:
     """Fold an alert into an open incident; returns True when newly linked."""
-    existing = {
-        l.alert_id for l in incident.alerts
-    }
+    existing = {l.alert_id for l in incident.alerts}
     if alert.id in existing:
-        incident.updated_at = datetime.now(timezone.utc)
+        incident.updated_at = datetime.now(UTC)
         return False
     session.add(IncidentAlertLink(incident_id=incident.id, alert_id=alert.id))
-    incident.updated_at = datetime.now(timezone.utc)
-    incident.risk_score = min(100.0, max(incident.risk_score or 0.0, alert.risk_score or 0.0))
+    incident.updated_at = datetime.now(UTC)
+    incident.risk_score = min(
+        100.0, max(incident.risk_score or 0.0, alert.risk_score or 0.0)
+    )
     if _severity_rank(alert.severity) > _severity_rank(incident.severity):
         incident.severity = alert.severity
     if not incident.host and alert.host:
@@ -197,10 +209,14 @@ def merge_alert(session, incident: Incident, alert: Alert) -> bool:
         from backend.investigation.confidence import incident_confidence
 
         incident.confidence = incident_confidence(session, incident)["score"]
-    except Exception:  # noqa: BLE001 - confidence must never break merging
-        log.debug("confidence recompute failed for incident %s", incident.id, exc_info=True)
+    except Exception:
+        log.debug(
+            "confidence recompute failed for incident %s", incident.id, exc_info=True
+        )
     return True
 
 
 def _severity_rank(severity: str) -> int:
-    return {"low": 1, "medium": 2, "high": 3, "critical": 4}.get(str(severity).lower(), 2)
+    return {"low": 1, "medium": 2, "high": 3, "critical": 4}.get(
+        str(severity).lower(), 2
+    )

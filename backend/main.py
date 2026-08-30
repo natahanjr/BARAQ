@@ -1,4 +1,5 @@
 """BARAQ FastAPI application."""
+
 from __future__ import annotations
 
 import asyncio
@@ -9,13 +10,12 @@ import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
 from sqlalchemy import text
-from starlette.exceptions import HTTPException
+from sqlalchemy.orm import Session
 
 from backend.api import (
     alerting,
@@ -36,12 +36,12 @@ from backend.api import (
     hunting,
     incidents,
     incidents_v2,
-    intel,
     integrations,
+    intel,
     investigation,
     rba,
-    reports,
     realtime,
+    reports,
     risk,
     saved,
     search,
@@ -54,6 +54,7 @@ from backend.config import (
     ADMIN_USERNAME,
     API_KEYS,
     AUTH_ENABLED,
+    BARAQ_ENV,
     BEHAVIOR_GROUPS_ENABLED,
     CORS_ORIGINS,
     DEFAULT_ADMIN_PASSWORD,
@@ -62,12 +63,12 @@ from backend.config import (
     METRICS_PUBLIC,
     REPORT_DIR,
     SECURITY_HEADERS,
-    BARAQ_ENV,
     SINGLE_INSTANCE,
-    V2_ENGINES_ALLOW_PROD,
 )
+
 # Import the new settings module
 from backend.settings import get_settings
+
 settings = get_settings()
 
 from backend.audit import client_ip
@@ -78,9 +79,10 @@ setup_logging()
 logger = logging.getLogger("baraq")
 
 # Roadmap 5.2 - optional OpenTelemetry export (no-op when not configured).
-from backend.observability import setup_observability  # noqa: E402
+from backend.observability import setup_observability
 
 setup_observability()
+
 
 def _seed_admin_user() -> None:
     """Create the bootstrap admin account if the users table is empty."""
@@ -158,7 +160,8 @@ def _scheduler_loop(interval_seconds: int = 15):
                 if created:
                     logger.info(
                         "Scheduler cycle: %d new alert(s) across %d tenant(s)",
-                        len(created), len(orgs),
+                        len(created),
+                        len(orgs),
                     )
                 counter += 1
                 from backend.realtime import publish_status
@@ -174,35 +177,46 @@ def _scheduler_loop(interval_seconds: int = 15):
                     if swept.get("collected"):
                         logger.info(
                             "Dataset collector: %d event(s) collected (total %d)",
-                            swept["collected"], swept["total"],
+                            swept["collected"],
+                            swept["total"],
                         )
                     if swept.get("target_reached"):
-                        logger.info("Dataset collector: target reached, collection complete")
-                except Exception:  # noqa: BLE001
+                        logger.info(
+                            "Dataset collector: target reached, collection complete"
+                        )
+                except Exception:
                     logger.exception("Dataset sweep failed")
 
                 # Phase 4: aggregate new alerts into behavior groups (v2 alerts).
                 phase4_groups: list = []
                 if BEHAVIOR_GROUPS_ENABLED and created:
                     try:
-                        from backend.alerting.models import AlertRecord
                         from backend.aggregation.engine import process_alerts
+                        from backend.alerting.models import AlertRecord
+
                         v2_alerts: list[AlertRecord] = []
                         for v1_alert in created:
                             fp_payload = {
                                 "detector_id": v1_alert.rule or "",
                                 "host_id": "",
-                                "host_name": (v1_alert.host or "").strip().lower() or "none",
+                                "host_name": (v1_alert.host or "").strip().lower()
+                                or "none",
                                 "user_id": "",
                                 "username": "",
                                 "source_ip": "",
                                 "mitre_technique": v1_alert.mitre_id or "",
                             }
-                            fp_blob = json.dumps(fp_payload, sort_keys=True, separators=(",", ":"))
-                            alert_fp = hashlib.sha256(fp_blob.encode("utf-8")).hexdigest()
+                            fp_blob = json.dumps(
+                                fp_payload, sort_keys=True, separators=(",", ":")
+                            )
+                            alert_fp = hashlib.sha256(
+                                fp_blob.encode("utf-8")
+                            ).hexdigest()
                             evidence_list = None
                             if v1_alert.evidence:
-                                evidence_list = [{"type": "text", "data": v1_alert.evidence}]
+                                evidence_list = [
+                                    {"type": "text", "data": v1_alert.evidence}
+                                ]
                             record = AlertRecord(
                                 alert_id="",
                                 alert_fingerprint=alert_fp,
@@ -215,7 +229,9 @@ def _scheduler_loop(interval_seconds: int = 15):
                                 status=(v1_alert.status or "open").upper(),
                                 first_seen=v1_alert.created_at,
                                 last_seen=v1_alert.updated_at,
-                                occurrence_count=max(1, int(v1_alert.trigger_count or 1)),
+                                occurrence_count=max(
+                                    1, int(v1_alert.trigger_count or 1)
+                                ),
                                 host_id="",
                                 host_name=v1_alert.host or "",
                                 user_id="",
@@ -242,7 +258,7 @@ def _scheduler_loop(interval_seconds: int = 15):
                                 "Scheduler cycle: %d behavior group(s) updated",
                                 len(phase4_groups),
                             )
-                    except Exception:  # noqa: BLE001 - aggregation must not wedge detection
+                    except Exception:
                         logger.exception("Phase 4 aggregation failed")
                 counter += 1
                 if counter % 4 == 0:  # every ~1 min: per-host chain learning
@@ -253,9 +269,11 @@ def _scheduler_loop(interval_seconds: int = 15):
                         if res["chains_created"] or res["chains_updated"]:
                             logger.info(
                                 "Baseline: %d chain(s) created, %d updated across %d host(s)",
-                                res["chains_created"], res["chains_updated"], len(res["hosts"]),
+                                res["chains_created"],
+                                res["chains_updated"],
+                                len(res["hosts"]),
                             )
-                    except Exception:  # noqa: BLE001 - baseline must not wedge the loop
+                    except Exception:
                         logger.exception("Behavioural baseline learning failed")
                 if counter % 5760 == 0:  # ~daily: rule precision auto-tuning
                     try:
@@ -267,7 +285,7 @@ def _scheduler_loop(interval_seconds: int = 15):
                                 "Rule precision auto-tune damped %d rule(s)",
                                 len(res["damped"]),
                             )
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         logger.exception("Rule precision auto-tune failed")
                 if counter % 240 == 0:  # every ~1 hour: dataset auto-export check
                     try:
@@ -275,8 +293,11 @@ def _scheduler_loop(interval_seconds: int = 15):
 
                         due = dataset_maybe_export(db)
                         if due.get("due"):
-                            logger.info("Dataset auto-export ran: %s", due.get("result", {}).get("status"))
-                    except Exception:  # noqa: BLE001
+                            logger.info(
+                                "Dataset auto-export ran: %s",
+                                due.get("result", {}).get("status"),
+                            )
+                    except Exception:
                         logger.exception("Dataset auto-export check failed")
                 if counter % 20 == 0:
                     dashboard.snapshot(db)
@@ -285,29 +306,42 @@ def _scheduler_loop(interval_seconds: int = 15):
                 if counter % 4 == 0:
                     stale, reason = get_detector().is_stale(db)
                     if stale:
-                        from backend.ml.tasks import train_in_background, training_active
+                        from backend.ml.tasks import (
+                            train_in_background,
+                            training_active,
+                        )
+
                         if training_active():
-                            logger.debug("Auto-train skipped: background training already running")
+                            logger.debug(
+                                "Auto-train skipped: background training already running"
+                            )
                         elif reason == "never-trained":
-                            total_events = db.scalar(
-                                select(func.count(NormalizedEvent.id))
-                            ) or 0
+                            total_events = (
+                                db.scalar(select(func.count(NormalizedEvent.id))) or 0
+                            )
                             if total_events >= ML_TRAIN_MIN_SAMPLES:
                                 logger.info(
                                     "ML never trained; initial auto-training on %d events",
                                     total_events,
                                 )
-                                scheduled = train_in_background(hours=None, validate=False)
+                                scheduled = train_in_background(
+                                    hours=None, validate=False
+                                )
                                 if not scheduled:
-                                    logger.debug("Auto-train: could not acquire training lock")
+                                    logger.debug(
+                                        "Auto-train: could not acquire training lock"
+                                    )
                         else:
                             logger.info("ML model stale (%s); retraining", reason)
                             scheduled = train_in_background(hours=None, validate=False)
                             if not scheduled:
-                                logger.debug("Auto-train: could not acquire training lock")
+                                logger.debug(
+                                    "Auto-train: could not acquire training lock"
+                                )
 
                 # RBA - Correlate alerts into incidents
                 from backend.detection.rba import RBAManager
+
                 rba = RBAManager(db)
                 rba.process_all_hosts(org="")
 
@@ -335,17 +369,20 @@ def _scheduler_loop(interval_seconds: int = 15):
                                 for notable in notables:
                                     try:
                                         publish_alert(notable.to_dict())
-                                    except Exception:  # noqa: BLE001
+                                    except Exception:
                                         pass
-                except Exception:  # noqa: BLE001 - RBA must not wedge the loop
+                except Exception:
                     logger.exception("Entity RBA cycle failed")
 
                 # Phase 7: create/update incidents from groups, correlations and risks.
                 if phase4_groups or notables:
                     try:
                         from backend.incidents.engine import create_incident
+
                         findings: list[dict] = []
-                        risks: list[dict] = [n.to_dict() for n in notables] if notables else []
+                        risks: list[dict] = (
+                            [n.to_dict() for n in notables] if notables else []
+                        )
                         alerts: list[dict] = [a.to_dict() for a in created]
                         result = create_incident(
                             db,
@@ -360,7 +397,7 @@ def _scheduler_loop(interval_seconds: int = 15):
                                 "Phase 7 incident created: %s",
                                 result.get("incident_id"),
                             )
-                    except Exception:  # noqa: BLE001 - incidents must not wedge the loop
+                    except Exception:
                         logger.exception("Phase 7 incident creation failed")
                 # against the baselines; on "drift" retrain so the baseline
                 # follows the environment. Retrains always use the FULL
@@ -373,18 +410,25 @@ def _scheduler_loop(interval_seconds: int = 15):
                         drift = check_drift(db, hours=12)
                         if drift.get("status") == "drift":
                             logger.warning("ML drift detected; retrain on full history")
-                            get_detector().train(db, hours=None, validate=False, kind="drift")
+                            get_detector().train(
+                                db, hours=None, validate=False, kind="drift"
+                            )
                         elif drift.get("status") == "watch":
                             logger.info("ML drift watch; retrain on full history")
-                            get_detector().train(db, hours=None, validate=False, kind="incremental")
-                    except Exception:  # noqa: BLE001 - drift must not wedge the loop
+                            get_detector().train(
+                                db, hours=None, validate=False, kind="incremental"
+                            )
+                    except Exception:
                         logger.exception("ML drift check failed")
                 if counter % 240 == 0:  # every ~1 hour (240 cycles x 15s)
                     # Phase 3: Online learning - incremental update via
                     # sliding-window buffer instead of full retrain.
                     try:
                         detector = get_detector()
-                        if detector.online_learner is not None and detector.online_learner.should_update():
+                        if (
+                            detector.online_learner is not None
+                            and detector.online_learner.should_update()
+                        ):
                             result = detector.online_learner.incremental_update(db)
                             if result.get("updated"):
                                 logger.info(
@@ -394,29 +438,37 @@ def _scheduler_loop(interval_seconds: int = 15):
                                 )
                         elif detector.is_ready:
                             # Fallback: full retrain if online learner not ready
-                            from backend.config import ML_INCREMENTAL_MIN_VERDICTS
-                            from backend.database.models import Verdict as _Verdict
-                            from datetime import datetime, timedelta
+                            from datetime import UTC, datetime, timedelta
+
                             from sqlalchemy import func as _func
 
-                            recent_verdicts = db.scalar(
-                                select(_func.count(_Verdict.id)).where(
-                                    _Verdict.created_at
-                                    >= datetime.now(timezone.utc) - timedelta(hours=24)
+                            from backend.config import ML_INCREMENTAL_MIN_VERDICTS
+                            from backend.database.models import Verdict as _Verdict
+
+                            recent_verdicts = (
+                                db.scalar(
+                                    select(_func.count(_Verdict.id)).where(
+                                        _Verdict.created_at
+                                        >= datetime.now(UTC) - timedelta(hours=24)
+                                    )
                                 )
-                            ) or 0
+                                or 0
+                            )
                             if recent_verdicts >= ML_INCREMENTAL_MIN_VERDICTS:
                                 logger.info(
                                     "ML full retrain (%d verdicts in 24h, online learner not ready)",
                                     recent_verdicts,
                                 )
                                 detector.train(
-                                    db, hours=None,
-                                    validate=False, kind="incremental",
+                                    db,
+                                    hours=None,
+                                    validate=False,
+                                    kind="incremental",
                                 )
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         logger.exception("ML online update failed")
                     from backend.database.retention import purge_old_data
+
                     purged = purge_old_data(db)
                     if any(purged.values()):
                         logger.info(
@@ -439,7 +491,7 @@ def _scheduler_loop(interval_seconds: int = 15):
                         summary = refresh_feeds(db)
                         if summary["feeds"]:
                             logger.info("Threat-intel feed refresh: %s", summary)
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         logger.exception("Threat-intel feed refresh failed")
                 if counter % 240 == 0:  # every ~1 hour: scheduled reports
                     # Roadmap 6.2: generate due reports (and email them when
@@ -450,18 +502,18 @@ def _scheduler_loop(interval_seconds: int = 15):
                         summary = run_due_schedules(db)
                         if summary["due"]:
                             logger.info("Scheduled reports: %s", summary)
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         logger.exception("Scheduled reports failed")
             finally:
                 db.close()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("Scheduler cycle failed: %s", exc)
         _scheduler_stop.wait(interval_seconds)
     logger.info("Scheduler stopped")
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):  # noqa: ARG001
+async def lifespan(app: FastAPI):
     import os
 
     from backend.realtime import hub
@@ -494,19 +546,21 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     # Run in background thread so 24+ channel probes don't block startup.
     from backend.collectors.health import check_collector_permissions
     from backend.config import (
+        ALL_EXTENDED_CHANNELS,
         POWERSHELL_CHANNELS,
         SECURITY_LOG_CHANNELS,
         SYSMON_CHANNELS,
-        ALL_EXTENDED_CHANNELS,
     )
 
     def _bg_collector_check():
-        check_collector_permissions([
-            *SECURITY_LOG_CHANNELS,
-            *POWERSHELL_CHANNELS,
-            *SYSMON_CHANNELS,
-            *ALL_EXTENDED_CHANNELS,
-        ])
+        check_collector_permissions(
+            [
+                *SECURITY_LOG_CHANNELS,
+                *POWERSHELL_CHANNELS,
+                *SYSMON_CHANNELS,
+                *ALL_EXTENDED_CHANNELS,
+            ]
+        )
 
     threading.Thread(target=_bg_collector_check, daemon=True).start()
     # Capability banner: many high-value detections depend on the Sysmon channel.
@@ -525,16 +579,17 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 
     global _scheduler_thread
     no_scheduler = os.environ.get("BARAQ_NO_SCHEDULER", "0").lower() in (
-        "1", "true", "yes", "on",
+        "1",
+        "true",
+        "yes",
+        "on",
     )
     # Roadmap 3.1: BARAQ_ROLE=api runs the API without a scheduler - the
     # scheduler lives in its own service (backend/scheduler_service.py).
     from backend.config import APP_ROLE
 
     if APP_ROLE not in ("all", "scheduler"):
-        logger.warning(
-            "BARAQ_ROLE=%s not recognised; treating as 'all'", APP_ROLE
-        )
+        logger.warning("BARAQ_ROLE=%s not recognised; treating as 'all'", APP_ROLE)
     no_scheduler = no_scheduler or APP_ROLE == "api"
     scheduler_owner = True
     if SINGLE_INSTANCE and APP_ROLE != "api":
@@ -547,11 +602,14 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
                 "scheduler is DISABLED here (API reads still served). Start "
                 "only one server or set BARAQ_SINGLE_INSTANCE=0."
             )
-    if scheduler_owner and not no_scheduler and (
-        not _scheduler_thread or not _scheduler_thread.is_alive()
+    if (
+        scheduler_owner
+        and not no_scheduler
+        and (not _scheduler_thread or not _scheduler_thread.is_alive())
     ):
         _scheduler_stop.clear()
         from backend.config import COLLECT_INTERVAL_SECONDS
+
         _scheduler_thread = threading.Thread(
             target=_scheduler_loop, args=(COLLECT_INTERVAL_SECONDS,), daemon=True
         )
@@ -576,7 +634,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
         from backend.monitor import data_quality as dq_monitor
 
         dq_monitor.stop()
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     release_instance_lock()
     logger.info("BARAQ API shut down")
@@ -718,7 +776,9 @@ def _rate_allowed(request: Request, identity: str) -> tuple[bool, int]:
 async def api_gates(request: Request, call_next):
     """IP ACLs (403) and API rate limiting (429) before authentication."""
     path = request.url.path
-    if path.startswith("/api/") and not path.startswith(("/api/health", "/api/auth/login")):
+    if path.startswith("/api/") and not path.startswith(
+        ("/api/health", "/api/auth/login")
+    ):
         if not _ip_allowed(request):
             return JSONResponse(
                 {"detail": "Client IP not permitted"},
@@ -751,7 +811,9 @@ _PUBLIC_PREFIXES = (
     "/api/auth/oidc/login",
     "/api/auth/oidc/callback",
     "/api/auth/oidc/status",
-    "/docs", "/openapi.json", "/redoc",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
 )
 #: Routes that authenticate with their own scheme (X-Agent-Key) instead of X-API-Key.
 _AGENT_PATHS = ("/api/ingest", "/api/commands/")
@@ -767,6 +829,7 @@ def _csrf_token_matches(request: Request) -> bool:
     baraq_csrf cookie value (constant-time compare). Only meaningful for
     cookie-authenticated browser sessions."""
     from backend.config import CSRF_ENABLED
+
     if not CSRF_ENABLED:
         return True
     cookie = request.cookies.get("baraq_csrf", "")
@@ -774,13 +837,19 @@ def _csrf_token_matches(request: Request) -> bool:
     if not cookie or not header:
         return False
     import hmac
+
     return hmac.compare_digest(cookie, header)
 
 
 @app.middleware("http")
 async def api_key_auth(request: Request, call_next):
     path = request.url.path
-    if AUTH_ENABLED and path.startswith("/api/") and not path.startswith(_PUBLIC_PREFIXES) and not path.startswith(_AGENT_PATHS):
+    if (
+        AUTH_ENABLED
+        and path.startswith("/api/")
+        and not path.startswith(_PUBLIC_PREFIXES)
+        and not path.startswith(_AGENT_PATHS)
+    ):
         # New session-token auth: Authorization: Bearer <token> (or the
         # httpOnly session cookie set at login, so the token never touches JS).
         authorization = request.headers.get("Authorization", "")
@@ -927,14 +996,15 @@ def health():
     overall_status = "ok"
     status_code = 200
 
-    from fastapi.responses import JSONResponse as _JSONResp
-
     # Database check
     try:
         db = SessionLocal()
         db.execute(text("SELECT 1"))
         db.close()
-        checks["database"] = {"status": "ok", "message": "Database connection successful"}
+        checks["database"] = {
+            "status": "ok",
+            "message": "Database connection successful",
+        }
     except Exception as e:
         checks["database"] = {"status": "error", "message": str(e)}
         overall_status = "error"
@@ -944,21 +1014,32 @@ def health():
     if settings.ml_rule_weight > 0 or settings.ml_detection_weight > 0:
         try:
             from backend.ml.anomaly import get_detector
+
             if get_detector().is_ready:
                 checks["ml_model"] = {"status": "ok", "message": "ML model is ready"}
             else:
-                checks["ml_model"] = {"status": "warning", "message": "ML model not trained yet (will train on first data cycle)"}
+                checks["ml_model"] = {
+                    "status": "warning",
+                    "message": "ML model not trained yet (will train on first data cycle)",
+                }
                 if overall_status == "ok":
                     overall_status = "warning"
         except Exception as e:
-            checks["ml_model"] = {"status": "warning", "message": f"ML model check skipped: {e}"}
+            checks["ml_model"] = {
+                "status": "warning",
+                "message": f"ML model check skipped: {e}",
+            }
             if overall_status == "ok":
                 overall_status = "warning"
     else:
-        checks["ml_model"] = {"status": "skipped", "message": "ML model check skipped (ML weights are zero)"}
+        checks["ml_model"] = {
+            "status": "skipped",
+            "message": "ML model check skipped (ML weights are zero)",
+        }
 
     # Data quality check
     from backend.collectors.quality import quality, status_for_rate
+
     rate = quality.window_rate()
     data_quality_status = "ok"
     if rate >= settings.data_quality_warn_rate:
@@ -977,10 +1058,15 @@ def health():
 
     # Single instance check
     from backend.locks import instance_lock_status
+
     instance_locked = instance_lock_status()
     checks["single_instance"] = {
         "status": "ok" if instance_locked else "error",
-        "message": "Instance lock acquired" if instance_locked else "Instance lock not acquired",
+        "message": (
+            "Instance lock acquired"
+            if instance_locked
+            else "Instance lock not acquired"
+        ),
     }
     if not instance_locked and overall_status == "ok":
         overall_status = "warning"
@@ -988,7 +1074,10 @@ def health():
     # If we have any critical errors (database or ml_model), we already set status_code to 503
     # and overall_status to "error". Otherwise, we return 200 with the overall status.
 
-    _no_cache = {"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"}
+    _no_cache = {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache",
+    }
     health_body = {
         "status": overall_status,
         "checks": checks,
@@ -1063,7 +1152,7 @@ class _SPAMount(StaticFiles):
       * /assets/* built files are content-hashed by Vite -> immutable caching.
     """
 
-    def _apply_cache(self, path: str, response) -> "Response":
+    def _apply_cache(self, path: str, response) -> Response:
         # ``path`` may arrive with a leading slash and, on Windows, as a native
         # path using backslashes (e.g. ``assets\\index-...js``).
         normalized = path.replace("\\", "/").lstrip("/")
@@ -1085,7 +1174,9 @@ class _SPAMount(StaticFiles):
                 # at construction; don't let the SPA fallback present those
                 # known paths as valid routes (masked 200s are probe bait).
                 if IS_PRODUCTION and path.lstrip("/").lower() in (
-                    "docs", "redoc", "openapi.json",
+                    "docs",
+                    "redoc",
+                    "openapi.json",
                 ):
                     raise
                 index = FRONTEND_DIST / "index.html"

@@ -16,6 +16,7 @@ Risk scale:  0-20 LOW · 21-40 MEDIUM · 41-70 HIGH · 71-100 CRITICAL
 The final risk level drives the alert severity so the displayed severity and
 risk never diverge (roadmap P0 - severity consistency).
 """
+
 from __future__ import annotations
 
 import logging
@@ -51,9 +52,17 @@ CREDENTIAL_EVENT_IDS = {
     "4756",  # member added to admin group
 }
 
-_SYSTEM_ACCOUNTS = {"system", "nt authority\\system", "local system",
-                    "network service", "nt authority\\network service",
-                    "local service", "nt authority\\local service", "-", "?"}
+_SYSTEM_ACCOUNTS = {
+    "system",
+    "nt authority\\system",
+    "local system",
+    "network service",
+    "nt authority\\network service",
+    "local service",
+    "nt authority\\local service",
+    "-",
+    "?",
+}
 
 #: C2 / shell-flavoured ports that make an outbound flow suspicious even
 #: when the IP is otherwise innocuous.
@@ -97,7 +106,11 @@ def _event_ids(events: list) -> list[str]:
 
 
 def _external_ips(facts) -> list[str]:
-    return [ip for ip in facts.ips if ip and not ip.startswith(("127.", "10.0.", "10.1.", "169.254."))]
+    return [
+        ip
+        for ip in facts.ips
+        if ip and not ip.startswith(("127.", "10.0.", "10.1.", "169.254."))
+    ]
 
 
 def _known_user(facts, session) -> bool:
@@ -109,12 +122,10 @@ def _known_user(facts, session) -> bool:
         from backend.database.models import NormalizedEvent
 
         row = session.scalars(
-            select(NormalizedEvent.id)
-            .where(NormalizedEvent.user == users[0])
-            .limit(1)
+            select(NormalizedEvent.id).where(NormalizedEvent.user == users[0]).limit(1)
         ).first()
         return row is not None
-    except Exception:  # noqa: BLE001 - lookup must never wedge risk scoring
+    except Exception:
         logger.exception("known-user lookup failed for %s", users[0])
         return False
 
@@ -151,39 +162,60 @@ def adjust_risk(
         tools = ", ".join((dev[:3] or ["toolchain CLI"]) + facts.dev_signals[:2])
         apply("developer_tool", -DEV_TOOL_PENALTY, f"developer toolchain ({tools})")
     elif facts.developer_workflow()["detected"]:
-        apply("developer_tool", -DEV_TOOL_PENALTY,
-              "developer workflow signals detected")
+        apply(
+            "developer_tool", -DEV_TOOL_PENALTY, "developer workflow signals detected"
+        )
 
     if facts.signed_binaries and not facts.ips:
-        apply("signed_binary", -SIGNED_BINARY_PENALTY,
-              "all processes are known system/trusted tooling")
+        apply(
+            "signed_binary",
+            -SIGNED_BINARY_PENALTY,
+            "all processes are known system/trusted tooling",
+        )
 
     if _known_user(facts, session):
-        apply("known_user", -KNOWN_USER_PENALTY,
-              f"account '{facts.users[0]}' has prior activity history")
+        apply(
+            "known_user",
+            -KNOWN_USER_PENALTY,
+            f"account '{facts.users[0]}' has prior activity history",
+        )
 
     # -- risk-elevation signals ----------------------------------------------
     if _external_ips(facts):
-        apply("suspicious_network", SUSPICIOUS_NETWORK_BONUS,
-              "external destination(s): " + ", ".join(_external_ips(facts)[:3]))
+        apply(
+            "suspicious_network",
+            SUSPICIOUS_NETWORK_BONUS,
+            "external destination(s): " + ", ".join(_external_ips(facts)[:3]),
+        )
     elif any(p in event_ids for p in SUSPICIOUS_PORTS):
-        apply("suspicious_network", SUSPICIOUS_NETWORK_BONUS,
-              "suspicious port in evidence")
+        apply(
+            "suspicious_network",
+            SUSPICIOUS_NETWORK_BONUS,
+            "suspicious port in evidence",
+        )
 
     if any(eid in event_ids for eid in PERSISTENCE_EVENT_IDS) or _RUNKEY_RE.search(
         facts.evidence_text
     ):
-        apply("persistence_detected", PERSISTENCE_BONUS,
-              "persistence activity (service/task/run-key) in evidence")
+        apply(
+            "persistence_detected",
+            PERSISTENCE_BONUS,
+            "persistence activity (service/task/run-key) in evidence",
+        )
 
     credential = any(eid in event_ids for eid in CREDENTIAL_EVENT_IDS)
-    if "10" in event_ids and any(_LSASS_RE.search(facts.evidence_text) for _ in [facts]):
+    if "10" in event_ids and any(
+        _LSASS_RE.search(facts.evidence_text) for _ in [facts]
+    ):
         credential = True
     if event_ids.count("4625") >= 5:
         credential = True
     if credential:
-        apply("credential_access", CREDENTIAL_ACCESS_BONUS,
-              "credential / privilege activity in evidence")
+        apply(
+            "credential_access",
+            CREDENTIAL_ACCESS_BONUS,
+            "credential / privilege activity in evidence",
+        )
 
     final = round(min(100.0, max(0.0, float(base_risk) + delta)), 2)
     level = roadmap_level(final)

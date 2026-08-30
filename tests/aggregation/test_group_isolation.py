@@ -5,6 +5,7 @@ create risk events, execute playbooks/SOAR or use ML. Everything below
 asserts the counters of the v1 state stay byte-identical across the whole
 aggregation lifecycle.
 """
+
 from backend.aggregation.engine import expire_groups, process_alerts
 from backend.aggregation.models import (
     BehaviorGroupAuditEvent,
@@ -12,7 +13,6 @@ from backend.aggregation.models import (
     BehaviorGroupMember,
     BehaviorGroupRecord,
 )
-
 from tests.aggregation.helpers import (
     GROUP_T0,
     fabricate_alerts,
@@ -24,7 +24,7 @@ from tests.aggregation.helpers import (
 
 def test_create_group_incident_count_unchanged(db):
     before = v1_counts(db)
-    alerts = make_alerts(db, [dict(minutes_ago=1.0)])
+    alerts = make_alerts(db, [{"minutes_ago": 1.0}])
     process_alerts(db, alerts, now=GROUP_T0)
     assert stored_groups(db)
     assert v1_counts(db) == before
@@ -35,8 +35,8 @@ def test_add_alert_to_group_entity_risk_unchanged(db):
     alerts = make_alerts(
         db,
         [
-            dict(minutes_ago=2.0),
-            dict(detector_id="D002", mitre="T1110", minutes_ago=1.0),
+            {"minutes_ago": 2.0},
+            {"detector_id": "D002", "mitre": "T1110", "minutes_ago": 1.0},
         ],
     )
     process_alerts(db, alerts, now=GROUP_T0)
@@ -48,7 +48,7 @@ def test_close_group_no_playbook_execution(db):
     from tests.alerting.helpers import v1_counts as alerting_v1
 
     before = alerting_v1(db)
-    alerts = fabricate_alerts(db, [dict(minutes_ago=120.0)])
+    alerts = fabricate_alerts(db, [{"minutes_ago": 120.0}])
     process_alerts(db, alerts, now=GROUP_T0)
     expire_groups(db, now=GROUP_T0)
     expire_groups(db, now=GROUP_T0)
@@ -58,10 +58,7 @@ def test_close_group_no_playbook_execution(db):
 
 def test_aggregate_100_alerts_no_incident_created(db):
     before = v1_counts(db)
-    specs = [
-        dict(minutes_ago=i * 0.3)
-        for i in range(100)
-    ]
+    specs = [{"minutes_ago": i * 0.3} for i in range(100)]
     alerts = fabricate_alerts(db, specs)
     process_alerts(db, alerts, now=GROUP_T0)
     groups = stored_groups(db)
@@ -86,7 +83,7 @@ def test_only_four_behavior_tables_written():
 
 
 def test_no_ml_imports_in_aggregation():
-    import backend.aggregation.engine as engine
+    from backend.aggregation import engine
 
     source = open(engine.__file__, encoding="utf-8").read().lower()
     for forbidden in ("sklearn", "kmeans", "dbscan", "embeddings", "llm", "openai"):

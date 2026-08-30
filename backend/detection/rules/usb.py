@@ -4,9 +4,10 @@ Flags insertion of new USB storage devices, which may be used to move
 malware onto the host or exfiltrate data (autorun / replication through
 removable media).
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -35,7 +36,9 @@ class UsbDeviceRule(BaseRule):
         self.window_minutes = window_minutes
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
-        since = datetime.now(timezone.utc) - timedelta(minutes=self.window_minutes or window_minutes)
+        since = datetime.now(UTC) - timedelta(
+            minutes=self.window_minutes or window_minutes
+        )
         findings: list[DetectionResult] = []
 
         devices = self.session.scalars(

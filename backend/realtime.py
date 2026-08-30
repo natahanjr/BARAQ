@@ -30,7 +30,9 @@ class BroadcastHub:
     def __init__(self) -> None:
         self._clients: set[asyncio.Queue] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._lock = asyncio.Lock() if asyncio.get_event_loop_policy() is not None else None
+        self._lock = (
+            asyncio.Lock() if asyncio.get_event_loop_policy() is not None else None
+        )
         self._started = False
 
     # ------------------------------------------------------------------
@@ -67,10 +69,8 @@ class BroadcastHub:
             return
         payload = json.dumps(message, default=str, ensure_ascii=False)
         try:
-            asyncio.run_coroutine_threadsafe(
-                self._broadcast(payload), self._loop
-            )
-        except (RuntimeError, Exception):  # noqa: BLE001 - loop shutting down
+            asyncio.run_coroutine_threadsafe(self._broadcast(payload), self._loop)
+        except (RuntimeError, Exception):
             pass
 
     async def _broadcast(self, payload: str) -> None:

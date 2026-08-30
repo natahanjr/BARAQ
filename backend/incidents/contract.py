@@ -1,9 +1,9 @@
 """Phase 7 incident contract (spec 7.1-7.4, 7.7-7.11, 7.15, 7.20, 7.29, 7.33, 7.52)."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
 
 INCIDENT_STATES = (
     "NEW",

@@ -1,8 +1,8 @@
 """Detector D001 - External RDP Logon tests (Phase 2)."""
+
 from __future__ import annotations
 
 from backend.detection.engine import run_detection
-
 from tests.detection.helpers import event, logon_failed, logon_success
 
 
@@ -55,12 +55,14 @@ def test_logon_type_missing_not_detected():
 
 
 def test_logon_type_non_numeric_not_detected():
-    detection = d001(event(
-        action="logon",
-        event_type="authentication",
-        network={"src_ip": "203.0.113.5"},
-        facts={"logon_type": "rdp-via-tunnel"},
-    ))
+    detection = d001(
+        event(
+            action="logon",
+            event_type="authentication",
+            network={"src_ip": "203.0.113.5"},
+            facts={"logon_type": "rdp-via-tunnel"},
+        )
+    )
     assert detection is None
 
 
@@ -75,12 +77,14 @@ def test_confidence_deterministic_and_in_range():
 
 
 def test_missing_source_ip_not_detected():
-    detection = d001(event(
-        action="logon",
-        event_type="authentication",
-        network={},
-        facts={"logon_type": 10},
-    ))
+    detection = d001(
+        event(
+            action="logon",
+            event_type="authentication",
+            network={},
+            facts={"logon_type": 10},
+        )
+    )
     assert detection is None
 
 

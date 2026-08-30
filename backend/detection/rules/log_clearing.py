@@ -4,9 +4,10 @@ Flags Security log clears (Event 1102), System log clears (Event 104) and
 deletion of .evtx event-log files (Sysmon Event 23) - evidence that an
 adversary tried to erase traces.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -33,7 +34,7 @@ class LogClearingRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id.in_([*_LOG_CLEAR_EVENTS, 23]),

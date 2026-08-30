@@ -3,104 +3,42 @@
 Runs each enabled rule against the current event corpus and routes
 findings to the alerting service (persistence + MITRE enrichment).
 """
+
 from __future__ import annotations
 
 import logging
 
 from sqlalchemy.orm import Session
 
-from backend.detection.rules.base import BaseRule, DetectionResult
-from backend.detection.rules.brute_force import BruteForceRule
-from backend.detection.rules.network_recon import NetworkReconRule
-from backend.detection.rules.persistence import PersistenceRule
-from backend.detection.rules.powershell import SuspiciousPowerShellRule
-from backend.detection.rules.privilege_escalation import PrivilegeEscalationRule
-from backend.detection.rules.lateral_movement import LateralMovementRule
-from backend.detection.rules.data_staging import DataStagingRule
-from backend.detection.rules.malware_file import MalwareFileRule
-from backend.detection.rules.email_phishing import EmailPhishingRule
-from backend.detection.rules.dns_http import DnsHttpExfilRule
-from backend.detection.rules.usb import UsbDeviceRule
-from backend.detection.rules.correlation import KillChainCorrelationRule
-from backend.detection.rules.vulnerability import VulnerabilityRule
-from backend.detection.rules.credential_access import CredentialAccessRule
-from backend.detection.rules.registry_runkey import RegistryRunKeyRule
-from backend.detection.rules.scheduled_task import ScheduledTaskAbuseRule
-from backend.detection.rules.wmi_event_subscription import WmiEventSubscriptionRule
+from backend.config import (
+    KILL_CHAIN,
+    PORT_SCAN_DISTINCT_PORTS,
+    PORT_SCAN_WINDOW_SECONDS,
+    RULE_OVERRIDES,
+    RULES_COUNT,
+)
+from backend.detection.correlation_engine import CorrelationEngine
 from backend.detection.rules.account_tampering import AccountTamperingRule
-from backend.detection.rules.masquerading import MasqueradingRule
-from backend.detection.rules.hidden_artifacts import HiddenArtifactsRule
-from backend.detection.rules.lolbin_execution import LolBinExecutionRule
-from backend.detection.rules.exfiltration_volume import ExfiltrationVolumeRule
-from backend.detection.rules.log_clearing import LogClearingRule
-from backend.detection.rules.c2_beacon import C2BeaconRule
-from backend.detection.rules.impact import InhibitRecoveryRule, RansomwareImpactRule
-from backend.detection.rules.credential_store import CredentialStoreTheftRule
-from backend.detection.rules.bits_jobs import BitsJobRule
-from backend.detection.rules.shortcut_modification import ShortcutModificationRule
-from backend.detection.rules.kerberos import (
-    AsRepRoastingRule,
-    DCSyncRule,
-    GoldenTicketRule,
-    KerberoastingRule,
-    PassTheHashRule,
-    PassTheTicketRule,
-    SilverTicketRule,
-)
 from backend.detection.rules.ad_abuse import BloodHoundReconRule, GpoAbuseRule
-from backend.detection.rules.process_abuse import (
-    DllSideloadingRule,
-    PrintNightmareRule,
-    ProcessInjectionRule,
-    TokenManipulationRule,
+from backend.detection.rules.base import BaseRule, DetectionResult
+from backend.detection.rules.bits_jobs import BitsJobRule
+from backend.detection.rules.brute_force import BruteForceRule
+from backend.detection.rules.c2_beacon import C2BeaconRule
+from backend.detection.rules.c2_exfil_extra import (
+    EncryptedChannelRule,
+    ExfilAlternativeProtocolRule,
+    ExfilWebServiceRule,
+    ProxyToolRule,
+    UnusualPortRule,
 )
-from backend.detection.rules.defense_evasion import (
-    AmsiBypassRule,
-    CertificateSpoofingRule,
-    SafeBootTamperingRule,
+from backend.detection.rules.collection import (
+    ArchiveCollectionRule,
+    ClipboardCaptureRule,
+    LocalDataCollectionRule,
+    ScreenCaptureRule,
 )
-from backend.detection.rules.exfil_c2 import (
-    CloudSyncExfilRule,
-    DnsTunnelingRule,
-    WebhookC2Rule,
-)
-from backend.detection.rules.initial_access import (
-    DriveByCompromiseRule,
-    ExternalServiceExploitRule,
-    SpearphishingAttachmentRule,
-    SpearphishingLinkRule,
-)
-from backend.detection.rules.execution import (
-    AtJobRule,
-    CmdScriptExecutionRule,
-    MsBuildExecutionRule,
-    PythonExecutionRule,
-    ServiceExecutionRule,
-    WmiExecutionRule,
-)
-from backend.detection.rules.persistence_extra import (
-    AccessibilityFeatureRule,
-    AppInitDllRule,
-    IfeoDebuggerRule,
-    LogonScriptRule,
-    NetshHelperRule,
-    ServiceImagePathPersistenceRule,
-    StartupFolderRule,
-)
-from backend.detection.rules.privilege_escalation_extra import (
-    AlwaysInstallElevatedRule,
-    NamedPipeImpersonationRule,
-    SeDebugPrivilegeRule,
-    UacBypassRule,
-    UnquotedServicePathRule,
-)
-from backend.detection.rules.defense_evasion_extra import (
-    DisableAuditRule,
-    DisableDefenderRule,
-    DisableFirewallRule,
-    DisableSystemRestoreRule,
-    HiddenFileAttributeRule,
-)
+from backend.detection.rules.correlation import KillChainCorrelationRule
+from backend.detection.rules.credential_access import CredentialAccessRule
 from backend.detection.rules.credential_access_extra import (
     CachedCredentialsRule,
     KeyloggingRule,
@@ -108,6 +46,20 @@ from backend.detection.rules.credential_access_extra import (
     NetworkSniffingRule,
     NtdsDumpRule,
     PasswordStoreTheftRule,
+)
+from backend.detection.rules.credential_store import CredentialStoreTheftRule
+from backend.detection.rules.data_staging import DataStagingRule
+from backend.detection.rules.defense_evasion import (
+    AmsiBypassRule,
+    CertificateSpoofingRule,
+    SafeBootTamperingRule,
+)
+from backend.detection.rules.defense_evasion_extra import (
+    DisableAuditRule,
+    DisableDefenderRule,
+    DisableFirewallRule,
+    DisableSystemRestoreRule,
+    HiddenFileAttributeRule,
 )
 from backend.detection.rules.discovery import (
     AccountDiscoveryRule,
@@ -117,34 +69,83 @@ from backend.detection.rules.discovery import (
     ShareDiscoveryRule,
     SystemInfoDiscoveryRule,
 )
+from backend.detection.rules.dns_http import DnsHttpExfilRule
+from backend.detection.rules.email_phishing import EmailPhishingRule
+from backend.detection.rules.execution import (
+    AtJobRule,
+    CmdScriptExecutionRule,
+    MsBuildExecutionRule,
+    PythonExecutionRule,
+    ServiceExecutionRule,
+    WmiExecutionRule,
+)
+from backend.detection.rules.exfil_c2 import (
+    CloudSyncExfilRule,
+    DnsTunnelingRule,
+    WebhookC2Rule,
+)
+from backend.detection.rules.exfiltration_volume import ExfiltrationVolumeRule
+from backend.detection.rules.hidden_artifacts import HiddenArtifactsRule
+from backend.detection.rules.impact import InhibitRecoveryRule, RansomwareImpactRule
+from backend.detection.rules.initial_access import (
+    DriveByCompromiseRule,
+    ExternalServiceExploitRule,
+    SpearphishingAttachmentRule,
+    SpearphishingLinkRule,
+)
+from backend.detection.rules.kerberos import (
+    AsRepRoastingRule,
+    DCSyncRule,
+    GoldenTicketRule,
+    KerberoastingRule,
+    PassTheHashRule,
+    PassTheTicketRule,
+    SilverTicketRule,
+)
+from backend.detection.rules.lateral_movement import LateralMovementRule
 from backend.detection.rules.lateral_movement_extra import (
     RdpLateralRule,
     SmbAdminShareRule,
     SshLateralRule,
     WinRmLateralRule,
 )
-from backend.detection.rules.collection import (
-    ArchiveCollectionRule,
-    ClipboardCaptureRule,
-    LocalDataCollectionRule,
-    ScreenCaptureRule,
+from backend.detection.rules.log_clearing import LogClearingRule
+from backend.detection.rules.lolbin_execution import LolBinExecutionRule
+from backend.detection.rules.malware_file import MalwareFileRule
+from backend.detection.rules.masquerading import MasqueradingRule
+from backend.detection.rules.network_recon import NetworkReconRule
+from backend.detection.rules.persistence import PersistenceRule
+from backend.detection.rules.persistence_extra import (
+    AccessibilityFeatureRule,
+    AppInitDllRule,
+    IfeoDebuggerRule,
+    LogonScriptRule,
+    NetshHelperRule,
+    ServiceImagePathPersistenceRule,
+    StartupFolderRule,
 )
-from backend.detection.rules.c2_exfil_extra import (
-    EncryptedChannelRule,
-    ExfilAlternativeProtocolRule,
-    ExfilWebServiceRule,
-    ProxyToolRule,
-    UnusualPortRule,
+from backend.detection.rules.powershell import SuspiciousPowerShellRule
+from backend.detection.rules.privilege_escalation import PrivilegeEscalationRule
+from backend.detection.rules.privilege_escalation_extra import (
+    AlwaysInstallElevatedRule,
+    NamedPipeImpersonationRule,
+    SeDebugPrivilegeRule,
+    UacBypassRule,
+    UnquotedServicePathRule,
 )
+from backend.detection.rules.process_abuse import (
+    DllSideloadingRule,
+    PrintNightmareRule,
+    ProcessInjectionRule,
+    TokenManipulationRule,
+)
+from backend.detection.rules.registry_runkey import RegistryRunKeyRule
+from backend.detection.rules.scheduled_task import ScheduledTaskAbuseRule
+from backend.detection.rules.shortcut_modification import ShortcutModificationRule
+from backend.detection.rules.usb import UsbDeviceRule
+from backend.detection.rules.vulnerability import VulnerabilityRule
+from backend.detection.rules.wmi_event_subscription import WmiEventSubscriptionRule
 from backend.detection.sigma.engine import SigmaRuleEngine
-from backend.detection.correlation_engine import CorrelationEngine
-from backend.config import (
-    KILL_CHAIN,
-    PORT_SCAN_DISTINCT_PORTS,
-    PORT_SCAN_WINDOW_SECONDS,
-    RULES_COUNT,
-    RULE_OVERRIDES,
-)
 from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
 
 logger = logging.getLogger("baraq.detection")
@@ -311,7 +312,11 @@ def _apply_feature_flags(rules: list) -> list[BaseRule]:
         sigma = [r for r in filtered if r.rule_id == "sigma_rules"]
         natives = natives[:RULES_COUNT]
         filtered = natives + sigma
-        logger.info("BARAQ_RULES_COUNT=%d: engine trimmed to %d rules", RULES_COUNT, len(filtered))
+        logger.info(
+            "BARAQ_RULES_COUNT=%d: engine trimmed to %d rules",
+            RULES_COUNT,
+            len(filtered),
+        )
     return filtered
 
 
@@ -321,7 +326,9 @@ class RulesEngine:
         self.org = org
         self.rules = build_rules(session)
 
-    def run(self, window_minutes: int = 10, since_id: int | None = None) -> list[DetectionResult]:
+    def run(
+        self, window_minutes: int = 10, since_id: int | None = None
+    ) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         for rule in self.rules:
             try:
@@ -331,12 +338,12 @@ class RulesEngine:
                     if not f.mitre_id or f.mitre_id == "T0000":
                         f.mitre_id = getattr(rule, "mitre_id", "T0000")
                     if not f.recommendation:
-                        f.recommendation = getattr(rule, "recommendation", "") or get_recommendation(f.mitre_id)
+                        f.recommendation = getattr(
+                            rule, "recommendation", ""
+                        ) or get_recommendation(f.mitre_id)
                 findings.extend(rule_findings)
-                logger.info(
-                    "Rule %s: %d finding(s)", rule.rule_id, len(rule_findings)
-                )
-            except Exception as exc:  # noqa: BLE001
+                logger.info("Rule %s: %d finding(s)", rule.rule_id, len(rule_findings))
+            except Exception as exc:
                 logger.exception("Rule %s failed: %s", rule.rule_id, exc)
                 self.session.rollback()
         return findings

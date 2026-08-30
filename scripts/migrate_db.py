@@ -7,6 +7,7 @@ Convenience wrapper around Alembic so operators never handle CLI details::
 
 Migrations read ``BARAQ_DATABASE_URL`` exactly like the application.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -15,8 +16,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from alembic import command  # noqa: E402
-from alembic.config import Config  # noqa: E402
+from alembic.config import Config
+
+from alembic import command
 
 
 def _config() -> Config:
@@ -27,9 +29,12 @@ def _config() -> Config:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Apply BARAQ schema migrations")
-    parser.add_argument("--stamp", action="store_true",
-                        help="mark the current schema as head without running DDL "
-                             "(for deployments that predate Alembic)")
+    parser.add_argument(
+        "--stamp",
+        action="store_true",
+        help="mark the current schema as head without running DDL "
+        "(for deployments that predate Alembic)",
+    )
     args = parser.parse_args(argv)
     cfg = _config()
     if args.stamp:

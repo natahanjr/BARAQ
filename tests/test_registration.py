@@ -1,9 +1,9 @@
 """Test self-service registration, admin verification, and account settings
 (rename / change password) for both admin and analyst roles."""
+
 from __future__ import annotations
 
 import pytest
-
 from fastapi.testclient import TestClient
 
 
@@ -25,12 +25,14 @@ def _ensure_bootstrap_admin():
     db = SessionLocal()
     try:
         if not db.query(User).filter(User.username == "admin").first():
-            db.add(User(
-                username="admin",
-                password_hash=hash_password("baraqadmin"),
-                role="admin",
-                is_active=True,
-            ))
+            db.add(
+                User(
+                    username="admin",
+                    password_hash=hash_password("baraqadmin"),
+                    role="admin",
+                    is_active=True,
+                )
+            )
             db.commit()
     finally:
         db.close()
@@ -51,7 +53,12 @@ def _bearer_headers(token):
 def _register(client, username="jane", password="hunter2hunter2"):
     return client.post(
         "/api/auth/register",
-        json={"username": username, "password": password, "full_name": "Jane Doe", "org": ""},
+        json={
+            "username": username,
+            "password": password,
+            "full_name": "Jane Doe",
+            "org": "",
+        },
     )
 
 
@@ -67,7 +74,9 @@ def test_register_creates_pending_inactive_analyst(client):
     assert "pending" in login.json()["detail"].lower()
 
     token = _login(client, "admin", "baraqadmin").json()["token"]
-    users = client.get("/api/auth/users", headers=_bearer_headers(token)).json()["items"]
+    users = client.get("/api/auth/users", headers=_bearer_headers(token)).json()[
+        "items"
+    ]
     jane = next(u for u in users if u["username"] == "jane")
     assert jane["role"] == "analyst"
     assert jane["is_active"] is False
@@ -94,10 +103,14 @@ def test_register_rejects_short_password(client):
 def test_admin_approve_activates_account(client):
     _register(client, username="bob")
     admin = _login(client, "admin", "baraqadmin").json()["token"]
-    users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()["items"]
+    users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()[
+        "items"
+    ]
     bob = next(u for u in users if u["username"] == "bob")
 
-    approved = client.post(f"/api/auth/users/{bob['id']}/approve", headers=_bearer_headers(admin))
+    approved = client.post(
+        f"/api/auth/users/{bob['id']}/approve", headers=_bearer_headers(admin)
+    )
     assert approved.status_code == 200
     assert approved.json()["is_active"] is True
     assert approved.json()["registration_status"] == ""
@@ -110,10 +123,14 @@ def test_admin_approve_activates_account(client):
 def test_admin_reject_keeps_account_locked(client):
     _register(client, username="carol")
     admin = _login(client, "admin", "baraqadmin").json()["token"]
-    users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()["items"]
+    users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()[
+        "items"
+    ]
     carol = next(u for u in users if u["username"] == "carol")
 
-    rejected = client.post(f"/api/auth/users/{carol['id']}/reject", headers=_bearer_headers(admin))
+    rejected = client.post(
+        f"/api/auth/users/{carol['id']}/reject", headers=_bearer_headers(admin)
+    )
     assert rejected.status_code == 200
     assert rejected.json()["registration_status"] == "rejected"
 
@@ -126,12 +143,16 @@ def test_approve_requires_admin(client):
     _register(client, username="dave")
     _register(client, username="analystx")
     admin = _login(client, "admin", "baraqadmin").json()["token"]
-    users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()["items"]
+    users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()[
+        "items"
+    ]
     dave = next(u for u in users if u["username"] == "dave")
     analystx = next(u for u in users if u["username"] == "analystx")
 
     client.post(f"/api/auth/users/{dave['id']}/approve", headers=_bearer_headers(admin))
-    client.post(f"/api/auth/users/{analystx['id']}/approve", headers=_bearer_headers(admin))
+    client.post(
+        f"/api/auth/users/{analystx['id']}/approve", headers=_bearer_headers(admin)
+    )
 
     analyst_token = _login(client, "analystx", "hunter2hunter2")
     assert analyst_token.status_code == 200
@@ -145,7 +166,9 @@ def test_approve_requires_admin(client):
 def test_change_password_self_service(client):
     _register(client, username="erin")
     admin = _login(client, "admin", "baraqadmin").json()["token"]
-    users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()["items"]
+    users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()[
+        "items"
+    ]
     erin = next(u for u in users if u["username"] == "erin")
     client.post(f"/api/auth/users/{erin['id']}/approve", headers=_bearer_headers(admin))
 
@@ -172,9 +195,13 @@ def test_change_password_self_service(client):
 def test_rename_username_self_service(client):
     _register(client, username="frank")
     admin = _login(client, "admin", "baraqadmin").json()["token"]
-    users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()["items"]
+    users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()[
+        "items"
+    ]
     frank = next(u for u in users if u["username"] == "frank")
-    client.post(f"/api/auth/users/{frank['id']}/approve", headers=_bearer_headers(admin))
+    client.post(
+        f"/api/auth/users/{frank['id']}/approve", headers=_bearer_headers(admin)
+    )
 
     token = _login(client, "frank", "hunter2hunter2").json()["token"]
 
@@ -214,11 +241,17 @@ def test_settings_require_authentication(client):
 def test_registration_and_approval_are_audited(client):
     _register(client, username="grace")
     admin = _login(client, "admin", "baraqadmin").json()["token"]
-    users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()["items"]
+    users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()[
+        "items"
+    ]
     grace = next(u for u in users if u["username"] == "grace")
-    client.post(f"/api/auth/users/{grace['id']}/approve", headers=_bearer_headers(admin))
+    client.post(
+        f"/api/auth/users/{grace['id']}/approve", headers=_bearer_headers(admin)
+    )
 
-    audit = client.get("/api/auth/audit", headers=_bearer_headers(admin)).json()["items"]
+    audit = client.get("/api/auth/audit", headers=_bearer_headers(admin)).json()[
+        "items"
+    ]
     actions = {e["action"] for e in audit}
     assert "user.registered" in actions
     assert "user.approved" in actions

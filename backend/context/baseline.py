@@ -6,10 +6,11 @@ them to silence generic rule hits, and NOVEL chains annotate alerts as
 elevated-signal context (the generic LOLBin answer: "this never happens
 here" beats hardcoded lists).
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -41,14 +42,29 @@ def _facts_get(facts: dict, *keys: str):
 
 
 def _chain_of(facts: dict) -> tuple[str, str]:
-    child_src = _facts_get(
-        facts, "new_process_name", "newprocessname", "NewProcessName",
-        "image_path", "image", "process_name",
-    ) or ""
-    parent_src = _facts_get(
-        facts, "parent_process_name", "parentprocessname", "ParentProcessName",
-        "parent_image", "parentimage",
-    ) or ""
+    child_src = (
+        _facts_get(
+            facts,
+            "new_process_name",
+            "newprocessname",
+            "NewProcessName",
+            "image_path",
+            "image",
+            "process_name",
+        )
+        or ""
+    )
+    parent_src = (
+        _facts_get(
+            facts,
+            "parent_process_name",
+            "parentprocessname",
+            "ParentProcessName",
+            "parent_image",
+            "parentimage",
+        )
+        or ""
+    )
     return _norm(str(parent_src)), _norm(str(child_src))
 
 
@@ -58,7 +74,7 @@ def learn_chains(db: Session, hours: int = 24, org: str = "") -> dict:
     Cheap enough for every scheduler cycle: reads only events newer than the
     previous pass window and merges counts.
     """
-    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    since = datetime.now(UTC) - timedelta(hours=hours)
     rows = db.scalars(
         select(NormalizedEvent).where(
             NormalizedEvent.event_id == 4688,
@@ -112,7 +128,9 @@ def learn_chains(db: Session, hours: int = 24, org: str = "") -> dict:
     }
 
 
-def lookup_chain(db: Session, host: str, parent: str, child: str, org: str = "") -> bool:
+def lookup_chain(
+    db: Session, host: str, parent: str, child: str, org: str = ""
+) -> bool:
     """True when this parent->child chain is established baseline for host."""
     chain = db.scalars(
         select(HostProcessChain).where(
@@ -125,18 +143,22 @@ def lookup_chain(db: Session, host: str, parent: str, child: str, org: str = "")
     return bool(chain and (chain.occurrences or 0) >= MIN_OCCURRENCES)
 
 
-def list_chains(db: Session, host: str = "", org: str = "", limit: int = 500) -> list[HostProcessChain]:
+def list_chains(
+    db: Session, host: str = "", org: str = "", limit: int = 500
+) -> list[HostProcessChain]:
     stmt = select(HostProcessChain).where(HostProcessChain.org == org)
     if host:
         stmt = stmt.where(HostProcessChain.host == _norm(host))
     return list(
-        db.scalars(stmt.order_by(HostProcessChain.occurrences.desc()).limit(limit)).all()
+        db.scalars(
+            stmt.order_by(HostProcessChain.occurrences.desc()).limit(limit)
+        ).all()
     )
 
 
 def rebuild(db: Session, days: int = 7, org: str = "") -> dict:
     """Full relearn: wipe + rescan the whole retention window."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     old = db.scalars(select(HostProcessChain).where(HostProcessChain.org == org)).all()
     for item in old:
         db.delete(item)
@@ -165,8 +187,11 @@ def rebuild(db: Session, days: int = 7, org: str = "") -> dict:
         for (host, parent, child), n in agg.items():
             db.add(
                 HostProcessChain(
-                    host=host, org=org, parent_name=parent,
-                    child_name=child, occurrences=n,
+                    host=host,
+                    org=org,
+                    parent_name=parent,
+                    child_name=child,
+                    occurrences=n,
                 )
             )
         total_seen += len(rows)

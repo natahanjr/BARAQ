@@ -1,17 +1,15 @@
 """Phase 6 API tests (spec 6.46-6.48, 6.53, 6.65, 6.77)."""
+
 from __future__ import annotations
 
 import pytest
-import backend.config as config
 from fastapi.testclient import TestClient
 
 from backend.api import risk as risk_api
-from backend.risk import engine
 from backend.main import app
-
+from backend.risk import engine
 from tests.risk.helpers import (
     RISK_T0,
-    alert_evidence,
     finding_evidence,
     group_evidence,
 )
@@ -25,11 +23,13 @@ def client() -> TestClient:
 
 def _seed(db):
     engine.apply_group(
-        db, group_evidence("g5", "h1", ["T1021.001"], alert_count=10),
+        db,
+        group_evidence("g5", "h1", ["T1021.001"], alert_count=10),
         now=RISK_T0,
     )
     engine.apply_group(
-        db, group_evidence("g4", "h-src", ["T1110"], user="u1"),
+        db,
+        group_evidence("g4", "h-src", ["T1110"], user="u1"),
         now=RISK_T0,
     )
     engine.apply_finding(db, finding_evidence("CF-000001", ["h1"]), now=RISK_T0)
@@ -49,11 +49,25 @@ def test_list_risks(db):
         assert body["count"] == 5  # h1, h-src, u-eval, u1, 203.0.113.5
         payload = body["risks"][0]
         for field in (
-            "risk_id", "entity_type", "entity_id", "entity_name", "score",
-            "severity", "state", "confidence", "trend", "first_seen",
-            "last_seen", "active_factor_count", "evidence_count",
-            "alert_count", "group_count", "correlation_count",
-            "created_at", "updated_at", "last_calculated_at",
+            "risk_id",
+            "entity_type",
+            "entity_id",
+            "entity_name",
+            "score",
+            "severity",
+            "state",
+            "confidence",
+            "trend",
+            "first_seen",
+            "last_seen",
+            "active_factor_count",
+            "evidence_count",
+            "alert_count",
+            "group_count",
+            "correlation_count",
+            "created_at",
+            "updated_at",
+            "last_calculated_at",
         ):
             assert field in payload
 
@@ -75,8 +89,13 @@ def test_list_filters(db):
         assert c.get(API, params={"trend": "UNKNOWN"}).json()["count"] == 2
         assert c.get(API, params={"score_min": 50}).json()["count"] == 1
         assert c.get(API, params={"score_max": 20}).json()["count"] == 1
-        assert c.get(API, params={"factor_type": "LATERAL_MOVEMENT"}).json()["count"] == 1
-        assert c.get(API, params={"source_type": "correlation_finding"}).json()["count"] == 3
+        assert (
+            c.get(API, params={"factor_type": "LATERAL_MOVEMENT"}).json()["count"] == 1
+        )
+        assert (
+            c.get(API, params={"source_type": "correlation_finding"}).json()["count"]
+            == 3
+        )
         assert c.get(API, params={"entity_id": "h1"}).json()["count"] == 1
         assert c.get(API, params={"entity_type": "GADGET"}).status_code == 422
         assert c.get(API, params={"severity": "bogus"}).status_code == 422
@@ -190,7 +209,12 @@ def test_metrics_endpoint(db):
         assert body["total_entities"] >= 3
         assert body["entities_with_risk"] == body["total_entities"]
         assert body["max_score"] > 0
-        assert set(body["calculation_latency"]) == {"p50_ms", "p95_ms", "p99_ms", "max_ms"}
+        assert set(body["calculation_latency"]) == {
+            "p50_ms",
+            "p95_ms",
+            "p99_ms",
+            "max_ms",
+        }
         assert body["risk_calculations"] > 0
 
 

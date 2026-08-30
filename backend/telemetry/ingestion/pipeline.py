@@ -10,17 +10,18 @@ Contract:
 * Never alerts, never mutates risk, never opens incidents.
 * The DB session is injected; the pipeline does not own connections.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-import backend.config as config
+from backend import config
 from backend.telemetry.contract import EVENT
 from backend.telemetry.enrichment.base import enrich
 from backend.telemetry.models import TelemetryEvent
@@ -37,7 +38,10 @@ def normalize(raw: dict[str, Any], fallback_ts: datetime | None = None) -> EVENT
 def _ensure_not_production_db() -> None:
     """Phase 0.7 isolation: refuse to write v2 telemetry into the v1
     production database, regardless of environment flags."""
-    if not config.V2_ENGINES_ALLOW_PROD and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
+    if (
+        not config.V2_ENGINES_ALLOW_PROD
+        and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME
+    ):
         raise RuntimeError(
             f"refusing: v2 telemetry ingestion is read-only against the "
             f"production database '{config.PRODUCTION_DB_NAME}'"
@@ -69,13 +73,13 @@ def ingest(
 
     # One fallback timestamp per batch keeps fingerprints deterministic so
     # replaying the same records is always a no-op.
-    fallback_ts = datetime.now(timezone.utc)
+    fallback_ts = datetime.now(UTC)
 
     events: list[EVENT] = []
     for raw in raw_records:
         try:
             event = _normalize(raw, fallback_ts)
-        except Exception as exc:  # noqa: BLE001 - one bad record never kills the batch
+        except Exception as exc:
             stats["failed"] += 1
             logger.warning("Normalization failed for record: %s", exc)
             continue

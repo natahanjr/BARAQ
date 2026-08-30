@@ -5,11 +5,10 @@ reconstructed chain (Discovery -> Execution -> Collection -> ...) carries
 a confidence and a deterministic risk boost, persists on the incident and
 re-runs every time a new alert joins the case.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from backend.database.models import (
     Alert,
@@ -21,14 +20,21 @@ from backend.database.models import (
 from backend.detection.alerting import AlertingService, _maybe_create_incident_helper
 from backend.investigation.attack_chain import apply_chain, reconstruct_chain
 from backend.investigation.dedup import PROCESS_CREATE_EVENT, merge_alert
-from tests.conftest import run_simulation
 
 
-def _mk_alert(db, rule: str, user: str, host: str = "web-01",
-              mitre: str = "T1059", severity: str = "high",
-              risk_level: str = "HIGH", risk_score: float = 60.0,
-              org: str = "univ-a", evidence: str = "",
-              created_at: datetime | None = None) -> Alert:
+def _mk_alert(
+    db,
+    rule: str,
+    user: str,
+    host: str = "web-01",
+    mitre: str = "T1059",
+    severity: str = "high",
+    risk_level: str = "HIGH",
+    risk_score: float = 60.0,
+    org: str = "univ-a",
+    evidence: str = "",
+    created_at: datetime | None = None,
+) -> Alert:
     alert = Alert(
         name=f"{rule} {user}",
         description=f"{rule} detection",
@@ -43,15 +49,16 @@ def _mk_alert(db, rule: str, user: str, host: str = "web-01",
         risk_level=risk_level,
         evidence=evidence or f"user '{user}' on {host}",
         correlation_id="",
-        created_at=created_at or datetime.now(timezone.utc),
+        created_at=created_at or datetime.now(UTC),
     )
     db.add(alert)
     db.flush()
     return alert
 
 
-def _mk_process_event(db, pid: int, ppid: int, name: str, ts: str,
-                      user: str, host: str = "web-01") -> NormalizedEvent:
+def _mk_process_event(
+    db, pid: int, ppid: int, name: str, ts: str, user: str, host: str = "web-01"
+) -> NormalizedEvent:
     ev = NormalizedEvent(
         event_id=PROCESS_CREATE_EVENT,
         timestamp=datetime.fromisoformat(ts),
@@ -79,7 +86,9 @@ def _link(db, alert: Alert, event: NormalizedEvent):
     db.flush()
 
 
-def _mk_incident(db, alert: Alert, host: str = "web-01", org: str = "univ-a") -> Incident:
+def _mk_incident(
+    db, alert: Alert, host: str = "web-01", org: str = "univ-a"
+) -> Incident:
     from backend.investigation.dedup import correlation_key
 
     incident = Incident(
@@ -94,7 +103,7 @@ def _mk_incident(db, alert: Alert, host: str = "web-01", org: str = "univ-a") ->
         risk_score=60.0,
         risk_level="HIGH",
         correlation_key=correlation_key(db, alert),
-        opened_at=datetime.now(timezone.utc),
+        opened_at=datetime.now(UTC),
     )
     db.add(incident)
     db.flush()
@@ -107,24 +116,42 @@ def _seed_process_tree(db, user: str, host: str = "web-01"):
     """cmd.exe (pid 100, top of chain) -> powershell.exe (200) -> archive.exe (300)."""
     return [
         _mk_process_event(db, 100, 0, "cmd.exe", "2026-08-16T10:00:00", user, host),
-        _mk_process_event(db, 200, 100, "powershell.exe", "2026-08-16T10:05:00", user, host),
-        _mk_process_event(db, 300, 200, "archive.exe", "2026-08-16T10:10:00", user, host),
+        _mk_process_event(
+            db, 200, 100, "powershell.exe", "2026-08-16T10:05:00", user, host
+        ),
+        _mk_process_event(
+            db, 300, 200, "archive.exe", "2026-08-16T10:10:00", user, host
+        ),
     ]
 
 
-def _mk_alerting(db, rule, user, event, host="web-01", ts="2026-08-16T10:00:00", risk_score=60.0):
-        alert = _mk_alert(db, rule, user, host=host, evidence=f"user '{user}' on {host}",
-                          risk_score=risk_score)
-        _link(db, alert, event)
-        return alert
+def _mk_alerting(
+    db, rule, user, event, host="web-01", ts="2026-08-16T10:00:00", risk_score=60.0
+):
+    alert = _mk_alert(
+        db,
+        rule,
+        user,
+        host=host,
+        evidence=f"user '{user}' on {host}",
+        risk_score=risk_score,
+    )
+    _link(db, alert, event)
+    return alert
 
 
 class TestChainReconstruction:
     def test_three_stage_chain_ordered_with_boost(self, db):
         evs = _seed_process_tree(db, "alice")
-        a1 = _mk_alerting(db, "suspicious_powershell", "alice", evs[1], ts="2026-08-16T10:06:00")
-        a2 = _mk_alerting(db, "startup_folder", "alice", evs[1], ts="2026-08-16T10:09:00")
-        a3 = _mk_alerting(db, "archive_collection", "alice", evs[2], ts="2026-08-16T10:11:00")
+        a1 = _mk_alerting(
+            db, "suspicious_powershell", "alice", evs[1], ts="2026-08-16T10:06:00"
+        )
+        a2 = _mk_alerting(
+            db, "startup_folder", "alice", evs[1], ts="2026-08-16T10:09:00"
+        )
+        a3 = _mk_alerting(
+            db, "archive_collection", "alice", evs[2], ts="2026-08-16T10:11:00"
+        )
         incident = _mk_incident(db, a1)
         for a in (a2, a3):
             db.add(IncidentAlertLink(incident_id=incident.id, alert_id=a.id))
@@ -163,9 +190,11 @@ class TestChainReconstruction:
 
     def test_correlation_finding_evidence_fallback(self, db):
         alert = _mk_alert(
-            db, "kill_chain_correlation", "dave",
+            db,
+            "kill_chain_correlation",
+            "dave",
             evidence="2 independent detections correlated for 'user:dave' "
-                     "(Initial Access, Execution, Exfiltration / C2)",
+            "(Initial Access, Execution, Exfiltration / C2)",
         )
         incident = _mk_incident(db, alert)
 
@@ -175,8 +204,12 @@ class TestChainReconstruction:
         assert chain["risk_boost"] >= 15
 
     def test_evidence_fallback_preserves_observed_order(self, db):
-        alert = _mk_alert(db, "kill_chain_correlation", "erin",
-                          evidence="correlated for 'user:erin' (Collection, Execution)")
+        alert = _mk_alert(
+            db,
+            "kill_chain_correlation",
+            "erin",
+            evidence="correlated for 'user:erin' (Collection, Execution)",
+        )
         incident = _mk_incident(db, alert)
 
         chain = reconstruct_chain(db, incident)
@@ -247,9 +280,13 @@ class TestPipelineWiring:
         ]
         for i, (rule, _stage, ev) in enumerate(rules):
             alert = _mk_alert(
-                db, rule, "judy", host="web-01", risk_score=55.0,
-                evidence=f"user 'judy' on web-01",
-                created_at=datetime.now(timezone.utc) + timedelta(minutes=i),
+                db,
+                rule,
+                "judy",
+                host="web-01",
+                risk_score=55.0,
+                evidence="user 'judy' on web-01",
+                created_at=datetime.now(UTC) + timedelta(minutes=i),
             )
             _link(db, alert, ev)
             _maybe_create_incident_helper(AlertingService(db), alert, org="univ-a")

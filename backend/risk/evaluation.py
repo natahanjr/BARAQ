@@ -5,6 +5,7 @@ verifies every expected score/severity/state/trend/factor set. No accuracy
 percentage is ever fabricated - the corpus measures the risk layer against
 hand-computed expectations.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import func, select, text
@@ -14,7 +15,6 @@ from backend.risk import engine
 from backend.risk.evaluation_data import SCENARIOS
 from backend.risk.metrics import risk_metrics
 from backend.risk.models import (
-    EntityRiskV2,
     EntityRiskV2AuditEvent,
     EntityRiskV2Factor,
 )
@@ -22,9 +22,7 @@ from backend.risk.models import (
 
 def _table_count(db: Session, table: str) -> int:
     try:
-        return db.scalars(
-            select(func.count()).select_from(text(f'"{table}"'))
-        ).one()
+        return db.scalars(select(func.count()).select_from(text(f'"{table}"'))).one()
     except Exception:
         return -1
 
@@ -107,9 +105,7 @@ def _check_scenario(db: Session, scenario: dict) -> dict:
         entity_type, entity_id = entity_key.split(":", 1)
         risk = engine.risk_for_entity(db, entity_type, entity_id)
         if risk is None:
-            raise AssertionError(
-                f"{scenario['id']}: no risk record for {entity_key}"
-            )
+            raise AssertionError(f"{scenario['id']}: no risk record for {entity_key}")
         if "score" in expected:
             checks["score"] = True
             actual = round(risk.score, 4)
@@ -140,7 +136,10 @@ def _check_scenario(db: Session, scenario: dict) -> dict:
                     f"{scenario['id']}: {entity_key} confidence "
                     f"{risk.confidence} != {expected['confidence']}"
                 )
-        if "peak_score" in expected and abs(risk.peak_score - expected["peak_score"]) > 0.0001:
+        if (
+            "peak_score" in expected
+            and abs(risk.peak_score - expected["peak_score"]) > 0.0001
+        ):
             raise AssertionError(
                 f"{scenario['id']}: {entity_key} peak {risk.peak_score} != "
                 f"{expected['peak_score']}"
@@ -155,12 +154,18 @@ def _check_scenario(db: Session, scenario: dict) -> dict:
                 f"{scenario['id']}: {entity_key} group_count "
                 f"{risk.group_count} != {expected['group_count']}"
             )
-        if "correlation_count" in expected and risk.correlation_count != expected["correlation_count"]:
+        if (
+            "correlation_count" in expected
+            and risk.correlation_count != expected["correlation_count"]
+        ):
             raise AssertionError(
                 f"{scenario['id']}: {entity_key} correlation_count "
                 f"{risk.correlation_count} != {expected['correlation_count']}"
             )
-        if "model_version" in expected and risk.risk_model_version != expected["model_version"]:
+        if (
+            "model_version" in expected
+            and risk.risk_model_version != expected["model_version"]
+        ):
             raise AssertionError(
                 f"{scenario['id']}: {entity_key} model version "
                 f"{risk.risk_model_version} != {expected['model_version']}"
@@ -172,9 +177,7 @@ def _check_scenario(db: Session, scenario: dict) -> dict:
                 f"{expected['factor_count']}"
             )
         if "repetition_count" in expected:
-            repetition = [
-                f for f in factors if f == "RF007_REPETITION"
-            ]
+            repetition = [f for f in factors if f == "RF007_REPETITION"]
             if len(repetition) != expected["repetition_count"]:
                 raise AssertionError(
                     f"{scenario['id']}: {entity_key} repetition count "
@@ -241,12 +244,28 @@ def _check_scenario(db: Session, scenario: dict) -> dict:
                     )
         if entity_key == "HOST:h022":
             required = {
-                "risk_id", "entity_type", "entity_id", "entity_name", "score",
-                "severity", "state", "confidence", "trend", "first_seen",
-                "last_seen", "active_factor_count", "evidence_count",
-                "alert_count", "group_count", "correlation_count",
-                "created_at", "updated_at", "last_calculated_at",
-                "peak_score", "peak_at", "risk_model_version",
+                "risk_id",
+                "entity_type",
+                "entity_id",
+                "entity_name",
+                "score",
+                "severity",
+                "state",
+                "confidence",
+                "trend",
+                "first_seen",
+                "last_seen",
+                "active_factor_count",
+                "evidence_count",
+                "alert_count",
+                "group_count",
+                "correlation_count",
+                "created_at",
+                "updated_at",
+                "last_calculated_at",
+                "peak_score",
+                "peak_at",
+                "risk_model_version",
             }
             payload = risk.to_dict()
             missing = required - set(payload)

@@ -3,10 +3,11 @@
 Incidents group related alerts into trackable cases with severity, status,
 ownership, MITRE mapping and an analyst comment timeline.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -22,7 +23,7 @@ from backend.database.models import (
     IncidentAlertLink,
     IncidentComment,
 )
-from backend.security import actor_name, tenant_scope, require_admin, require_auth
+from backend.security import actor_name, require_admin, require_auth, tenant_scope
 
 logger = logging.getLogger("baraq.api.incidents")
 
@@ -83,8 +84,10 @@ def _publish_incident(incident: Incident) -> None:
         from backend.realtime import publish_incident
 
         publish_incident(incident.to_dict())
-    except Exception:  # noqa: BLE001 - realtime must never break incidents
-        logger.debug("Failed to publish incident #%s over realtime", incident.id, exc_info=True)
+    except Exception:
+        logger.debug(
+            "Failed to publish incident #%s over realtime", incident.id, exc_info=True
+        )
 
 
 def _with_links(stmt):
@@ -105,7 +108,9 @@ def list_incidents(
     db: Session = Depends(get_db),
 ):
     scope = tenant_scope(request)
-    stmt = _with_links(select(Incident).order_by(Incident.created_at.desc()).limit(limit))
+    stmt = _with_links(
+        select(Incident).order_by(Incident.created_at.desc()).limit(limit)
+    )
     if scope is not None:
         stmt = stmt.where(Incident.org == scope)
     if not include_demo:
@@ -138,7 +143,7 @@ def workload(request: Request, db: Session = Depends(get_db)):
         stmt = stmt.where(Incident.org == scope)
     rows = db.scalars(stmt).all()
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     active = [i for i in rows if i.status in ACTIVE_STATUSES and not i.demo]
 
     owners: dict[str, dict] = {}
@@ -149,9 +154,7 @@ def workload(request: Request, db: Session = Depends(get_db)):
 
     for incident in active:
         owner = incident.owner or "unassigned"
-        bucket = owners.setdefault(
-            owner, {"owner": owner, "open": 0, "overdue": 0}
-        )
+        bucket = owners.setdefault(owner, {"owner": owner, "open": 0, "overdue": 0})
         bucket["open"] += 1
         anchor = incident.created_at or incident.opened_at
         age_minutes = (now - anchor).total_seconds() / 60 if anchor else 0.0
@@ -181,7 +184,12 @@ def workload(request: Request, db: Session = Depends(get_db)):
             if delta >= 0:
                 response_times.append(delta)
 
-    response_stats = {"count": 0, "avg_minutes": None, "median_minutes": None, "p95_minutes": None}
+    response_stats = {
+        "count": 0,
+        "avg_minutes": None,
+        "median_minutes": None,
+        "p95_minutes": None,
+    }
     if response_times:
         ordered = sorted(response_times)
         n = len(ordered)
@@ -265,7 +273,7 @@ def create_incident(
         org="",
         mitre_id=body.mitre_id,
         mitre_name=body.mitre_name,
-        opened_at=datetime.now(timezone.utc),
+        opened_at=datetime.now(UTC),
     )
     db.add(incident)
     db.flush()
@@ -276,15 +284,19 @@ def create_incident(
             db.add(IncidentAlertLink(incident_id=incident.id, alert_id=alert_id))
             incident.org = alert.org or incident.org
 
-    db.add(IncidentComment(
-        incident_id=incident.id,
-        author=actor,
-        body=f"Incident created by {actor}",
-        kind="status",
-    ))
+    db.add(
+        IncidentComment(
+            incident_id=incident.id,
+            author=actor,
+            body=f"Incident created by {actor}",
+            kind="status",
+        )
+    )
 
     linked_alerts = [db.get(Alert, a) for a in body.alert_ids]
-    max_risk = max((a.risk_score or 0.0) for a in linked_alerts if a) if linked_alerts else 0.0
+    max_risk = (
+        max((a.risk_score or 0.0) for a in linked_alerts if a) if linked_alerts else 0.0
+    )
     incident.risk_score = max_risk
     incident.risk_level = (
         "CRITICAL" if max_risk >= 80 else "HIGH" if max_risk >= 60 else "MEDIUM"
@@ -292,8 +304,15 @@ def create_incident(
 
     db.commit()
     db.refresh(incident)
-    log_action(db, actor, "incident.create", "incident", incident.id,
-               f"Created incident '{body.title}'", client_ip(request))
+    log_action(
+        db,
+        actor,
+        "incident.create",
+        "incident",
+        incident.id,
+        f"Created incident '{body.title}'",
+        client_ip(request),
+    )
     _publish_incident(incident)
     return incident.to_dict(include_links=True)
 
@@ -314,7 +333,6 @@ def update_incident(
     # Original values: the SLA checks below must compare against what the
     # record looked like BEFORE this request - the generic field loop would
     # otherwise mutate e.g. ``owner`` first and make "owner changed" false.
-    prev_status = incident.status
     prev_owner = incident.owner
 
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -327,7 +345,7 @@ def update_incident(
             setattr(incident, field, value)
 
     if body.status is not None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if body.status.value in ("resolved", "closed") and not incident.resolved_at:
             incident.resolved_at = now
         if body.status.value == "closed" and not incident.closed_at:
@@ -343,25 +361,30 @@ def update_incident(
             changes.append("responded_at->set")
 
     # Assigning an owner also counts as a first response (the case is engaged).
-    if (
-        body.owner
-        and body.owner != prev_owner
-        and incident.responded_at is None
-    ):
-        incident.responded_at = datetime.now(timezone.utc)
+    if body.owner and body.owner != prev_owner and incident.responded_at is None:
+        incident.responded_at = datetime.now(UTC)
         changes.append("responded_at->set")
 
     if changes:
-        db.add(IncidentComment(
-            incident_id=incident.id,
-            author=actor,
-            body=", ".join(changes),
-            kind="status",
-        ))
+        db.add(
+            IncidentComment(
+                incident_id=incident.id,
+                author=actor,
+                body=", ".join(changes),
+                kind="status",
+            )
+        )
         db.commit()
         db.refresh(incident)
-        log_action(db, actor, "incident.update", "incident", incident.id,
-                   "Updated: " + "; ".join(changes), client_ip(request))
+        log_action(
+            db,
+            actor,
+            "incident.update",
+            "incident",
+            incident.id,
+            "Updated: " + "; ".join(changes),
+            client_ip(request),
+        )
         _publish_incident(incident)
     return incident.to_dict(include_links=True)
 
@@ -392,16 +415,25 @@ def link_alerts(
 
     actor = actor_name(request)
     if linked:
-        db.add(IncidentComment(
-            incident_id=incident_id,
-            author=actor,
-            body=f"Linked alerts: {', '.join(map(str, linked))}",
-            kind="action",
-        ))
+        db.add(
+            IncidentComment(
+                incident_id=incident_id,
+                author=actor,
+                body=f"Linked alerts: {', '.join(map(str, linked))}",
+                kind="action",
+            )
+        )
         db.commit()
         db.refresh(incident)
-        log_action(db, actor, "incident.link_alerts", "incident", incident_id,
-                   f"Linked alerts {linked}", client_ip(request))
+        log_action(
+            db,
+            actor,
+            "incident.link_alerts",
+            "incident",
+            incident_id,
+            f"Linked alerts {linked}",
+            client_ip(request),
+        )
         _publish_incident(incident)
     return incident.to_dict(include_links=True)
 

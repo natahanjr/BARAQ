@@ -8,19 +8,19 @@ import os
 import pytest
 
 from backend.config import DATASET_COLLECT_BATCH
-from backend.dataset import (
-    export_pending,
-    pause,
-    resume,
-    status,
-    sweep,
-)
 from backend.database.models import (
     DatasetCollection,
     DatasetEvent,
     DatasetExport,
     DatasetExportFile,
     NormalizedEvent,
+)
+from backend.dataset import (
+    export_pending,
+    pause,
+    resume,
+    status,
+    sweep,
 )
 
 
@@ -120,23 +120,28 @@ def test_sweep_collects_and_deduplicates(db):
     # exact replay of a collected event -> fingerprint collision -> dedup
     replay = [
         r
-        for r in db.query(NormalizedEvent).order_by(NormalizedEvent.id.asc()).limit(1).all()
+        for r in db.query(NormalizedEvent)
+        .order_by(NormalizedEvent.id.asc())
+        .limit(1)
+        .all()
         if r
     ]
     from tests.fixtures import add_normalized
 
     add_normalized(
         db,
-        [{
-            "source": "eventlog",
-            "channel": "Security",
-            "event_id": 4625,
-            "message": replay[0].message,
-            "timestamp": replay[0].timestamp.isoformat(),
-            "user": replay[0].user,
-            "host": replay[0].host,
-            "facts": (replay[0].raw_json or {}).get("facts", {}),
-        }],
+        [
+            {
+                "source": "eventlog",
+                "channel": "Security",
+                "event_id": 4625,
+                "message": replay[0].message,
+                "timestamp": replay[0].timestamp.isoformat(),
+                "user": replay[0].user,
+                "host": replay[0].host,
+                "facts": (replay[0].raw_json or {}).get("facts", {}),
+            }
+        ],
     )
     _insert(db, [_logon(user="bob", ip="10.0.0.7")])
     result = sweep(db)
@@ -155,7 +160,7 @@ def test_sweep_is_stable_across_runs(db):
 
 def test_pause_stops_collection_resume_continues(db):
     sweep(db)  # create the default collection
-    coll = _active_collection(db)
+    _active_collection(db)
     pause(db)
     _events(db, 2)
     assert sweep(db)["collected"] == 0
@@ -216,7 +221,7 @@ def test_export_writes_csv_checksum_and_manifest(db, _tmp_dataset_dir):
     assert manifest["files"][0]["event_count"] == 5
 
     # events marked exported
-    assert db.query(DatasetEvent).filter(DatasetEvent.exported == True).count() == 5  # noqa: E712
+    assert db.query(DatasetEvent).filter(DatasetEvent.exported == True).count() == 5
 
 
 def test_export_is_idempotent(db, _tmp_dataset_dir):
@@ -228,7 +233,7 @@ def test_export_is_idempotent(db, _tmp_dataset_dir):
 
     export_pending(db, coll.id)  # second run, nothing new
     assert db.query(DatasetExportFile).count() == first_files
-    assert db.query(DatasetEvent).filter(DatasetEvent.exported == False).count() == 0  # noqa: E712
+    assert db.query(DatasetEvent).filter(DatasetEvent.exported == False).count() == 0
 
 
 def test_export_splits_at_boundary(db, _tmp_dataset_dir):
@@ -271,7 +276,9 @@ def test_export_continues_part_numbering_across_batches(db, _tmp_dataset_dir):
     # manifest lists every part of the collection, from both exports
     import json
 
-    with open(os.path.join(_tmp_dataset_dir, f"{coll.name}_manifest.json"), encoding="utf-8") as fh:
+    with open(
+        os.path.join(_tmp_dataset_dir, f"{coll.name}_manifest.json"), encoding="utf-8"
+    ) as fh:
         manifest = json.load(fh)
     assert manifest["parts"] == 2
     assert {f["part_number"] for f in manifest["files"]} == {1, 2}
@@ -303,7 +310,7 @@ def test_export_failure_retries_without_loss(db, _tmp_dataset_dir, monkeypatch):
         result = export_pending(db, coll.id)
     assert result["status"] == "failed"
     # nothing marked exported, partial file cleaned up
-    assert db.query(DatasetEvent).filter(DatasetEvent.exported == True).count() == 0  # noqa: E712
+    assert db.query(DatasetEvent).filter(DatasetEvent.exported == True).count() == 0
     assert db.query(DatasetExportFile).count() == 0
     assert len(list(_tmp_dataset_dir.iterdir())) == 0
     failed = db.query(DatasetExport).filter(DatasetExport.status == "failed").first()
@@ -313,7 +320,7 @@ def test_export_failure_retries_without_loss(db, _tmp_dataset_dir, monkeypatch):
     result = export_pending(db, coll.id)
     assert result["status"] == "completed"
     assert result["event_count"] == 6
-    assert db.query(DatasetEvent).filter(DatasetEvent.exported == True).count() == 6  # noqa: E712
+    assert db.query(DatasetEvent).filter(DatasetEvent.exported == True).count() == 6
     assert db.query(DatasetExportFile).count() == 1
 
 
@@ -375,7 +382,10 @@ def test_target_reached_completes_collection(db):
     result = sweep(db)
     assert result["target_reached"] is True
     assert result["collected"] == 0
-    assert db.query(DatasetEvent).filter(DatasetEvent.collection_id == coll.id).count() <= 3 + DATASET_COLLECT_BATCH
+    assert (
+        db.query(DatasetEvent).filter(DatasetEvent.collection_id == coll.id).count()
+        <= 3 + DATASET_COLLECT_BATCH
+    )
 
 
 def test_status_reflects_progress(db):

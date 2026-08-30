@@ -5,6 +5,7 @@ the ML/TI health views must be unambiguous: one MODEL STATE, live-scoring
 count, drift verdict, and a TI state that distinguishes "not configured"
 from "healthy" and "degraded".
 """
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -58,7 +59,10 @@ def test_ti_feeds_endpoint_shapes(db):
 
 def test_correlation_group_helper_wired(db):
     """The incident-creation entry point exists and is importable."""
-    from backend.detection.alerting import AlertingService, _maybe_create_incident_helper
+    from backend.detection.alerting import (
+        AlertingService,
+        _maybe_create_incident_helper,
+    )
 
     assert callable(_maybe_create_incident_helper)
     assert AlertingService is not None
@@ -69,4 +73,6 @@ def test_ml_versions_serving_version_string():
         r = client.get("/api/system/ml/versions")
         assert r.status_code == 200
         body = r.json()
-        assert isinstance(body["serving_version"], str) or isinstance(body["serving_version"], int)
+        assert isinstance(body["serving_version"], str) or isinstance(
+            body["serving_version"], int
+        )

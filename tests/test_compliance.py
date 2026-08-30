@@ -1,5 +1,8 @@
 """Compliance (roadmap 3.3): anonymized exports, DSAR, audit retention."""
+
 from __future__ import annotations
+
+from datetime import UTC
 
 import pytest
 
@@ -7,12 +10,17 @@ from backend.database.models import AuditLog, NormalizedEvent
 
 
 def _add_event(db, user="alice@corp.test"):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     ev = NormalizedEvent(
-        source="test", event_id=4625, category="logon",
-        severity="medium", message=f"Failed logon for {user}",
-        user=user, host="laptop-01", timestamp=datetime.now(timezone.utc),
+        source="test",
+        event_id=4625,
+        category="logon",
+        severity="medium",
+        message=f"Failed logon for {user}",
+        user=user,
+        host="laptop-01",
+        timestamp=datetime.now(UTC),
     )
     db.add(ev)
     db.commit()
@@ -22,8 +30,15 @@ def _add_event(db, user="alice@corp.test"):
 def test_anonymize_masks_pii():
     from backend.compliance import anonymize
 
-    out = anonymize({"user": "alice", "host": "laptop-01", "source_ip": "10.0.0.1",
-                     "message": "logon ok", "nested": {"email": "a@b.c"}})
+    out = anonymize(
+        {
+            "user": "alice",
+            "host": "laptop-01",
+            "source_ip": "10.0.0.1",
+            "message": "logon ok",
+            "nested": {"email": "a@b.c"},
+        }
+    )
     assert out["user"].startswith("anonymized-")
     assert out["user"] != "alice"
     assert out["host"].startswith("anonymized-")
@@ -59,14 +74,22 @@ def test_compliance_report_shape(db):
 
 
 def test_audit_retention_purge(db):
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from backend.compliance import purge_old_audit
 
-    old = AuditLog(actor="system", action="test.old", detail="old entry",
-                   created_at=datetime.now(timezone.utc) - timedelta(days=400))
-    recent = AuditLog(actor="system", action="test.recent", detail="recent entry",
-                      created_at=datetime.now(timezone.utc))
+    old = AuditLog(
+        actor="system",
+        action="test.old",
+        detail="old entry",
+        created_at=datetime.now(UTC) - timedelta(days=400),
+    )
+    recent = AuditLog(
+        actor="system",
+        action="test.recent",
+        detail="recent entry",
+        created_at=datetime.now(UTC),
+    )
     db.add_all([old, recent])
     db.commit()
 

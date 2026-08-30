@@ -6,6 +6,7 @@ mapping to MITRE ATT&CK). Selections may be mappings of field->value or bare
 keyword lists; values support modifiers (contains, startswith, endswith, re,
 all, base64, cidr, null).
 """
+
 from __future__ import annotations
 
 import logging

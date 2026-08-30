@@ -4,6 +4,7 @@ Contains a curated subset of Enterprise techniques relevant to the
 BARAQ detection rules. Each technique carries its MITRE ID,
 tactic, description, data sources and detection/remediation advice.
 """
+
 from __future__ import annotations
 
 import json

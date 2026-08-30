@@ -1,4 +1,5 @@
 """Tests for the Hybrid Risk Scoring Engine (Upgrade Module 5)."""
+
 from __future__ import annotations
 
 import pytest
@@ -32,7 +33,9 @@ def test_rule_score_increases_with_confidence_and_events():
 
 def test_ml_anomaly_score_averages_and_scales():
     assert ml_anomaly_score([FakeEvent(0.0)]) == 0.0
-    assert ml_anomaly_score([FakeEvent(0.5), FakeEvent(0.9)]) == pytest.approx(70.0, abs=0.01)
+    assert ml_anomaly_score([FakeEvent(0.5), FakeEvent(0.9)]) == pytest.approx(
+        70.0, abs=0.01
+    )
     assert ml_anomaly_score([FakeEvent(None), FakeEvent(0.5)]) == 50.0
     assert ml_anomaly_score([]) == 0.0
     assert ml_anomaly_score([{"ml_score": 0.25}]) == 25.0
@@ -40,7 +43,7 @@ def test_ml_anomaly_score_averages_and_scales():
 
 def test_hybrid_risk_fusion_weights():
     # Rule 60% + ML 40%: high severity base 70, confidence 1.0 -> rule part 42
-    final, level = hybrid_risk("high", 1.0, 1, [], rule_weight=0.6, ml_weight=0.4)
+    final, _level = hybrid_risk("high", 1.0, 1, [], rule_weight=0.6, ml_weight=0.4)
     assert final == pytest.approx(42.0, abs=0.5)
     # All rule + perfect ML -> CRITICAL
     final_max, level_max = hybrid_risk("critical", 1.0, 1, [FakeEvent(1.0)])

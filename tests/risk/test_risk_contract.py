@@ -1,7 +1,8 @@
 """Phase 6 contract tests (spec 6.2, 6.4-6.8, 6.43, 6.44, 6.81, 6.83)."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -27,12 +28,17 @@ from backend.risk.contract import (
     RiskCalculation,
 )
 
-T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=UTC)
 
 
 def test_entity_types_are_spec_exact():
     assert set(ENTITY_TYPES) == {
-        "HOST", "USER", "ACCOUNT", "SOURCE_IP", "DESTINATION_IP", "PROCESS",
+        "HOST",
+        "USER",
+        "ACCOUNT",
+        "SOURCE_IP",
+        "DESTINATION_IP",
+        "PROCESS",
     }
 
 
@@ -51,24 +57,44 @@ def test_trends_and_origins():
 
 def test_evidence_kinds_are_spec_exact():
     assert list(EVIDENCE_KINDS) == [
-        "DETECTION", "ALERT", "BEHAVIOR_GROUP", "CORRELATION_FINDING",
+        "DETECTION",
+        "ALERT",
+        "BEHAVIOR_GROUP",
+        "CORRELATION_FINDING",
     ]
 
 
 def test_factor_types_are_spec_exact():
     assert set(FACTOR_TYPES) == {
-        "ALERT_SEVERITY", "ALERT_REPETITION", "BEHAVIOR_GROUP", "CORRELATION",
-        "LATERAL_MOVEMENT", "EXTERNAL_ACCESS", "CREDENTIAL_ACCESS",
-        "PRIVILEGE_ACTIVITY", "PERSISTENCE", "EXECUTION", "DEFENSE_EVASION",
-        "RECENCY", "SOURCE_REPUTATION", "ENTITY_SPREAD",
+        "ALERT_SEVERITY",
+        "ALERT_REPETITION",
+        "BEHAVIOR_GROUP",
+        "CORRELATION",
+        "LATERAL_MOVEMENT",
+        "EXTERNAL_ACCESS",
+        "CREDENTIAL_ACCESS",
+        "PRIVILEGE_ACTIVITY",
+        "PERSISTENCE",
+        "EXECUTION",
+        "DEFENSE_EVASION",
+        "RECENCY",
+        "SOURCE_REPUTATION",
+        "ENTITY_SPREAD",
     }
 
 
 def test_audit_actions_are_spec_exact():
     assert set(RISK_ACTIONS) == {
-        "RISK_CREATED", "RISK_UPDATED", "FACTOR_ADDED", "FACTOR_EXPIRED",
-        "FACTOR_REMOVED", "RISK_RECALCULATED", "RISK_STATE_CHANGED",
-        "RISK_THRESHOLD_CROSSED", "RISK_MODEL_CHANGED", "RISK_CALCULATION_FAILED",
+        "RISK_CREATED",
+        "RISK_UPDATED",
+        "FACTOR_ADDED",
+        "FACTOR_EXPIRED",
+        "FACTOR_REMOVED",
+        "RISK_RECALCULATED",
+        "RISK_STATE_CHANGED",
+        "RISK_THRESHOLD_CROSSED",
+        "RISK_MODEL_CHANGED",
+        "RISK_CALCULATION_FAILED",
     }
 
 
@@ -80,14 +106,27 @@ def test_banned_phrases_never_claim_confirmation():
 
 
 def test_entity_risk_validates():
-    base = dict(
-        risk_id="ER-000001", entity_type="HOST", entity_id="h1",
-        entity_name="h1", score=72.0, severity="HIGH", state="HIGH",
-        confidence=1.0, trend="RISING", peak_score=72.0, peak_at=T0,
-        first_seen=T0, last_seen=T0, active_factor_count=7,
-        evidence_count=2, alert_count=10, group_count=1,
-        correlation_count=1, risk_model_version="1.0.0",
-    )
+    base = {
+        "risk_id": "ER-000001",
+        "entity_type": "HOST",
+        "entity_id": "h1",
+        "entity_name": "h1",
+        "score": 72.0,
+        "severity": "HIGH",
+        "state": "HIGH",
+        "confidence": 1.0,
+        "trend": "RISING",
+        "peak_score": 72.0,
+        "peak_at": T0,
+        "first_seen": T0,
+        "last_seen": T0,
+        "active_factor_count": 7,
+        "evidence_count": 2,
+        "alert_count": 10,
+        "group_count": 1,
+        "correlation_count": 1,
+        "risk_model_version": "1.0.0",
+    }
     EntityRisk(**base)
     with pytest.raises(ValueError):
         EntityRisk(**dict(base, entity_type="GADGET"))
@@ -160,26 +199,41 @@ def test_calculate_risk_full_decomposition():
         {
             "factor_id": "RF003_LATERAL_MOVEMENT",
             "factor_type": "LATERAL_MOVEMENT",
-            "source_type": "behavior_group", "source_id": "g5",
-            "value": 18.0, "weight": 1.0, "origin": "DIRECT",
-            "created_at": now - timedelta(hours=24), "expires_at": None,
-            "reason": "lateral movement", "evidence": {"group_id": "g5"},
+            "source_type": "behavior_group",
+            "source_id": "g5",
+            "value": 18.0,
+            "weight": 1.0,
+            "origin": "DIRECT",
+            "created_at": now - timedelta(hours=24),
+            "expires_at": None,
+            "reason": "lateral movement",
+            "evidence": {"group_id": "g5"},
         },
         {
             "factor_id": "RF010_BEHAVIOR_GROUP",
             "factor_type": "BEHAVIOR_GROUP",
-            "source_type": "behavior_group", "source_id": "g5",
-            "value": 10.0, "weight": 1.0, "origin": "DIRECT",
-            "created_at": now - timedelta(hours=24), "expires_at": None,
-            "reason": "membership", "evidence": {"group_id": "g5"},
+            "source_type": "behavior_group",
+            "source_id": "g5",
+            "value": 10.0,
+            "weight": 1.0,
+            "origin": "DIRECT",
+            "created_at": now - timedelta(hours=24),
+            "expires_at": None,
+            "reason": "membership",
+            "evidence": {"group_id": "g5"},
         },
         {
             "factor_id": "RF006_MULTI_STAGE_CORRELATION",
             "factor_type": "CORRELATION",
-            "source_type": "propagation", "source_id": "user_to_host:u1",
-            "value": 8.0, "weight": 1.0, "origin": "CONTEXTUAL",
-            "created_at": now, "expires_at": now + timedelta(hours=72),
-            "reason": "context", "evidence": {},
+            "source_type": "propagation",
+            "source_id": "user_to_host:u1",
+            "value": 8.0,
+            "weight": 1.0,
+            "origin": "CONTEXTUAL",
+            "created_at": now,
+            "expires_at": now + timedelta(hours=72),
+            "reason": "context",
+            "evidence": {},
             "relationship_type": "user_to_host",
         },
     ]
@@ -201,11 +255,15 @@ def test_calculate_risk_expired_contributes_zero():
         {
             "factor_id": "RF010_BEHAVIOR_GROUP",
             "factor_type": "BEHAVIOR_GROUP",
-            "source_type": "behavior_group", "source_id": "g5",
-            "value": 10.0, "weight": 1.0, "origin": "DIRECT",
+            "source_type": "behavior_group",
+            "source_id": "g5",
+            "value": 10.0,
+            "weight": 1.0,
+            "origin": "DIRECT",
             "created_at": now - timedelta(days=10),
             "expires_at": now - timedelta(hours=1),
-            "reason": "membership", "evidence": {},
+            "reason": "membership",
+            "evidence": {},
         }
     ]
     calc = calculate_risk(factors, now)

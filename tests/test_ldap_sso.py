@@ -4,6 +4,7 @@ chain (local password -> LDAP -> auto-provision), and audit coverage.
 The directory is faked by monkeypatching ``backend.ldap._authenticate_impl``
 so the suite runs without a real LDAP server or the ldap3 package.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -11,7 +12,6 @@ from fastapi.testclient import TestClient
 
 from backend import ldap as ldap_sso
 from backend.totp import current_code
-
 
 # ---------------------------------------------------------------------------
 # Group -> role mapping (pure logic)
@@ -70,12 +70,14 @@ def _bootstrap_admin():
     db = SessionLocal()
     try:
         if not db.query(User).filter(User.username == "admin").first():
-            db.add(User(
-                username="admin",
-                password_hash=hash_password("baraqadmin"),
-                role="admin",
-                is_active=True,
-            ))
+            db.add(
+                User(
+                    username="admin",
+                    password_hash=hash_password("baraqadmin"),
+                    role="admin",
+                    is_active=True,
+                )
+            )
             db.commit()
     finally:
         db.close()
@@ -83,19 +85,25 @@ def _bootstrap_admin():
 
 def _fake_directory(accounts: dict):
     """Return a _authenticate_impl replacement backed by a plain dict."""
+
     def impl(username: str, password: str):
         if username not in accounts:
             return None
         expected, full_name, role = accounts[username]
         if password != expected:
             return None
-        groups = ["CN=Domain Admins,DC=corp,DC=local"] if role == "admin" else ["CN=Analysts,DC=corp,DC=local"]
+        groups = (
+            ["CN=Domain Admins,DC=corp,DC=local"]
+            if role == "admin"
+            else ["CN=Analysts,DC=corp,DC=local"]
+        )
         return {
             "username": username,
             "full_name": full_name,
             "role": role,
             "groups": groups,
         }
+
     return impl
 
 
@@ -117,10 +125,15 @@ def _find_user(username: str):
 
 
 def test_ldap_user_is_auto_provisioned_and_gets_role(client, ldap_on):
-    ldap_on.setattr(ldap_sso, "_authenticate_impl",
-                    _fake_directory({"jdoe": ("CorpPass!42", "Jane Doe", "analyst")}))
+    ldap_on.setattr(
+        ldap_sso,
+        "_authenticate_impl",
+        _fake_directory({"jdoe": ("CorpPass!42", "Jane Doe", "analyst")}),
+    )
 
-    resp = client.post("/api/auth/login", json={"username": "jdoe", "password": "CorpPass!42"})
+    resp = client.post(
+        "/api/auth/login", json={"username": "jdoe", "password": "CorpPass!42"}
+    )
     assert resp.status_code == 200, resp.text
     user = resp.json()["user"]
     assert user["username"] == "jdoe"
@@ -131,21 +144,32 @@ def test_ldap_user_is_auto_provisioned_and_gets_role(client, ldap_on):
     assert row is not None and row.role == "analyst"
     # The local password hash must be unusable: directory remains the only way in.
     from backend.auth import verify_password
+
     assert not verify_password("CorpPass!42", row.password_hash)
 
 
 def test_ldap_admin_group_grants_admin_role(client, ldap_on):
-    ldap_on.setattr(ldap_sso, "_authenticate_impl",
-                    _fake_directory({"jdoe": ("CorpPass!42", "Jane Doe", "admin")}))
-    resp = client.post("/api/auth/login", json={"username": "jdoe", "password": "CorpPass!42"})
+    ldap_on.setattr(
+        ldap_sso,
+        "_authenticate_impl",
+        _fake_directory({"jdoe": ("CorpPass!42", "Jane Doe", "admin")}),
+    )
+    resp = client.post(
+        "/api/auth/login", json={"username": "jdoe", "password": "CorpPass!42"}
+    )
     assert resp.status_code == 200
     assert resp.json()["user"]["role"] == "admin"
 
 
 def test_wrong_ldap_password_is_rejected(client, ldap_on):
-    ldap_on.setattr(ldap_sso, "_authenticate_impl",
-                    _fake_directory({"jdoe": ("CorpPass!42", "Jane Doe", "analyst")}))
-    resp = client.post("/api/auth/login", json={"username": "jdoe", "password": "wrong-pass"})
+    ldap_on.setattr(
+        ldap_sso,
+        "_authenticate_impl",
+        _fake_directory({"jdoe": ("CorpPass!42", "Jane Doe", "analyst")}),
+    )
+    resp = client.post(
+        "/api/auth/login", json={"username": "jdoe", "password": "wrong-pass"}
+    )
     assert resp.status_code == 401
     assert _find_user("jdoe") is None  # nothing provisioned on failure
 
@@ -159,6 +183,7 @@ def test_unknown_user_is_rejected(client, ldap_on):
 def test_directory_unavailable_falls_back_gracefully(client, ldap_on):
     def boom(username, password):
         raise ldap_sso.LDAPError("connection refused")
+
     ldap_on.setattr(ldap_sso, "_authenticate_impl", boom)
     resp = client.post("/api/auth/login", json={"username": "jdoe", "password": "x"})
     assert resp.status_code == 401  # never leak that the directory is down
@@ -167,17 +192,24 @@ def test_directory_unavailable_falls_back_gracefully(client, ldap_on):
 def test_local_password_wins_over_ldap(client, ldap_on):
     # Even with LDAP enabled, an existing local account authenticates locally.
     ldap_on.setattr(ldap_sso, "_authenticate_impl", lambda u, p: None)
-    resp = client.post("/api/auth/login", json={"username": "admin", "password": "baraqadmin"})
+    resp = client.post(
+        "/api/auth/login", json={"username": "admin", "password": "baraqadmin"}
+    )
     assert resp.status_code == 200
     assert resp.json()["user"]["username"] == "admin"
 
 
 def test_ldap_with_2fa_requires_challenge(client, ldap_on):
-    ldap_on.setattr(ldap_sso, "_authenticate_impl",
-                    _fake_directory({"jdoe": ("CorpPass!42", "Jane Doe", "analyst")}))
+    ldap_on.setattr(
+        ldap_sso,
+        "_authenticate_impl",
+        _fake_directory({"jdoe": ("CorpPass!42", "Jane Doe", "analyst")}),
+    )
 
     # First login provisions the account.
-    first = client.post("/api/auth/login", json={"username": "jdoe", "password": "CorpPass!42"})
+    first = client.post(
+        "/api/auth/login", json={"username": "jdoe", "password": "CorpPass!42"}
+    )
     assert first.status_code == 200
     token = first.json()["token"]
 
@@ -186,22 +218,32 @@ def test_ldap_with_2fa_requires_challenge(client, ldap_on):
     setup = client.post("/api/auth/mfa/setup", headers=headers)
     assert setup.status_code == 200
     secret = setup.json()["secret"]
-    confirm = client.post("/api/auth/mfa/confirm", headers=headers, json={"code": current_code(secret)})
+    confirm = client.post(
+        "/api/auth/mfa/confirm", headers=headers, json={"code": current_code(secret)}
+    )
     assert confirm.status_code == 200
 
     # Next login must go through the MFA challenge step.
-    again = client.post("/api/auth/login", json={"username": "jdoe", "password": "CorpPass!42"})
+    again = client.post(
+        "/api/auth/login", json={"username": "jdoe", "password": "CorpPass!42"}
+    )
     assert again.status_code == 200
     data = again.json()
     assert data["mfa_required"] is True and data["challenge"]
-    done = client.post("/api/auth/mfa/verify", json={"challenge": data["challenge"], "code": current_code(secret)})
+    done = client.post(
+        "/api/auth/mfa/verify",
+        json={"challenge": data["challenge"], "code": current_code(secret)},
+    )
     assert done.status_code == 200
     assert done.json()["token"]
 
 
 def test_ldap_login_is_audited(client, ldap_on):
-    ldap_on.setattr(ldap_sso, "_authenticate_impl",
-                    _fake_directory({"jdoe": ("CorpPass!42", "Jane Doe", "analyst")}))
+    ldap_on.setattr(
+        ldap_sso,
+        "_authenticate_impl",
+        _fake_directory({"jdoe": ("CorpPass!42", "Jane Doe", "analyst")}),
+    )
     client.post("/api/auth/login", json={"username": "jdoe", "password": "CorpPass!42"})
 
     from backend.database.connection import SessionLocal

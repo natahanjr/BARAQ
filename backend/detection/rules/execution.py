@@ -5,14 +5,18 @@ Covers command-line script engines (T1059.003), WMI remote execution
 interpreters from user-writable locations (T1059.006/007) and build
 tool abuse (T1127.001).
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from backend.detection.rules.base import BaseRule, DetectionResult
 
-_SUSPICIOUS_DIRS = re.compile(r"\\Temp\\|\\Users\\Public\\|\\AppData\\|\\Downloads\\|\\ProgramData\\", re.IGNORECASE)
+_SUSPICIOUS_DIRS = re.compile(
+    r"\\Temp\\|\\Users\\Public\\|\\AppData\\|\\Downloads\\|\\ProgramData\\",
+    re.IGNORECASE,
+)
 
 _CMD_ENC = re.compile(
     r"\bcmd(?:\.exe)?\s+/[cC]\b[^\n]*?(?<!\w)(?:/enc(?:oded)?\b|/u\b|base64|powershell(?:\.exe)?\s+-e)",
@@ -26,7 +30,8 @@ _WMIC_EXEC = re.compile(
 )
 _AT_JOB = re.compile(r"\bat(?:\.exe)?\b\s+\d{1,2}:\d{2}", re.IGNORECASE)
 _SERVICE_CREATE = re.compile(
-    r"\bsc(?:\.exe)?\b\s+(?:create|config)\b[^\n]*?(?:\bbinpath\b|=)", re.IGNORECASE,
+    r"\bsc(?:\.exe)?\b\s+(?:create|config)\b[^\n]*?(?:\bbinpath\b|=)",
+    re.IGNORECASE,
 )
 _MSBUILD = re.compile(r"\bmsbuild(?:\.exe)?\b", re.IGNORECASE)
 _PYTHON = re.compile(r"\b(?:python|py|python3)(?:\.exe|\d*\.exe)?\b", re.IGNORECASE)
@@ -49,7 +54,7 @@ class CmdScriptExecutionRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _CMD_ENC.search(cmdline):
                 continue
@@ -82,7 +87,7 @@ class WmiExecutionRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _WMIC_EXEC.search(cmdline):
                 continue
@@ -115,7 +120,7 @@ class AtJobRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _AT_JOB.search(cmdline):
                 continue
@@ -149,7 +154,7 @@ class ServiceExecutionRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _SERVICE_CREATE.search(cmdline):
                 continue
@@ -182,7 +187,7 @@ class MsBuildExecutionRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _MSBUILD.search(cmdline):
                 continue
@@ -216,7 +221,7 @@ class PythonExecutionRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _PYTHON.search(cmdline):
                 continue

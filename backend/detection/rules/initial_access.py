@@ -4,11 +4,12 @@ Covers spearphishing attachment/link delivery (T1566.001/.002), drive-by
 compromise from malicious web content (T1189), and exploitation of
 internet-facing services (T1190).
 """
+
 from __future__ import annotations
 
 import ipaddress
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -16,21 +17,67 @@ from backend.database.models import EmailMessage, HttpRequest, NetworkConnection
 from backend.detection.rules.base import BaseRule, DetectionResult
 
 BAD_ATTACHMENTS = {
-    ".exe", ".scr", ".js", ".vbs", ".ps1", ".bat", ".cmd", ".lnk",
-    ".docm", ".xlsm", ".xlsb", ".pptm", ".iso", ".hta", ".jar",
+    ".exe",
+    ".scr",
+    ".js",
+    ".vbs",
+    ".ps1",
+    ".bat",
+    ".cmd",
+    ".lnk",
+    ".docm",
+    ".xlsm",
+    ".xlsb",
+    ".pptm",
+    ".iso",
+    ".hta",
+    ".jar",
 }
 SHORTENER_HOSTS = re.compile(
     r"(?:bit\.ly|tinyurl\.com|goo\.gl|t\.co|is\.gd|cutt\.ly|rb\.gy|shorturl\.at|"
     r"ow\.ly|buff\.ly|tiny\.cc|v\.gd)",
     re.IGNORECASE,
 )
-SUSPICIOUS_TLDS = (".tk", ".ml", ".ga", ".cf", ".gq", ".xyz", ".top", ".site", ".click", ".info", ".zip")
-BROWSER_PROCESSES = ("chrome.exe", "msedge.exe", "firefox.exe", "iexplore.exe", "brave.exe", "opera.exe")
+SUSPICIOUS_TLDS = (
+    ".tk",
+    ".ml",
+    ".ga",
+    ".cf",
+    ".gq",
+    ".xyz",
+    ".top",
+    ".site",
+    ".click",
+    ".info",
+    ".zip",
+)
+BROWSER_PROCESSES = (
+    "chrome.exe",
+    "msedge.exe",
+    "firefox.exe",
+    "iexplore.exe",
+    "brave.exe",
+    "opera.exe",
+)
 
 #: High-value service ports adversaries probe / exploit on public hosts.
 HIGH_VALUE_PORTS = {
-    22, 445, 1433, 3306, 3389, 5432, 5985, 5986, 6379, 7001, 8000, 8080,
-    8443, 9000, 9200, 27017,
+    22,
+    445,
+    1433,
+    3306,
+    3389,
+    5432,
+    5985,
+    5986,
+    6379,
+    7001,
+    8000,
+    8080,
+    8443,
+    9000,
+    9200,
+    27017,
 }
 
 _IP_ONLY_URL = re.compile(r"https?://\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?", re.IGNORECASE)
@@ -48,9 +95,7 @@ def _is_external(ip: str) -> bool:
         return True
     if addr.is_loopback or addr.is_link_local or addr.is_private:
         return False
-    if addr.is_multicast or addr.is_reserved:
-        return False
-    return True
+    return not (addr.is_multicast or addr.is_reserved)
 
 
 class SpearphishingAttachmentRule(BaseRule):
@@ -70,7 +115,7 @@ class SpearphishingAttachmentRule(BaseRule):
     )
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         findings: list[DetectionResult] = []
         rows = self.session.scalars(
             select(EmailMessage).where(
@@ -112,7 +157,7 @@ class SpearphishingLinkRule(BaseRule):
     )
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         findings: list[DetectionResult] = []
         rows = self.session.scalars(
             select(EmailMessage).where(
@@ -157,7 +202,7 @@ class DriveByCompromiseRule(BaseRule):
     )
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         findings: list[DetectionResult] = []
         rows = self.session.scalars(
             select(HttpRequest).where(
@@ -206,7 +251,7 @@ class ExternalServiceExploitRule(BaseRule):
     )
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         findings: list[DetectionResult] = []
         rows = self.session.scalars(
             select(NetworkConnection).where(

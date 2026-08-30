@@ -4,21 +4,29 @@ Detects schtasks /create (or /change) invocations where the task name
 masquerades as a system component, the action binary lives in a
 user-writable directory, or the task is triggered at logon/startup.
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from backend.detection.rules.base import BaseRule, DetectionResult
 
-_CREATE = re.compile(r"\bschtasks(?:\.exe)?\s+(?:/create|/change|-create|-change)\b", re.IGNORECASE)
+_CREATE = re.compile(
+    r"\bschtasks(?:\.exe)?\s+(?:/create|/change|-create|-change)\b", re.IGNORECASE
+)
 _MASQUERADE = re.compile(
     r"(windowsupdate|windowsupdater|systemupdate|systemmaintenance|adobeupdate|"
     r"googleupdate|microsoftupdate|windowsdefender|windowssecurity)",
     re.IGNORECASE,
 )
-_SUSPICIOUS_DIRS = re.compile(r"\\Temp\\|\\Users\\Public\\|\\AppData\\|\\Downloads\\|\\ProgramData\\", re.IGNORECASE)
-_STARTUP_TRIGGER = re.compile(r"/sc\b[^\s]*?\b(onlogon|onstart|onboot|onidle)", re.IGNORECASE)
+_SUSPICIOUS_DIRS = re.compile(
+    r"\\Temp\\|\\Users\\Public\\|\\AppData\\|\\Downloads\\|\\ProgramData\\",
+    re.IGNORECASE,
+)
+_STARTUP_TRIGGER = re.compile(
+    r"/sc\b[^\s]*?\b(onlogon|onstart|onboot|onidle)", re.IGNORECASE
+)
 
 
 class ScheduledTaskAbuseRule(BaseRule):
@@ -39,7 +47,7 @@ class ScheduledTaskAbuseRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _CREATE.search(cmdline):

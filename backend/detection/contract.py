@@ -11,11 +11,12 @@ satisfies a detector's conditions.
 Phase 2 creates EVENT -> DETECTION only. Nothing here may create alerts,
 incidents, risk updates, SOAR actions or ML dependencies.
 """
+
 from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from backend.detection.evidence import Evidence
@@ -77,9 +78,7 @@ class DETECTION:
     status: str = "new"
 
     detection_id: str = ""
-    created_at: datetime = field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
         if self.severity not in SEVERITIES:

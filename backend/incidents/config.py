@@ -1,4 +1,5 @@
 """Phase 7 incident configuration (spec 7.1, 7.9, 7.21, 7.35, 7.49)."""
+
 from __future__ import annotations
 
 INCIDENT_MODEL_VERSION: str = "1.0.0"

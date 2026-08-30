@@ -19,6 +19,7 @@ Usage:
 
 The script is read-only: it never writes config or the production DB.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,7 +27,7 @@ import json
 import os
 import random
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -38,29 +39,57 @@ os.environ.setdefault(
     "BARAQ_DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:55432/baraq"
 )
 
-from sqlalchemy import create_engine, select  # noqa: E402
-from sqlalchemy.orm import sessionmaker  # noqa: E402
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
 
-from backend.config import DATABASE_URL  # noqa: E402
-from backend.database.connection import normalize_database_url  # noqa: E402
-from backend.api.system import run_pipeline  # noqa: E402
-from backend.database.models import Alert, Base  # noqa: E402
+from backend.api.system import run_pipeline
+from backend.config import DATABASE_URL
+from backend.database.connection import normalize_database_url
+from backend.database.models import Alert, Base
 
 #: scenario -> (expected rule id, MITRE technique, human guidance).
 SCENARIOS = {
     "brute_force": ("brute_force", "T1110", "brute-force failed-logon burst"),
-    "suspicious_powershell": ("suspicious_powershell", "T1059.001", "encoded/hidden download-execute payload"),
-    "privilege_escalation": ("privilege_escalation", "T1068", "admin account / privileged group mutation"),
-    "persistence": ("persistence", "T1547", "scheduled-task persistence (run-at-logon)"),
+    "suspicious_powershell": (
+        "suspicious_powershell",
+        "T1059.001",
+        "encoded/hidden download-execute payload",
+    ),
+    "privilege_escalation": (
+        "privilege_escalation",
+        "T1068",
+        "admin account / privileged group mutation",
+    ),
+    "persistence": (
+        "persistence",
+        "T1547",
+        "scheduled-task persistence (run-at-logon)",
+    ),
     "port_scan": ("network_recon", "T1046", "multi-port service discovery"),
-    "lateral_movement": ("lateral_movement", "T1021.002", "admin-share / session-based lateral movement"),
-    "data_staging": ("data_staging", "T1074", "archive/binary staging before exfiltration"),
-    "phishing_email": ("email_phishing", "T1566", "phishing email with lure attachment"),
+    "lateral_movement": (
+        "lateral_movement",
+        "T1021.002",
+        "admin-share / session-based lateral movement",
+    ),
+    "data_staging": (
+        "data_staging",
+        "T1074",
+        "archive/binary staging before exfiltration",
+    ),
+    "phishing_email": (
+        "email_phishing",
+        "T1566",
+        "phishing email with lure attachment",
+    ),
     "dns_exfil": ("dns_http_exfil", "T1048", "DNS query exfiltration channel"),
     "http_exfil": ("exfiltration_volume", "T1048", "large HTTP upload transfer"),
     "ml_c2_beacon": ("c2_beacon", "T1071.001", "periodic C2 beacon cadence"),
     "log_clear": ("log_clearing", "T1074", "Windows event-log clearing"),
-    "lolbin_usage": ("lolbin_execution", "T1204.002", "lolbin download/execute (certutil/mshta)"),
+    "lolbin_usage": (
+        "lolbin_execution",
+        "T1204.002",
+        "lolbin download/execute (certutil/mshta)",
+    ),
 }
 
 #: benign fixtures interleaved around each stage so the engine sees a busy host.
@@ -91,7 +120,7 @@ def _anchor_now(records: list[dict], newest_seconds: float = 2.0) -> list[dict]:
             newest = dt
     if newest is None:
         return records
-    offset = (datetime.now(timezone.utc) - newest).total_seconds() - newest_seconds
+    offset = (datetime.now(UTC) - newest).total_seconds() - newest_seconds
     if offset <= 0:
         return records
     shifted = []
@@ -191,7 +220,9 @@ def _fresh_session():
     base_url = make_url(normalize_database_url(DATABASE_URL))
     db_name = f"baraq_scratch_{uuid.uuid4().hex[:12]}"
 
-    admin = create_engine(base_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    admin = create_engine(
+        base_url.set(database="postgres"), isolation_level="AUTOCOMMIT"
+    )
     try:
         with admin.connect() as conn:
             conn.execute(sa_text(f'CREATE DATABASE "{db_name}"'))
@@ -211,19 +242,23 @@ def _drop_scratch() -> None:
     from sqlalchemy.engine import make_url
 
     base_url = make_url(normalize_database_url(DATABASE_URL))
-    admin = create_engine(base_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    admin = create_engine(
+        base_url.set(database="postgres"), isolation_level="AUTOCOMMIT"
+    )
     try:
         while _SCRATCH:
             session, engine, db_name = _SCRATCH.pop()
             try:
                 session.close()
                 engine.dispose()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
             try:
                 with admin.connect() as conn:
-                    conn.execute(sa_text(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)'))
-            except Exception:  # noqa: BLE001
+                    conn.execute(
+                        sa_text(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)')
+                    )
+            except Exception:
                 pass
     finally:
         admin.dispose()
@@ -267,7 +302,7 @@ def _detection_time(alert: Alert | None, records: list[dict]) -> str:
         return "n/a"
     created = alert.created_at
     if created.tzinfo is None:
-        created = created.replace(tzinfo=timezone.utc)
+        created = created.replace(tzinfo=UTC)
     return f"{((created - newest).total_seconds()):+.1f}s"
 
 
@@ -307,13 +342,17 @@ def _replay_chain() -> list[dict]:
     evaluation pass.
     """
     session = _fresh_session()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     timeline: list[dict] = []
     for i, name in enumerate(SCENARIOS):
         newest_seconds = 15 + i * 3
         target = now - timedelta(seconds=newest_seconds)
         timeline.extend(_shift_latest_to(_scenario_records(name), target))
-        timeline.extend(_shift_latest_to(_noise(12, seed=20260806 + i), target - timedelta(seconds=90)))
+        timeline.extend(
+            _shift_latest_to(
+                _noise(12, seed=20260806 + i), target - timedelta(seconds=90)
+            )
+        )
     timeline = _anchor_now(timeline)
     alerts = _run_events(session, timeline)
     by_rule: dict[str, list[Alert]] = {}
@@ -323,24 +362,42 @@ def _replay_chain() -> list[dict]:
     for name, (rule, _, _) in SCENARIOS.items():
         hits = by_rule.get(rule, [])
         primary = hits[0] if hits else None
-        results.append({
-            "scenario": name,
-            "expected_rule": rule,
-            "detected": bool(hits),
-            "alert_rule": primary.rule if primary else "",
-            "severity": primary.severity if primary else "",
-            "detection_method": primary.detection_method if primary else "",
-            "detection_time_s": _detection_time(primary, timeline),
-        })
+        results.append(
+            {
+                "scenario": name,
+                "expected_rule": rule,
+                "detected": bool(hits),
+                "alert_rule": primary.rule if primary else "",
+                "severity": primary.severity if primary else "",
+                "detection_method": primary.detection_method if primary else "",
+                "detection_time_s": _detection_time(primary, timeline),
+            }
+        )
     session.close()
     return results
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--scenario", type=str, default="", help="replay a single scenario by fixture name")
-    parser.add_argument("--chain", action="store_true", help="replay the full kill chain in one timeline")
-    parser.add_argument("--json-out", type=str, default="", help="write the verdict table to a JSON file")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--scenario",
+        type=str,
+        default="",
+        help="replay a single scenario by fixture name",
+    )
+    parser.add_argument(
+        "--chain",
+        action="store_true",
+        help="replay the full kill chain in one timeline",
+    )
+    parser.add_argument(
+        "--json-out",
+        type=str,
+        default="",
+        help="write the verdict table to a JSON file",
+    )
     args = parser.parse_args()
 
     try:
@@ -350,18 +407,25 @@ def main() -> int:
         elif args.scenario:
             name = args.scenario
             if name not in SCENARIOS:
-                raise SystemExit(f"unknown scenario {name!r}; pick from: {', '.join(SCENARIOS)}")
+                raise SystemExit(
+                    f"unknown scenario {name!r}; pick from: {', '.join(SCENARIOS)}"
+                )
             rule, mitre, note = SCENARIOS[name]
             results = [_replay_isolation(name, rule, mitre, note)]
             mode = f"isolated replay: {name}"
         else:
-            results = [_replay_isolation(name, rule, mitre, note) for name, (rule, mitre, note) in SCENARIOS.items()]
+            results = [
+                _replay_isolation(name, rule, mitre, note)
+                for name, (rule, mitre, note) in SCENARIOS.items()
+            ]
             mode = "isolated per-scenario replay (fresh DB per scenario)"
     finally:
         _drop_scratch()
 
     print(f"Red-team validation asset - mode: {mode}")
-    print(f"{'scenario':22s} {'expected rule':18s} {'verdict':6s} {'severity':9s} {'method':10s} {'latency':9s}")
+    print(
+        f"{'scenario':22s} {'expected rule':18s} {'verdict':6s} {'severity':9s} {'method':10s} {'latency':9s}"
+    )
     misses = 0
     for r in results:
         hit = r["detected"]
@@ -375,7 +439,9 @@ def main() -> int:
     if args.json_out:
         with Path(args.json_out).open("w", encoding="utf-8") as fh:
             json.dump({"mode": mode, "results": results}, fh, indent=2)
-    print(f"result: {'ALL DETECTED' if misses == 0 else f'{misses} scenario(s) missed'} (exit {misses})")
+    print(
+        f"result: {'ALL DETECTED' if misses == 0 else f'{misses} scenario(s) missed'} (exit {misses})"
+    )
     return misses
 
 

@@ -4,6 +4,7 @@ Every feedback action records alert_id, feedback_type, analyst, timestamp
 and an optional comment. False-positive rates are only reported once
 enough labeled data exists (``ALERT_MIN_LABELED_FOR_FPR``).
 """
+
 from __future__ import annotations
 
 from sqlalchemy import select

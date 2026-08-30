@@ -23,9 +23,10 @@ The chain may also resolve to HOST_CHAIN when it spans three or more
 distinct hosts with network/destination relations (documented in
 docs/phase5/RULES_POLICY.md).
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from backend.correlation.contract import is_progression, phase_of
 

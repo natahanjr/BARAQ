@@ -4,6 +4,7 @@
 stable, reproducible, independent of alert id and timestamps. Never a
 random UUID: UUIDs are fine as alert IDs, never as dedup keys.
 """
+
 from __future__ import annotations
 
 import hashlib

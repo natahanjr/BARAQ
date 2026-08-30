@@ -11,13 +11,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.audit import client_ip, log_action
 from backend.automation.playbooks import (
     find_matching_playbooks,
-    fire_playbooks,
     run_playbook,
     validate_playbook,
 )
-from backend.audit import client_ip, log_action
 from backend.database.connection import get_db
 from backend.database.models import Alert, AutomationPlaybook, PlaybookRun
 from backend.security import actor_name, require_admin, require_auth
@@ -64,7 +63,9 @@ def list_playbooks(db: Session = Depends(get_db)):
 
 
 @router.post("/playbooks", dependencies=[Depends(require_admin)])
-def create_playbook(body: PlaybookCreate, request: Request, db: Session = Depends(get_db)):
+def create_playbook(
+    body: PlaybookCreate, request: Request, db: Session = Depends(get_db)
+):
     """Create a playbook (admin). Validates triggers and actions."""
     try:
         triggers, actions = validate_playbook(body.triggers, body.actions)
@@ -85,9 +86,14 @@ def create_playbook(body: PlaybookCreate, request: Request, db: Session = Depend
     db.add(playbook)
     db.commit()
     log_action(
-        db, actor_name(request), "playbook.create", "playbook", str(playbook.id),
+        db,
+        actor_name(request),
+        "playbook.create",
+        "playbook",
+        str(playbook.id),
         f"Created playbook '{playbook.name}' ({len(actions)} action(s), "
-        f"enabled={body.enabled})", client_ip(request),
+        f"enabled={body.enabled})",
+        client_ip(request),
     )
     return playbook.to_dict()
 
@@ -101,10 +107,7 @@ def update_playbook(
 ):
     """Update any field of a playbook (admin)."""
     playbook = _get_playbook(db, playbook_id)
-    before = {
-        k: str(playbook.to_dict().get(k))[:120]
-        for k in ("name", "enabled")
-    }
+    before = {k: str(playbook.to_dict().get(k))[:120] for k in ("name", "enabled")}
     updates = body.model_dump(exclude_none=True)
     if body.name is not None:
         updates["name"] = body.name.strip()
@@ -129,8 +132,13 @@ def update_playbook(
     if "triggers" in updates or "actions" in updates:
         changed.append(f"logic: {len(playbook.actions or [])} action(s)")
     log_action(
-        db, actor_name(request), "playbook.update", "playbook", str(playbook.id),
-        f"Updated '{playbook.name}': " + "; ".join(changed), client_ip(request),
+        db,
+        actor_name(request),
+        "playbook.update",
+        "playbook",
+        str(playbook.id),
+        f"Updated '{playbook.name}': " + "; ".join(changed),
+        client_ip(request),
     )
     return playbook.to_dict()
 
@@ -143,8 +151,13 @@ def delete_playbook(playbook_id: int, request: Request, db: Session = Depends(ge
     db.delete(playbook)
     db.commit()
     log_action(
-        db, actor_name(request), "playbook.delete", "playbook", str(playbook_id),
-        f"Deleted playbook '{name}'", client_ip(request),
+        db,
+        actor_name(request),
+        "playbook.delete",
+        "playbook",
+        str(playbook_id),
+        f"Deleted playbook '{name}'",
+        client_ip(request),
     )
     return {"deleted": True, "id": playbook_id}
 
@@ -165,9 +178,14 @@ def test_playbook(
 
     matched = matches(alert, playbook.triggers or {})
     log_action(
-        db, actor_name(request), "playbook.test", "playbook", str(playbook.id),
+        db,
+        actor_name(request),
+        "playbook.test",
+        "playbook",
+        str(playbook.id),
         f"Dry-run '{playbook.name}' against alert #{alert_id} ({alert.name}) -> "
-        f"{'matched' if matched else 'no match'}", client_ip(request),
+        f"{'matched' if matched else 'no match'}",
+        client_ip(request),
     )
     return {
         "matched": matched,
@@ -192,9 +210,14 @@ def run_playbook_now(
     run = run_playbook(db, playbook, alert, triggered_by="manual")
     db.commit()
     log_action(
-        db, actor_name(request), "playbook.run", "playbook", str(playbook.id),
+        db,
+        actor_name(request),
+        "playbook.run",
+        "playbook",
+        str(playbook.id),
         f"Manual run of '{playbook.name}' against alert #{alert_id} ({alert.name}) "
-        f"-> {run.status}", client_ip(request),
+        f"-> {run.status}",
+        client_ip(request),
     )
     return run.to_dict()
 

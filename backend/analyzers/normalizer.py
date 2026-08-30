@@ -11,6 +11,7 @@ into the canonical BARAQ event:
 Also parses structured facts (source IPs, logon types, accounts, binaries)
 out of messages so detection rules can reason over real data.
 """
+
 from __future__ import annotations
 
 import logging
@@ -31,10 +32,28 @@ MAX_MESSAGE_LEN = 8192
 _TRUNCATION_MARKERS = ("...", "\t")
 
 #: A complete Windows process path ends with one of these executable suffixes.
-_EXEC_SUFFIXES = (".exe", ".com", ".bat", ".cmd", ".ps1", ".dll", ".scr", ".vbs", ".js", ".msi", ".jar")
+_EXEC_SUFFIXES = (
+    ".exe",
+    ".com",
+    ".bat",
+    ".cmd",
+    ".ps1",
+    ".dll",
+    ".scr",
+    ".vbs",
+    ".js",
+    ".msi",
+    ".jar",
+)
 
 #: Structured fields whose completeness the normalizer can reason about.
-_STRUCTURED_PROCESS_KEYS = ("NewProcessName", "ParentProcessName", "Image", "CommandLine", "ScriptBlockText")
+_STRUCTURED_PROCESS_KEYS = (
+    "NewProcessName",
+    "ParentProcessName",
+    "Image",
+    "CommandLine",
+    "ScriptBlockText",
+)
 
 #: Event IDs whose process facts drive detection and must arrive intact.
 _PROCESS_EVENT_IDS = (4688, 1, 4104, 4103)
@@ -60,8 +79,7 @@ _FIELD_LINE_RE = re.compile(r"^([A-Za-z][A-Za-z ]+):\s*(.*)$")
 #: with this literal sentence + raw insertion strings. It is formatter debris,
 #: never real telemetry.
 _TEMPLATE_PLACEHOLDER_RE = re.compile(
-    r"The description for Event ID\s*\(\s*\d+\s*\).*?"
-    r"insertion string\(s\)\s*:\s*",
+    r"The description for Event ID\s*\(\s*\d+\s*\).*?" r"insertion string\(s\)\s*:\s*",
     re.DOTALL | re.IGNORECASE,
 )
 
@@ -109,8 +127,6 @@ EVENT_META: dict[int, dict[str, str]] = {
     1102: {"category": "Log Clearing", "risk": "High", "severity": "high"},
     4738: {"category": "Account Management", "risk": "High", "severity": "high"},
     4662: {"category": "Directory Service", "risk": "Medium", "severity": "medium"},
-    4768: {"category": "Authentication", "risk": "Medium", "severity": "medium"},
-    4769: {"category": "Authentication", "risk": "Low", "severity": "low"},
     5136: {"category": "Directory Service", "risk": "High", "severity": "high"},
     7: {"category": "Process", "risk": "Medium", "severity": "medium"},
     8: {"category": "Process", "risk": "High", "severity": "high"},
@@ -150,7 +166,6 @@ EVENT_META: dict[int, dict[str, str]] = {
     # Terminal Services / RDP
     21: {"category": "Remote Desktop", "risk": "Medium", "severity": "low"},
     22: {"category": "Remote Desktop", "risk": "Medium", "severity": "low"},
-    23: {"category": "Remote Desktop", "risk": "Medium", "severity": "low"},
     24: {"category": "Remote Desktop", "risk": "Medium", "severity": "low"},
     25: {"category": "Remote Desktop", "risk": "Low", "severity": "info"},
     39: {"category": "Remote Desktop", "risk": "Medium", "severity": "low"},
@@ -170,8 +185,6 @@ EVENT_META: dict[int, dict[str, str]] = {
     3004: {"category": "Code Integrity", "risk": "Medium", "severity": "medium"},
     3033: {"category": "Code Integrity", "risk": "Medium", "severity": "medium"},
     # Driver Frameworks
-    2001: {"category": "Driver", "risk": "Low", "severity": "info"},
-    2003: {"category": "Driver", "risk": "Low", "severity": "info"},
     2100: {"category": "Driver", "risk": "Low", "severity": "info"},
     2101: {"category": "Driver", "risk": "Low", "severity": "info"},
     2102: {"category": "Driver", "risk": "Low", "severity": "info"},
@@ -219,10 +232,14 @@ MESSAGE_PATTERNS = {
     "target_account_name": re.compile(r"Target Account Name:\s+(\S+)", re.IGNORECASE),
     "deleted_account": re.compile(r"Deleted Account Name:\s+(\S+)", re.IGNORECASE),
     "file_path": re.compile(r"File (?:created|deleted):\s+(\S+)", re.IGNORECASE),
-    "ticket_encryption_type": re.compile(r"Ticket Encryption Type:\s+(0x[0-9A-Fa-f]+)", re.IGNORECASE),
+    "ticket_encryption_type": re.compile(
+        r"Ticket Encryption Type:\s+(0x[0-9A-Fa-f]+)", re.IGNORECASE
+    ),
     "ticket_options": re.compile(r"Ticket Options:\s+(0x[0-9A-Fa-f]+)", re.IGNORECASE),
     "logon_process": re.compile(r"Logon Process:\s+(\S+)", re.IGNORECASE),
-    "authentication_package": re.compile(r"Authentication Package:\s+(\S+)", re.IGNORECASE),
+    "authentication_package": re.compile(
+        r"Authentication Package:\s+(\S+)", re.IGNORECASE
+    ),
     "workstation_name": re.compile(r"Workstation Name:\s+(\S+)", re.IGNORECASE),
     "access_mask": re.compile(r"Access Mask:\s+(0x[0-9A-Fa-f]+)", re.IGNORECASE),
     "service_sid": re.compile(r"Service SID:\s+(\S+)", re.IGNORECASE),
@@ -239,6 +256,7 @@ class Normalizer:
 
     def __init__(self, hostname: str | None = None):
         import socket
+
         self.hostname = hostname or socket.gethostname()
 
     # ------------------------------------------------------------------
@@ -262,12 +280,16 @@ class Normalizer:
             return True
         if kind == "path":
             lowered = v.lower()
-            if not lowered.endswith(_EXEC_SUFFIXES) and ("\\" in v or re.fullmatch(r"[A-Za-z]:?", v)):
+            if not lowered.endswith(_EXEC_SUFFIXES) and (
+                "\\" in v or re.fullmatch(r"[A-Za-z]:?", v)
+            ):
                 return True
         return False
 
     @classmethod
-    def detect_truncation(cls, record: dict, facts: dict) -> tuple[list[str], list[str]]:
+    def detect_truncation(
+        cls, record: dict, facts: dict
+    ) -> tuple[list[str], list[str]]:
         """Return ``(truncated_fields, reasons)`` describing data-integrity loss.
 
         Detects three failure modes:
@@ -284,7 +306,9 @@ class Normalizer:
         truncated: list[str] = []
         reasons: list[str] = []
 
-        message_cut = len(message) > MAX_MESSAGE_LEN or bool(raw.get("message_truncated"))
+        message_cut = len(message) > MAX_MESSAGE_LEN or bool(
+            raw.get("message_truncated")
+        )
         if message_cut:
             truncated.append("message")
             reasons.append(f"formatted message longer than {MAX_MESSAGE_LEN} chars")
@@ -308,13 +332,17 @@ class Normalizer:
                     )
                     break
 
-        structured = {k: str(facts[k]) for k in _STRUCTURED_PROCESS_KEYS if facts.get(k)}
+        structured = {
+            k: str(facts[k]) for k in _STRUCTURED_PROCESS_KEYS if facts.get(k)
+        }
         if structured:
             for key, value in structured.items():
                 kind = "text" if key in ("CommandLine", "ScriptBlockText") else "path"
                 if cls._looks_truncated(value, kind):
                     truncated.append(key)
-                    reasons.append(f"structured field {key} ends mid-value (truncation marker or partial path)")
+                    reasons.append(
+                        f"structured field {key} ends mid-value (truncation marker or partial path)"
+                    )
         elif event_id in _PROCESS_EVENT_IDS:
             parsed = {
                 k: str(v)
@@ -323,16 +351,22 @@ class Normalizer:
             }
             if not parsed:
                 truncated.append("process_data")
-                reasons.append("no process image or command line captured for a process event")
+                reasons.append(
+                    "no process image or command line captured for a process event"
+                )
             else:
                 for key, value in parsed.items():
                     kind = "text" if key in ("command_line", "script_block") else "path"
                     if cls._looks_truncated(value, kind):
                         truncated.append(key)
-                        reasons.append(f"{key} parsed from the message and looks cut short")
+                        reasons.append(
+                            f"{key} parsed from the message and looks cut short"
+                        )
                 if message_cut or raw.get("structured_fetch_failed"):
                     truncated.append("process_data")
-                    reasons.append("message copy only (structured process fields unavailable) - command line may be lost")
+                    reasons.append(
+                        "message copy only (structured process fields unavailable) - command line may be lost"
+                    )
         return truncated, reasons
 
     # ------------------------------------------------------------------
@@ -397,21 +431,40 @@ class Normalizer:
         return facts
 
     # ------------------------------------------------------------------
-    _ENC_SIGNAL = re.compile(r"(?:enc|encodedcommand|frombase64string|base64)", re.IGNORECASE)
-    _DOWNLOAD_SIGNAL = re.compile(
-        r"(?:downloadstring|invoke-webrequest|start-bits|webclient|wget|curl|downloadfile)", re.IGNORECASE
+    _ENC_SIGNAL = re.compile(
+        r"(?:enc|encodedcommand|frombase64string|base64)", re.IGNORECASE
     )
-    _HIDDEN_SIGNAL = re.compile(r"(?:-w(?:indowstyle)?\s+hidden|/hidden|windowstyle\s+hidden)", re.IGNORECASE)
+    _DOWNLOAD_SIGNAL = re.compile(
+        r"(?:downloadstring|invoke-webrequest|start-bits|webclient|wget|curl|downloadfile)",
+        re.IGNORECASE,
+    )
+    _HIDDEN_SIGNAL = re.compile(
+        r"(?:-w(?:indowstyle)?\s+hidden|/hidden|windowstyle\s+hidden)", re.IGNORECASE
+    )
     _REMOTE_SIGNAL = re.compile(
-        r"(?:tcpclient|net\.sockets|\.connect\s*\(|invoke-webrequest|downloadstring|etcp|127\.0\.0\.1)", re.IGNORECASE
+        r"(?:tcpclient|net\.sockets|\.connect\s*\(|invoke-webrequest|downloadstring|etcp|127\.0\.0\.1)",
+        re.IGNORECASE,
     )
     #: System binary names commonly abused by name-masquerading malware.
     _MASQUERADE_NAMES = {
-        "svchost.exe", "lsass.exe", "csrss.exe", "winlogon.exe", "services.exe", "smss.exe",
-        "wininit.exe", "spoolsv.exe", "dllhost.exe", "conhost.exe", "taskhost.exe",
-        "explorer.exe", "wmiprvse.exe", "searchindexer.exe",
+        "svchost.exe",
+        "lsass.exe",
+        "csrss.exe",
+        "winlogon.exe",
+        "services.exe",
+        "smss.exe",
+        "wininit.exe",
+        "spoolsv.exe",
+        "dllhost.exe",
+        "conhost.exe",
+        "taskhost.exe",
+        "explorer.exe",
+        "wmiprvse.exe",
+        "searchindexer.exe",
     }
-    _SYSTEM32_HINT = re.compile(r"\\windows\\(?:system(?:32|64)\\|syswow64)\\", re.IGNORECASE)
+    _SYSTEM32_HINT = re.compile(
+        r"\\windows\\(?:system(?:32|64)\\|syswow64)\\", re.IGNORECASE
+    )
 
     @classmethod
     def _derive_attack_facts(cls, event_id: int, facts: dict) -> dict:
@@ -425,15 +478,18 @@ class Normalizer:
         if eid not in (4688, 4104, 4103, 4698, 7045, 4697):
             return facts
         cmd = str(
-            facts.get("command_line") or facts.get("CommandLine")
-            or facts.get("script_block") or facts.get("ScriptBlockText") or ""
+            facts.get("command_line")
+            or facts.get("CommandLine")
+            or facts.get("script_block")
+            or facts.get("ScriptBlockText")
+            or ""
         )
-        script = str(
-            facts.get("script_block") or facts.get("ScriptBlockText") or ""
-        )
+        script = str(facts.get("script_block") or facts.get("ScriptBlockText") or "")
         image = str(
-            facts.get("image_path") or facts.get("new_process")
-            or facts.get("NewProcessName") or ""
+            facts.get("image_path")
+            or facts.get("new_process")
+            or facts.get("NewProcessName")
+            or ""
         )
         text = (cmd + " " + script).strip()
 
@@ -460,7 +516,9 @@ class Normalizer:
                 facts["has_download"] = True
             if not facts.get("has_remote") and cls._REMOTE_SIGNAL.search(text):
                 facts["has_remote"] = True
-            if not facts.get("has_hidden") and (cls._HIDDEN_SIGNAL.search(cmd) or cls._is_masquerade(image)):
+            if not facts.get("has_hidden") and (
+                cls._HIDDEN_SIGNAL.search(cmd) or cls._is_masquerade(image)
+            ):
                 facts["has_hidden"] = True
         return facts
 
@@ -471,7 +529,8 @@ class Normalizer:
             return False
         name = image.split("\\")[-1].lower()
         is_system_name = any(
-            name == candidate or (candidate.startswith("svchost") and name.startswith("svchost"))
+            name == candidate
+            or (candidate.startswith("svchost") and name.startswith("svchost"))
             for candidate in cls._MASQUERADE_NAMES
         )
         if not is_system_name:
@@ -482,12 +541,19 @@ class Normalizer:
     def normalize(self, record: dict) -> dict:
         """Normalize one raw record into a canonical event dict."""
         event_id = int(record.get("event_id") or 0)
-        meta = EVENT_META.get(event_id, {"category": "Other", "risk": "Low", "severity": "info"})
+        meta = EVENT_META.get(
+            event_id, {"category": "Other", "risk": "Low", "severity": "info"}
+        )
         facts = self._extract_facts(record)
         facts = self._derive_attack_facts(event_id, facts)
 
         # Resolve the user: prefer structured, fall back to message parse.
-        user = record.get("user") or facts.get("account_name") or facts.get("new_account") or "-"
+        user = (
+            record.get("user")
+            or facts.get("account_name")
+            or facts.get("new_account")
+            or "-"
+        )
         if user in (None, "", "-") and facts.get("new_account"):
             user = facts["new_account"]
 
@@ -524,7 +590,9 @@ class Normalizer:
         if repaired_fields:
             logger.info(
                 "Data integrity: event %s message repaired from structured "
-                "fields: %s", event_id, ", ".join(repaired_fields),
+                "fields: %s",
+                event_id,
+                ", ".join(repaired_fields),
             )
 
         risk_score = RISK_BAND_SCORES.get(meta["risk"], 15)
@@ -538,12 +606,18 @@ class Normalizer:
             "severity": meta["severity"],
             "source": record.get("source", "unknown"),
             "user": str(user)[:128],
-            "host": record.get("host") or record.get("raw", {}).get("computer") or self.hostname,
+            "host": record.get("host")
+            or record.get("raw", {}).get("computer")
+            or self.hostname,
             "message": str(message)[:8192],
             "timestamp": timestamp,
             "data_integrity": data_integrity,
             "raw_json": {
-                "facts": {k: v for k, v in facts.items() if isinstance(v, (str, int, float, bool))},
+                "facts": {
+                    k: v
+                    for k, v in facts.items()
+                    if isinstance(v, (str, int, float, bool))
+                },
                 "channel": record.get("channel", ""),
                 "record_number": record.get("raw", {}).get("record_number"),
                 "data_integrity": {
@@ -559,23 +633,39 @@ class Normalizer:
     def _risk_modifiers(event_id: int, facts: dict) -> float:
         """Additional risk points for aggravating factors in the event."""
         bonus = 0.0
-        if event_id == 4625 and str(facts.get("sub_status", "")) in ("0xC000006D", "0xC0000234"):
+        if event_id == 4625 and str(facts.get("sub_status", "")) in (
+            "0xC000006D",
+            "0xC0000234",
+        ):
             bonus += 10  # locked-account / bad-password attempts
-        if event_id in (4720, 4732) and "admin" in str(facts.get("new_account", "")).lower():
+        if (
+            event_id in (4720, 4732)
+            and "admin" in str(facts.get("new_account", "")).lower()
+        ):
             bonus += 10  # admin-named account creation
         if event_id == 4732 and facts.get("group_sid") == "S-1-5-32-544":
             bonus += 15  # Administrators group membership
-        if event_id == 7045 and re.search(r"public|temp|downloads", str(facts.get("image_path", "")), re.IGNORECASE):
+        if event_id == 7045 and re.search(
+            r"public|temp|downloads", str(facts.get("image_path", "")), re.IGNORECASE
+        ):
             bonus += 10  # service binary dropped in user-writable path
         if event_id == 4104 and facts.get("has_encoded"):
             bonus += 15  # encoded PowerShell
         if event_id == 4104 and facts.get("has_download"):
             bonus += 10  # download-execute PowerShell
-        if event_id == 4698 and re.search(r"public|temp|downloads", str(facts.get("image_path", "")), re.IGNORECASE):
+        if event_id == 4698 and re.search(
+            r"public|temp|downloads", str(facts.get("image_path", "")), re.IGNORECASE
+        ):
             bonus += 10
-        if event_id == 10 and re.search(r"lsass\.exe$", str(facts.get("target_image", "")), re.IGNORECASE):
+        if event_id == 10 and re.search(
+            r"lsass\.exe$", str(facts.get("target_image", "")), re.IGNORECASE
+        ):
             bonus += 20  # LSASS memory access
-        if event_id == 13 and re.search(r"\\Run(?:Once)?(?:Services)?\\", str(facts.get("target_object", "")), re.IGNORECASE):
+        if event_id == 13 and re.search(
+            r"\\Run(?:Once)?(?:Services)?\\",
+            str(facts.get("target_object", "")),
+            re.IGNORECASE,
+        ):
             bonus += 15  # autostart Run-key write
         return bonus
 

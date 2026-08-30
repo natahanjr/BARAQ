@@ -1,16 +1,17 @@
 """Phase 7 incident API tests (spec 7.30-7.33, 7.35, 7.39, 7.48, 7.49)."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from fastapi.testclient import TestClient
 
-from backend.main import app
 from backend.incidents import engine
-from backend.incidents.contract import INCIDENT_STATES
+from backend.main import app
 
 client = TestClient(app)
 API = "/api/incidents-v2"
-EVAL_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=timezone.utc)
+EVAL_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=UTC)
 
 
 def _group(group_id, hosts, techniques, severity="high", alert_count=10):
@@ -118,5 +119,3 @@ def test_metrics_never_fabricates_accuracy(db):
     assert "accuracy" not in body
     assert "precision" not in body
     assert "recall" not in body
-
-

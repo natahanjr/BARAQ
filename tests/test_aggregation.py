@@ -1,4 +1,5 @@
 """Tests for alert aggregation, ML lifecycle staleness and assistant RAG."""
+
 from __future__ import annotations
 
 import pytest
@@ -70,7 +71,6 @@ def test_ml_staleness_lifecycle(db):
     assert stale is True
     assert reason == "never-trained"
 
-    from backend.database.models import NormalizedEvent
     from tests.conftest import run_simulation
 
     run_simulation(db)

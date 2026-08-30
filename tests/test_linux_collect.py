@@ -1,6 +1,6 @@
 """Linux collector record shapes (pure parsing; subprocess mocked)."""
-import re
-from datetime import datetime, timedelta, timezone
+
+from datetime import datetime
 
 import pytest
 
@@ -45,8 +45,10 @@ def test_auth_failure_regex():
         "root from 203.0.113.9 port 55314 ssh2"
     )
     assert m and m.group("user") == "root" and m.group("ip") == "203.0.113.9"
-    assert _ACCEPTED_SSH.search("Aug  9 10:02:11 box sshd[1234]: Accepted publickey"
-                                " for alice from 198.51.100.7 port 44322 ssh2")
+    assert _ACCEPTED_SSH.search(
+        "Aug  9 10:02:11 box sshd[1234]: Accepted publickey"
+        " for alice from 198.51.100.7 port 44322 ssh2"
+    )
 
 
 def test_collect_auth_shapes(fake_authlog):
@@ -63,13 +65,11 @@ def test_collect_auth_shapes(fake_authlog):
 def test_collect_connections(monkeypatch):
     out = (
         "State Recv-Q Send-Q Local Address:Port Peer Address:Port Process\n"
-        "ESTAB 0 0 10.0.0.5:54321 203.0.113.44:443 users:((\"curl\",pid=901))\n"
-        "ESTAB 0 0 10.0.0.5:54322 198.51.100.3:22 users:((\"ssh\",pid=555))\n"
-        "LISTEN 0 0 0.0.0.0:22 0.0.0.0:* users:((\"sshd\",pid=1))\n"
+        'ESTAB 0 0 10.0.0.5:54321 203.0.113.44:443 users:(("curl",pid=901))\n'
+        'ESTAB 0 0 10.0.0.5:54322 198.51.100.3:22 users:(("ssh",pid=555))\n'
+        'LISTEN 0 0 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=1))\n'
     )
-    monkeypatch.setattr(
-        "scripts.linux_collect._run", lambda cmd, timeout=15: out
-    )
+    monkeypatch.setattr("scripts.linux_collect._run", lambda cmd, timeout=15: out)
     records = collect_connections()
     assert len(records) == 2  # LISTEN skipped
     assert records[0]["event_id"] == 3

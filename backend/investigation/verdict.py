@@ -50,16 +50,18 @@ def _entity_risk(session, alert: Alert) -> list[dict]:
             continue
         try:
             prof: EntityRisk | None = manager.profile(kind, name, org=alert.org or "")
-        except Exception:  # noqa: BLE001
+        except Exception:
             prof = None
         if prof:
-            out.append({
-                "kind": kind,
-                "name": name,
-                "risk_level": prof.risk_level,
-                "risk_score": prof.risk_score,
-                "alerts_count": prof.alerts_count,
-            })
+            out.append(
+                {
+                    "kind": kind,
+                    "name": name,
+                    "risk_level": prof.risk_level,
+                    "risk_score": prof.risk_score,
+                    "alerts_count": prof.alerts_count,
+                }
+            )
     return out
 
 
@@ -75,8 +77,10 @@ def suggest_verdict(
     if facts is None:
         try:
             facts = assess_for_alert(session, alert)
-        except Exception:  # noqa: BLE001
-            log.warning("context assessment failed for alert %s", alert.id, exc_info=True)
+        except Exception:
+            log.warning(
+                "context assessment failed for alert %s", alert.id, exc_info=True
+            )
             facts = None
 
     # ---- 1) context engine -------------------------------------------------
@@ -93,7 +97,9 @@ def suggest_verdict(
         ]
         if unknown and not facts.strong_dev_context:
             scores[TP] += 0.25
-            reasons.append((f"unknown process reputation ({', '.join(unknown[:2])})", 0.25))
+            reasons.append(
+                (f"unknown process reputation ({', '.join(unknown[:2])})", 0.25)
+            )
         if facts.localhost_flows and not facts.strong_dev_context and not unknown:
             scores[EXP] += 0.1
 
@@ -123,7 +129,8 @@ def suggest_verdict(
     ev_ids = [link.event_id for link in alert.events][:40]
     if ev_ids:
         ml_scores = [
-            s for s in session.scalars(
+            s
+            for s in session.scalars(
                 select(NormalizedEvent.ml_score).where(
                     NormalizedEvent.id.in_(ev_ids),
                     NormalizedEvent.ml_score.isnot(None),
@@ -137,7 +144,9 @@ def suggest_verdict(
                 reasons.append((f"ML anomaly agreement (mean {mean_ml:.2f})", 0.25))
             elif mean_ml <= 0.25:
                 scores[FP] += 0.15
-                reasons.append((f"ML finds nothing anomalous (mean {mean_ml:.2f})", 0.15))
+                reasons.append(
+                    (f"ML finds nothing anomalous (mean {mean_ml:.2f})", 0.15)
+                )
 
     # ---- 6) analyst feedback weights ----------------------------------------
     try:
@@ -145,11 +154,13 @@ def suggest_verdict(
         w = float(weights.get(alert.rule, 1.0))
         if w < 0.9:
             scores[EXP if alert.rule in DEV_SENSITIVE_RULES else FP] += 0.2
-            reasons.append((f"analysts have down-weighted this rule (weight {w:.2f})", 0.2))
+            reasons.append(
+                (f"analysts have down-weighted this rule (weight {w:.2f})", 0.2)
+            )
         elif w > 1.1:
             scores[TP] += 0.15
             reasons.append((f"analysts confirmed this rule (weight {w:.2f})", 0.15))
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
     # ---- 7) verdict history of the rule --------------------------------------
@@ -169,8 +180,10 @@ def suggest_verdict(
                 reasons.append((f"{cnt} past verdicts on this rule: {majority}", 0.2))
             elif majority == TP and cnt / len(past) >= 0.6:
                 scores[TP] += 0.15
-                reasons.append((f"{cnt} past verdicts on this rule: true positive", 0.15))
-    except Exception:  # noqa: BLE001
+                reasons.append(
+                    (f"{cnt} past verdicts on this rule: true positive", 0.15)
+                )
+    except Exception:
         pass
 
     # ---- 8) correlation chain -------------------------------------------------

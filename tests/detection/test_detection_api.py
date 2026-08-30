@@ -1,4 +1,5 @@
 """Detection API tests (Phase 2)."""
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -119,9 +120,13 @@ def test_evaluate_never_touches_v1_state(db):
         "network": {"src_ip": "203.0.113.5"},
     }
     with client() as c:
-        before = {t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar() for t in tables}
+        before = {
+            t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar() for t in tables
+        }
         c.post("/api/detections/evaluate", json={"records": [record]})
-        after = {t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar() for t in tables}
+        after = {
+            t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar() for t in tables
+        }
         assert after == before
 
 
@@ -134,7 +139,6 @@ def test_api_requires_auth():
 def test_list_detections_filters(db):
     from backend.detection.contract import DETECTION
     from backend.detection.engine import persist
-
     from tests.detection.helpers import event
 
     finding = DETECTION(

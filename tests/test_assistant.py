@@ -1,18 +1,32 @@
 """Tests for the AI Security Assistant (chat, clear history, new intents)."""
-from datetime import datetime, timedelta, timezone
+
+from datetime import UTC, datetime, timedelta
 
 from backend.ai.assistant import SecurityAssistant
 from backend.database.models import Alert, AssistantMessage, Endpoint, NormalizedEvent
 
 
-def _mk_alert(db, name="Brute Force - many failed logons", severity="high",
-              rule="brute_force", mitre_id="T1110", tactic="Credential Access",
-              status="open"):
+def _mk_alert(
+    db,
+    name="Brute Force - many failed logons",
+    severity="high",
+    rule="brute_force",
+    mitre_id="T1110",
+    tactic="Credential Access",
+    status="open",
+):
     a = Alert(
-        name=name, description="many failed logons", severity=severity,
-        status=status, confidence=0.9, mitre_id=mitre_id,
-        mitre_name=name, mitre_tactic=tactic, rule=rule,
-        evidence="4625 x 30 from 10.0.9.1", recommendation="Block the source IP.",
+        name=name,
+        description="many failed logons",
+        severity=severity,
+        status=status,
+        confidence=0.9,
+        mitre_id=mitre_id,
+        mitre_name=name,
+        mitre_tactic=tactic,
+        rule=rule,
+        evidence="4625 x 30 from 10.0.9.1",
+        recommendation="Block the source IP.",
     )
     db.add(a)
     db.commit()
@@ -59,7 +73,12 @@ def test_alert_search_filters_by_severity(db):
 
 
 def test_alert_search_keyword(db):
-    _mk_alert(db, name="Suspicious PowerShell", severity="medium", rule="suspicious_powershell")
+    _mk_alert(
+        db,
+        name="Suspicious PowerShell",
+        severity="medium",
+        rule="suspicious_powershell",
+    )
     _mk_alert(db, name="RDP brute force", severity="high", rule="brute_force")
     assistant = SecurityAssistant(db)
     reply = assistant.chat("find alerts about powershell")
@@ -68,17 +87,35 @@ def test_alert_search_keyword(db):
 
 
 def test_recent_events_filters_by_host(db):
-    now = datetime.now(timezone.utc)
-    db.add(NormalizedEvent(
-        event_id=4624, category="Authentication", user="alice", host="ws01",
-        timestamp=now, message="logon", risk_score=10, severity="low",
-        source="eventlog", raw_json={},
-    ))
-    db.add(NormalizedEvent(
-        event_id=4688, category="Process", user="bob", host="ws02",
-        timestamp=now, message="new process", risk_score=10, severity="low",
-        source="eventlog", raw_json={},
-    ))
+    now = datetime.now(UTC)
+    db.add(
+        NormalizedEvent(
+            event_id=4624,
+            category="Authentication",
+            user="alice",
+            host="ws01",
+            timestamp=now,
+            message="logon",
+            risk_score=10,
+            severity="low",
+            source="eventlog",
+            raw_json={},
+        )
+    )
+    db.add(
+        NormalizedEvent(
+            event_id=4688,
+            category="Process",
+            user="bob",
+            host="ws02",
+            timestamp=now,
+            message="new process",
+            risk_score=10,
+            severity="low",
+            source="eventlog",
+            raw_json={},
+        )
+    )
     db.commit()
     assistant = SecurityAssistant(db)
     reply = assistant.chat("recent events from host ws01")
@@ -87,15 +124,22 @@ def test_recent_events_filters_by_host(db):
 
 
 def test_fleet_status_lists_endpoints(db):
-    db.add(Endpoint(
-        agent_id="agent-1", host="ws01",
-        last_seen=datetime.now(timezone.utc),
-        events_total=120, alerts_total=1,
-    ))
-    db.add(Endpoint(
-        agent_id="agent-2", host="stale-host",
-        last_seen=datetime.now(timezone.utc) - timedelta(hours=2),
-    ))
+    db.add(
+        Endpoint(
+            agent_id="agent-1",
+            host="ws01",
+            last_seen=datetime.now(UTC),
+            events_total=120,
+            alerts_total=1,
+        )
+    )
+    db.add(
+        Endpoint(
+            agent_id="agent-2",
+            host="stale-host",
+            last_seen=datetime.now(UTC) - timedelta(hours=2),
+        )
+    )
     db.commit()
     assistant = SecurityAssistant(db)
     reply = assistant.chat("are my agents healthy")
@@ -105,12 +149,22 @@ def test_fleet_status_lists_endpoints(db):
 
 
 def test_ml_anomalies_lists_flagged_events(db):
-    db.add(NormalizedEvent(
-        event_id=4104, category="PowerShell", user="alice", host="ws01",
-        timestamp=datetime.now(timezone.utc), message="obfuscated script",
-        risk_score=80, severity="high", source="eventlog", raw_json={},
-        is_anomaly=True, ml_score=0.93,
-    ))
+    db.add(
+        NormalizedEvent(
+            event_id=4104,
+            category="PowerShell",
+            user="alice",
+            host="ws01",
+            timestamp=datetime.now(UTC),
+            message="obfuscated script",
+            risk_score=80,
+            severity="high",
+            source="eventlog",
+            raw_json={},
+            is_anomaly=True,
+            ml_score=0.93,
+        )
+    )
     db.commit()
     assistant = SecurityAssistant(db)
     reply = assistant.chat("show ml anomalies")
@@ -122,11 +176,12 @@ def test_threat_intel_returns_verdict_or_graceful_reply(db):
     assistant = SecurityAssistant(db)
     reply = assistant.chat("is 203.0.113.9 malicious?")
     assert "203.0.113.9" in reply
-    assert ("Verdict" in reply or "No reputation data" in reply)
+    assert "Verdict" in reply or "No reputation data" in reply
 
 
 def test_clear_history_endpoint(db):
     from fastapi.testclient import TestClient
+
     from backend.main import app
 
     assistant = SecurityAssistant(db)

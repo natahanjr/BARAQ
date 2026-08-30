@@ -3,23 +3,57 @@
 Heuristic scoring of collected email metadata: suspicious sender domains,
 impersonation language, urgency, and malicious attachment types.
 """
+
 from __future__ import annotations
 
-import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
 from backend.database.models import EmailMessage
 from backend.detection.rules.base import BaseRule, DetectionResult
 
-SUSPICIOUS_TLDS = {".tk", ".ml", ".ga", ".cf", ".gq", ".xyz", ".top", ".site", ".click", ".info"}
+SUSPICIOUS_TLDS = {
+    ".tk",
+    ".ml",
+    ".ga",
+    ".cf",
+    ".gq",
+    ".xyz",
+    ".top",
+    ".site",
+    ".click",
+    ".info",
+}
 URGENT_WORDS = [
-    "urgent", "account locked", "password reset", "verify", "unusual sign-in",
-    "invoice", "payment", "suspended", "deactivated", "action required",
-    "security alert", "w-2", "wire transfer", "gift card",
+    "urgent",
+    "account locked",
+    "password reset",
+    "verify",
+    "unusual sign-in",
+    "invoice",
+    "payment",
+    "suspended",
+    "deactivated",
+    "action required",
+    "security alert",
+    "w-2",
+    "wire transfer",
+    "gift card",
 ]
-BAD_ATTACHMENTS = {".exe", ".scr", ".js", ".vbs", ".ps1", ".bat", ".cmd", ".lnk", ".docm", ".xlsm", ".iso"}
+BAD_ATTACHMENTS = {
+    ".exe",
+    ".scr",
+    ".js",
+    ".vbs",
+    ".ps1",
+    ".bat",
+    ".cmd",
+    ".lnk",
+    ".docm",
+    ".xlsm",
+    ".iso",
+}
 
 
 class EmailPhishingRule(BaseRule):
@@ -69,7 +103,9 @@ class EmailPhishingRule(BaseRule):
         return score, reasons
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
-        since = datetime.now(timezone.utc) - timedelta(minutes=self.window_minutes or window_minutes)
+        since = datetime.now(UTC) - timedelta(
+            minutes=self.window_minutes or window_minutes
+        )
         findings: list[DetectionResult] = []
 
         emails = self.session.scalars(

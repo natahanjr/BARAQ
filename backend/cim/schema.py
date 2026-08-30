@@ -1,12 +1,15 @@
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Any
+
 
 @dataclass
 class CIMField:
     """Defines a standard field in the BARAQ Common Information Model."""
+
     name: str
     description: str
     expected_type: type
+
 
 CIM_SCHEMA = {
     "endpoint": {
@@ -31,22 +34,23 @@ CIM_SCHEMA = {
     "identity": {
         "user_id": CIMField("user_id", "Unique identifier for the user", str),
         "user_domain": CIMField("user_domain", "Authentication domain", str),
-    }
+    },
 }
 
-def normalize_to_cim(data: Dict[str, Any], category: str) -> Dict[str, Any]:
+
+def normalize_to_cim(data: dict[str, Any], category: str) -> dict[str, Any]:
     """
     Ensures a data dictionary conforms to the CIM for a given category.
     Fills missing required fields with defaults.
     """
     if category not in CIM_SCHEMA:
         return data
-    
+
     schema = CIM_SCHEMA[category]
     normalized = data.copy()
-    
+
     for field_name, field_def in schema.items():
         if field_name not in normalized:
             normalized[field_name] = None if field_def.expected_type == str else 0
-            
+
     return normalized

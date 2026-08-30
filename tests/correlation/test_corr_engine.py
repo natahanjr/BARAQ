@@ -1,5 +1,4 @@
 """Phase 5 engine tests (spec 5.2-5.10, 5.35-5.37, 5.68-5.70, 5.77)."""
-from datetime import timedelta
 
 import pytest
 from sqlalchemy import text
@@ -12,7 +11,6 @@ from backend.correlation.models import (
     CorrelationFindingRecord,
     CorrelationMember,
 )
-
 from tests.correlation.helpers import (
     CORR_T0,
     canonical_specs,
@@ -51,7 +49,10 @@ def test_canonical_30_alerts_5_groups_1_finding(db):
     edges = stored_corr_edges(db)
     relationship_types = {e.relationship_type for e in edges}
     assert relationship_types == {
-        "SAME_USER", "SAME_SOURCE", "TEMPORAL", "DESTINATION_RELATION",
+        "SAME_USER",
+        "SAME_SOURCE",
+        "TEMPORAL",
+        "DESTINATION_RELATION",
         "LATERAL_MOVEMENT",
     }
     assert any(e.relationship_type == "LATERAL_MOVEMENT" for e in edges)
@@ -66,9 +67,15 @@ def test_canonical_no_overclaiming_no_incident(db):
     finding = stored_correlations(db)[0]
     lowered = (finding.title + " " + finding.description).lower()
     for banned in (
-        "confirmed attack", "confirmed compromise", "attacker confirmed",
-        "breach confirmed", "apt confirmed", "malware confirmed",
-        "host compromised", "account compromised", "confirmed intrusion",
+        "confirmed attack",
+        "confirmed compromise",
+        "attacker confirmed",
+        "breach confirmed",
+        "apt confirmed",
+        "malware confirmed",
+        "host compromised",
+        "account compromised",
+        "confirmed intrusion",
         "proves",
     ):
         assert banned not in lowered
@@ -82,11 +89,13 @@ def test_deterministic_correlation_same_input_same_output(db):
     first_edges = [(e.relationship_type, e.strength) for e in stored_corr_edges(db)]
 
     # Wipe only the correlation tables (groups stay identical) and rerun.
-    db.execute(text(
-        "TRUNCATE TABLE correlation_findings, correlation_members, "
-        "correlation_edges, correlation_evidence, correlation_audit_events "
-        "RESTART IDENTITY CASCADE"
-    ))
+    db.execute(
+        text(
+            "TRUNCATE TABLE correlation_findings, correlation_members, "
+            "correlation_edges, correlation_evidence, correlation_audit_events "
+            "RESTART IDENTITY CASCADE"
+        )
+    )
     db.commit()
     correlate(db, now=CORR_T0)
     second = stored_correlations(db)
@@ -100,12 +109,20 @@ def test_deterministic_correlation_same_input_same_output(db):
 def test_idempotent_rerun_no_duplicates(db):
     make_groups(db, canonical_specs(), now=CORR_T0)
     correlate(db, now=CORR_T0)
-    before = (len(stored_correlations(db)), len(stored_corr_edges(db)),
-              len(stored_corr_members(db)), len(stored_corr_evidence(db)))
+    before = (
+        len(stored_correlations(db)),
+        len(stored_corr_edges(db)),
+        len(stored_corr_members(db)),
+        len(stored_corr_evidence(db)),
+    )
     correlate(db, now=CORR_T0)
     correlate(db, now=CORR_T0)
-    after = (len(stored_correlations(db)), len(stored_corr_edges(db)),
-             len(stored_corr_members(db)), len(stored_corr_evidence(db)))
+    after = (
+        len(stored_correlations(db)),
+        len(stored_corr_edges(db)),
+        len(stored_corr_members(db)),
+        len(stored_corr_evidence(db)),
+    )
     assert after == before
 
 
@@ -114,12 +131,30 @@ def test_unrelated_groups_never_correlate(db):
     make_groups(
         db,
         [
-            dict(detector_id="D001", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1133", minutes_ago=10),
-            dict(detector_id="D003", host="host-b", user="bob", source_ip="203.0.113.9",
-                 mitre="T1059.001", minutes_ago=9),
-            dict(detector_id="D005", host="host-c", user="carol", source_ip="203.0.113.7",
-                 mitre="T1486", minutes_ago=8),
+            {
+                "detector_id": "D001",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1133",
+                "minutes_ago": 10,
+            },
+            {
+                "detector_id": "D003",
+                "host": "host-b",
+                "user": "bob",
+                "source_ip": "203.0.113.9",
+                "mitre": "T1059.001",
+                "minutes_ago": 9,
+            },
+            {
+                "detector_id": "D005",
+                "host": "host-c",
+                "user": "carol",
+                "source_ip": "203.0.113.7",
+                "mitre": "T1486",
+                "minutes_ago": 8,
+            },
         ],
         now=CORR_T0,
     )
@@ -132,10 +167,23 @@ def test_window_boundary_keeps_episodes_separate(db):
     make_groups(
         db,
         [
-            dict(detector_id="D002", host="10.0.0.4", user="u1", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=300, destination_ip="10.0.0.5"),
-            dict(detector_id="D002", host="10.0.0.5", user="u1", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=60),
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.4",
+                "user": "u1",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 300,
+                "destination_ip": "10.0.0.5",
+            },
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.5",
+                "user": "u1",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 60,
+            },
         ],
         now=CORR_T0,
     )
@@ -147,10 +195,22 @@ def test_auth_to_execution_rule_r001(db):
     make_groups(
         db,
         [
-            dict(detector_id="D001", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1133", minutes_ago=5),
-            dict(detector_id="D003", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1059.001", minutes_ago=1),
+            {
+                "detector_id": "D001",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1133",
+                "minutes_ago": 5,
+            },
+            {
+                "detector_id": "D003",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1059.001",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -158,18 +218,33 @@ def test_auth_to_execution_rule_r001(db):
     findings = stored_correlations(db)
     assert len(findings) == 1
     assert findings[0].correlation_type == "TEMPORAL"
-    assert "R001" in {e.details.get("rule_id") for e in stored_corr_audit(db)
-                      if e.action == "CORRELATION_CREATED"}
+    assert "R001" in {
+        e.details.get("rule_id")
+        for e in stored_corr_audit(db)
+        if e.action == "CORRELATION_CREATED"
+    }
 
 
 def test_credential_access_rule_r002_entity(db):
     make_groups(
         db,
         [
-            dict(detector_id="D001", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1133", minutes_ago=5),
-            dict(detector_id="D002", host="host-b", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=1),
+            {
+                "detector_id": "D001",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1133",
+                "minutes_ago": 5,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-b",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -186,10 +261,22 @@ def test_source_chain_rule_r005(db):
     make_groups(
         db,
         [
-            dict(detector_id="D002", host="host-a", user="alice", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=5),
-            dict(detector_id="D002", host="host-b", user="bob", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=1),
+            {
+                "detector_id": "D002",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 5,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-b",
+                "user": "bob",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -203,10 +290,22 @@ def test_user_chain_rule_r006(db):
     make_groups(
         db,
         [
-            dict(detector_id="D002", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=5),
-            dict(detector_id="D002", host="host-b", user="alice", source_ip="203.0.113.9",
-                 mitre="T1110", minutes_ago=1),
+            {
+                "detector_id": "D002",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 5,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-b",
+                "user": "alice",
+                "source_ip": "203.0.113.9",
+                "mitre": "T1110",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -221,14 +320,38 @@ def test_multi_stage_chain_upgrade(db):
     make_groups(
         db,
         [
-            dict(detector_id="D001", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1133", minutes_ago=20),
-            dict(detector_id="D002", host="host-b", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=15),
-            dict(detector_id="D003", host="host-c", user="alice", source_ip="203.0.113.5",
-                 mitre="T1059.001", minutes_ago=10),
-            dict(detector_id="D004", host="host-d", user="alice", source_ip="203.0.113.5",
-                 mitre="T1053.005", minutes_ago=5),
+            {
+                "detector_id": "D001",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1133",
+                "minutes_ago": 20,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-b",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 15,
+            },
+            {
+                "detector_id": "D003",
+                "host": "host-c",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1059.001",
+                "minutes_ago": 10,
+            },
+            {
+                "detector_id": "D004",
+                "host": "host-d",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1053.005",
+                "minutes_ago": 5,
+            },
         ],
         now=CORR_T0,
     )
@@ -244,12 +367,33 @@ def test_host_chain_upgrade(db):
     make_groups(
         db,
         [
-            dict(detector_id="D002", host="10.0.0.1", user="alice", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=30, destination_ip="10.0.0.2"),
-            dict(detector_id="D002", host="10.0.0.2", user="alice", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=20, destination_ip="10.0.0.3"),
-            dict(detector_id="D002", host="10.0.0.3", user="alice", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=10, destination_ip="10.0.0.4"),
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.1",
+                "user": "alice",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 30,
+                "destination_ip": "10.0.0.2",
+            },
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.2",
+                "user": "alice",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 20,
+                "destination_ip": "10.0.0.3",
+            },
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.3",
+                "user": "alice",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 10,
+                "destination_ip": "10.0.0.4",
+            },
         ],
         now=CORR_T0,
     )
@@ -266,10 +410,22 @@ def test_technique_transition_rule_r007(db):
     make_groups(
         db,
         [
-            dict(detector_id="D002", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=5),
-            dict(detector_id="D002", host="host-a", user="bob", source_ip="203.0.113.9",
-                 mitre="T1621", minutes_ago=1),
+            {
+                "detector_id": "D002",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 5,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-a",
+                "user": "bob",
+                "source_ip": "203.0.113.9",
+                "mitre": "T1621",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -288,10 +444,22 @@ def test_tactic_progression_rule_r008(db):
     make_groups(
         db,
         [
-            dict(detector_id="D001", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1133", minutes_ago=5),
-            dict(detector_id="D002", host="host-a", user="bob", source_ip="203.0.113.9",
-                 mitre="T1110", minutes_ago=1),
+            {
+                "detector_id": "D001",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1133",
+                "minutes_ago": 5,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-a",
+                "user": "bob",
+                "source_ip": "203.0.113.9",
+                "mitre": "T1110",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -300,8 +468,8 @@ def test_tactic_progression_rule_r008(db):
 
 
 def test_engine_refuses_production_database():
+    from backend import config
     from backend.database.connection import SessionLocal
-    import backend.config as config
 
     original = config.DATABASE_URL
     config.DATABASE_URL = "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel"
@@ -321,13 +489,16 @@ def test_only_five_correlation_tables_written(db):
         CorrelationAuditEvent.__tablename__,
     }
     assert written == {
-        "correlation_findings", "correlation_members", "correlation_edges",
-        "correlation_evidence", "correlation_audit_events",
+        "correlation_findings",
+        "correlation_members",
+        "correlation_edges",
+        "correlation_evidence",
+        "correlation_audit_events",
     }
 
 
 def test_no_ml_imports_in_correlation():
-    import backend.correlation.engine as engine
+    from backend.correlation import engine
 
     source = open(engine.__file__, encoding="utf-8").read().lower()
     for forbidden in ("sklearn", "kmeans", "dbscan", "embeddings", "llm", "openai"):
@@ -341,10 +512,10 @@ def test_correlation_failure_does_not_break_telemetry(db):
     assert len(stored_correlations(db)) == 1
     edges_before = len(stored_corr_edges(db))
 
-    import backend.correlation.engine as engine
+    from backend.correlation import engine
 
     original = engine.pair_rules
-    engine.pair_rules = lambda: []  # simulate a broken rule source
+    engine.pair_rules = list  # simulate a broken rule source
 
     try:
         correlate(db, now=CORR_T0)
@@ -361,10 +532,13 @@ def test_correlation_never_rewrites_groups_or_alerts(db):
         (g.behavior_group_id, g.alert_count, g.status, g.last_seen) for g in groups
     ]
     correlate(db, now=CORR_T0)
-    from backend.aggregation.models import BehaviorGroupRecord
     from sqlalchemy import select
 
-    current = db.scalars(select(BehaviorGroupRecord).order_by(BehaviorGroupRecord.id)).all()
+    from backend.aggregation.models import BehaviorGroupRecord
+
+    current = db.scalars(
+        select(BehaviorGroupRecord).order_by(BehaviorGroupRecord.id)
+    ).all()
     assert [
         (g.behavior_group_id, g.alert_count, g.status, g.last_seen) for g in current
     ] == group_snapshots

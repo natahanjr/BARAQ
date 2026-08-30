@@ -4,6 +4,7 @@ Used for second-factor login. Secrets are 20 random bytes base32-encoded
 (RFC 4648), codes are 6 digits with a 30-second step and a ±1-step
 verification window. No third-party dependency (``pyotp`` not required).
 """
+
 from __future__ import annotations
 
 import base64

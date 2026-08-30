@@ -4,10 +4,11 @@ Flags per-process HTTP/S transfer volumes that are anomalous for an
 endpoint: many megabytes of upload/download or very high request counts
 from a single process within a short window.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -15,7 +16,7 @@ from backend.database.models import HttpRequest
 from backend.detection.rules.base import BaseRule, DetectionResult
 
 BYTES_THRESHOLD = 5_000_000  # 5 MB per process per window
-COUNT_THRESHOLD = 250        # 250 requests per process per window
+COUNT_THRESHOLD = 250  # 250 requests per process per window
 
 
 class ExfiltrationVolumeRule(BaseRule):
@@ -34,14 +35,19 @@ class ExfiltrationVolumeRule(BaseRule):
         "chain, determine which data left the host and notify incident response."
     )
 
-    def __init__(self, session, bytes_threshold: int = BYTES_THRESHOLD, count_threshold: int = COUNT_THRESHOLD):
+    def __init__(
+        self,
+        session,
+        bytes_threshold: int = BYTES_THRESHOLD,
+        count_threshold: int = COUNT_THRESHOLD,
+    ):
         super().__init__(session)
         self.bytes_threshold = bytes_threshold
         self.count_threshold = count_threshold
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(HttpRequest).where(
                 HttpRequest.observed_at >= since,
@@ -52,7 +58,9 @@ class ExfiltrationVolumeRule(BaseRule):
         totals: dict[str, dict] = defaultdict(lambda: {"bytes": 0, "count": 0})
         for req in rows:
             process = (req.process or "?").strip() or "?"
-            totals[process]["bytes"] += (req.request_body_size or 0) + (req.response_body_size or 0)
+            totals[process]["bytes"] += (req.request_body_size or 0) + (
+                req.response_body_size or 0
+            )
             totals[process]["count"] += 1
 
         for process, stats in totals.items():
@@ -67,7 +75,9 @@ class ExfiltrationVolumeRule(BaseRule):
             if over_count:
                 reasons.append(f"{stats['count']} requests")
 
-            confidence = min(0.95, self.confidence + (0.05 if over_bytes and over_count else 0.0))
+            confidence = min(
+                0.95, self.confidence + (0.05 if over_bytes and over_count else 0.0)
+            )
             findings.append(
                 self._result(
                     evidence=(

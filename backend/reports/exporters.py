@@ -1,10 +1,10 @@
 """Report exporters: JSON, CSV, HTML, PDF (reportlab)."""
+
 from __future__ import annotations
 
 import csv
 import json
-from datetime import datetime, timezone
-from io import StringIO
+from datetime import UTC, datetime
 
 from backend.config import REPORT_DIR
 
@@ -29,7 +29,7 @@ except ImportError:  # pragma: no cover
 
 
 def _stamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
 
 def export_json(context: dict) -> tuple[str, str]:
@@ -45,7 +45,9 @@ def export_csv(context: dict) -> tuple[str, str]:
     path = REPORT_DIR / name
     rows = context.get("alerts") or context.get("top_threats") or []
     with path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()) if rows else ["name"])
+        writer = csv.DictWriter(
+            fh, fieldnames=list(rows[0].keys()) if rows else ["name"]
+        )
         writer.writeheader()
         writer.writerows(rows)
     return str(path), "csv"
@@ -126,26 +128,53 @@ def export_pdf(context: dict) -> tuple[str, str]:
     path = REPORT_DIR / name
 
     doc = SimpleDocTemplate(
-        str(path), pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm,
-        topMargin=18 * mm, bottomMargin=18 * mm,
+        str(path),
+        pagesize=A4,
+        leftMargin=18 * mm,
+        rightMargin=18 * mm,
+        topMargin=18 * mm,
+        bottomMargin=18 * mm,
     )
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
-        "BARAQTitle", parent=styles["Title"], textColor=colors.HexColor("#0f172a"),
-        alignment=TA_CENTER, fontSize=20, spaceAfter=4,
+        "BARAQTitle",
+        parent=styles["Title"],
+        textColor=colors.HexColor("#0f172a"),
+        alignment=TA_CENTER,
+        fontSize=20,
+        spaceAfter=4,
     )
-    h2 = ParagraphStyle("H2", parent=styles["Heading2"], textColor=colors.HexColor("#1e3a8a"))
-    meta_style = ParagraphStyle("Meta", parent=styles["Normal"], textColor=colors.HexColor("#64748b"), fontSize=9)
+    h2 = ParagraphStyle(
+        "H2", parent=styles["Heading2"], textColor=colors.HexColor("#1e3a8a")
+    )
+    meta_style = ParagraphStyle(
+        "Meta",
+        parent=styles["Normal"],
+        textColor=colors.HexColor("#64748b"),
+        fontSize=9,
+    )
 
     summary = context.get("summary", {})
     score = context.get("security_score", summary.get("security_score", 0))
     risk = context.get("risk_level", "N/A")
 
     story = [
-        Paragraph(f"BARAQ", title_style),
-        Paragraph(context["title"], ParagraphStyle("Sub", parent=styles["Title"], fontSize=13, alignment=TA_CENTER, textColor=colors.HexColor("#2563eb"))),
+        Paragraph("BARAQ", title_style),
+        Paragraph(
+            context["title"],
+            ParagraphStyle(
+                "Sub",
+                parent=styles["Title"],
+                fontSize=13,
+                alignment=TA_CENTER,
+                textColor=colors.HexColor("#2563eb"),
+            ),
+        ),
         Spacer(1, 6),
-        Paragraph(f"Generated: {context.get('generated_at', '')} | Period: {context.get('period', '')}", meta_style),
+        Paragraph(
+            f"Generated: {context.get('generated_at', '')} | Period: {context.get('period', '')}",
+            meta_style,
+        ),
         Spacer(1, 10),
         Table(
             [
@@ -166,7 +195,15 @@ def export_pdf(context: dict) -> tuple[str, str]:
     if alerts:
         data = [["Threat", "Severity", "MITRE", "Tactic", "Status"]]
         for a in alerts:
-            data.append([a.get("name", ""), a.get("severity", ""), a.get("mitre_id", ""), a.get("mitre_tactic", ""), a.get("status", "")])
+            data.append(
+                [
+                    a.get("name", ""),
+                    a.get("severity", ""),
+                    a.get("mitre_id", ""),
+                    a.get("mitre_tactic", ""),
+                    a.get("status", ""),
+                ]
+            )
         table = Table(data, colWidths=[58 * mm, 20 * mm, 20 * mm, 30 * mm, 20 * mm])
         table.setStyle(
             TableStyle(
@@ -187,7 +224,11 @@ def export_pdf(context: dict) -> tuple[str, str]:
     story.append(Spacer(1, 8))
     story.append(Paragraph("MITRE ATT&CK Coverage", h2))
     for c in context.get("mitre_coverage", []):
-        story.append(Paragraph(f"<b>{c['tactic']}:</b> " + ", ".join(c["techniques"]), styles["Normal"]))
+        story.append(
+            Paragraph(
+                f"<b>{c['tactic']}:</b> " + ", ".join(c["techniques"]), styles["Normal"]
+            )
+        )
 
     # Technical detail
     if context.get("alerts"):
@@ -195,22 +236,60 @@ def export_pdf(context: dict) -> tuple[str, str]:
         story.append(Paragraph("Technical Detail - Evidence & Recommendations", h2))
         for a in context["alerts"]:
             story.append(Paragraph(f"#{a['id']} {a['name']} ({a['severity']})", h2))
-            story.append(Paragraph(f"<b>Description:</b> {a.get('description', '')}", styles["Normal"]))
-            story.append(Paragraph(f"<b>MITRE:</b> {a.get('mitre_id', '')} - {a.get('mitre_name', '')} ({a.get('mitre_tactic', '')})", styles["Normal"]))
-            story.append(Paragraph(f"<b>Evidence:</b> {a.get('evidence', '')}", styles["Normal"]))
-            story.append(Paragraph(f"<b>Recommendation:</b> {a.get('recommendation', '')}", styles["Normal"]))
+            story.append(
+                Paragraph(
+                    f"<b>Description:</b> {a.get('description', '')}", styles["Normal"]
+                )
+            )
+            story.append(
+                Paragraph(
+                    f"<b>MITRE:</b> {a.get('mitre_id', '')} - {a.get('mitre_name', '')} ({a.get('mitre_tactic', '')})",
+                    styles["Normal"],
+                )
+            )
+            story.append(
+                Paragraph(f"<b>Evidence:</b> {a.get('evidence', '')}", styles["Normal"])
+            )
+            story.append(
+                Paragraph(
+                    f"<b>Recommendation:</b> {a.get('recommendation', '')}",
+                    styles["Normal"],
+                )
+            )
             ev = a.get("events", [])
             if ev:
                 ev_data = [["Time", "Event", "User", "Category", "Risk"]]
                 for e in ev[:15]:
-                    ev_data.append([e.get("timestamp", "")[:19], e.get("event_id", ""), e.get("user", ""), e.get("category", ""), e.get("risk", "")])
-                et = Table(ev_data, colWidths=[48 * mm, 16 * mm, 30 * mm, 30 * mm, 16 * mm])
-                et.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")), ("FONTSIZE", (0, 0), (-1, -1), 7)]))
+                    ev_data.append(
+                        [
+                            e.get("timestamp", "")[:19],
+                            e.get("event_id", ""),
+                            e.get("user", ""),
+                            e.get("category", ""),
+                            e.get("risk", ""),
+                        ]
+                    )
+                et = Table(
+                    ev_data, colWidths=[48 * mm, 16 * mm, 30 * mm, 30 * mm, 16 * mm]
+                )
+                et.setStyle(
+                    TableStyle(
+                        [
+                            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")),
+                            ("FONTSIZE", (0, 0), (-1, -1), 7),
+                        ]
+                    )
+                )
                 story.append(et)
             story.append(Spacer(1, 6))
 
     story.append(Spacer(1, 12))
-    story.append(Paragraph("BARAQ - Intelligent Lightweight SOC Platform for Real-Time Windows Threat Detection", meta_style))
+    story.append(
+        Paragraph(
+            "BARAQ - Intelligent Lightweight SOC Platform for Real-Time Windows Threat Detection",
+            meta_style,
+        )
+    )
     doc.build(story)
     return str(path), "pdf"
 

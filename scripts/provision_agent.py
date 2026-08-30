@@ -21,6 +21,7 @@ config then carries the pin and the printed agent command includes
 
 After ``add``, restart the BARAQ service so the new keys are loaded.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -32,8 +33,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from backend.vault import SecretVault, get_vault_path  # noqa: E402
-from backend.config import APP_DIR  # noqa: E402
+from backend.config import APP_DIR
+from backend.vault import SecretVault, get_vault_path
 
 AGENT_KEYS_SECRET = "BARAQ_AGENT_KEYS"
 AGENT_ORGS_SECRET = "BARAQ_AGENT_ORGS"
@@ -68,8 +69,9 @@ def generate_key() -> str:
     return "baraq-agent-" + secrets.token_urlsafe(27)
 
 
-def write_agent_config(agent_id: str, key: str, server: str, tls_cert: str = "",
-                       interval: int = 15) -> Path:
+def write_agent_config(
+    agent_id: str, key: str, server: str, tls_cert: str = "", interval: int = 15
+) -> Path:
     cfg_dir = APP_DIR / "agent_configs"
     cfg_dir.mkdir(exist_ok=True)
     path = cfg_dir / f"{agent_id}.json"
@@ -89,8 +91,14 @@ def drop_agent_config(agent_id: str) -> None:
     (APP_DIR / "agent_configs" / f"{agent_id}.json").unlink(missing_ok=True)
 
 
-def provision_host(vault: SecretVault, agent_id: str, server: str, org: str = "",
-                   tls_cert: str = "", interval: int = 15) -> tuple[str, Path]:
+def provision_host(
+    vault: SecretVault,
+    agent_id: str,
+    server: str,
+    org: str = "",
+    tls_cert: str = "",
+    interval: int = 15,
+) -> tuple[str, Path]:
     """Register one fleet host: key in the vault, optional org mapping, config file.
 
     Returns ``(key, config_path)``. The org mapping (``agent_id -> org``) is
@@ -116,15 +124,20 @@ def cmd_add(args: argparse.Namespace) -> int:
     key, cfg = provision_host(
         vault, args.agent_id, args.server, args.org, args.tls_cert, args.interval
     )
-    print(f"provisioned agent '{args.agent_id}'" + (f" [org: {args.org}]" if args.org else ""))
+    print(
+        f"provisioned agent '{args.agent_id}'"
+        + (f" [org: {args.org}]" if args.org else "")
+    )
     print(f"  vault    : {get_vault_path()}")
     print(f"  key      : {key}")
     print(f"  host cfg : {cfg}")
-    print(f"\nOn the agent host:")
+    print("\nOn the agent host:")
     ca = f" --tls-ca {args.tls_cert}" if args.tls_cert else ""
     if args.server.startswith("https://") and not ca:
         ca = " --tls-ca certs\\baraq.crt"
-    print(f"  python scripts/agent.py --server {args.server} --key \"{key}\" --interval {args.interval}{ca}")
+    print(
+        f'  python scripts/agent.py --server {args.server} --key "{key}" --interval {args.interval}{ca}'
+    )
     print("\nRestart the BARAQ service to load the new key.")
 
 
@@ -160,13 +173,24 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     add = sub.add_parser("add", help="register a new fleet host")
     add.add_argument("agent_id", help="unique id, e.g. ws-desktop-07")
-    add.add_argument("--server", default="https://127.0.0.1:8443",
-                     help="central server base URL (HTTPS standard, port 8443)")
-    add.add_argument("--tls-cert", default="",
-                     help="path to central server PEM cert (certs/baraq.crt) for agent pinning")
-    add.add_argument("--org", default="",
-                     help="tenant/org id this agent belongs to (e.g. university short name)")
-    add.add_argument("--interval", type=int, default=15, help="agent upload interval in seconds")
+    add.add_argument(
+        "--server",
+        default="https://127.0.0.1:8443",
+        help="central server base URL (HTTPS standard, port 8443)",
+    )
+    add.add_argument(
+        "--tls-cert",
+        default="",
+        help="path to central server PEM cert (certs/baraq.crt) for agent pinning",
+    )
+    add.add_argument(
+        "--org",
+        default="",
+        help="tenant/org id this agent belongs to (e.g. university short name)",
+    )
+    add.add_argument(
+        "--interval", type=int, default=15, help="agent upload interval in seconds"
+    )
     add.set_defaults(func=cmd_add)
     sub.add_parser("list", help="show registered agent ids").set_defaults(func=cmd_list)
     revoke = sub.add_parser("revoke", help="remove an agent's credentials")

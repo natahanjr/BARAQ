@@ -1,4 +1,5 @@
 """Phase 7 incident fingerprint tests (spec 7.4)."""
+
 from __future__ import annotations
 
 from backend.incidents.fingerprint import compute_fingerprint

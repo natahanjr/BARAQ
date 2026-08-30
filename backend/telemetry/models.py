@@ -4,11 +4,12 @@ The v2 ``EVENT`` is stored in its own table (``v2_events``), fully separate
 from the v1 ``events`` table, so the new pipeline never shares state with
 the frozen v1 detection engine.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -42,5 +43,5 @@ class TelemetryEvent(Base):
     #: Original raw record (audit / reprovenance); never queried, only kept.
     raw_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

@@ -4,13 +4,14 @@ The pipeline must annotate alerts with reputation verdicts WHILE they are
 created (offline fast path), surface them in the API, and never let a
 provider failure wedge detection.
 """
+
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 
 from backend.database.models import Alert, ThreatIntelRecord
-from backend.intel.detection import annotate_alert_intel, intel_hits
+from backend.intel.detection import intel_hits
 from tests.conftest import run_simulation
 
 
@@ -24,7 +25,7 @@ def _seed_malicious_ioc(db, indicator: str = "192.168.99.77"):
         label="known C2 node",
         confidence=0.9,
         sources=["test-feed"],
-        checked_at=datetime.now(timezone.utc),
+        checked_at=datetime.now(UTC),
     )
     db.add(row)
     db.commit()
@@ -58,11 +59,13 @@ class TestDetectionTimeAnnotation:
         for alert in db.query(Alert).all():
             if alert.rule == "entity_risk":
                 continue  # RBA alerts are annotated inside apply_alert (same hook)
-            expected = bool(extract_indicators(f"{alert.evidence or ''} {alert.name or ''}"))
+            expected = bool(
+                extract_indicators(f"{alert.evidence or ''} {alert.name or ''}")
+            )
             if expected:
-                assert alert.intel_json is not None, (
-                    f"alert #{alert.id} ({alert.rule}) carries indicators but was not annotated"
-                )
+                assert (
+                    alert.intel_json is not None
+                ), f"alert #{alert.id} ({alert.rule}) carries indicators but was not annotated"
 
     def test_pipeline_survives_provider_failure(self, db, monkeypatch):
         _seed_malicious_ioc(db)
@@ -79,7 +82,6 @@ class TestDetectionTimeAnnotation:
 
     def test_intel_disabled_skips_annotation(self, db, monkeypatch):
         _seed_malicious_ioc(db)
-        import backend.intel.detection as detection_mod
 
         monkeypatch.setattr("backend.config.THREAT_INTEL_ENABLED", False)
         run_simulation(db, scenario="brute_force")

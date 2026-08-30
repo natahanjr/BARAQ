@@ -1,7 +1,6 @@
 """Tests for scripts/db_backup.py helper logic (dialect, manifests, retention)."""
-import hashlib
 
-import pytest
+import hashlib
 
 import scripts.db_backup as bk
 
@@ -12,7 +11,10 @@ def test_dialect_detection():
 
 
 def test_pg_url_driver_stripped():
-    assert bk.pg_url_for_tools("postgresql+psycopg://u:p@h:55432/db") == "postgresql://u:p@h:55432/db"
+    assert (
+        bk.pg_url_for_tools("postgresql+psycopg://u:p@h:55432/db")
+        == "postgresql://u:p@h:55432/db"
+    )
     assert bk.pg_url_for_tools("postgres://u@h/db") == "postgres://u@h/db"
 
 

@@ -1,4 +1,5 @@
 """Evaluation framework API endpoints."""
+
 from __future__ import annotations
 
 import logging
@@ -8,9 +9,9 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.config import ML_VALIDATE_ON_REAL
 from backend.database.connection import get_db
 from backend.database.models import EvaluationRun
-from backend.config import ML_VALIDATE_ON_REAL
 from backend.evaluation.evaluator import run_evaluation
 from backend.evaluation.holdout import run_holdout_evaluation
 from backend.security import require_admin, require_auth
@@ -46,8 +47,11 @@ def run_holdout(
     """
     use_real = ML_VALIDATE_ON_REAL if use_real_baseline is None else use_real_baseline
     return run_holdout_evaluation(
-        db, with_ml=with_ml, use_real_baseline=use_real,
-        randomize=randomize, seed=seed,
+        db,
+        with_ml=with_ml,
+        use_real_baseline=use_real,
+        randomize=randomize,
+        seed=seed,
     )
 
 

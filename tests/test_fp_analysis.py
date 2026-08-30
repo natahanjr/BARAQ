@@ -4,6 +4,7 @@ Verdicts feed the feedback loop, expected-behaviour verdicts can create
 scoped suppression rules, the fp-analysis endpoint ranks tuning candidates,
 and feedback-stats turns analyst verdicts into per-rule precision metrics.
 """
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -80,9 +81,11 @@ class TestFeedbackStats:
             )
         assert r.status_code == 200
         assert r.json()["verdict"] == "expected_behavior"
-        rule = db.query(SuppressionRule).filter(
-            SuppressionRule.rule == "Detection Rule A"
-        ).first()
+        rule = (
+            db.query(SuppressionRule)
+            .filter(SuppressionRule.rule == "Detection Rule A")
+            .first()
+        )
         assert rule is not None
         assert rule.host == "ws01"
         with _client() as client:
@@ -97,9 +100,7 @@ class TestFeedbackStats:
                 f"/api/alerts/{alert.id}/verdict",
                 json={"verdict": "false_positive", "note": "test note"},
             )
-        entries = db.query(AuditLog).filter(
-            AuditLog.action == "alert.verdict"
-        ).all()
+        entries = db.query(AuditLog).filter(AuditLog.action == "alert.verdict").all()
         assert any("false_positive" in (e.detail or "") for e in entries)
 
 

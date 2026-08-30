@@ -6,19 +6,26 @@ evaluation. The only mutation is the operator-triggered recalculation
 (6.65). Gated by ``RISK_ENABLED`` (PEP 562) and inert against the
 production database.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
 
-import backend.config as config
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend import config
 from backend.database.connection import get_db
-from backend.risk import engine, metrics as metrics_module
+from backend.risk import engine
+from backend.risk import metrics as metrics_module
 from backend.risk.calculator import calculate_risk, utcnow
-from backend.risk.contract import ENTITY_TYPES, RISK_SEVERITIES, RISK_STATES, RISK_TRENDS
+from backend.risk.contract import (
+    ENTITY_TYPES,
+    RISK_SEVERITIES,
+    RISK_STATES,
+    RISK_TRENDS,
+)
 from backend.risk.evaluation import run_evaluation
 from backend.risk.models import (
     EntityRiskV2,
@@ -129,13 +136,17 @@ def list_risks(
     stmt = select(EntityRiskV2).order_by(EntityRiskV2.id)
     if entity_type is not None:
         if entity_type not in ENTITY_TYPES:
-            raise HTTPException(status_code=422, detail=f"invalid entity_type {entity_type!r}")
+            raise HTTPException(
+                status_code=422, detail=f"invalid entity_type {entity_type!r}"
+            )
         stmt = stmt.where(EntityRiskV2.entity_type == entity_type)
     if entity_id is not None:
         stmt = stmt.where(EntityRiskV2.entity_id == entity_id)
     if severity is not None:
         if severity.upper() not in RISK_SEVERITIES:
-            raise HTTPException(status_code=422, detail=f"invalid severity {severity!r}")
+            raise HTTPException(
+                status_code=422, detail=f"invalid severity {severity!r}"
+            )
         stmt = stmt.where(EntityRiskV2.severity == severity.upper())
     if state is not None:
         if state.upper() not in RISK_STATES:
@@ -219,11 +230,17 @@ def ranking(
     else:
         rows = db.scalars(
             select(EntityRiskV2)
-            .where(EntityRiskV2.severity.in_(("HIGH", "CRITICAL")), EntityRiskV2.score > 0)
+            .where(
+                EntityRiskV2.severity.in_(("HIGH", "CRITICAL")), EntityRiskV2.score > 0
+            )
             .order_by(EntityRiskV2.updated_at.desc(), EntityRiskV2.risk_id)
             .limit(limit)
         ).all()
-    return {"kind": kind, "count": len(rows), "entities": [row.to_dict() for row in rows]}
+    return {
+        "kind": kind,
+        "count": len(rows),
+        "entities": [row.to_dict() for row in rows],
+    }
 
 
 @router.get("/metrics/health")
@@ -287,7 +304,9 @@ def entity_risk(
     """Risk record for one entity (spec 6.46)."""
     _gate()
     if entity_type not in ENTITY_TYPES:
-        raise HTTPException(status_code=422, detail=f"invalid entity_type {entity_type!r}")
+        raise HTTPException(
+            status_code=422, detail=f"invalid entity_type {entity_type!r}"
+        )
     row = engine.risk_for_entity(db, entity_type, entity_id)
     if row is None:
         raise HTTPException(
@@ -502,5 +521,3 @@ def recalculate(risk_id: str, db: Session = Depends(get_db)) -> dict:
     _gate()
     _fetch(db, risk_id)
     return engine.manual_recalculate(db, risk_id)
-
-

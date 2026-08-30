@@ -4,10 +4,11 @@ BloodHound/SharpHound collection (MITRE T1087 Account Discovery) and Group
 Policy modification abuse (MITRE T1484.001, GPO deployment of malicious
 configuration / SharpGPOAbuse).
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -44,7 +45,7 @@ class BloodHoundReconRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):
                 continue
@@ -87,7 +88,7 @@ class GpoAbuseRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):

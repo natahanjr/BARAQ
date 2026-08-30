@@ -5,18 +5,19 @@ WITHOUT inventing an accuracy percentage. Each scenario fabricates alerts,
 aggregates them into behavior groups, then labels which group chains MUST
 correlate (``correlated: True``) and which MUST NOT.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.alerting.models import AlertRecord
 from backend.aggregation.engine import process_alerts
 from backend.aggregation.models import BehaviorGroupRecord
+from backend.alerting.models import AlertRecord
 
-T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=UTC)
 
 
 def _fabricate(db: Session, spec: dict, base: datetime, index: int) -> AlertRecord:
@@ -68,9 +69,7 @@ def build_groups(db: Session, scenario: dict) -> list[dict]:
     from backend.correlation.engine import group_summary
 
     groups = list(
-        db.scalars(
-            select(BehaviorGroupRecord).order_by(BehaviorGroupRecord.id)
-        ).all()
+        db.scalars(select(BehaviorGroupRecord).order_by(BehaviorGroupRecord.id)).all()
     )
     scenario["group_ids"] = {
         f"g{i}": group.behavior_group_id for i, group in enumerate(groups)
@@ -83,14 +82,45 @@ SCENARIOS: list[dict] = [
         "name": "c1-rdp-to-lateral",
         "base_minutes": 0,
         "alerts": [
-            dict(detector_id="D002", host="10.0.0.4", user="u-r1", source_ip="198.51.100.9",
-                 mitre="T1110", minutes=0, severity="high", destination_ip="10.0.0.5"),
-            dict(detector_id="D002", host="10.0.0.5", user="u-r1", source_ip="198.51.100.9",
-                 mitre="T1110", minutes=4, severity="high", destination_ip="10.0.0.6"),
-            dict(detector_id="D002", host="10.0.0.6", user="u-r1", source_ip="198.51.100.9",
-                 mitre="T1110", minutes=8, severity="high", destination_ip="10.0.0.7"),
-            dict(detector_id="D003", host="10.0.0.7", user="u-r1", source_ip="198.51.100.9",
-                 mitre="T1021.001", minutes=14, severity="high"),
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.4",
+                "user": "u-r1",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes": 0,
+                "severity": "high",
+                "destination_ip": "10.0.0.5",
+            },
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.5",
+                "user": "u-r1",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes": 4,
+                "severity": "high",
+                "destination_ip": "10.0.0.6",
+            },
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.6",
+                "user": "u-r1",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes": 8,
+                "severity": "high",
+                "destination_ip": "10.0.0.7",
+            },
+            {
+                "detector_id": "D003",
+                "host": "10.0.0.7",
+                "user": "u-r1",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1021.001",
+                "minutes": 14,
+                "severity": "high",
+            },
         ],
         "labels": [
             {"groups": ["g0", "g1", "g2", "g3"], "correlated": True},
@@ -100,10 +130,22 @@ SCENARIOS: list[dict] = [
         "name": "c2-unrelated-hosts",
         "base_minutes": 240,
         "alerts": [
-            dict(detector_id="D001", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1133", minutes=0),
-            dict(detector_id="D003", host="host-b", user="bob", source_ip="203.0.113.9",
-                 mitre="T1059.001", minutes=1),
+            {
+                "detector_id": "D001",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1133",
+                "minutes": 0,
+            },
+            {
+                "detector_id": "D003",
+                "host": "host-b",
+                "user": "bob",
+                "source_ip": "203.0.113.9",
+                "mitre": "T1059.001",
+                "minutes": 1,
+            },
         ],
         "labels": [
             {"groups": ["g0", "g1"], "correlated": False},
@@ -113,10 +155,22 @@ SCENARIOS: list[dict] = [
         "name": "c3-temporal-only",
         "base_minutes": 480,
         "alerts": [
-            dict(detector_id="D001", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1133", minutes=0),
-            dict(detector_id="D002", host="host-a", user="bob", source_ip="203.0.113.9",
-                 mitre="T1110", minutes=1),
+            {
+                "detector_id": "D001",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1133",
+                "minutes": 0,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-a",
+                "user": "bob",
+                "source_ip": "203.0.113.9",
+                "mitre": "T1110",
+                "minutes": 1,
+            },
         ],
         "labels": [
             {"groups": ["g0", "g1"], "correlated": False},

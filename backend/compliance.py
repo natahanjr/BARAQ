@@ -12,11 +12,12 @@
 PII fields are masked with a stable per-value token (SHA-256 prefix), so a
 masked value stays linkable across a dataset without being readable.
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -25,14 +26,23 @@ from backend.database.models import Alert, AuditLog, NormalizedEvent, User
 logger = logging.getLogger("baraq.compliance")
 
 #: Fields carrying personal data; values are replaced by a token.
-_PII_FIELDS = ("user", "host", "ip", "email", "source_ip", "dest_ip", "actor", "subject_user")
+_PII_FIELDS = (
+    "user",
+    "host",
+    "ip",
+    "email",
+    "source_ip",
+    "dest_ip",
+    "actor",
+    "subject_user",
+)
 
 
 def _token(value, salt: str = "baraq-pii") -> str:
     """Deterministic, unreadable replacement for one PII value."""
     if not value:
         return ""
-    digest = hashlib.sha256(f"{salt}:{value}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{salt}:{value}".encode()).hexdigest()
     return f"anonymized-{digest[:12]}"
 
 
@@ -55,25 +65,29 @@ def anonymize(record: dict) -> dict:
 
 def anonymized_export(session, hours: int = 24, org: str = "") -> dict:
     """Anonymized telemetry + alert dataset for the export window."""
-    since = datetime.now(timezone.utc).replace(tzinfo=None)
+    since = datetime.now(UTC).replace(tzinfo=None)
     if hours:
         from datetime import timedelta
 
         since = since - timedelta(hours=hours)
     events = session.scalars(
-        select(NormalizedEvent).where(
+        select(NormalizedEvent)
+        .where(
             NormalizedEvent.timestamp >= since,
             *((NormalizedEvent.org == org,) if org else ()),
-        ).limit(5000)
+        )
+        .limit(5000)
     ).all()
     alerts = session.scalars(
-        select(Alert).where(
+        select(Alert)
+        .where(
             Alert.created_at >= since,
             *((Alert.org == org,) if org else ()),
-        ).limit(2000)
+        )
+        .limit(2000)
     ).all()
     return {
-        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "exported_at": datetime.now(UTC).isoformat(),
         "window_hours": hours,
         "org": org,
         "anonymization": "sha256-token (deterministic, not reversible)",
@@ -99,7 +113,7 @@ def dsar_package(session, email: str) -> dict:
         select(Alert).where(Alert.evidence.contains(email)).limit(1000)
     ).all()
     return {
-        "requested_at": datetime.now(timezone.utc).isoformat(),
+        "requested_at": datetime.now(UTC).isoformat(),
         "subject": email,
         "account": account.to_dict() if account else None,
         "audit_entries": [a.to_dict() for a in audit],
@@ -127,7 +141,7 @@ def compliance_report(session) -> dict:
         "users": session.scalar(select(func.count(User.id))) or 0,
     }
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "inventory": inventory,
         "retention_days": {
             "telemetry": EVENT_RETENTION_DAYS,
@@ -157,9 +171,10 @@ def purge_old_audit(session, days: int | None = None) -> int:
     from backend.config import AUDIT_RETENTION_DAYS
 
     window = days or AUDIT_RETENTION_DAYS
-    cutoff = datetime.now(timezone.utc) - timedelta(days=window)
+    cutoff = datetime.now(UTC) - timedelta(days=window)
     deleted = int(
-        session.execute(delete(AuditLog).where(AuditLog.created_at < cutoff)).rowcount or 0
+        session.execute(delete(AuditLog).where(AuditLog.created_at < cutoff)).rowcount
+        or 0
     )
     if deleted:
         session.commit()

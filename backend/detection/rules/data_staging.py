@@ -6,13 +6,14 @@ Detects data preparation for exfiltration:
 - Staging data in hidden/system directories
 - Unusual archive creation with compression
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 
-from backend.database.models import ProcessRecord, NormalizedEvent
+from backend.database.models import NormalizedEvent, ProcessRecord
 from backend.detection.rules.base import BaseRule, DetectionResult
 
 
@@ -43,7 +44,11 @@ class DataStagingRule(BaseRule):
         super().__init__(session)
         # Only true archive tools, removed PowerShell.exe and wsl.exe (common legit tools)
         self.archive_tools = archive_tools or [
-            "7z.exe", "7za.exe", "rar.exe", "winrar.exe", "zip.exe"
+            "7z.exe",
+            "7za.exe",
+            "rar.exe",
+            "winrar.exe",
+            "zip.exe",
         ]
         self.min_archive_events = min_archive_events
         self.temp_dir_access_threshold = temp_dir_access_threshold
@@ -52,7 +57,7 @@ class DataStagingRule(BaseRule):
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         window_minutes = self.window_minutes or window_minutes
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         # Pattern 1: Archive tool execution (7z, rar, zip) is the high-signal check.
         findings.extend(self._detect_archive_creation(since))
@@ -67,20 +72,19 @@ class DataStagingRule(BaseRule):
         findings: list[DetectionResult] = []
 
         # Query for process creation events that might involve archive tools
-        stmt = (
-            select(NormalizedEvent)
-            .where(
-                NormalizedEvent.event_id.in_([4688, 4104]),  # Process creation or PowerShell
-                NormalizedEvent.timestamp >= since,
-                *self._org_conds(NormalizedEvent),
-            )
+        stmt = select(NormalizedEvent).where(
+            NormalizedEvent.event_id.in_(
+                [4688, 4104]
+            ),  # Process creation or PowerShell
+            NormalizedEvent.timestamp >= since,
+            *self._org_conds(NormalizedEvent),
         )
 
         events_by_user: dict[str, list] = {}
         for event in self.session.execute(stmt).scalars().all():
             if not event.user:
                 continue
-            
+
             # Check if raw data contains archive tool names
             raw_json = event.raw_json or {}
             facts = raw_json.get("facts", {})
@@ -92,8 +96,14 @@ class DataStagingRule(BaseRule):
 
             # Check for suspicious patterns
             suspicious_patterns = [
-                "documents", "downloads", "desktop", "users\\",
-                "appdata", "temp", "programdata", "\\$recycle"
+                "documents",
+                "downloads",
+                "desktop",
+                "users\\",
+                "appdata",
+                "temp",
+                "programdata",
+                "\\$recycle",
             ]
             has_suspicious_target = any(
                 pattern in cmd_line for pattern in suspicious_patterns
@@ -129,7 +139,6 @@ class DataStagingRule(BaseRule):
         findings: list[DetectionResult] = []
 
         # ProcessRecord captures process snapshots; we check for temp directory patterns
-        temp_dirs = ["\\temp\\", "\\tmp\\", "\\appdata\\local\\temp", "%temp%", "c:\\temp"]
 
         stmt = (
             select(

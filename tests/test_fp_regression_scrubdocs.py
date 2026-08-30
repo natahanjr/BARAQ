@@ -11,9 +11,10 @@ because of three stacked defects:
 
 Each test pins one layer so none can silently regress.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
@@ -21,7 +22,10 @@ from sqlalchemy import select
 from backend.database.models import Alert, NormalizedEvent
 from backend.detection.alerting import AlertingService, _alert_user
 from backend.detection.fp_filters import is_trusted_agent_activity
-from backend.detection.rules.powershell import SUSPICIOUS_PATTERNS, SuspiciousPowerShellRule
+from backend.detection.rules.powershell import (
+    SUSPICIOUS_PATTERNS,
+    SuspiciousPowerShellRule,
+)
 
 SCRUB_DOCS_CMD = (
     "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
@@ -31,13 +35,19 @@ SCRUB_DOCS_CMD = (
 
 
 def _add_event(db, command_line: str, user: str = "-") -> None:
-    db.add(NormalizedEvent(
-        source="test", event_id=4688, category="process",
-        severity="info", message=command_line[:200], user=user,
-        host="haaraphel",
-        timestamp=datetime.now(timezone.utc),
-        raw_json={"facts": {"command_line": command_line}},
-    ))
+    db.add(
+        NormalizedEvent(
+            source="test",
+            event_id=4688,
+            category="process",
+            severity="info",
+            message=command_line[:200],
+            user=user,
+            host="haaraphel",
+            timestamp=datetime.now(UTC),
+            raw_json={"facts": {"command_line": command_line}},
+        )
+    )
     db.commit()
 
 
@@ -51,14 +61,21 @@ def test_bare_noprofile_is_not_hidden_execution():
 
 
 def test_real_hidden_window_still_matches():
-    assert SUSPICIOUS_PATTERNS["hidden_execution"].search("powershell -w hidden -File x.ps1")
-    assert SUSPICIOUS_PATTERNS["hidden_execution"].search("powershell -WindowStyle Hidden")
+    assert SUSPICIOUS_PATTERNS["hidden_execution"].search(
+        "powershell -w hidden -File x.ps1"
+    )
+    assert SUSPICIOUS_PATTERNS["hidden_execution"].search(
+        "powershell -WindowStyle Hidden"
+    )
 
 
-@pytest.mark.parametrize("text", [
-    SCRUB_DOCS_CMD,
-    r"AppData\Local\Temp\opencode\shoot.py",
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        SCRUB_DOCS_CMD,
+        r"AppData\Local\Temp\opencode\shoot.py",
+    ],
+)
 def test_trusted_agent_paths_filtered(text):
     assert is_trusted_agent_activity(text)
 
@@ -93,7 +110,9 @@ def test_evidence_user_extraction_case_insensitive():
 class _Result:
     """Minimal DetectionResult stand-in."""
 
-    def __init__(self, name="Suspicious PowerShell Activity", rule="suspicious_powershell"):
+    def __init__(
+        self, name="Suspicious PowerShell Activity", rule="suspicious_powershell"
+    ):
         self.name = name
         self.rule = rule
         self.description = "d"
@@ -113,7 +132,9 @@ def test_unknown_user_repeats_merge_into_one_alert(db):
     third = svc.handle_findings([_Result()], org="")
     assert len(first) == 1
     assert second == [] and third == [], "repeats merge, nothing new created"
-    alerts = db.scalars(select(Alert).where(Alert.rule == "suspicious_powershell")).all()
+    alerts = db.scalars(
+        select(Alert).where(Alert.rule == "suspicious_powershell")
+    ).all()
     assert len(alerts) == 1, "repeats must refresh one alert, not spawn new ones"
     assert alerts[0].trigger_count == 3
 
@@ -124,11 +145,13 @@ def test_reopen_guard_absorbs_closed_alert_repeat(db):
     svc.handle_findings([_Result()], org="")
     alert = db.scalars(select(Alert).where(Alert.rule == "suspicious_powershell")).one()
     alert.status = "closed"
-    alert.updated_at = datetime.now(timezone.utc)
+    alert.updated_at = datetime.now(UTC)
     db.commit()
 
     created = svc.handle_findings([_Result()], org="")
 
     assert created == []
-    alerts = db.scalars(select(Alert).where(Alert.rule == "suspicious_powershell")).all()
+    alerts = db.scalars(
+        select(Alert).where(Alert.rule == "suspicious_powershell")
+    ).all()
     assert len(alerts) == 1 and alerts[0].status == "closed"

@@ -4,16 +4,14 @@ Every known-problem scenario is pinned here through the REAL risk engine:
 typed evidence -> factors -> deterministic score/severity/state/trend.
 RISK-020..RISK-025 pin the isolation boundary (v1 counters untouched).
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
 
 import pytest
 
-import backend.config as config
 from backend.risk import engine
-from backend.risk.models import EntityRiskV2Factor
-
 from tests.risk.helpers import (
     RISK_T0,
     alert_evidence,
@@ -29,7 +27,9 @@ EV = RISK_T0
 
 def test_risk_001_single_alert_overload(db):
     engine.apply_alert(
-        db, alert_evidence("ALR-000001", "h1", severity="medium"), now=EV,
+        db,
+        alert_evidence("ALR-000001", "h1", severity="medium"),
+        now=EV,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     assert risk.score == 11.0  # tier (medium=3) + recency 8
@@ -40,10 +40,14 @@ def test_risk_001_single_alert_overload(db):
 
 def test_risk_002_group_explosion(db):
     engine.apply_group(
-        db, group_evidence("g-a", "h1", ["T1021.001"], alert_count=10), now=EV,
+        db,
+        group_evidence("g-a", "h1", ["T1021.001"], alert_count=10),
+        now=EV,
     )
     engine.apply_group(
-        db, group_evidence("g-b", "h2", ["T1021.001"], alert_count=50), now=EV,
+        db,
+        group_evidence("g-b", "h2", ["T1021.001"], alert_count=50),
+        now=EV,
     )
     assert engine.risk_for_entity(db, "HOST", "h1").score == 42.0
     assert engine.risk_for_entity(db, "HOST", "h2").score == 42.0
@@ -71,7 +75,9 @@ def test_risk_004_recency(db):
         now=EV,
     )
     assert engine.risk_for_entity(db, "HOST", "h1").score == 42.0
-    assert engine.risk_for_entity(db, "HOST", "h2").score == pytest.approx(round(34.0 * 0.5 ** (2 / 24), 4), abs=0.001)
+    assert engine.risk_for_entity(db, "HOST", "h2").score == pytest.approx(
+        round(34.0 * 0.5 ** (2 / 24), 4), abs=0.001
+    )
 
 
 def test_risk_005_decay(db):
@@ -100,13 +106,15 @@ def test_risk_006_expiration(db):
 def test_risk_007_repetition(db):
     for index in range(5):
         engine.apply_alert(
-            db, alert_evidence(f"ALR-{index:06d}", "h1", detector="D100", severity="high"),
+            db,
+            alert_evidence(f"ALR-{index:06d}", "h1", detector="D100", severity="high"),
             now=EV,
         )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     assert risk.score == 43.0
     repetition = [
-        f for f in stored_factors(db)
+        f
+        for f in stored_factors(db)
         if f.risk_id == risk.risk_id and f.factor_id == "RF007_REPETITION"
     ]
     assert len(repetition) == 4
@@ -115,8 +123,12 @@ def test_risk_007_repetition(db):
 def test_risk_008_propagation_bounded(db):
     engine.apply_group(db, group_evidence("g-h", "h1", ["T1021.001"]), now=EV)
     engine.apply_propagation(
-        db, "USER", "u1", from_entity="HOST:h1",
-        relationship_type="host_to_user", now=EV,
+        db,
+        "USER",
+        "u1",
+        from_entity="HOST:h1",
+        relationship_type="host_to_user",
+        now=EV,
     )
     user_risk = engine.risk_for_entity(db, "USER", "u1")
     assert user_risk.score == 16.0  # bounded weight 8 + fresh recency 8
@@ -126,7 +138,9 @@ def test_risk_008_propagation_bounded(db):
 def test_risk_009_severity_cap(db):
     for index, technique in enumerate(("T1110", "T1021.001", "T1059.001", "T1047")):
         engine.apply_group(
-            db, group_evidence(f"g{index}", "h1", [technique]), now=EV,
+            db,
+            group_evidence(f"g{index}", "h1", [technique]),
+            now=EV,
         )
     engine.apply_finding(db, finding_evidence("CF-000001", ["h1"]), now=EV)
     risk = engine.risk_for_entity(db, "HOST", "h1")
@@ -171,7 +185,9 @@ def test_risk_012_peak(db):
 
 def test_risk_013_threshold_crossed(db):
     engine.apply_alert(
-        db, alert_evidence("ALR-000001", "h1", severity="medium"), now=EV,
+        db,
+        alert_evidence("ALR-000001", "h1", severity="medium"),
+        now=EV,
     )
     engine.apply_group(db, group_evidence("g-l", "h1", ["T1021.001"]), now=EV)
     risk = engine.risk_for_entity(db, "HOST", "h1")
@@ -179,7 +195,8 @@ def test_risk_013_threshold_crossed(db):
     assert risk.severity == "MEDIUM"
     assert risk.state == "HIGH"
     events = [
-        a for a in stored_audit(db)
+        a
+        for a in stored_audit(db)
         if a.risk_id == risk.risk_id and a.action == "RISK_THRESHOLD_CROSSED"
     ]
     assert events[0].details["severities"] == ["LOW", "MEDIUM"]
@@ -195,14 +212,17 @@ def test_risk_014_stale(db):
 
 def test_risk_015_trend(db):
     engine.apply_alert(
-        db, alert_evidence("ALR-000001", "h-a", severity="medium"), now=EV,
+        db,
+        alert_evidence("ALR-000001", "h-a", severity="medium"),
+        now=EV,
     )
     engine.apply_group(db, group_evidence("g-n1", "h-a", ["T1021.001"]), now=EV)
     engine.apply_group(db, group_evidence("g-n2", "h-b", ["T1021.001"]), now=EV)
     assert engine.risk_for_entity(db, "HOST", "h-a").trend == "RISING"
     assert engine.risk_for_entity(db, "HOST", "h-b").trend == "UNKNOWN"
     engine.recalculate_entity(
-        db, engine.risk_for_entity(db, "HOST", "h-b").risk_id,
+        db,
+        engine.risk_for_entity(db, "HOST", "h-b").risk_id,
         now=EV + timedelta(hours=24),
     )
     assert engine.risk_for_entity(db, "HOST", "h-b").trend == "FALLING"
@@ -227,10 +247,16 @@ def test_risk_017_no_magic(db):
         db,
         {
             "kind": "BEHAVIOR_GROUP",
-            "group_id": "g-p", "hosts": ["h1"], "users": ["u1"],
-            "source_ips": ["203.0.113.5"], "destination_ips": [],
-            "techniques": ["T9999"], "severity": "high", "alert_count": 10,
-            "first_seen": EV, "last_seen": EV,
+            "group_id": "g-p",
+            "hosts": ["h1"],
+            "users": ["u1"],
+            "source_ips": ["203.0.113.5"],
+            "destination_ips": [],
+            "techniques": ["T9999"],
+            "severity": "high",
+            "alert_count": 10,
+            "first_seen": EV,
+            "last_seen": EV,
         },
         now=EV,
     )
@@ -238,16 +264,24 @@ def test_risk_017_no_magic(db):
     assert risk.score == 24.0
     with pytest.raises(ValueError):
         engine.apply_propagation(
-            db, "HOST", "h1", from_entity="HOST:x",
-            relationship_type="suspicious", now=EV,
+            db,
+            "HOST",
+            "h1",
+            from_entity="HOST:x",
+            relationship_type="suspicious",
+            now=EV,
         )
 
 
 def test_risk_018_direct_vs_contextual(db):
     engine.apply_group(db, group_evidence("g-q", "h1", ["T1021.001"]), now=EV)
     engine.apply_propagation(
-        db, "HOST", "h1", from_entity="USER:u1",
-        relationship_type="user_to_host", now=EV,
+        db,
+        "HOST",
+        "h1",
+        from_entity="USER:u1",
+        relationship_type="user_to_host",
+        now=EV,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     assert risk.score == 50.0
@@ -258,14 +292,12 @@ def test_risk_019_model_version(db):
     engine.apply_group(db, group_evidence("g-r", "h1", ["T1021.001"]), now=EV)
     risk = engine.risk_for_entity(db, "HOST", "h1")
     assert risk.risk_model_version == "1.0.0"
-    from backend.risk.models import EntityRiskV2Snapshot
-
     from sqlalchemy import select
 
+    from backend.risk.models import EntityRiskV2Snapshot
+
     snapshots = db.scalars(
-        select(EntityRiskV2Snapshot).where(
-            EntityRiskV2Snapshot.risk_id == risk.risk_id
-        )
+        select(EntityRiskV2Snapshot).where(EntityRiskV2Snapshot.risk_id == risk.risk_id)
     ).all()
     assert all(s.risk_model_version == "1.0.0" for s in snapshots)
 
@@ -277,10 +309,17 @@ def test_risk_020_isolation(db):
         return {
             t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar()
             for t in (
-                "alerts", "incidents", "v2_events", "v2_alerts",
-                "behavior_groups", "behavior_group_members",
-                "correlation_findings", "correlation_members",
-                "entity_risk", "entity_risk_events", "playbook_runs",
+                "alerts",
+                "incidents",
+                "v2_events",
+                "v2_alerts",
+                "behavior_groups",
+                "behavior_group_members",
+                "correlation_findings",
+                "correlation_members",
+                "entity_risk",
+                "entity_risk_events",
+                "playbook_runs",
             )
         }
 
@@ -309,12 +348,28 @@ def test_risk_022_api_shape(db):
     risk = engine.risk_for_entity(db, "HOST", "h1")
     payload = risk.to_dict()
     for field in (
-        "risk_id", "entity_type", "entity_id", "entity_name", "score",
-        "severity", "state", "confidence", "trend", "peak_score", "peak_at",
-        "first_seen", "last_seen", "last_calculated_at",
-        "active_factor_count", "evidence_count", "alert_count",
-        "group_count", "correlation_count", "risk_model_version",
-        "created_at", "updated_at",
+        "risk_id",
+        "entity_type",
+        "entity_id",
+        "entity_name",
+        "score",
+        "severity",
+        "state",
+        "confidence",
+        "trend",
+        "peak_score",
+        "peak_at",
+        "first_seen",
+        "last_seen",
+        "last_calculated_at",
+        "active_factor_count",
+        "evidence_count",
+        "alert_count",
+        "group_count",
+        "correlation_count",
+        "risk_model_version",
+        "created_at",
+        "updated_at",
     ):
         assert field in payload
 
@@ -323,23 +378,31 @@ def test_risk_023_entity_types(db):
     engine.apply_alert(
         db,
         alert_evidence(
-            "ALR-000001", "h1", user="u1", source="203.0.113.1",
-            destination_ip="10.0.0.1", account="svc-1", process="pwsh.exe",
+            "ALR-000001",
+            "h1",
+            user="u1",
+            source="203.0.113.1",
+            destination_ip="10.0.0.1",
+            account="svc-1",
+            process="pwsh.exe",
         ),
         now=EV,
     )
     types = {r.entity_type for r in stored_risks(db)}
     assert types == {
-        "HOST", "USER", "SOURCE_IP", "DESTINATION_IP", "ACCOUNT", "PROCESS",
+        "HOST",
+        "USER",
+        "SOURCE_IP",
+        "DESTINATION_IP",
+        "ACCOUNT",
+        "PROCESS",
     }
 
 
 def test_risk_024_attribution(db):
     engine.apply_group(db, group_evidence("g-v", "h1", ["T1021.001"]), now=EV)
     risk = engine.risk_for_entity(db, "HOST", "h1")
-    actions = [
-        a for a in stored_audit(db) if a.risk_id == risk.risk_id
-    ]
+    actions = [a for a in stored_audit(db) if a.risk_id == risk.risk_id]
     names = {a.action for a in actions}
     assert {"RISK_CREATED", "FACTOR_ADDED", "RISK_RECALCULATED"} <= names
     assert all(a.actor == "system" for a in actions)
@@ -351,19 +414,18 @@ def test_risk_025_explanation_mismatch(db):
     risk = engine.risk_for_entity(db, "HOST", "h1")
     factor_ids = {f.factor_id for f in stored_factors(db) if f.risk_id == risk.risk_id}
     assert factor_ids == {
-        "RF003_LATERAL_MOVEMENT", "RF010_BEHAVIOR_GROUP",
-        "RF009_ALERT_SEVERITY", "RF008_RECENCY",
+        "RF003_LATERAL_MOVEMENT",
+        "RF010_BEHAVIOR_GROUP",
+        "RF009_ALERT_SEVERITY",
+        "RF008_RECENCY",
     }
-    total = sum(
-        f.contribution for f in stored_factors(db) if f.risk_id == risk.risk_id
-    )
+    total = sum(f.contribution for f in stored_factors(db) if f.risk_id == risk.risk_id)
     assert total == risk.score == 42.0
 
 
 def test_dod_acceptance_72_high_rising(db):
     """DoD (spec 6.88): 30 alerts -> 5 groups -> 1 correlation -> 72 HIGH RISING."""
     from backend.correlation.engine import correlate
-
     from tests.correlation.helpers import canonical_specs, make_groups
 
     groups = make_groups(db, canonical_specs(), now=EV)
@@ -379,7 +441,9 @@ def test_dod_acceptance_72_high_rising(db):
                 "hosts": list(g.host_ids or []),
                 "users": list(g.user_ids or []),
                 "source_ips": list(g.source_ips or []),
-                "destination_ips": list((g.observables or {}).get("destination_ips", [])),
+                "destination_ips": list(
+                    (g.observables or {}).get("destination_ips", [])
+                ),
                 "techniques": list(g.mitre_techniques or []),
                 "severity": g.highest_severity or "low",
                 "alert_count": g.alert_count,

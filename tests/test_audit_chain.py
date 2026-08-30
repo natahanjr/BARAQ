@@ -1,4 +1,5 @@
 """Tests for the tamper-evident audit hash chain (backend.audit)."""
+
 from __future__ import annotations
 
 import pytest
@@ -19,7 +20,9 @@ def db():
 
 def test_chain_grows_and_verifies(db):
     for i in range(3):
-        log_action(db, "admin", f"test.action{i}", "user", str(i), f"detail {i}", "127.0.0.1")
+        log_action(
+            db, "admin", f"test.action{i}", "user", str(i), f"detail {i}", "127.0.0.1"
+        )
     result = verify_chain(db)
     assert result["ok"] is True
     assert result["checked"] == 3

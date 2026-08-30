@@ -1,15 +1,24 @@
 """Scheduled reports (roadmap 6.2): due logic, email delivery, API."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from backend.database.models import ReportRecord, ReportSchedule
 
 
 def _mk(db, **kwargs) -> ReportSchedule:
-    row = ReportSchedule(**{"name": "test", "report_type": "executive",
-                            "fmt": "html", "every_hours": 24,
-                            "hour_of_day": -1, "enabled": True, **kwargs})
+    row = ReportSchedule(
+        **{
+            "name": "test",
+            "report_type": "executive",
+            "fmt": "html",
+            "every_hours": 24,
+            "hour_of_day": -1,
+            "enabled": True,
+            **kwargs,
+        }
+    )
     db.add(row)
     db.commit()
     return row
@@ -18,7 +27,7 @@ def _mk(db, **kwargs) -> ReportSchedule:
 def test_schedule_is_due_when_never_run(db):
     from backend.reports.schedule import _is_due
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     s = _mk(db, every_hours=24, last_run_at=None)
     assert _is_due(s, now) is True
 
@@ -26,7 +35,7 @@ def test_schedule_is_due_when_never_run(db):
 def test_schedule_not_due_within_window(db):
     from backend.reports.schedule import _is_due
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     s = _mk(db, every_hours=24, last_run_at=now - timedelta(hours=2))
     assert _is_due(s, now) is False
 
@@ -34,7 +43,7 @@ def test_schedule_not_due_within_window(db):
 def test_schedule_due_after_window(db):
     from backend.reports.schedule import _is_due
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     s = _mk(db, every_hours=24, last_run_at=now - timedelta(hours=25))
     assert _is_due(s, now) is True
 
@@ -42,7 +51,7 @@ def test_schedule_due_after_window(db):
 def test_disabled_schedule_never_due(db):
     from backend.reports.schedule import _is_due
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     s = _mk(db, every_hours=1, enabled=False, last_run_at=None)
     assert _is_due(s, now) is False
 
@@ -50,7 +59,7 @@ def test_disabled_schedule_never_due(db):
 def test_hour_of_day_due_only_at_hour(db):
     from backend.reports.schedule import _is_due
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     s = _mk(db, hour_of_day=now.hour, last_run_at=None)
     assert _is_due(s, now) is True
     s2 = _mk(db, hour_of_day=(now.hour + 1) % 24, last_run_at=None)
@@ -73,8 +82,13 @@ def test_run_due_schedules_runs_only_due(db):
     from backend.reports.schedule import run_due_schedules
 
     _mk(db, name="due", fmt="html", every_hours=24, last_run_at=None)
-    _mk(db, name="recent", fmt="html", every_hours=24,
-        last_run_at=datetime.now(timezone.utc) - timedelta(hours=1))
+    _mk(
+        db,
+        name="recent",
+        fmt="html",
+        every_hours=24,
+        last_run_at=datetime.now(UTC) - timedelta(hours=1),
+    )
     summary = run_due_schedules(db)
     assert summary["due"] == 1
     assert summary["results"][0]["name"] == "due"
@@ -147,19 +161,32 @@ def test_schedule_api_crud_and_run():
         assert r.status_code == 200
         assert "items" in r.json()
 
-        r = client.post("/api/reports/schedules", json={
-            "name": "daily-exec", "report_type": "executive",
-            "format": "html", "every_hours": 24, "email_to": "",
-        })
+        r = client.post(
+            "/api/reports/schedules",
+            json={
+                "name": "daily-exec",
+                "report_type": "executive",
+                "format": "html",
+                "every_hours": 24,
+                "email_to": "",
+            },
+        )
         assert r.status_code == 200, r.text
         sid = r.json()["id"]
         assert r.json()["enabled"] is True
 
-        r = client.patch(f"/api/reports/schedules/{sid}", json={
-            "name": "daily-exec", "report_type": "technical",
-            "format": "html", "every_hours": 12, "hour_of_day": -1, "email_to": "",
-            "enabled": True,
-        })
+        r = client.patch(
+            f"/api/reports/schedules/{sid}",
+            json={
+                "name": "daily-exec",
+                "report_type": "technical",
+                "format": "html",
+                "every_hours": 12,
+                "hour_of_day": -1,
+                "email_to": "",
+                "enabled": True,
+            },
+        )
         assert r.status_code == 200
         assert r.json()["report_type"] == "technical"
 
@@ -169,7 +196,7 @@ def test_schedule_api_crud_and_run():
 
         r = client.delete(f"/api/reports/schedules/{sid}")
         assert r.status_code == 200
-        r = client.get(f"/api/reports/schedules")
+        r = client.get("/api/reports/schedules")
         assert all(s["id"] != sid for s in r.json()["items"])
 
 
@@ -179,9 +206,13 @@ def test_schedule_crud_requires_admin():
     from backend.main import app
 
     with TestClient(app, headers={"X-API-Key": "baraq-dev-analyst"}) as client:
-        r = client.post("/api/reports/schedules", json={
-            "name": "x", "every_hours": 24,
-        })
+        r = client.post(
+            "/api/reports/schedules",
+            json={
+                "name": "x",
+                "every_hours": 24,
+            },
+        )
         assert r.status_code == 403
 
 

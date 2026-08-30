@@ -1,15 +1,46 @@
 """Tests for the 52-rule native expansion (initial access, execution,
 persistence, privilege escalation, defense evasion, credential access,
 discovery, lateral movement, collection, C2 / exfiltration)."""
+
 from __future__ import annotations
 
 import pytest
 
-from backend.detection.rules.initial_access import (
-    DriveByCompromiseRule,
-    ExternalServiceExploitRule,
-    SpearphishingAttachmentRule,
-    SpearphishingLinkRule,
+from backend.detection.rules.c2_exfil_extra import (
+    EncryptedChannelRule,
+    ExfilAlternativeProtocolRule,
+    ExfilWebServiceRule,
+    ProxyToolRule,
+    UnusualPortRule,
+)
+from backend.detection.rules.collection import (
+    ArchiveCollectionRule,
+    ClipboardCaptureRule,
+    LocalDataCollectionRule,
+    ScreenCaptureRule,
+)
+from backend.detection.rules.credential_access_extra import (
+    CachedCredentialsRule,
+    KeyloggingRule,
+    LsassDumpRule,
+    NetworkSniffingRule,
+    NtdsDumpRule,
+    PasswordStoreTheftRule,
+)
+from backend.detection.rules.defense_evasion_extra import (
+    DisableAuditRule,
+    DisableDefenderRule,
+    DisableFirewallRule,
+    DisableSystemRestoreRule,
+    HiddenFileAttributeRule,
+)
+from backend.detection.rules.discovery import (
+    AccountDiscoveryRule,
+    DomainDiscoveryRule,
+    FileSystemDiscoveryRule,
+    SecuritySoftwareDiscoveryRule,
+    ShareDiscoveryRule,
+    SystemInfoDiscoveryRule,
 )
 from backend.detection.rules.execution import (
     AtJobRule,
@@ -18,6 +49,18 @@ from backend.detection.rules.execution import (
     PythonExecutionRule,
     ServiceExecutionRule,
     WmiExecutionRule,
+)
+from backend.detection.rules.initial_access import (
+    DriveByCompromiseRule,
+    ExternalServiceExploitRule,
+    SpearphishingAttachmentRule,
+    SpearphishingLinkRule,
+)
+from backend.detection.rules.lateral_movement_extra import (
+    RdpLateralRule,
+    SmbAdminShareRule,
+    SshLateralRule,
+    WinRmLateralRule,
 )
 from backend.detection.rules.persistence_extra import (
     AccessibilityFeatureRule,
@@ -35,51 +78,9 @@ from backend.detection.rules.privilege_escalation_extra import (
     UacBypassRule,
     UnquotedServicePathRule,
 )
-from backend.detection.rules.defense_evasion_extra import (
-    DisableAuditRule,
-    DisableDefenderRule,
-    DisableFirewallRule,
-    DisableSystemRestoreRule,
-    HiddenFileAttributeRule,
-)
-from backend.detection.rules.credential_access_extra import (
-    CachedCredentialsRule,
-    KeyloggingRule,
-    LsassDumpRule,
-    NetworkSniffingRule,
-    NtdsDumpRule,
-    PasswordStoreTheftRule,
-)
-from backend.detection.rules.discovery import (
-    AccountDiscoveryRule,
-    DomainDiscoveryRule,
-    FileSystemDiscoveryRule,
-    SecuritySoftwareDiscoveryRule,
-    ShareDiscoveryRule,
-    SystemInfoDiscoveryRule,
-)
-from backend.detection.rules.lateral_movement_extra import (
-    RdpLateralRule,
-    SmbAdminShareRule,
-    SshLateralRule,
-    WinRmLateralRule,
-)
-from backend.detection.rules.collection import (
-    ArchiveCollectionRule,
-    ClipboardCaptureRule,
-    LocalDataCollectionRule,
-    ScreenCaptureRule,
-)
-from backend.detection.rules.c2_exfil_extra import (
-    EncryptedChannelRule,
-    ExfilAlternativeProtocolRule,
-    ExfilWebServiceRule,
-    ProxyToolRule,
-    UnusualPortRule,
-)
 from tests.fixtures import (
-    account_discovery,
     accessibility_feature,
+    account_discovery,
     add_normalized,
     always_install_elevated,
     appinit_dlls,
@@ -130,8 +131,8 @@ from tests.fixtures import (
     uac_bypass,
     unquoted_service_path,
     unusual_port,
-    wmi_execution,
     winrm_lateral,
+    wmi_execution,
 )
 
 NEW_RULES = [
@@ -213,7 +214,12 @@ def test_rules_engine_has_100_native_rules(db):
     from backend.detection.rules_engine import build_rules
 
     rules = build_rules(db)
-    native = [r for r in rules if getattr(r, "rule_id", "") != "" and type(r).__module__.startswith("backend.detection.rules")]
+    native = [
+        r
+        for r in rules
+        if getattr(r, "rule_id", "") != ""
+        and type(r).__module__.startswith("backend.detection.rules")
+    ]
     assert len(native) >= 100
 
 
@@ -273,60 +279,63 @@ def test_rules_engine_has_100_native_rules(db):
         (ExfilAlternativeProtocolRule, exfil_alt),
         (ExfilWebServiceRule, exfil_web),
     ],
-    ids=[f.__name__ for _, f in [
-        (SpearphishingAttachmentRule, spearphishing_attachment),
-        (SpearphishingLinkRule, spearphishing_link),
-        (DriveByCompromiseRule, drive_by),
-        (ExternalServiceExploitRule, external_service_exploit),
-        (CmdScriptExecutionRule, cmd_script_execution),
-        (WmiExecutionRule, wmi_execution),
-        (AtJobRule, at_job),
-        (ServiceExecutionRule, service_execution),
-        (MsBuildExecutionRule, msbuild_execution),
-        (PythonExecutionRule, python_execution),
-        (StartupFolderRule, startup_folder),
-        (ServiceImagePathPersistenceRule, service_image_path),
-        (AppInitDllRule, appinit_dlls),
-        (AccessibilityFeatureRule, accessibility_feature),
-        (IfeoDebuggerRule, ifeo_debugger),
-        (NetshHelperRule, netsh_helper),
-        (LogonScriptRule, logon_script),
-        (UacBypassRule, uac_bypass),
-        (SeDebugPrivilegeRule, se_debug_privilege),
-        (NamedPipeImpersonationRule, named_pipe),
-        (UnquotedServicePathRule, unquoted_service_path),
-        (AlwaysInstallElevatedRule, always_install_elevated),
-        (DisableDefenderRule, disable_defender),
-        (DisableFirewallRule, disable_firewall),
-        (DisableAuditRule, disable_audit),
-        (HiddenFileAttributeRule, hidden_file_attribute),
-        (DisableSystemRestoreRule, disable_system_restore),
-        (LsassDumpRule, lsass_dump),
-        (NtdsDumpRule, ntds_dump),
-        (PasswordStoreTheftRule, password_store),
-        (KeyloggingRule, keylogging),
-        (NetworkSniffingRule, sniffing),
-        (CachedCredentialsRule, cached_credentials),
-        (AccountDiscoveryRule, account_discovery),
-        (ShareDiscoveryRule, share_discovery),
-        (SystemInfoDiscoveryRule, system_info),
-        (DomainDiscoveryRule, domain_discovery),
-        (SecuritySoftwareDiscoveryRule, security_software),
-        (FileSystemDiscoveryRule, filesystem_discovery),
-        (SmbAdminShareRule, smb_admin_share),
-        (RdpLateralRule, rdp_lateral),
-        (WinRmLateralRule, winrm_lateral),
-        (SshLateralRule, ssh_lateral),
-        (ClipboardCaptureRule, clipboard_capture),
-        (ScreenCaptureRule, screen_capture),
-        (ArchiveCollectionRule, archive_collection),
-        (LocalDataCollectionRule, local_data),
-        (ProxyToolRule, proxy_tool),
-        (UnusualPortRule, unusual_port),
-        (EncryptedChannelRule, encrypted_channel),
-        (ExfilAlternativeProtocolRule, exfil_alt),
-        (ExfilWebServiceRule, exfil_web),
-    ]],
+    ids=[
+        f.__name__
+        for _, f in [
+            (SpearphishingAttachmentRule, spearphishing_attachment),
+            (SpearphishingLinkRule, spearphishing_link),
+            (DriveByCompromiseRule, drive_by),
+            (ExternalServiceExploitRule, external_service_exploit),
+            (CmdScriptExecutionRule, cmd_script_execution),
+            (WmiExecutionRule, wmi_execution),
+            (AtJobRule, at_job),
+            (ServiceExecutionRule, service_execution),
+            (MsBuildExecutionRule, msbuild_execution),
+            (PythonExecutionRule, python_execution),
+            (StartupFolderRule, startup_folder),
+            (ServiceImagePathPersistenceRule, service_image_path),
+            (AppInitDllRule, appinit_dlls),
+            (AccessibilityFeatureRule, accessibility_feature),
+            (IfeoDebuggerRule, ifeo_debugger),
+            (NetshHelperRule, netsh_helper),
+            (LogonScriptRule, logon_script),
+            (UacBypassRule, uac_bypass),
+            (SeDebugPrivilegeRule, se_debug_privilege),
+            (NamedPipeImpersonationRule, named_pipe),
+            (UnquotedServicePathRule, unquoted_service_path),
+            (AlwaysInstallElevatedRule, always_install_elevated),
+            (DisableDefenderRule, disable_defender),
+            (DisableFirewallRule, disable_firewall),
+            (DisableAuditRule, disable_audit),
+            (HiddenFileAttributeRule, hidden_file_attribute),
+            (DisableSystemRestoreRule, disable_system_restore),
+            (LsassDumpRule, lsass_dump),
+            (NtdsDumpRule, ntds_dump),
+            (PasswordStoreTheftRule, password_store),
+            (KeyloggingRule, keylogging),
+            (NetworkSniffingRule, sniffing),
+            (CachedCredentialsRule, cached_credentials),
+            (AccountDiscoveryRule, account_discovery),
+            (ShareDiscoveryRule, share_discovery),
+            (SystemInfoDiscoveryRule, system_info),
+            (DomainDiscoveryRule, domain_discovery),
+            (SecuritySoftwareDiscoveryRule, security_software),
+            (FileSystemDiscoveryRule, filesystem_discovery),
+            (SmbAdminShareRule, smb_admin_share),
+            (RdpLateralRule, rdp_lateral),
+            (WinRmLateralRule, winrm_lateral),
+            (SshLateralRule, ssh_lateral),
+            (ClipboardCaptureRule, clipboard_capture),
+            (ScreenCaptureRule, screen_capture),
+            (ArchiveCollectionRule, archive_collection),
+            (LocalDataCollectionRule, local_data),
+            (ProxyToolRule, proxy_tool),
+            (UnusualPortRule, unusual_port),
+            (EncryptedChannelRule, encrypted_channel),
+            (ExfilAlternativeProtocolRule, exfil_alt),
+            (ExfilWebServiceRule, exfil_web),
+        ]
+    ],
 )
 def test_new_rule_detects_fixture(db, rule_cls, fixture):
     findings = _findings(rule_cls, db, fixture())

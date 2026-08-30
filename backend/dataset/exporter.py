@@ -21,12 +21,16 @@ import hashlib
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
-from backend.config import DATASET_COLLECTOR_VERSION, DATASET_DIR, DATASET_SCHEMA_VERSION
+from backend.config import (
+    DATASET_COLLECTOR_VERSION,
+    DATASET_DIR,
+    DATASET_SCHEMA_VERSION,
+)
 from backend.database.models import (
     DatasetCollection,
     DatasetEvent,
@@ -68,7 +72,8 @@ def _lock_export(session: Session) -> None:
     """Take a PG advisory lock for the export transaction (cross-process
     safety - both BARAQ servers run the scheduler)."""
     session.execute(
-        text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": _ADVISORY_LOCK_KEY}
+        text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+        {"key": _ADVISORY_LOCK_KEY},
     )
 
 
@@ -81,7 +86,9 @@ def _next_part_number(session: Session, collection_id: int) -> int:
     return int(row or 0) + 1
 
 
-def _write_manifest(collection: DatasetCollection, files: list[DatasetExportFile]) -> str:
+def _write_manifest(
+    collection: DatasetCollection, files: list[DatasetExportFile]
+) -> str:
     """Write the dataset manifest JSON and return its path."""
     data = {
         "dataset_name": collection.name,
@@ -109,8 +116,12 @@ def _write_manifest(collection: DatasetCollection, files: list[DatasetExportFile
                 "filename": f.filename,
                 "part_number": f.part_number,
                 "event_count": f.event_count,
-                "first_timestamp": f.first_timestamp.isoformat() if f.first_timestamp else None,
-                "last_timestamp": f.last_timestamp.isoformat() if f.last_timestamp else None,
+                "first_timestamp": (
+                    f.first_timestamp.isoformat() if f.first_timestamp else None
+                ),
+                "last_timestamp": (
+                    f.last_timestamp.isoformat() if f.last_timestamp else None
+                ),
                 "sha256": f.sha256,
                 "status": f.status,
                 "created_at": f.created_at.isoformat() if f.created_at else None,
@@ -206,18 +217,25 @@ def export_pending(
         while True:
             q = select(DatasetEvent).where(
                 DatasetEvent.collection_id == collection_id,
-                DatasetEvent.exported == False,  # noqa: E712
+                DatasetEvent.exported == False,
             )
             if cursor_ts is not None:
                 q = q.where(
                     (DatasetEvent.timestamp > cursor_ts)
-                    | ((DatasetEvent.timestamp == cursor_ts) & (DatasetEvent.id > cursor_id))
+                    | (
+                        (DatasetEvent.timestamp == cursor_ts)
+                        & (DatasetEvent.id > cursor_id)
+                    )
                 )
-            rows = session.execute(
-                q.order_by(DatasetEvent.timestamp.asc(), DatasetEvent.id.asc()).limit(
-                    batch_size
+            rows = (
+                session.execute(
+                    q.order_by(
+                        DatasetEvent.timestamp.asc(), DatasetEvent.id.asc()
+                    ).limit(batch_size)
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             if not rows:
                 break
 
@@ -236,7 +254,10 @@ def export_pending(
                     part_number += 1
                     open_part(ts)
 
-                row = {field: (event.payload_normalized or {}).get(field, "") for field in CSV_FIELDS}
+                row = {
+                    field: (event.payload_normalized or {}).get(field, "")
+                    for field in CSV_FIELDS
+                }
                 row["dataset_event_id"] = event.source_event_id
                 row["timestamp"] = ts.isoformat() if ts else ""
                 writer.writerow(row)
@@ -268,21 +289,25 @@ def export_pending(
             )
 
         export.status = "completed"
-        export.completed_at = datetime.now(timezone.utc)
+        export.completed_at = datetime.now(UTC)
         export.event_count = total_written
         export.files_count = len(files)
-        collection.last_export_at = datetime.now(timezone.utc)
+        collection.last_export_at = datetime.now(UTC)
         # file rows are not flushed yet, so count parts from the session list
         collection.parts = files[-1].part_number if files else 0
-        collection.updated_at = datetime.now(timezone.utc)
+        collection.updated_at = datetime.now(UTC)
         session.commit()
 
         # manifest covers every part of the collection, not just this export
-        all_files = session.execute(
-            select(DatasetExportFile)
-            .where(DatasetExportFile.collection_id == collection_id)
-            .order_by(DatasetExportFile.part_number.asc())
-        ).scalars().all()
+        all_files = (
+            session.execute(
+                select(DatasetExportFile)
+                .where(DatasetExportFile.collection_id == collection_id)
+                .order_by(DatasetExportFile.part_number.asc())
+            )
+            .scalars()
+            .all()
+        )
         try:
             _write_manifest(collection, list(all_files))
         except OSError as exc:  # manifest is best-effort; export itself is done
@@ -290,7 +315,10 @@ def export_pending(
 
         log.info(
             "Dataset export #%s: %d events -> %d CSV part(s), %d checksums",
-            export.id, total_written, len(files), len(files),
+            export.id,
+            total_written,
+            len(files),
+            len(files),
         )
         return {
             "status": "completed",
@@ -300,7 +328,7 @@ def export_pending(
             "files": [f.to_dict() for f in files],
         }
 
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # cleanup partial files, leave events unexported
         if cur is not None:
             try:
@@ -315,8 +343,8 @@ def export_pending(
             collection_id=collection_id,
             trigger=trigger,
             status="failed",
-            started_at=datetime.now(timezone.utc),
-            completed_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
             error_message=str(exc)[:1000],
             event_count=0,
             files_count=0,
@@ -330,17 +358,26 @@ def export_pending(
 def export_all_pending(session: Session, trigger: str = "scheduled") -> dict:
     """Export for every non-complete collection that has pending events."""
     _lock_export(session)
-    collections = session.execute(
-        select(DatasetCollection).where(DatasetCollection.status.in_(["active", "paused"]))
-    ).scalars().all()
+    collections = (
+        session.execute(
+            select(DatasetCollection).where(
+                DatasetCollection.status.in_(["active", "paused"])
+            )
+        )
+        .scalars()
+        .all()
+    )
     results = []
     for coll in collections:
-        pending = session.execute(
-            select(func.count(DatasetEvent.id)).where(
-                DatasetEvent.collection_id == coll.id,
-                DatasetEvent.exported == False,  # noqa: E712
-            )
-        ).scalar() or 0
+        pending = (
+            session.execute(
+                select(func.count(DatasetEvent.id)).where(
+                    DatasetEvent.collection_id == coll.id,
+                    DatasetEvent.exported == False,
+                )
+            ).scalar()
+            or 0
+        )
         if pending:
             results.append(export_pending(session, coll.id, trigger=trigger))
     return {"collections": results}

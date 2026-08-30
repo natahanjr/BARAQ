@@ -1,4 +1,5 @@
 """Phase 5 contract tests (spec 5.1, 5.3, 5.4, 5.26-5.28, 5.31, 5.63)."""
+
 import pytest
 
 from backend.correlation.contract import (
@@ -20,16 +21,30 @@ def test_statuses_match_spec():
 
 def test_types_cover_the_nine_spec_types():
     assert set(CORRELATION_TYPES) == {
-        "TEMPORAL", "ENTITY", "HOST_CHAIN", "USER_CHAIN", "SOURCE_CHAIN",
-        "TACTIC_SEQUENCE", "TECHNIQUE_SEQUENCE", "LATERAL_MOVEMENT", "MULTI_STAGE",
+        "TEMPORAL",
+        "ENTITY",
+        "HOST_CHAIN",
+        "USER_CHAIN",
+        "SOURCE_CHAIN",
+        "TACTIC_SEQUENCE",
+        "TECHNIQUE_SEQUENCE",
+        "LATERAL_MOVEMENT",
+        "MULTI_STAGE",
     }
 
 
 def test_edge_types_cover_the_spec_relationships():
     assert set(EDGE_TYPES) == {
-        "TEMPORAL", "SAME_HOST", "SAME_USER", "SAME_SOURCE", "SAME_ACCOUNT",
-        "NETWORK_RELATION", "DESTINATION_RELATION", "TECHNIQUE_TRANSITION",
-        "TACTIC_TRANSITION", "LATERAL_MOVEMENT",
+        "TEMPORAL",
+        "SAME_HOST",
+        "SAME_USER",
+        "SAME_SOURCE",
+        "SAME_ACCOUNT",
+        "NETWORK_RELATION",
+        "DESTINATION_RELATION",
+        "TECHNIQUE_TRANSITION",
+        "TACTIC_TRANSITION",
+        "LATERAL_MOVEMENT",
     }
 
 
@@ -53,36 +68,65 @@ def test_banned_phrases_never_claim_confirmation():
 def test_finding_validation_rejects_banned_title():
     with pytest.raises(ValueError):
         CorrelationFinding(
-            correlation_id="CF-000001", fingerprint="fp", title="confirmed attack",
-            description="desc", status="NEW", correlation_type="TEMPORAL",
-            first_seen=None, last_seen=None,
+            correlation_id="CF-000001",
+            fingerprint="fp",
+            title="confirmed attack",
+            description="desc",
+            status="NEW",
+            correlation_type="TEMPORAL",
+            first_seen=None,
+            last_seen=None,
         )
 
 
 def test_finding_validation_rejects_bad_status_and_type():
     with pytest.raises(ValueError):
         CorrelationFinding(
-            correlation_id="CF-000001", fingerprint="fp", title="t", description="d",
-            status="OPEN", correlation_type="TEMPORAL", first_seen=None, last_seen=None,
+            correlation_id="CF-000001",
+            fingerprint="fp",
+            title="t",
+            description="d",
+            status="OPEN",
+            correlation_type="TEMPORAL",
+            first_seen=None,
+            last_seen=None,
         )
     with pytest.raises(ValueError):
         CorrelationFinding(
-            correlation_id="CF-000001", fingerprint="fp", title="t", description="d",
-            status="NEW", correlation_type="MAGIC", first_seen=None, last_seen=None,
+            correlation_id="CF-000001",
+            fingerprint="fp",
+            title="t",
+            description="d",
+            status="NEW",
+            correlation_type="MAGIC",
+            first_seen=None,
+            last_seen=None,
         )
 
 
 def test_finding_validation_rejects_invalid_edge_and_confidence():
     with pytest.raises(ValueError):
         CorrelationFinding(
-            correlation_id="CF-000001", fingerprint="fp", title="t", description="d",
-            status="NEW", correlation_type="TEMPORAL", first_seen=None, last_seen=None,
+            correlation_id="CF-000001",
+            fingerprint="fp",
+            title="t",
+            description="d",
+            status="NEW",
+            correlation_type="TEMPORAL",
+            first_seen=None,
+            last_seen=None,
             edges=[{"relationship_type": "NOPE"}],
         )
     with pytest.raises(ValueError):
         CorrelationFinding(
-            correlation_id="CF-000001", fingerprint="fp", title="t", description="d",
-            status="NEW", correlation_type="TEMPORAL", first_seen=None, last_seen=None,
+            correlation_id="CF-000001",
+            fingerprint="fp",
+            title="t",
+            description="d",
+            status="NEW",
+            correlation_type="TEMPORAL",
+            first_seen=None,
+            last_seen=None,
             confidence=1.5,
         )
 
@@ -104,8 +148,12 @@ def test_phase_mapping_and_progression_deterministic():
 
 def test_audit_actions_match_spec():
     assert set(CORRELATION_ACTIONS) == {
-        "CORRELATION_CREATED", "GROUP_ADDED", "EDGE_CREATED",
-        "CORRELATION_UPDATED", "CORRELATION_QUIET", "CORRELATION_CLOSED",
+        "CORRELATION_CREATED",
+        "GROUP_ADDED",
+        "EDGE_CREATED",
+        "CORRELATION_UPDATED",
+        "CORRELATION_QUIET",
+        "CORRELATION_CLOSED",
         "CORRELATION_REOPEN_REJECTED",
     }
     assert CorrelationAuditEvent.__tablename__ == "correlation_audit_events"

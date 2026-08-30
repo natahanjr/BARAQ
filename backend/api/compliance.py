@@ -1,5 +1,6 @@
 """Compliance endpoints (roadmap 3.3): anonymized exports, DSAR, audit
 retention, compliance report. All admin-only."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -31,8 +32,15 @@ def anonymized_export_endpoint(
         data = anonymized_export(db, hours=hours, org=org)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    log_action(db, actor_name(request), "compliance.export", "dataset",
-               f"{hours}h", f"anonymized export for org '{org}'", client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "compliance.export",
+        "dataset",
+        f"{hours}h",
+        f"anonymized export for org '{org}'",
+        client_ip(request),
+    )
     return data
 
 
@@ -49,8 +57,15 @@ def dsar_endpoint(
         data = dsar_package(db, email)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    log_action(db, actor_name(request), "compliance.dsar", "subject",
-               email, "data subject access request", client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "compliance.dsar",
+        "subject",
+        email,
+        "data subject access request",
+        client_ip(request),
+    )
     return data
 
 
@@ -60,8 +75,15 @@ def compliance_report_endpoint(request: Request = None, db: Session = Depends(ge
     from backend.compliance import compliance_report
 
     report = compliance_report(db)
-    log_action(db, actor_name(request), "compliance.report", "report", "",
-               "compliance report generated", client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "compliance.report",
+        "report",
+        "",
+        "compliance report generated",
+        client_ip(request),
+    )
     return report
 
 

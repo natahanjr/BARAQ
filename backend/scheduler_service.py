@@ -11,10 +11,10 @@ one scheduler runs per deployment even with many API replicas. API
 processes should be started with BARAQ_ROLE=api to keep them scheduler-free
 and fully horizontal.
 """
+
 from __future__ import annotations
 
 import logging
-import os
 import signal
 import threading
 
@@ -48,7 +48,7 @@ def run(interval_seconds: int | None = None) -> None:
     stop = threading.Event()
     stop_flag = {"set": False}
 
-    def _shutdown(_sig, _frame):  # noqa: ARG001
+    def _shutdown(_sig, _frame):
         logger.info("Signal received; stopping scheduler")
         _scheduler_stop.set()
         stop_flag["set"] = True
@@ -58,7 +58,9 @@ def run(interval_seconds: int | None = None) -> None:
 
     interval = interval_seconds or COLLECT_INTERVAL_SECONDS
     thread = threading.Thread(
-        target=_scheduler_loop, args=(interval,), daemon=True,
+        target=_scheduler_loop,
+        args=(interval,),
+        daemon=True,
         name="baraq-scheduler",
     )
     thread.start()

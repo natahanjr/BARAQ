@@ -1,9 +1,10 @@
 """Phase 6 factor registry tests (spec 6.9, 6.40, 6.41, 6.43)."""
+
 from __future__ import annotations
 
-import backend.config as config
 import pytest
 
+from backend import config
 from backend.risk.registry import (
     FACTOR_ID_TYPES,
     FACTOR_REGISTRY,
@@ -16,10 +17,14 @@ from backend.risk.registry import (
 
 def test_all_spec_factors_are_registered():
     required = {
-        "RF001_EXTERNAL_ACCESS", "RF002_CREDENTIAL_ACCESS",
-        "RF003_LATERAL_MOVEMENT", "RF004_PRIVILEGE_ACTIVITY",
-        "RF005_EXECUTION", "RF006_MULTI_STAGE_CORRELATION",
-        "RF007_REPETITION", "RF008_RECENCY",
+        "RF001_EXTERNAL_ACCESS",
+        "RF002_CREDENTIAL_ACCESS",
+        "RF003_LATERAL_MOVEMENT",
+        "RF004_PRIVILEGE_ACTIVITY",
+        "RF005_EXECUTION",
+        "RF006_MULTI_STAGE_CORRELATION",
+        "RF007_REPETITION",
+        "RF008_RECENCY",
     }
     assert required <= set(FACTOR_REGISTRY)
     assert len(FACTOR_REGISTRY) >= 8
@@ -66,8 +71,13 @@ def test_list_factors_is_sorted_and_complete():
     assert len(factors) == len(FACTOR_REGISTRY)
     for entry in factors:
         assert set(entry) == {
-            "factor_id", "version", "description", "source_type",
-            "weight", "decay_policy", "maximum_contribution",
+            "factor_id",
+            "version",
+            "description",
+            "source_type",
+            "weight",
+            "decay_policy",
+            "maximum_contribution",
         }
 
 

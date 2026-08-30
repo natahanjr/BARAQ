@@ -1,12 +1,17 @@
 """Phase 4 lifecycle tests (spec 4.15, 4.16, 4.29, 4.30)."""
+
 from datetime import timedelta
 
 import pytest
 
 from backend.aggregation.engine import expire_groups, process_alerts
 from backend.aggregation.lifecycle import IllegalTransition, can_transition, transition
-
-from tests.aggregation.helpers import GROUP_T0, make_alerts, stored_group_audit, stored_groups
+from tests.aggregation.helpers import (
+    GROUP_T0,
+    make_alerts,
+    stored_group_audit,
+    stored_groups,
+)
 
 
 def test_transition_table():
@@ -24,9 +29,9 @@ def test_transition_table():
 
 def test_expiration_quiet_then_closed(db):
     """10:10 last alert -> QUIET at +30min -> CLOSED at +60min (4.15)."""
-    alerts = make_alerts(db, [dict(minutes_ago=10.0)])
+    alerts = make_alerts(db, [{"minutes_ago": 10.0}])
     process_alerts(db, alerts, now=GROUP_T0)
-    group = stored_groups(db)[0]
+    stored_groups(db)[0]
 
     expire_groups(db, now=GROUP_T0 + timedelta(minutes=20))
     assert stored_groups(db)[0].status == "ACTIVE"
@@ -47,13 +52,15 @@ def test_quiet_group_reactivates_on_new_member(db):
     """4.29: new in-window member while QUIET -> QUIET -> ACTIVE."""
     from tests.aggregation.helpers import fabricate_alerts
 
-    alerts = fabricate_alerts(db, [dict(minutes_ago=10.0)])
+    alerts = fabricate_alerts(db, [{"minutes_ago": 10.0}])
     process_alerts(db, alerts, now=GROUP_T0)
     group = stored_groups(db)[0]
     group.status = "QUIET"
     db.commit()
 
-    new = fabricate_alerts(db, [dict(detector_id="D002", mitre="T1110", minutes_ago=2.0)])
+    new = fabricate_alerts(
+        db, [{"detector_id": "D002", "mitre": "T1110", "minutes_ago": 2.0}]
+    )
     process_alerts(db, new, now=GROUP_T0)
     group = stored_groups(db)[0]
     assert group.status == "ACTIVE"
@@ -63,13 +70,15 @@ def test_quiet_group_reactivates_on_new_member(db):
 
 def test_closed_group_never_absorbs_new_alerts(db):
     """BG closed at 11:10; 12:30 activity -> NEW group (4.16)."""
-    alerts = make_alerts(db, [dict(minutes_ago=70.0)])
+    alerts = make_alerts(db, [{"minutes_ago": 70.0}])
     process_alerts(db, alerts, now=GROUP_T0)
     expire_groups(db, now=GROUP_T0)
     expire_groups(db, now=GROUP_T0)  # ACTIVE->QUIET then QUIET->CLOSED
     assert stored_groups(db)[0].status == "CLOSED"
 
-    later = make_alerts(db, [dict(detector_id="D002", mitre="T1110", minutes_ago=30.0)])
+    later = make_alerts(
+        db, [{"detector_id": "D002", "mitre": "T1110", "minutes_ago": 30.0}]
+    )
     process_alerts(db, later, now=GROUP_T0)
     groups = stored_groups(db)
     assert len(groups) == 2
@@ -82,9 +91,11 @@ def test_closed_group_never_absorbs_new_alerts(db):
 
 
 def test_new_matching_alert_while_active_attaches(db):
-    alerts = make_alerts(db, [dict(minutes_ago=1.0)])
+    alerts = make_alerts(db, [{"minutes_ago": 1.0}])
     process_alerts(db, alerts, now=GROUP_T0)
-    more = make_alerts(db, [dict(detector_id="D002", mitre="T1110", minutes_ago=0.0)])
+    more = make_alerts(
+        db, [{"detector_id": "D002", "mitre": "T1110", "minutes_ago": 0.0}]
+    )
     process_alerts(db, more, now=GROUP_T0)
     groups = stored_groups(db)
     assert len(groups) == 1
@@ -93,7 +104,7 @@ def test_new_matching_alert_while_active_attaches(db):
 
 
 def test_audit_events_have_group_id_action_actor_details(db):
-    alerts = make_alerts(db, [dict(minutes_ago=1.0)])
+    alerts = make_alerts(db, [{"minutes_ago": 1.0}])
     process_alerts(db, alerts, now=GROUP_T0)
     events = stored_group_audit(db)
     assert events[0].action == "GROUP_CREATED"

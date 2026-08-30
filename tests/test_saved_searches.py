@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 def _seed(db):
     from backend.api.system import run_pipeline
-
     from tests.fixtures import brute_force
 
     run_pipeline(db, brute_force())
@@ -45,7 +42,9 @@ def test_saved_search_crud_and_run(db):
     assert body["columns"] == ["user", "count"]
     assert body["total"] >= 1
 
-    r = client.patch(f"/api/saved/searches/{sid}", headers=headers, json={"description": "updated"})
+    r = client.patch(
+        f"/api/saved/searches/{sid}", headers=headers, json={"description": "updated"}
+    )
     assert r.status_code == 200
     assert r.json()["description"] == "updated"
 
@@ -63,19 +62,28 @@ def test_saved_search_duplicate_rejected(db):
     client = TestClient(app)
     headers = {"X-API-Key": "baraq-dev-admin"}
     body = {"name": "dup", "query": "event_id=1"}
-    assert client.post("/api/saved/searches", headers=headers, json=body).status_code == 200
-    assert client.post("/api/saved/searches", headers=headers, json=body).status_code == 409
+    assert (
+        client.post("/api/saved/searches", headers=headers, json=body).status_code
+        == 200
+    )
+    assert (
+        client.post("/api/saved/searches", headers=headers, json=body).status_code
+        == 409
+    )
 
 
 def test_saved_search_org_scoping(db):
     from fastapi.testclient import TestClient
 
-    from backend.main import app
     from backend.database.models import SavedSearch
+    from backend.main import app
 
     saved = SavedSearch(
-        name="org_private", query="event_id=1", org="tenant-alpha",
-        earliest="-24h", owner="someone",
+        name="org_private",
+        query="event_id=1",
+        org="tenant-alpha",
+        earliest="-24h",
+        owner="someone",
     )
     db.add(saved)
     db.commit()
@@ -98,7 +106,11 @@ def test_dashboard_crud_and_render(db):
     saved = client.post(
         "/api/saved/searches",
         headers=headers,
-        json={"name": "logon_stats", "query": "event_id=4625 | stats count by user | sort -count", "earliest": "-30d"},
+        json={
+            "name": "logon_stats",
+            "query": "event_id=4625 | stats count by user | sort -count",
+            "earliest": "-30d",
+        },
     ).json()
 
     r = client.post(
@@ -108,9 +120,24 @@ def test_dashboard_crud_and_render(db):
             "name": "Auth Overview",
             "description": "logon dashboard",
             "panels": [
-                {"title": "Top users", "saved_search_id": saved["id"], "viz": "top", "field": "user", "limit": 5, "cols": 2},
-                {"title": "Total logons", "saved_search_id": saved["id"], "viz": "count"},
-                {"title": "Inline", "query": "event_id=4625 | stats count by host | sort -count | limit 5", "viz": "table"},
+                {
+                    "title": "Top users",
+                    "saved_search_id": saved["id"],
+                    "viz": "top",
+                    "field": "user",
+                    "limit": 5,
+                    "cols": 2,
+                },
+                {
+                    "title": "Total logons",
+                    "saved_search_id": saved["id"],
+                    "viz": "count",
+                },
+                {
+                    "title": "Inline",
+                    "query": "event_id=4625 | stats count by host | sort -count | limit 5",
+                    "viz": "table",
+                },
             ],
         },
     )
@@ -156,7 +183,10 @@ def test_dashboard_panel_missing_saved_search(db):
     r = client.post(
         "/api/saved/dashboards",
         headers=headers,
-        json={"name": "broken", "panels": [{"title": "gone", "saved_search_id": 9999, "viz": "table"}]},
+        json={
+            "name": "broken",
+            "panels": [{"title": "gone", "saved_search_id": 9999, "viz": "table"}],
+        },
     )
     assert r.status_code == 200
     did = r.json()["id"]
@@ -175,7 +205,10 @@ def test_dashboard_panel_invalid_query(db):
     r = client.post(
         "/api/saved/dashboards",
         headers=headers,
-        json={"name": "badq", "panels": [{"title": "x", "query": "bogus_field=1", "viz": "table"}]},
+        json={
+            "name": "badq",
+            "panels": [{"title": "x", "query": "bogus_field=1", "viz": "table"}],
+        },
     )
     did = r.json()["id"]
     r = client.get(f"/api/saved/dashboards/{did}/render", headers=headers)

@@ -7,13 +7,14 @@ Reads real DNS query activity from the Sysmon operational channel
 Pure-live: when Sysmon is unavailable / pywin32 missing, the DNS part is a
 no-op and no simulation is generated.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from backend.collectors.base import BaseCollector
@@ -81,7 +82,9 @@ class DnsHttpCollector(BaseCollector):
             return []
         out: list[dict] = []
         try:
-            lines = self._http_log.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = self._http_log.read_text(
+                encoding="utf-8", errors="replace"
+            ).splitlines()
         except OSError:
             return []
         for line in lines[-MAX_RECORDS_PER_CYCLE:]:
@@ -102,18 +105,20 @@ class DnsHttpCollector(BaseCollector):
                     host = url.split("/")[2]
                 except IndexError:
                     host = ""
-            out.append({
-                "source": "http",
-                "process": str(data.get("process", "")),
-                "pid": int(data.get("pid", 0) or 0),
-                "method": str(data.get("method", "GET")),
-                "url": url[:1024],
-                "host": host[:256],
-                "status_code": int(data.get("status_code", 0) or 0),
-                "request_body_size": int(data.get("request_body_size", 0) or 0),
-                "response_body_size": int(data.get("response_body_size", 0) or 0),
-                "timestamp": data.get("timestamp") or datetime.now(timezone.utc).isoformat(),
-            })
+            out.append(
+                {
+                    "source": "http",
+                    "process": str(data.get("process", "")),
+                    "pid": int(data.get("pid", 0) or 0),
+                    "method": str(data.get("method", "GET")),
+                    "url": url[:1024],
+                    "host": host[:256],
+                    "status_code": int(data.get("status_code", 0) or 0),
+                    "request_body_size": int(data.get("request_body_size", 0) or 0),
+                    "response_body_size": int(data.get("response_body_size", 0) or 0),
+                    "timestamp": data.get("timestamp") or datetime.now(UTC).isoformat(),
+                }
+            )
         return out
 
     # ------------------------------------------------------------------

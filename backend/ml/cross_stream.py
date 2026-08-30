@@ -13,17 +13,15 @@ Attack Sequences Detected:
 The model uses a simple Markov chain approach with transition probabilities
 learned from historical attack patterns.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from datetime import UTC, datetime, timedelta
 
-import numpy as np
-from sqlalchemy import select, func
+from sqlalchemy import select
 
-from backend.database.connection import SessionLocal
-from backend.database.models import NormalizedEvent, NetworkConnection
+from backend.database.models import NormalizedEvent
 
 logger = logging.getLogger("baraq.ml.cross_stream")
 
@@ -72,8 +70,8 @@ class AttackSequenceDetector:
     }
 
     def __init__(self):
-        self.transition_counts: Dict[str, Dict[Tuple[int, int], int]] = {}
-        self.sequence_scores: Dict[str, float] = {}
+        self.transition_counts: dict[str, dict[tuple[int, int], int]] = {}
+        self.sequence_scores: dict[str, float] = {}
         self._initialized = False
 
     def _ensure_initialized(self):
@@ -86,7 +84,9 @@ class AttackSequenceDetector:
                 self.transition_counts[pattern_name][(from_event, to_event)] = 0
         self._initialized = True
 
-    def update_transition(self, from_event_id: int, to_event_id: int, pattern_name: str):
+    def update_transition(
+        self, from_event_id: int, to_event_id: int, pattern_name: str
+    ):
         """Update transition count for a known pattern."""
         self._ensure_initialized()
         if pattern_name in self.transition_counts:
@@ -123,10 +123,12 @@ class AttackSequenceDetector:
 
         return total_score / total_weight
 
-    def analyze_event_sequence(self, session, time_window_minutes: int = 60) -> Dict[str, float]:
+    def analyze_event_sequence(
+        self, session, time_window_minutes: int = 60
+    ) -> dict[str, float]:
         """Analyze recent event sequence for attack patterns."""
         self._ensure_initialized()
-        since = datetime.now(timezone.utc) - timedelta(minutes=time_window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=time_window_minutes)
 
         # Get recent events ordered by time
         events = session.scalars(
@@ -183,24 +185,26 @@ class AttackSequenceDetector:
 
         return total_score / total_weight if total_weight > 0 else 0.0
 
-    def get_active_patterns(self, session, time_window_minutes: int = 60) -> List[Dict]:
+    def get_active_patterns(self, session, time_window_minutes: int = 60) -> list[dict]:
         """Get list of active attack patterns with details."""
         scores = self.analyze_event_sequence(session, time_window_minutes)
         active = []
         for pattern_name, score in scores.items():
             if score > 0.3:  # Threshold for "active" pattern
                 pattern = self.ATTACK_SEQUENCES[pattern_name]
-                active.append({
-                    "pattern": pattern_name,
-                    "description": pattern["description"],
-                    "score": round(score, 3),
-                    "transitions": self.transition_counts.get(pattern_name, {}),
-                })
+                active.append(
+                    {
+                        "pattern": pattern_name,
+                        "description": pattern["description"],
+                        "score": round(score, 3),
+                        "transitions": self.transition_counts.get(pattern_name, {}),
+                    }
+                )
         return active
 
 
 # Singleton instance
-_detector: Optional[AttackSequenceDetector] = None
+_detector: AttackSequenceDetector | None = None
 
 
 def get_cross_stream_detector() -> AttackSequenceDetector:

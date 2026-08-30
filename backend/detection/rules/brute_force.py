@@ -3,9 +3,10 @@
 Multiple failed logons (4625) against the same account within a short
 time interval, typically from a single source address.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import String, func, select
 
@@ -28,8 +29,14 @@ class BruteForceRule(BaseRule):
         "enable multi-factor authentication and reset the targeted account's password."
     )
 
-    def __init__(self, session, threshold: int = 5, window_minutes: int = 10,
-                 spray_distinct_ips: int = 7, min_spread_ips: int = 3):
+    def __init__(
+        self,
+        session,
+        threshold: int = 5,
+        window_minutes: int = 10,
+        spray_distinct_ips: int = 7,
+        min_spread_ips: int = 3,
+    ):
         super().__init__(session)
         self.threshold = threshold
         self.window_minutes = window_minutes
@@ -37,7 +44,7 @@ class BruteForceRule(BaseRule):
         self.min_spread_ips = min_spread_ips
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         stmt = (
             select(
@@ -69,8 +76,7 @@ class BruteForceRule(BaseRule):
 
             ev_ids = list(
                 self.session.scalars(
-                    select(NormalizedEvent.id)
-                    .where(
+                    select(NormalizedEvent.id).where(
                         NormalizedEvent.event_id == 4625,
                         NormalizedEvent.user == row.user,
                         NormalizedEvent.timestamp >= since,
@@ -105,9 +111,11 @@ class BruteForceRule(BaseRule):
             select(
                 NormalizedEvent.user,
                 func.count(NormalizedEvent.id).label("attempts"),
-                func.count(func.distinct(
-                    NormalizedEvent.raw_json["facts"]["source_ip"].cast(String)
-                )).label("distinct_ips"),
+                func.count(
+                    func.distinct(
+                        NormalizedEvent.raw_json["facts"]["source_ip"].cast(String)
+                    )
+                ).label("distinct_ips"),
                 func.min(NormalizedEvent.timestamp).label("first_ts"),
                 func.max(NormalizedEvent.timestamp).label("last_ts"),
             )
@@ -132,8 +140,7 @@ class BruteForceRule(BaseRule):
                 continue
             ev_ids = list(
                 self.session.scalars(
-                    select(NormalizedEvent.id)
-                    .where(
+                    select(NormalizedEvent.id).where(
                         NormalizedEvent.event_id == 4625,
                         NormalizedEvent.user == row.user,
                         NormalizedEvent.timestamp >= since,

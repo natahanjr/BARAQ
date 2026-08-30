@@ -18,18 +18,14 @@ from __future__ import annotations
 
 import json
 import math
-from copy import deepcopy
-from datetime import datetime, timedelta, timezone
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from backend.risk.ranking import (
     ASSET_MULTIPLIER,
     SEVERITY_WEIGHT,
-    RiskBreakdown,
     asset_criticality_multiplier,
-    confidence_multiplier,
     compute_risk_score,
+    confidence_multiplier,
     correlation_multiplier,
     healthy_score,
     rank_alerts,
@@ -39,12 +35,13 @@ from backend.risk.ranking import (
     severity_weight,
 )
 
-NOW = datetime(2026, 3, 15, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 3, 15, 12, 0, 0, tzinfo=UTC)
 
 
 # ──────────────────────────────────────────────────────────────────────
 # 1. SEVERITY WEIGHTS
 # ──────────────────────────────────────────────────────────────────────
+
 
 class TestSeverityWeights:
     def test_healthy_is_zero(self):
@@ -81,8 +78,14 @@ class TestSeverityWeights:
         assert severity_weight("") == 0.10
 
     def test_weights_dict_immutable_values(self):
-        expected = {"healthy": 0.00, "info": 0.00, "low": 0.05,
-                    "medium": 0.10, "high": 0.30, "critical": 1.00}
+        expected = {
+            "healthy": 0.00,
+            "info": 0.00,
+            "low": 0.05,
+            "medium": 0.10,
+            "high": 0.30,
+            "critical": 1.00,
+        }
         assert SEVERITY_WEIGHT == expected
 
     def test_all_weights_non_negative(self):
@@ -103,6 +106,7 @@ class TestSeverityWeights:
 # ──────────────────────────────────────────────────────────────────────
 # 2. CONFIDENCE MULTIPLIER
 # ──────────────────────────────────────────────────────────────────────
+
 
 class TestConfidenceMultiplier:
     def test_below_0_40_returns_0_50(self):
@@ -160,6 +164,7 @@ class TestConfidenceMultiplier:
 # 3. ASSET CRITICALITY
 # ──────────────────────────────────────────────────────────────────────
 
+
 class TestAssetCriticality:
     def test_low(self):
         assert asset_criticality_multiplier("low") == 0.75
@@ -189,13 +194,17 @@ class TestAssetCriticality:
 
     def test_all_multiplier_dict_values(self):
         assert ASSET_MULTIPLIER == {
-            "low": 0.75, "normal": 1.00, "important": 1.50, "critical": 2.00,
+            "low": 0.75,
+            "normal": 1.00,
+            "important": 1.50,
+            "critical": 2.00,
         }
 
 
 # ──────────────────────────────────────────────────────────────────────
 # 4. CORRELATION MULTIPLIER
 # ──────────────────────────────────────────────────────────────────────
+
 
 class TestCorrelationMultiplier:
     def test_single_returns_1_00(self):
@@ -238,6 +247,7 @@ class TestCorrelationMultiplier:
 # ──────────────────────────────────────────────────────────────────────
 # 5. RECENCY DECAY
 # ──────────────────────────────────────────────────────────────────────
+
 
 class TestRecencyDecay:
     def test_none_returns_0_50(self):
@@ -321,19 +331,30 @@ class TestRecencyDecay:
         assert recency_multiplier(NOW - timedelta(minutes=60, seconds=1), NOW) == 0.70
 
     def test_boundary_5h59min59sec(self):
-        assert recency_multiplier(NOW - timedelta(hours=5, minutes=59, seconds=59), NOW) == 0.70
+        assert (
+            recency_multiplier(NOW - timedelta(hours=5, minutes=59, seconds=59), NOW)
+            == 0.70
+        )
 
     def test_boundary_6h1sec(self):
         assert recency_multiplier(NOW - timedelta(hours=6, seconds=1), NOW) == 0.50
 
     def test_boundary_23h59min59sec(self):
-        assert recency_multiplier(NOW - timedelta(hours=23, minutes=59, seconds=59), NOW) == 0.50
+        assert (
+            recency_multiplier(NOW - timedelta(hours=23, minutes=59, seconds=59), NOW)
+            == 0.50
+        )
 
     def test_boundary_24h1sec(self):
         assert recency_multiplier(NOW - timedelta(hours=24, seconds=1), NOW) == 0.25
 
     def test_boundary_2d23h59min59sec(self):
-        assert recency_multiplier(NOW - timedelta(days=2, hours=23, minutes=59, seconds=59), NOW) == 0.25
+        assert (
+            recency_multiplier(
+                NOW - timedelta(days=2, hours=23, minutes=59, seconds=59), NOW
+            )
+            == 0.25
+        )
 
     def test_boundary_3d1sec(self):
         assert recency_multiplier(NOW - timedelta(days=3, seconds=1), NOW) == 0.10
@@ -349,6 +370,7 @@ class TestRecencyDecay:
 # ──────────────────────────────────────────────────────────────────────
 # 6. CORE FORMULA
 # ──────────────────────────────────────────────────────────────────────
+
 
 class TestCoreFormula:
     def test_spec_example(self):
@@ -444,6 +466,7 @@ class TestCoreFormula:
 # 7. REPEAT DAMPENING
 # ──────────────────────────────────────────────────────────────────────
 
+
 class TestRepeatDampening:
     def test_first_occurrence(self):
         assert repeat_dampener(1) == 1.00
@@ -487,6 +510,7 @@ class TestRepeatDampening:
 # 8. RISK LEVELS FROM SCORE
 # ──────────────────────────────────────────────────────────────────────
 
+
 class TestRiskLevelFromScore:
     def test_zero_is_healthy(self):
         assert risk_level_from_score(0.0) == "HEALTHY"
@@ -514,6 +538,7 @@ class TestRiskLevelFromScore:
 # ──────────────────────────────────────────────────────────────────────
 # 9. RANKING ORDER
 # ──────────────────────────────────────────────────────────────────────
+
 
 class TestRankingOrder:
     def _alert(self, severity, confidence=0.8, occ=1, chain=False, corr=1):
@@ -583,8 +608,18 @@ class TestRankingOrder:
         assert scores == sorted(scores, reverse=True)
 
     def test_ten_alerts_ranked_correctly(self):
-        severities = ["low", "medium", "high", "critical", "info",
-                      "low", "medium", "high", "critical", "healthy"]
+        severities = [
+            "low",
+            "medium",
+            "high",
+            "critical",
+            "info",
+            "low",
+            "medium",
+            "high",
+            "critical",
+            "healthy",
+        ]
         alerts = [self._alert(s) for s in severities]
         ranked = rank_alerts(alerts, NOW)
         scores = [a["risk_score"] for a in ranked]
@@ -594,6 +629,7 @@ class TestRankingOrder:
 # ──────────────────────────────────────────────────────────────────────
 # 10. EXPLAINABILITY (RiskBreakdown)
 # ──────────────────────────────────────────────────────────────────────
+
 
 class TestExplainability:
     def _bd(self):
@@ -609,11 +645,22 @@ class TestExplainability:
     def test_has_all_fields(self):
         bd = self._bd()
         expected_fields = {
-            "risk_score", "severity", "severity_weight", "confidence",
-            "confidence_multiplier", "asset_criticality", "asset_multiplier",
-            "correlation_level", "correlated_alerts", "correlation_multiplier",
-            "is_attack_chain", "recency_minutes", "recency_multiplier",
-            "occurrence", "repeat_dampener", "risk_level",
+            "risk_score",
+            "severity",
+            "severity_weight",
+            "confidence",
+            "confidence_multiplier",
+            "asset_criticality",
+            "asset_multiplier",
+            "correlation_level",
+            "correlated_alerts",
+            "correlation_multiplier",
+            "is_attack_chain",
+            "recency_minutes",
+            "recency_multiplier",
+            "occurrence",
+            "repeat_dampener",
+            "risk_level",
         }
         actual = {f.name for f in bd.__dataclass_fields__.values()}
         assert expected_fields == actual
@@ -664,7 +711,9 @@ class TestExplainability:
 
     def test_explanation_repeat_line_present(self):
         bd = compute_risk_score(
-            severity="medium", occurrence=3, now=NOW,
+            severity="medium",
+            occurrence=3,
+            now=NOW,
         )
         text = bd.explanation()
         assert "Repeat" in text
@@ -704,7 +753,9 @@ class TestExplainability:
 
     def test_explanation_plurals(self):
         bd = compute_risk_score(
-            severity="medium", correlated_alerts=5, now=NOW,
+            severity="medium",
+            correlated_alerts=5,
+            now=NOW,
         )
         text = bd.explanation()
         assert "alerts" in text
@@ -713,6 +764,7 @@ class TestExplainability:
 # ──────────────────────────────────────────────────────────────────────
 # 11. HEALTHY STATE
 # ──────────────────────────────────────────────────────────────────────
+
 
 class TestHealthyState:
     def test_healthy_score_returns_zero(self):
@@ -749,6 +801,7 @@ class TestHealthyState:
 # 12. DATA INTEGRITY
 # ──────────────────────────────────────────────────────────────────────
 
+
 class TestDataIntegrity:
     def test_severity_preserved_separately(self):
         bd = compute_risk_score(severity="high", now=NOW)
@@ -758,7 +811,9 @@ class TestDataIntegrity:
 
     def test_asset_criticality_preserved(self):
         bd = compute_risk_score(
-            severity="medium", asset_criticality="critical", now=NOW,
+            severity="medium",
+            asset_criticality="critical",
+            now=NOW,
         )
         assert bd.asset_criticality == "critical"
         assert bd.asset_multiplier == 2.00
@@ -769,7 +824,9 @@ class TestDataIntegrity:
 
     def test_correlated_alerts_preserved(self):
         bd = compute_risk_score(
-            severity="medium", correlated_alerts=4, now=NOW,
+            severity="medium",
+            correlated_alerts=4,
+            now=NOW,
         )
         assert bd.correlated_alerts == 4
 
@@ -779,7 +836,9 @@ class TestDataIntegrity:
 
     def test_is_attack_chain_preserved(self):
         bd = compute_risk_score(
-            severity="medium", is_attack_chain=True, now=NOW,
+            severity="medium",
+            is_attack_chain=True,
+            now=NOW,
         )
         assert bd.is_attack_chain is True
 
@@ -793,7 +852,9 @@ class TestDataIntegrity:
         bd4 = compute_risk_score(severity="low", correlated_alerts=5, now=NOW)
         assert bd4.correlation_level == "5+"
         bd5 = compute_risk_score(
-            severity="low", is_attack_chain=True, now=NOW,
+            severity="low",
+            is_attack_chain=True,
+            now=NOW,
         )
         assert bd5.correlation_level == "attack_chain"
 
@@ -803,7 +864,9 @@ class TestDataIntegrity:
 
     def test_clamped_correlated_alerts(self):
         bd = compute_risk_score(
-            severity="medium", correlated_alerts=-3, now=NOW,
+            severity="medium",
+            correlated_alerts=-3,
+            now=NOW,
         )
         assert bd.correlated_alerts >= 1
 
@@ -811,6 +874,7 @@ class TestDataIntegrity:
 # ──────────────────────────────────────────────────────────────────────
 # 13. EDGE CASES
 # ──────────────────────────────────────────────────────────────────────
+
 
 class TestEdgeCases:
     def test_no_nan_in_score(self):
@@ -891,7 +955,9 @@ class TestEdgeCases:
 
     def test_very_many_correlated_alerts(self):
         bd = compute_risk_score(
-            severity="low", correlated_alerts=9999, now=NOW,
+            severity="low",
+            correlated_alerts=9999,
+            now=NOW,
         )
         assert bd.correlation_multiplier == 2.00
         assert bd.risk_score >= 0.0
@@ -924,11 +990,13 @@ class TestEdgeCases:
         assert ranked == []
 
     def test_rank_alerts_single_alert(self):
-        alerts = [{
-            "severity": "medium",
-            "confidence": 0.8,
-            "last_seen": NOW - timedelta(minutes=5),
-        }]
+        alerts = [
+            {
+                "severity": "medium",
+                "confidence": 0.8,
+                "last_seen": NOW - timedelta(minutes=5),
+            }
+        ]
         ranked = rank_alerts(alerts, NOW)
         assert len(ranked) == 1
         assert ranked[0]["risk_score"] >= 0.0
@@ -940,50 +1008,60 @@ class TestEdgeCases:
         assert ranked[0]["risk_score"] >= 0.0
 
     def test_rank_alerts_string_timestamps(self):
-        alerts = [{
-            "severity": "medium",
-            "confidence": 0.7,
-            "updated_at": "2026-03-15T11:50:00Z",
-        }]
+        alerts = [
+            {
+                "severity": "medium",
+                "confidence": 0.7,
+                "updated_at": "2026-03-15T11:50:00Z",
+            }
+        ]
         ranked = rank_alerts(alerts, NOW)
         assert len(ranked) == 1
 
     def test_rank_alerts_invalid_string_timestamp(self):
-        alerts = [{
-            "severity": "medium",
-            "confidence": 0.7,
-            "updated_at": "not-a-date",
-        }]
+        alerts = [
+            {
+                "severity": "medium",
+                "confidence": 0.7,
+                "updated_at": "not-a-date",
+            }
+        ]
         ranked = rank_alerts(alerts, NOW)
         assert len(ranked) == 1
 
     def test_rank_alerts_preserves_original_dict(self):
-        alerts = [{
-            "severity": "high",
-            "confidence": 0.9,
-            "last_seen": NOW - timedelta(minutes=5),
-            "custom_field": "hello",
-        }]
+        alerts = [
+            {
+                "severity": "high",
+                "confidence": 0.9,
+                "last_seen": NOW - timedelta(minutes=5),
+                "custom_field": "hello",
+            }
+        ]
         ranked = rank_alerts(alerts, NOW)
         assert ranked[0]["custom_field"] == "hello"
 
     def test_rank_alerts_adds_risk_fields(self):
-        alerts = [{
-            "severity": "high",
-            "confidence": 0.9,
-            "last_seen": NOW - timedelta(minutes=5),
-        }]
+        alerts = [
+            {
+                "severity": "high",
+                "confidence": 0.9,
+                "last_seen": NOW - timedelta(minutes=5),
+            }
+        ]
         ranked = rank_alerts(alerts, NOW)
         assert "risk_score" in ranked[0]
         assert "risk_level" in ranked[0]
         assert "risk_breakdown" in ranked[0]
 
     def test_rank_alerts_breakdown_is_dict(self):
-        alerts = [{
-            "severity": "medium",
-            "confidence": 0.8,
-            "last_seen": NOW - timedelta(minutes=5),
-        }]
+        alerts = [
+            {
+                "severity": "medium",
+                "confidence": 0.8,
+                "last_seen": NOW - timedelta(minutes=5),
+            }
+        ]
         ranked = rank_alerts(alerts, NOW)
         assert isinstance(ranked[0]["risk_breakdown"], dict)
 
@@ -991,6 +1069,7 @@ class TestEdgeCases:
 # ──────────────────────────────────────────────────────────────────────
 # 14. COMBINED / INTEGRATION
 # ──────────────────────────────────────────────────────────────────────
+
 
 class TestCombinedIntegration:
     def test_critical_attack_chain_recent(self):
@@ -1036,14 +1115,23 @@ class TestCombinedIntegration:
 
     def test_batch_ranking_mixed(self):
         alerts = [
-            {"severity": "critical", "confidence": 0.9,
-             "last_seen": NOW - timedelta(minutes=2)},
-            {"severity": "low", "confidence": 0.3,
-             "last_seen": NOW - timedelta(days=5)},
-            {"severity": "high", "confidence": 0.8,
-             "asset_criticality": "critical",
-             "correlated_alerts": 5,
-             "last_seen": NOW - timedelta(minutes=10)},
+            {
+                "severity": "critical",
+                "confidence": 0.9,
+                "last_seen": NOW - timedelta(minutes=2),
+            },
+            {
+                "severity": "low",
+                "confidence": 0.3,
+                "last_seen": NOW - timedelta(days=5),
+            },
+            {
+                "severity": "high",
+                "confidence": 0.8,
+                "asset_criticality": "critical",
+                "correlated_alerts": 5,
+                "last_seen": NOW - timedelta(minutes=10),
+            },
         ]
         ranked = rank_alerts(alerts, NOW)
         assert ranked[0]["severity"] == "critical"

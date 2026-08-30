@@ -1,14 +1,20 @@
 """Investigation API - attack chain reconstruction for an alert."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
-from backend.database.models import Alert, AlertEventLink, NetworkConnection, NormalizedEvent
+from backend.database.models import (
+    Alert,
+    AlertEventLink,
+    NetworkConnection,
+    NormalizedEvent,
+)
 from backend.security import require_auth
 
 router = APIRouter(
@@ -40,7 +46,7 @@ def process_tree(
         return build_process_tree(db, evidence_events, org=alert.org or "")
 
     if host:
-        since = datetime.now(timezone.utc) - timedelta(hours=hours)
+        since = datetime.now(UTC) - timedelta(hours=hours)
         events = db.scalars(
             select(NormalizedEvent)
             .where(
@@ -145,13 +151,15 @@ def investigate(alert_id: int, db: Session = Depends(get_db)):
             }
             for s in similar
         ]
-    except Exception:  # noqa: BLE001
+    except Exception:
         similar_incidents = []
 
     # Network context: connections around the alert window
     if alert.mitre_id == "T1046":
         conns = db.scalars(
-            select(NetworkConnection).order_by(NetworkConnection.observed_at.desc()).limit(50)
+            select(NetworkConnection)
+            .order_by(NetworkConnection.observed_at.desc())
+            .limit(50)
         ).all()
         network = [c.to_dict() for c in conns]
     else:

@@ -6,17 +6,17 @@ Both report types derive their content from the live database:
 * Technical Report - evidence, event timeline, MITRE ATT&CK mapping,
   recommendations.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.analyzers.dashboard import (
     alert_timeline,
     attack_stats,
-    compute_security_score,
     dashboard_summary,
     event_timeline,
     severity_distribution,
@@ -66,7 +66,7 @@ def executive_context(session: Session) -> dict:
 
     return {
         "title": "Executive Security Report",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "period": "Last 24 hours",
         "security_score": score,
         "risk_level": label,
@@ -97,7 +97,7 @@ def technical_context(session: Session) -> dict:
 
     return {
         "title": "Technical Security Report",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "alerts": alert_details,
         "event_timeline": event_timeline(session),
         "alert_timeline": alert_timeline(session),

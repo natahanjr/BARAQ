@@ -8,6 +8,7 @@ Regression target: v1 produced questionable alerts for python runs;
 this detector must explain process / path / user / host / parent /
 command line where available.
 """
+
 from __future__ import annotations
 
 from backend.detection.context import DetectionContext
@@ -17,11 +18,23 @@ from backend.detection.registry import Detector
 from backend.telemetry.contract import EVENT
 
 _USER_WRITABLE_MARKERS = (
-    "\\users\\", "/home/", "\\temp\\", "/tmp", "/var/tmp", "/dev/shm",
-    "/run/user", "appdata\\local\\temp", "\\appdata\\",
+    "\\users\\",
+    "/home/",
+    "\\temp\\",
+    "/tmp",
+    "/var/tmp",
+    "/dev/shm",
+    "/run/user",
+    "appdata\\local\\temp",
+    "\\appdata\\",
 )
 _SYSTEM_MARKERS = (
-    "\\windows\\system32", "\\windows\\", "/usr/", "/opt/", "/lib", "/bin",
+    "\\windows\\system32",
+    "\\windows\\",
+    "/usr/",
+    "/opt/",
+    "/lib",
+    "/bin",
     "/sbin",
 )
 
@@ -54,7 +67,9 @@ class PythonWritablePathDetector(Detector):
     enabled = True
     supported_event_types = ("process",)
 
-    def evaluate(self, event: EVENT, context: DetectionContext | None = None) -> DETECTION | None:
+    def evaluate(
+        self, event: EVENT, context: DetectionContext | None = None
+    ) -> DETECTION | None:
         proc = event.process or {}
         name = str(proc.get("name") or event.facts.get("process_name") or "")
         if not _is_python(name):
@@ -84,7 +99,10 @@ class PythonWritablePathDetector(Detector):
             or ""
         )
 
-        in_temp = any(m in lowered for m in ("\\temp\\", "/tmp", "/var/tmp", "appdata\\local\\temp"))
+        in_temp = any(
+            m in lowered
+            for m in ("\\temp\\", "/tmp", "/var/tmp", "appdata\\local\\temp")
+        )
         confidence = min(0.85, 0.70 + (0.10 if in_temp else 0.05))
 
         evidence = [

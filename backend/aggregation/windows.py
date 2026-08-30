@@ -6,6 +6,7 @@ is used: an alert joins a live group only when it lands within the family
 window of the group's last_seen. 10:00 + 10:10 + 10:20 with a 30-minute
 window can be one group; 10:00 + 11:30 never stays in the same group.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta

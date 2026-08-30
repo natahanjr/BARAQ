@@ -15,12 +15,13 @@ After this revision, model changes must ship as real, reviewed migrations:
     venv\\Scripts\\python -m alembic revision --autogenerate -m "<change>"
 review the generated file, then ``alembic upgrade head``.
 """
+
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from alembic import op  # noqa: E402
+from alembic import op
 
 revision = "ac765816b06d"
 down_revision = None
@@ -38,4 +39,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Baseline has nothing to undo: prior deployments predate alembic."""
-    pass  # noqa: B010

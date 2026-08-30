@@ -8,11 +8,12 @@ titles. Technique transitions are only claimed for same-family pairs
 therefore keeps exactly SAME_USER / SAME_SOURCE / TEMPORAL /
 DESTINATION_RELATION / LATERAL_MOVEMENT.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
 
-import backend.config as config
+from backend import config
 from backend.correlation.contract import (
     EDGE_TYPES,
     is_progression,
@@ -97,9 +98,11 @@ def pair_relationships(
     if shared_dests:
         types.append("NETWORK_RELATION")
 
-    temporal = window_check(
-        earlier["first_seen"], later["first_seen"], window_key
-    ) if within_window is None else within_window
+    temporal = (
+        window_check(earlier["first_seen"], later["first_seen"], window_key)
+        if within_window is None
+        else within_window
+    )
     if temporal:
         types.append("TEMPORAL")
 

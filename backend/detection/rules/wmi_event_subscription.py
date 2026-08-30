@@ -4,10 +4,11 @@ Flags command lines that create WMI event subscriptions
 (EventFilter + EventConsumer + FilterToConsumerBinding) to run a payload
 when a defined event fires - a stealthy persistence technique.
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from backend.detection.rules.base import BaseRule, DetectionResult
 
@@ -39,7 +40,7 @@ class WmiEventSubscriptionRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _WMI_SUB.search(cmdline):

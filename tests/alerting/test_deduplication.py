@@ -1,10 +1,10 @@
 """Alert deduplication tests (spec 3.8-3.10, 3.44-3.47)."""
+
 from __future__ import annotations
 
 from datetime import timedelta
 
 from backend.alerting.engine import process_detection
-
 from tests.alerting.helpers import T0, detection, stored_alerts, stored_occurrences
 
 

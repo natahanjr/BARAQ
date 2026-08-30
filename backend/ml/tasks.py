@@ -4,6 +4,7 @@ Training blocks the API for seconds; scheduling it in a daemon thread keeps
 ``POST /api/system/ml/train`` responsive. A non-blocking lock guarantees a
 single training run at a time; ``training_active()`` feeds ``/ml/status``.
 """
+
 from __future__ import annotations
 
 import logging
@@ -17,7 +18,9 @@ logger = logging.getLogger("baraq.ml.tasks")
 _train_lock = threading.Lock()
 
 
-def train_in_background(hours: int | None = None, validate: bool = True, force: bool = False) -> bool:
+def train_in_background(
+    hours: int | None = None, validate: bool = True, force: bool = False
+) -> bool:
     """Start a background training job; False if one is already running.
 
     ``hours=None`` trains on the FULL collected history (no sample window).
@@ -32,7 +35,7 @@ def train_in_background(hours: int | None = None, validate: bool = True, force: 
                 db, hours=hours, validate=validate and not force
             )
             logger.info("Background ML training finished: %s", result.get("status"))
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("Background ML training failed")
         finally:
             db.close()

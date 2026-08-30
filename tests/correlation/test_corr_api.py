@@ -1,11 +1,11 @@
 """Phase 5 API tests (spec 5.52-5.58, 5.61, 5.62)."""
-import backend.config as config
+
 from fastapi.testclient import TestClient
 
+from backend import config
 from backend.api import correlations
 from backend.correlation.engine import correlate
 from backend.main import app
-
 from tests.correlation.helpers import (
     CORR_T0,
     canonical_specs,
@@ -46,8 +46,13 @@ def test_list_filters(db):
     with client() as c:
         assert c.get(API, params={"status": "ACTIVE"}).json()["total"] == 1
         assert c.get(API, params={"status": "CLOSED"}).json()["total"] == 0
-        assert c.get(API, params={"correlation_type": "LATERAL_MOVEMENT"}).json()["total"] == 1
-        assert c.get(API, params={"correlation_type": "MULTI_STAGE"}).json()["total"] == 0
+        assert (
+            c.get(API, params={"correlation_type": "LATERAL_MOVEMENT"}).json()["total"]
+            == 1
+        )
+        assert (
+            c.get(API, params={"correlation_type": "MULTI_STAGE"}).json()["total"] == 0
+        )
         assert c.get(API, params={"host": "10.0.0.7"}).json()["total"] == 1
         assert c.get(API, params={"user": "u-r1"}).json()["total"] == 1
         assert c.get(API, params={"source_ip": "198.51.100.9"}).json()["total"] == 1

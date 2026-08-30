@@ -23,7 +23,9 @@ _SECRET_REGEX = re.compile(
     r"(?:=|\s*[:=]\s*|\s+)(?:\"|')?([A-Za-z0-9_.\\/@:+-]{3,64})"
 )
 _EMAIL_REGEX = re.compile(r"\b([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b")
-_DOMAIN_REGEX = re.compile(r"\b((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,})\b")
+_DOMAIN_REGEX = re.compile(
+    r"\b((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,})\b"
+)
 _SECRET_VALUE_REGEX = re.compile(r"(?i)([A-Za-z0-9._\\/@:+-]{8,64})")
 
 
@@ -45,7 +47,7 @@ class Pseudonymizer:
 
     # ------------------------------------------------------------------
     def _token(self, entity: str) -> int:
-        key = f"{self._salt}::{self.collection_id}".encode("utf-8")
+        key = f"{self._salt}::{self.collection_id}".encode()
         digest = hmac.new(key, entity.encode("utf-8"), hashlib.sha256).hexdigest()
         return int(digest[:12], 16)
 
@@ -111,7 +113,11 @@ class Pseudonymizer:
         text = self._redact(text)
         text = _EMAIL_REGEX.sub(lambda m: self._map_email(m.group(0)), text)
         text = _DOMAIN_REGEX.sub(
-            lambda m: self._map_domain(m.group(0)) if not _is_internal_ip(m.group(0)) else m.group(0),
+            lambda m: (
+                self._map_domain(m.group(0))
+                if not _is_internal_ip(m.group(0))
+                else m.group(0)
+            ),
             text,
         )
         return text

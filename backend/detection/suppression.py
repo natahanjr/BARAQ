@@ -5,10 +5,11 @@ An analyst declares that a detection is expected behaviour within a scope
 before persisting a finding: a matching active rule means the finding is
 annotated and dropped instead of becoming an alert.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -34,7 +35,7 @@ def find_matching(
     Matching is exact on rule, host and user, with ``*`` wildcards; a rule
     applies only while ``expires_at`` is unset or in the future.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     rules = session.scalars(
         select(SuppressionRule).where(SuppressionRule.org == org)
     ).all()
@@ -70,7 +71,7 @@ def create(
         created_by=created_by,
         org=org,
         expires_at=(
-            datetime.now(timezone.utc) + timedelta(hours=max(0.0, expires_hours))
+            datetime.now(UTC) + timedelta(hours=max(0.0, expires_hours))
             if expires_hours is not None
             else None
         ),
@@ -80,15 +81,21 @@ def create(
     session.refresh(item)
     logger.info(
         "Suppression rule #%s: rule=%s host=%s user=%s expires=%s",
-        item.id, item.rule, item.host, item.user, item.expires_at,
+        item.id,
+        item.rule,
+        item.host,
+        item.user,
+        item.expires_at,
     )
     return item
 
 
-def list_rules(session: Session, org: str = "", include_expired: bool = False) -> list[SuppressionRule]:
+def list_rules(
+    session: Session, org: str = "", include_expired: bool = False
+) -> list[SuppressionRule]:
     stmt = select(SuppressionRule).where(SuppressionRule.org == org)
     if not include_expired:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stmt = stmt.where(
             (SuppressionRule.expires_at.is_(None)) | (SuppressionRule.expires_at > now)
         )
@@ -107,10 +114,11 @@ def delete(session: Session, rule_id: int, org: str = "") -> bool:
 
 def prune_expired(session: Session) -> int:
     """Delete expired suppression rules (housekeeping on scheduler cycles)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expired = session.scalars(
-        select(SuppressionRule).where(SuppressionRule.expires_at.isnot(None),
-                                      SuppressionRule.expires_at <= now)
+        select(SuppressionRule).where(
+            SuppressionRule.expires_at.isnot(None), SuppressionRule.expires_at <= now
+        )
     ).all()
     for item in expired:
         session.delete(item)

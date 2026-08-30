@@ -50,22 +50,35 @@ def _is_registry_event(ev: NormalizedEvent) -> bool:
 
 def incident_events(session, incident: Incident) -> list[NormalizedEvent]:
     """All events linked to the incident through its alerts (de-duplicated)."""
-    ids = set(session.scalars(
-        select(AlertEventLink.event_id)
-        .join(IncidentAlertLink, IncidentAlertLink.alert_id == AlertEventLink.alert_id)
-        .where(IncidentAlertLink.incident_id == incident.id)
-    ).all())
+    ids = set(
+        session.scalars(
+            select(AlertEventLink.event_id)
+            .join(
+                IncidentAlertLink, IncidentAlertLink.alert_id == AlertEventLink.alert_id
+            )
+            .where(IncidentAlertLink.incident_id == incident.id)
+        ).all()
+    )
     if not ids:
         return []
     return session.scalars(
-        select(NormalizedEvent).where(NormalizedEvent.id.in_(list(ids))).limit(MAX_EVENTS)
+        select(NormalizedEvent)
+        .where(NormalizedEvent.id.in_(list(ids)))
+        .limit(MAX_EVENTS)
     ).all()
 
 
 def _file_names(events: list[NormalizedEvent]) -> list[str]:
     names = set()
     for ev in events:
-        for key in ("target_filename", "file_path", "image_path", "new_process", "NewProcessName", "Image"):
+        for key in (
+            "target_filename",
+            "file_path",
+            "image_path",
+            "new_process",
+            "NewProcessName",
+            "Image",
+        ):
             val = _fact(ev, key)
             if val:
                 names.add(val.rsplit("\\", 1)[-1])
@@ -76,7 +89,13 @@ def _file_names(events: list[NormalizedEvent]) -> list[str]:
 def _process_names(events: list[NormalizedEvent]) -> list[str]:
     names = set()
     for ev in events:
-        for key in ("new_process", "NewProcessName", "Image", "image_path", "process_name"):
+        for key in (
+            "new_process",
+            "NewProcessName",
+            "Image",
+            "image_path",
+            "process_name",
+        ):
             val = _fact(ev, key)
             if val:
                 names.add(val.rsplit("\\", 1)[-1])
@@ -97,13 +116,15 @@ def _network_events(events: list[NormalizedEvent]) -> list[dict]:
         if not _is_network_event(ev) or ev.id in seen:
             continue
         seen.add(ev.id)
-        out.append({
-            "event_id": ev.id,
-            "ts": ev.timestamp.isoformat() if ev.timestamp else None,
-            "remote_ip": _fact(ev, "remote_ip", "dest_ip", "destination_ip"),
-            "local_ip": _fact(ev, "local_ip", "source_ip"),
-            "message": (ev.message or "")[:160],
-        })
+        out.append(
+            {
+                "event_id": ev.id,
+                "ts": ev.timestamp.isoformat() if ev.timestamp else None,
+                "remote_ip": _fact(ev, "remote_ip", "dest_ip", "destination_ip"),
+                "local_ip": _fact(ev, "local_ip", "source_ip"),
+                "message": (ev.message or "")[:160],
+            }
+        )
     return out[:50]
 
 
@@ -112,12 +133,14 @@ def _registry_events(events: list[NormalizedEvent]) -> list[dict]:
     for ev in events:
         if not _is_registry_event(ev):
             continue
-        out.append({
-            "event_id": ev.id,
-            "ts": ev.timestamp.isoformat() if ev.timestamp else None,
-            "target": _fact(ev, "target_object", "object"),
-            "message": (ev.message or "")[:160],
-        })
+        out.append(
+            {
+                "event_id": ev.id,
+                "ts": ev.timestamp.isoformat() if ev.timestamp else None,
+                "target": _fact(ev, "target_object", "object"),
+                "message": (ev.message or "")[:160],
+            }
+        )
     return out[:50]
 
 
@@ -127,13 +150,31 @@ def _six_w(session, incident: Incident, events: list[NormalizedEvent]) -> dict:
     hosts = sorted({ev.host for ev in events if ev.host and ev.host not in ("-", "")})
     timestamps = [ev.timestamp for ev in events if ev.timestamp]
     categories = Counter(
-        "process" if ev.event_id == 4688 else
-        "network" if _is_network_event(ev) else
-        "registry" if _is_registry_event(ev) else
-        "auth" if ev.event_id in (4624, 4625, 4672) else
-        "script" if ev.event_id in (4103, 4104) else
-        "persistence" if ev.event_id in (7045, 4698) else
-        "other"
+        (
+            "process"
+            if ev.event_id == 4688
+            else (
+                "network"
+                if _is_network_event(ev)
+                else (
+                    "registry"
+                    if _is_registry_event(ev)
+                    else (
+                        "auth"
+                        if ev.event_id in (4624, 4625, 4672)
+                        else (
+                            "script"
+                            if ev.event_id in (4103, 4104)
+                            else (
+                                "persistence"
+                                if ev.event_id in (7045, 4698)
+                                else "other"
+                            )
+                        )
+                    )
+                )
+            )
+        )
         for ev in events
     )
 
@@ -166,7 +207,11 @@ def _six_w(session, incident: Incident, events: list[NormalizedEvent]) -> dict:
         "when": {
             "first": min(timestamps).isoformat() if timestamps else None,
             "last": max(timestamps).isoformat() if timestamps else None,
-            "span_seconds": round((max(timestamps) - min(timestamps)).total_seconds(), 1) if len(timestamps) > 1 else 0,
+            "span_seconds": (
+                round((max(timestamps) - min(timestamps)).total_seconds(), 1)
+                if len(timestamps) > 1
+                else 0
+            ),
         },
         "where": hosts[:10],
         "how": steps[:10],
@@ -178,21 +223,29 @@ def _six_w(session, incident: Incident, events: list[NormalizedEvent]) -> dict:
     }
 
 
-def enrich_incident(session, incident: Incident, window_minutes: int = ENRICHMENT_WINDOW_MINUTES) -> dict:
+def enrich_incident(
+    session, incident: Incident, window_minutes: int = ENRICHMENT_WINDOW_MINUTES
+) -> dict:
     """Full investigation payload for an incident."""
     events = incident_events(session, incident)
-    tree = build_process_tree(session, events, org=incident.org or "", window_minutes=window_minutes)
+    tree = build_process_tree(
+        session, events, org=incident.org or "", window_minutes=window_minutes
+    )
 
     evidence = []
-    for alert in sorted({l.alert for l in incident.alerts if l.alert}, key=lambda a: a.id):
-        evidence.append({
-            "alert_id": alert.id,
-            "name": alert.name,
-            "severity": alert.severity,
-            "confidence": alert.confidence,
-            "mitre_id": alert.mitre_id,
-            "evidence": (alert.evidence or "")[:600],
-        })
+    for alert in sorted(
+        {l.alert for l in incident.alerts if l.alert}, key=lambda a: a.id
+    ):
+        evidence.append(
+            {
+                "alert_id": alert.id,
+                "name": alert.name,
+                "severity": alert.severity,
+                "confidence": alert.confidence,
+                "mitre_id": alert.mitre_id,
+                "evidence": (alert.evidence or "")[:600],
+            }
+        )
 
     files = _file_names(events)
     processes = _process_names(events)
@@ -206,15 +259,22 @@ def enrich_incident(session, incident: Incident, window_minutes: int = ENRICHMEN
     from backend.risk.dynamic import adjust_risk
 
     base_risk = float(incident.risk_score or 0) or max(
-        (float(a.risk_score or 0) for a in incident.alerts
-         if a.alert and a.alert.risk_score),
+        (
+            float(a.risk_score or 0)
+            for a in incident.alerts
+            if a.alert and a.alert.risk_score
+        ),
         default=0.0,
     )
     facts = assess_events(events, rule="")
     risk = adjust_risk(base_risk, facts, events, session=session)
     rc = root_cause(
-        session, incident=incident, events=events,
-        facts=facts, risk=risk, tree=tree,
+        session,
+        incident=incident,
+        events=events,
+        facts=facts,
+        risk=risk,
+        tree=tree,
     )
 
     return {

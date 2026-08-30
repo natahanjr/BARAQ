@@ -18,6 +18,7 @@ Behaviour:
     contents of the target database) and validates archives with
     ``pg_restore --list`` first.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,7 +27,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -72,7 +73,7 @@ def find_pg_binary(tool: str) -> str:
 
 
 def archive_base(dialect: str) -> str:
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     return f"baraq_{dialect}_{ts}"
 
 
@@ -142,7 +143,9 @@ def run_or_die(cmd: list[str]) -> None:
         )
 
 
-def backup_db(url: str, backup_dir: Path, *, keep: int = 10, encrypt: bool = False) -> Path:
+def backup_db(
+    url: str, backup_dir: Path, *, keep: int = 10, encrypt: bool = False
+) -> Path:
     backup_dir.mkdir(parents=True, exist_ok=True)
     archive = backup_dir / (archive_base("postgres") + (".enc" if encrypt else ".dump"))
 
@@ -150,8 +153,14 @@ def backup_db(url: str, backup_dir: Path, *, keep: int = 10, encrypt: bool = Fal
     plain = backup_dir / (archive_base("postgres") + ".dump")
     run_or_die(
         [
-            pg_dump, "-Fc", "-Z", "9", "--no-owner",
-            "--file", str(plain), pg_url_for_tools(url),
+            pg_dump,
+            "-Fc",
+            "-Z",
+            "9",
+            "--no-owner",
+            "--file",
+            str(plain),
+            pg_url_for_tools(url),
         ]
     )
     data = plain.read_bytes()
@@ -200,8 +209,13 @@ def restore_db(url: str, archive: Path, *, yes: bool = False) -> None:
         pg_restore = find_pg_binary("pg_restore")
         run_or_die(
             [
-                pg_restore, "--clean", "--if-exists", "--no-owner",
-                "--dbname", pg_url_for_tools(url), str(body_path),
+                pg_restore,
+                "--clean",
+                "--if-exists",
+                "--no-owner",
+                "--dbname",
+                pg_url_for_tools(url),
+                str(body_path),
             ]
         )
     finally:
@@ -226,9 +240,15 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_bk = sub.add_parser("backup", help="Create a consistent database archive")
-    p_bk.add_argument("--keep", type=int, default=10, help="archives to retain (default 10)")
-    p_bk.add_argument("--encrypt", action="store_true", help="AES-GCM encrypt the archive")
-    p_bk.add_argument("--dir", default=None, help="backup directory (default ./backups)")
+    p_bk.add_argument(
+        "--keep", type=int, default=10, help="archives to retain (default 10)"
+    )
+    p_bk.add_argument(
+        "--encrypt", action="store_true", help="AES-GCM encrypt the archive"
+    )
+    p_bk.add_argument(
+        "--dir", default=None, help="backup directory (default ./backups)"
+    )
 
     p_ls = sub.add_parser("list", help="List backups with verification status")
     p_ls.add_argument("--dir", default=None)

@@ -1,13 +1,14 @@
 """Phase 6 calculator tests (spec 6.30-6.34): pure, deterministic, bounded."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from backend.risk.calculator import calculate_risk
 
-T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=UTC)
 
 
 def _factor(
@@ -23,16 +24,24 @@ def _factor(
     return {
         "factor_id": factor_id,
         "factor_type": "TEST",
-        "source_type": "test", "source_id": "t1",
-        "value": value, "weight": weight, "origin": origin,
-        "created_at": created_at, "expires_at": expires_at,
-        "reason": reason, "evidence": {"test": True},
+        "source_type": "test",
+        "source_id": "t1",
+        "value": value,
+        "weight": weight,
+        "origin": origin,
+        "created_at": created_at,
+        "expires_at": expires_at,
+        "reason": reason,
+        "evidence": {"test": True},
     }
 
 
 def test_deterministic_same_inputs_same_output():
     now = T0
-    factors = [_factor("RF010_BEHAVIOR_GROUP", 10.0), _factor("RF009_ALERT_SEVERITY", 6.0)]
+    factors = [
+        _factor("RF010_BEHAVIOR_GROUP", 10.0),
+        _factor("RF009_ALERT_SEVERITY", 6.0),
+    ]
     first = calculate_risk(factors, now)
     second = calculate_risk(factors, now)
     assert first.final_score == second.final_score == 16.0
@@ -48,7 +57,9 @@ def test_score_is_bounded_at_100():
 
 def test_score_is_bounded_at_0():
     now = T0
-    factors = [_factor("RF010_BEHAVIOR_GROUP", 10.0, created_at=T0 - timedelta(days=400))]
+    factors = [
+        _factor("RF010_BEHAVIOR_GROUP", 10.0, created_at=T0 - timedelta(days=400))
+    ]
     calc = calculate_risk(factors, now)
     assert calc.final_score == 0.0
 

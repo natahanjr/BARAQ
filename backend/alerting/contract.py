@@ -10,10 +10,11 @@ Alerts always retain a reference to their originating detection(s) and the
 full evidence chain. Alert-level severity and confidence inherit from the
 detection (spec 3.18/3.19) - never derived from occurrence counts.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 ALERT_SEVERITIES = ("low", "medium", "high", "critical")
 
@@ -37,7 +38,7 @@ FEEDBACK_TYPES = (
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @dataclass(frozen=True)
@@ -129,7 +130,9 @@ class ALERT:
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "assigned_to": self.assigned_to,
             "assigned_at": self.assigned_at.isoformat() if self.assigned_at else None,
-            "acknowledged_at": self.acknowledged_at.isoformat() if self.acknowledged_at else None,
+            "acknowledged_at": (
+                self.acknowledged_at.isoformat() if self.acknowledged_at else None
+            ),
             "acknowledged_by": self.acknowledged_by,
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
             "feedback": self.feedback,

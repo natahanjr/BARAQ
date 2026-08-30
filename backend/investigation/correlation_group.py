@@ -20,10 +20,11 @@ A candidate incident must match the host and at least one entity
 dimension (user or root process) within the window to absorb an alert -
 unrelated campaigns never merge.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -47,7 +48,7 @@ def group_key(session, alert, now: datetime | None = None) -> str:
     lookups agree on boundaries; the technique/rule/root dimensions are
     intentionally absent (they are the *reason* alerts differ).
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     bucket = int(now.timestamp() // (GROUP_WINDOW_MINUTES * 60))
     user = _evidence_user(alert) or "?"
     host = alert.host or "?"
@@ -75,7 +76,7 @@ def find_group_incident(
         return None
     host = alert.host
     user = _evidence_user(alert) or "?"
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     ts_min = now - timedelta(minutes=window_minutes)
 
     q = select(Incident).where(

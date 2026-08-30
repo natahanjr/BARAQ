@@ -1,10 +1,9 @@
 """Process collector using psutil: running processes + new process detection."""
+
 from __future__ import annotations
 
 import logging
-import os
-import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.collectors.base import BaseCollector
 
@@ -48,7 +47,7 @@ class ProcessCollector(BaseCollector):
                 "command_line": info.get("cmdline") or [],
                 "user": info.get("username") or "",
                 "create_time": info.get("create_time") or 0,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             return None
@@ -59,7 +58,9 @@ class ProcessCollector(BaseCollector):
         records: list[dict] = []
         current_pids: set[int] = set()
 
-        for proc in psutil.process_iter(["pid", "ppid", "name", "exe", "cmdline", "username", "create_time"]):
+        for proc in psutil.process_iter(
+            ["pid", "ppid", "name", "exe", "cmdline", "username", "create_time"]
+        ):
             info = self._proc_info(proc)
             if not info:
                 continue
@@ -67,7 +68,11 @@ class ProcessCollector(BaseCollector):
             current_pids.add(pid)
             info["is_new"] = self._first_run or pid not in self._known_pids
             info["raw"] = {
-                "cmdline": " ".join(info.pop("command_line"))[:4096] if info.get("command_line") else "",
+                "cmdline": (
+                    " ".join(info.pop("command_line"))[:4096]
+                    if info.get("command_line")
+                    else ""
+                ),
             }
             records.append(info)
 

@@ -1,7 +1,8 @@
 """Tests for the vulnerability scanner module (version logic, CVE matching, rule)."""
+
 from __future__ import annotations
 
-import json
+from datetime import UTC
 
 import pytest
 
@@ -70,10 +71,29 @@ class TestCveMatching:
                 {"name": "Some App", "version": "1.0"},
             ]
         }
-        findings = scan_inventory(inventory, [
-            {"cve_id": "CVE-A", "match": "log4j", "version_lt": "2.15.0", "cvss": 6.0, "severity": "medium", "description": "", "remediation": ""},
-            {"cve_id": "CVE-B", "match": "log4j", "version_lt": "2.15.0", "cvss": 10.0, "severity": "critical", "description": "", "remediation": ""},
-        ])
+        findings = scan_inventory(
+            inventory,
+            [
+                {
+                    "cve_id": "CVE-A",
+                    "match": "log4j",
+                    "version_lt": "2.15.0",
+                    "cvss": 6.0,
+                    "severity": "medium",
+                    "description": "",
+                    "remediation": "",
+                },
+                {
+                    "cve_id": "CVE-B",
+                    "match": "log4j",
+                    "version_lt": "2.15.0",
+                    "cvss": 10.0,
+                    "severity": "critical",
+                    "description": "",
+                    "remediation": "",
+                },
+            ],
+        )
         assert [f["cve_id"] for f in findings] == ["CVE-B", "CVE-A"]
 
 
@@ -87,15 +107,22 @@ class TestSeverityMapping:
 
 class TestVulnerabilityRule:
     def _seed(self):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         db = SessionLocal()
-        db.add(VulnFinding(
-            host="labhost", product="Apache Log4j Core", version="2.14.1",
-            cve_id="CVE-2021-44228", cvss=10.0, severity="critical",
-            description="Log4Shell", remediation="upgrade",
-            found_at=datetime.now(timezone.utc),
-        ))
+        db.add(
+            VulnFinding(
+                host="labhost",
+                product="Apache Log4j Core",
+                version="2.14.1",
+                cve_id="CVE-2021-44228",
+                cvss=10.0,
+                severity="critical",
+                description="Log4Shell",
+                remediation="upgrade",
+                found_at=datetime.now(UTC),
+            )
+        )
         db.commit()
         db.close()
 

@@ -10,16 +10,17 @@ Risk levels:  LOW (<40) · MEDIUM (40-64) · HIGH (65-84) · CRITICAL (>=85)
 The engine is deliberately lightweight: pure math over existing signals, so
 it adds no runtime cost on the target laptop.
 """
+
 from __future__ import annotations
 
 import logging
 
 from backend.config import (
+    ML_DETECTION_WEIGHT,
+    ML_RULE_WEIGHT,
     RISK_LEVEL_CRITICAL,
     RISK_LEVEL_HIGH,
     RISK_LEVEL_MEDIUM,
-    ML_RULE_WEIGHT,
-    ML_DETECTION_WEIGHT,
 )
 
 logger = logging.getLogger("baraq.risk")
@@ -43,7 +44,11 @@ def ml_anomaly_score(events: list) -> float:
     """
     scores = []
     for ev in events:
-        value = ev.get("ml_score") if isinstance(ev, dict) else getattr(ev, "ml_score", None)
+        value = (
+            ev.get("ml_score")
+            if isinstance(ev, dict)
+            else getattr(ev, "ml_score", None)
+        )
         if value is not None:
             scores.append(float(value))
     if not scores:
@@ -61,8 +66,12 @@ def hybrid_risk(
 ) -> tuple[float, str]:
     """Fuse rule + ML signals into (final_risk_0_100, risk_level)."""
     final, _, _, level = hybrid_parts(
-        severity, confidence, event_count, anomaly_scores,
-        rule_weight=rule_weight, ml_weight=ml_weight,
+        severity,
+        confidence,
+        event_count,
+        anomaly_scores,
+        rule_weight=rule_weight,
+        ml_weight=ml_weight,
     )
     return final, level
 

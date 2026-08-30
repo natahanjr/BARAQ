@@ -13,13 +13,14 @@ Usage:
 Requires a running BARAQ server with admin credentials. Prints the precision /
 recall / FPR summary for the real-baseline run.
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 
 
 def _post(base_url: str, api_key: str, path: str, params: str) -> dict:
@@ -56,14 +57,18 @@ def main() -> int:
         f"use_real_baseline=true&with_ml={str(not args.no_ml).lower()}"
         f"&randomize={str(args.randomize).lower()}"
     )
-    print(f"[*] Running hold-out evaluation with REAL host-telemetry baseline "
-          f"against {args.base_url} ...")
+    print(
+        f"[*] Running hold-out evaluation with REAL host-telemetry baseline "
+        f"against {args.base_url} ..."
+    )
     result = _post(args.base_url, args.api_key, "/api/evaluation/holdout", params)
 
     summary = result.get("summary") or result
     print(json.dumps(summary, indent=2))
-    print("\n[+] Real-world validation complete. Compare these numbers against the "
-          "synthetic-baseline run (POST /api/evaluation/holdout?use_real_baseline=false).")
+    print(
+        "\n[+] Real-world validation complete. Compare these numbers against the "
+        "synthetic-baseline run (POST /api/evaluation/holdout?use_real_baseline=false)."
+    )
     return 0
 
 

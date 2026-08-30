@@ -22,9 +22,10 @@ never touches alerts, groups, findings, incidents, playbooks or SOAR (6.61),
 refuses the production database by name, and every failure is contained and
 audited as RISK_CALCULATION_FAILED (6.75).
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from time import perf_counter
 
 from sqlalchemy import func, select
@@ -33,17 +34,15 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-import backend.config as config
+from backend import config
 from backend.risk import audit as risk_audit
 from backend.risk.calculator import (
     calculate_risk,
-    severity_for,
-    state_for,
     thresholds_crossed,
     trend_for,
     utcnow,
 )
-from backend.risk.contract import EVIDENCE_KINDS, ENTITY_TYPES
+from backend.risk.contract import ENTITY_TYPES, EVIDENCE_KINDS
 from backend.risk.models import (
     EntityRiskV2,
     EntityRiskV2Event,
@@ -91,15 +90,39 @@ TECHNIQUE_FACTORS: dict[str, str] = {
 TECHNIQUE_FACTOR_DESTINATIONS = ("RF001_EXTERNAL_ACCESS", "RF003_LATERAL_MOVEMENT")
 
 _PRIVATE_PREFIXES = (
-    "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.",
-    "172.22.", "172.23.", "172.24.", "172.25.", "172.26.", "172.27.",
-    "172.28.", "172.29.", "172.30.", "172.31.", "192.168.", "169.254.",
-    "127.", "100.64.", "192.0.0.", "224.", "240.", "0.",
+    "10.",
+    "172.16.",
+    "172.17.",
+    "172.18.",
+    "172.19.",
+    "172.20.",
+    "172.21.",
+    "172.22.",
+    "172.23.",
+    "172.24.",
+    "172.25.",
+    "172.26.",
+    "172.27.",
+    "172.28.",
+    "172.29.",
+    "172.30.",
+    "172.31.",
+    "192.168.",
+    "169.254.",
+    "127.",
+    "100.64.",
+    "192.0.0.",
+    "224.",
+    "240.",
+    "0.",
 )
 
 
 def _ensure_not_production_db() -> None:
-    if not config.V2_ENGINES_ALLOW_PROD and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
+    if (
+        not config.V2_ENGINES_ALLOW_PROD
+        and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME
+    ):
         raise RuntimeError(
             f"risk engine refuses the v1 production database "
             f"({config.PRODUCTION_DB_NAME!r}) by name"
@@ -163,13 +186,11 @@ def get_or_create_risk(
             confidence=1.0,
             trend="UNKNOWN",
             first_seen=now,
-            last_seen=datetime(1970, 1, 1, tzinfo=timezone.utc),
+            last_seen=datetime(1970, 1, 1, tzinfo=UTC),
             created_at=now,
             updated_at=now,
         )
-        stmt = stmt.on_conflict_do_nothing(
-            index_elements=["entity_type", "entity_id"]
-        )
+        stmt = stmt.on_conflict_do_nothing(index_elements=["entity_type", "entity_id"])
         try:
             with db.begin_nested():
                 db.execute(stmt)
@@ -204,7 +225,9 @@ def get_or_create_risk(
     )
 
 
-def risk_for_entity(db: Session, entity_type: str, entity_id: str) -> EntityRiskV2 | None:
+def risk_for_entity(
+    db: Session, entity_type: str, entity_id: str
+) -> EntityRiskV2 | None:
     return db.scalars(
         select(EntityRiskV2).where(
             EntityRiskV2.entity_type == entity_type,
@@ -340,7 +363,9 @@ def _alert_entities(alert: dict) -> list[tuple[str, str]]:
     return targets
 
 
-def apply_alert(db: Session, alert: dict, now: datetime | None = None, actor: str = "system") -> list[str]:
+def apply_alert(
+    db: Session, alert: dict, now: datetime | None = None, actor: str = "system"
+) -> list[str]:
     """Ingest one alert as direct evidence (spec 6.1).
 
     Per entity: one ALERT_SEVERITY tier factor (once per tier, never per
@@ -350,9 +375,7 @@ def apply_alert(db: Session, alert: dict, now: datetime | None = None, actor: st
     _ensure_not_production_db()
     now = now or utcnow()
     severity = str(alert.get("severity", "low")).lower()
-    tier_value = float(
-        config.RISK_ALERT_SEVERITY_CONTRIBUTIONS.get(severity, 1)
-    )
+    tier_value = float(config.RISK_ALERT_SEVERITY_CONTRIBUTIONS.get(severity, 1))
     observed = alert.get("first_seen") or alert.get("last_seen") or now
     detector = alert.get("detector_id") or alert.get("rule") or "unknown"
     alert_id = str(alert.get("alert_id") or alert.get("source_id") or "alert")
@@ -455,7 +478,9 @@ def _group_targets(group: dict) -> dict:
     }
 
 
-def apply_group(db: Session, group: dict, now: datetime | None = None, actor: str = "system") -> list[str]:
+def apply_group(
+    db: Session, group: dict, now: datetime | None = None, actor: str = "system"
+) -> list[str]:
     """Ingest one behavior group (spec 6.1).
 
     A group is a single contribution per member entity - never one per member
@@ -536,7 +561,7 @@ def apply_group(db: Session, group: dict, now: datetime | None = None, actor: st
                     risk = get_or_create_risk(db, "HOST", destination, now=now)
                     hit_hosts[destination] = risk
                     target_host_risks[destination] = risk
-        for host_id, risk in hit_hosts.items():
+        for risk in hit_hosts.values():
             _add_factor(
                 db,
                 risk,
@@ -583,7 +608,9 @@ def apply_group(db: Session, group: dict, now: datetime | None = None, actor: st
                 db, "HOST", destination, now=now
             )
             target_host_risks[destination] = risk
-            risk.last_seen = max(risk.last_seen, observed) if risk.last_seen else observed
+            risk.last_seen = (
+                max(risk.last_seen, observed) if risk.last_seen else observed
+            )
             _add_factor(
                 db,
                 risk,
@@ -618,7 +645,9 @@ def _apply_spread(db: Session, groups: list[dict], now: datetime) -> None:
     """
     membership: dict[str, set[str]] = {}
     for group in groups:
-        group_id = str(group.get("group_id") or group.get("behavior_group_id") or "group")
+        group_id = str(
+            group.get("group_id") or group.get("behavior_group_id") or "group"
+        )
         for entity_type, ids in (
             ("HOST", group.get("hosts") or []),
             ("USER", group.get("users") or []),
@@ -699,7 +728,9 @@ def apply_finding(
                 f"finding {finding_id} ({finding.get('correlation_type', '')})",
                 now,
             )
-            risk.last_seen = max(risk.last_seen, observed) if risk.last_seen else observed
+            risk.last_seen = (
+                max(risk.last_seen, observed) if risk.last_seen else observed
+            )
             risk.correlation_count = (risk.correlation_count or 0) + 1
             _add_factor(
                 db,
@@ -745,9 +776,7 @@ def apply_propagation(
     """
     _ensure_not_production_db()
     now = now or utcnow()
-    weight = float(
-        config.RISK_PROPAGATION_WEIGHTS.get(relationship_type, 0.0)
-    )
+    weight = float(config.RISK_PROPAGATION_WEIGHTS.get(relationship_type, 0.0))
     if weight <= 0:
         raise ValueError(f"unknown propagation relationship {relationship_type!r}")
     risk = get_or_create_risk(db, target_entity_type, target_entity_id, now=now)
@@ -759,7 +788,8 @@ def apply_propagation(
         "propagation",
         f"{relationship_type}:{from_entity}",
         weight,
-        reason=reason or f"contextual propagation from {from_entity} ({relationship_type})",
+        reason=reason
+        or f"contextual propagation from {from_entity} ({relationship_type})",
         evidence=dict(evidence or {}),
         origin="CONTEXTUAL",
         propagation_from=from_entity,
@@ -824,7 +854,9 @@ def _refresh_recency(db: Session, risk: EntityRiskV2, now: datetime) -> None:
         )
 
 
-def expire_factors(db: Session, now: datetime | None = None, actor: str = "system") -> int:
+def expire_factors(
+    db: Session, now: datetime | None = None, actor: str = "system"
+) -> int:
     """Mark every factor past its expiry (6.21); history remains (6.72)."""
     _ensure_not_production_db()
     now = now or utcnow()
@@ -919,7 +951,6 @@ def recalculate_entity(
 
     old_score = risk.score
     old_state = risk.state
-    old_severity = risk.severity
 
     risk.score = calculation.final_score
     risk.severity = calculation.severity
@@ -1057,7 +1088,9 @@ def ingest_evidence(
     return list(dict.fromkeys(affected))
 
 
-def failure_boundary(db: Session, risk_id: str, error: Exception, now: datetime | None = None) -> None:
+def failure_boundary(
+    db: Session, risk_id: str, error: Exception, now: datetime | None = None
+) -> None:
     """Contain a calculation failure (6.75): previous state stays intact."""
     risk_audit.audit(
         db,

@@ -1,15 +1,14 @@
 """Phase 7 incident investigation operations (spec 7.16-7.18, 7.19, 7.17)."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
 from backend.incidents.audit import audit
-from backend.incidents.contract import AUDIT_ACTIONS
-from backend.incidents.lifecycle import can_transition, is_terminal
-from backend.incidents.models import IncidentV2Note, IncidentV2
+from backend.incidents.lifecycle import is_terminal
+from backend.incidents.models import IncidentV2, IncidentV2Note
 
 
 def add_note(
@@ -27,7 +26,9 @@ def add_note(
     if is_terminal(incident.status):
         raise ValueError(f"cannot add note to terminal incident {incident.status!r}")
     if note_id is None:
-        note_id = f"NOTE-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{incident_id[-4:]}"
+        note_id = (
+            f"NOTE-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}-{incident_id[-4:]}"
+        )
     row = IncidentV2Note(
         note_id=note_id,
         incident_id=incident_id,
@@ -43,9 +44,9 @@ def add_note(
         actor=author,
         new_value=note_id,
         reason="analyst note",
-        now=datetime.now(timezone.utc),
+        now=datetime.now(UTC),
     )
-    incident.updated_at = datetime.now(timezone.utc)
+    incident.updated_at = datetime.now(UTC)
     incident.updated_by = author
     db.flush()
     return row
@@ -67,27 +68,40 @@ def assign_incident(
     old_team = incident.assigned_team
     incident.assigned_to = assigned_to
     incident.assigned_team = assigned_team
-    incident.assigned_at = datetime.now(timezone.utc)
-    incident.updated_at = datetime.now(timezone.utc)
+    incident.assigned_at = datetime.now(UTC)
+    incident.updated_at = datetime.now(UTC)
     incident.updated_by = actor
     db.flush()
     if old_to != assigned_to:
         action = "INCIDENT_ASSIGNED" if assigned_to else "INCIDENT_UNASSIGNED"
-        audit(db, incident_id, action, actor=actor, old_value=old_to, new_value=assigned_to, now=datetime.now(timezone.utc))
+        audit(
+            db,
+            incident_id,
+            action,
+            actor=actor,
+            old_value=old_to,
+            new_value=assigned_to,
+            now=datetime.now(UTC),
+        )
     if old_team != assigned_team:
-        audit(db, incident_id, "INCIDENT_TEAM_ASSIGNED", actor=actor, old_value=old_team, new_value=assigned_team, now=datetime.now(timezone.utc))
+        audit(
+            db,
+            incident_id,
+            "INCIDENT_TEAM_ASSIGNED",
+            actor=actor,
+            old_value=old_team,
+            new_value=assigned_team,
+            now=datetime.now(UTC),
+        )
     return {"assigned_to": assigned_to, "assigned_team": assigned_team}
 
 
 def get_timeline(db, incident_id: str) -> list[dict]:
     from backend.incidents.models import (
-        IncidentV2AlertLink,
         IncidentV2AuditEvent,
-        IncidentV2BehaviorGroupLink,
-        IncidentV2CorrelationLink,
-        IncidentV2Evidence,
         IncidentV2Note,
     )
+
     events: list[dict] = []
     for row in db.scalars(
         select(IncidentV2AuditEvent)
@@ -105,7 +119,9 @@ def get_timeline(db, incident_id: str) -> list[dict]:
             }
         )
     for row in db.scalars(
-        select(IncidentV2Note).where(IncidentV2Note.incident_id == incident_id).order_by(IncidentV2Note.note_id)
+        select(IncidentV2Note)
+        .where(IncidentV2Note.incident_id == incident_id)
+        .order_by(IncidentV2Note.note_id)
     ).all():
         events.append(
             {
@@ -118,5 +134,3 @@ def get_timeline(db, incident_id: str) -> list[dict]:
         )
     events.sort(key=lambda e: e.get("created_at") or "")
     return events
-
-

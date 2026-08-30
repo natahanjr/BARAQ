@@ -4,9 +4,10 @@ Compression + distribution + latency. Every rate exposes its sample size;
 raw labeled quality counts come from the evaluation corpus (spec 5.62),
 never a fabricated accuracy percentage.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -30,9 +31,11 @@ def _median(values: list[float]) -> float:
 
 
 def metrics(db: Session, now: datetime | None = None) -> dict:
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     findings = list(
-        db.scalars(select(CorrelationFindingRecord).order_by(CorrelationFindingRecord.id)).all()
+        db.scalars(
+            select(CorrelationFindingRecord).order_by(CorrelationFindingRecord.id)
+        ).all()
     )
     groups_total = db.scalars(select(func.count()).select_from(CorrelationMember)).one()
     edges_total = db.scalars(select(func.count()).select_from(CorrelationEdge)).one()
@@ -46,9 +49,7 @@ def metrics(db: Session, now: datetime | None = None) -> dict:
         rule_id = (event.details or {}).get("rule_id", "unknown")
         rule_distribution[rule_id] = rule_distribution.get(rule_id, 0) + 1
 
-    member_counts = sorted(
-        len(f.member_group_ids or []) for f in findings
-    )
+    member_counts = sorted(len(f.member_group_ids or []) for f in findings)
     confidences = [f.confidence for f in findings]
     latencies = [
         (now - f.created_at).total_seconds() if f.created_at else 0.0 for f in findings
@@ -76,7 +77,9 @@ def metrics(db: Session, now: datetime | None = None) -> dict:
         "median_age_seconds": _median(latencies),
         "rule_distribution": rule_distribution,
         "type_distribution": {
-            correlation_type: sum(1 for f in findings if f.correlation_type == correlation_type)
+            correlation_type: sum(
+                1 for f in findings if f.correlation_type == correlation_type
+            )
             for correlation_type in sorted({f.correlation_type for f in findings})
         },
         "group_reduction_ratio": (

@@ -4,12 +4,11 @@ Deterministic window logic: evaluate the crossing failure event against a
 context seeded with stored failures. Count = stored in window + current
 (if not already stored).
 """
+
 from __future__ import annotations
 
 from backend.detection.context import DetectionContext
 from backend.detection.engine import run_detection
-from backend.detection.registry import default_registry
-
 from tests.detection.helpers import logon_failed, logon_success, seed_events
 
 
@@ -131,7 +130,9 @@ def test_duplicate_batch_idempotent_detection(db):
     seed_events(db, seeded)
     seed_events(db, seeded)  # replay - no-op ingest
     context = DetectionContext(db)
-    findings = [f for f in run_detection(logon_failed(0), context) if f.detector_id == "D002"]
+    findings = [
+        f for f in run_detection(logon_failed(0), context) if f.detector_id == "D002"
+    ]
     assert findings[0].detection_id == evaluate(db, logon_failed(0), []).detection_id
 
 

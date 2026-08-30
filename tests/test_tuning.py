@@ -10,7 +10,6 @@ from backend.detection.tuning import (
     set_tuning,
     thresholds,
 )
-from backend.database.models import DetectionTuning
 
 
 def test_default_tuning_matches_env(db):
@@ -78,7 +77,9 @@ def test_tuning_overrides_env_weights(db):
     db.flush()
     manager = EntityRiskManager(db)
     manager.apply_alert(alert)
-    entity = db.query(EntityRisk).filter_by(entity_kind="host", entity_name="WS-1").one()
+    entity = (
+        db.query(EntityRisk).filter_by(entity_kind="host", entity_name="WS-1").one()
+    )
     assert entity.score == 40.0  # 10 x 4.0 tuning weight
 
 
@@ -153,7 +154,10 @@ def test_tuning_api_endpoints(db):
     r = client.put(
         "/api/rba/tuning",
         headers=headers,
-        json={"rule_risk_weights": {"brute_force": 3.0}, "risk_thresholds": {"high": 55}},
+        json={
+            "rule_risk_weights": {"brute_force": 3.0},
+            "risk_thresholds": {"high": 55},
+        },
     )
     assert r.status_code == 200
     body = r.json()

@@ -4,10 +4,11 @@ Flags processes named after trusted system binaries (svchost, lsass, csrss,
 winlogon, services, ...) whose image path is NOT under C:\\Windows - the
 binary is being copied and renamed to evade analysis and allow-lists.
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -15,9 +16,20 @@ from backend.database.models import NormalizedEvent, ProcessRecord
 from backend.detection.rules.base import BaseRule, DetectionResult
 
 SYSTEM_BINARIES = {
-    "svchost.exe", "lsass.exe", "csrss.exe", "winlogon.exe", "services.exe",
-    "smss.exe", "wininit.exe", "lsm.exe", "spoolsv.exe", "dwm.exe",
-    "taskhostw.exe", "conhost.exe", "explorer.exe", "dllhost.exe",
+    "svchost.exe",
+    "lsass.exe",
+    "csrss.exe",
+    "winlogon.exe",
+    "services.exe",
+    "smss.exe",
+    "wininit.exe",
+    "lsm.exe",
+    "spoolsv.exe",
+    "dwm.exe",
+    "taskhostw.exe",
+    "conhost.exe",
+    "explorer.exe",
+    "dllhost.exe",
 }
 
 # Legitimate homes for these binaries; everything else is suspect.
@@ -50,7 +62,7 @@ class MasqueradingRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(ProcessRecord).where(
                 ProcessRecord.observed_at >= since,

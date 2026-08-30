@@ -1,7 +1,8 @@
 """Dashboard analytics - KPI computation for the SOC dashboard and reports."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -48,7 +49,8 @@ def compute_security_score(
     """Security score 0-100 derived from open alerts (optionally per tenant)."""
     score = 100.0
     stmt = select(Alert.severity, func.count(Alert.id)).where(
-        Alert.status == "open", *_conds(_alert_org(org), _demo_expr(Alert, include_demo))
+        Alert.status == "open",
+        *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
     )
     counts = dict(session.execute(stmt.group_by(Alert.severity)).all())
     for severity, penalty in SECURITY_SCORE_PENALTY.items():
@@ -66,38 +68,53 @@ def dashboard_summary(
     records tagged with that organization. ``include_demo`` shows demo/test
     data alongside production telemetry (console demo mode).
     """
-    total_events = session.scalar(
-        select(func.count(NormalizedEvent.id)).where(
-            *_conds(_event_org(org), _demo_expr(NormalizedEvent, include_demo))
+    total_events = (
+        session.scalar(
+            select(func.count(NormalizedEvent.id)).where(
+                *_conds(_event_org(org), _demo_expr(NormalizedEvent, include_demo))
+            )
         )
-    ) or 0
-    active_alerts = session.scalar(
-        select(func.count(Alert.id)).where(
-            Alert.status == "open",
-            *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
+        or 0
+    )
+    active_alerts = (
+        session.scalar(
+            select(func.count(Alert.id)).where(
+                Alert.status == "open",
+                *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
+            )
         )
-    ) or 0
-    critical_threats = session.scalar(
-        select(func.count(Alert.id)).where(
-            Alert.status == "open",
-            Alert.severity.in_(["critical", "high"]),
-            *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
+        or 0
+    )
+    critical_threats = (
+        session.scalar(
+            select(func.count(Alert.id)).where(
+                Alert.status == "open",
+                Alert.severity.in_(["critical", "high"]),
+                *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
+            )
         )
-    ) or 0
-    anomalies = session.scalar(
-        select(func.count(NormalizedEvent.id)).where(
-            NormalizedEvent.is_anomaly.is_(True),
-            *_conds(_event_org(org), _demo_expr(NormalizedEvent, include_demo)),
+        or 0
+    )
+    anomalies = (
+        session.scalar(
+            select(func.count(NormalizedEvent.id)).where(
+                NormalizedEvent.is_anomaly.is_(True),
+                *_conds(_event_org(org), _demo_expr(NormalizedEvent, include_demo)),
+            )
         )
-    ) or 0
+        or 0
+    )
 
-    hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
-    events_last_hour = session.scalar(
-        select(func.count(NormalizedEvent.id)).where(
-            NormalizedEvent.timestamp >= hour_ago,
-            *_conds(_event_org(org), _demo_expr(NormalizedEvent, include_demo)),
+    hour_ago = datetime.now(UTC) - timedelta(hours=1)
+    events_last_hour = (
+        session.scalar(
+            select(func.count(NormalizedEvent.id)).where(
+                NormalizedEvent.timestamp >= hour_ago,
+                *_conds(_event_org(org), _demo_expr(NormalizedEvent, include_demo)),
+            )
         )
-    ) or 0
+        or 0
+    )
 
     severity_counts = {
         s: session.scalar(
@@ -113,9 +130,7 @@ def dashboard_summary(
 
     score = compute_security_score(session, org=org, include_demo=include_demo)
     system_status = (
-        "CRITICAL"
-        if score < 40
-        else ("ATTENTION" if score < 70 else "HEALTHY")
+        "CRITICAL" if score < 40 else ("ATTENTION" if score < 70 else "HEALTHY")
     )
 
     return {
@@ -127,7 +142,7 @@ def dashboard_summary(
         "events_last_hour": events_last_hour,
         "system_status": system_status,
         "severity_counts": severity_counts,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
@@ -151,10 +166,13 @@ def _format_bucket(value) -> str:
 
 
 def event_timeline(
-    session: Session, hours: int = 24, org: str | None = None, include_demo: bool = False
+    session: Session,
+    hours: int = 24,
+    org: str | None = None,
+    include_demo: bool = False,
 ) -> list[dict]:
     """Event counts bucketed per hour for the timeline chart."""
-    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    since = datetime.now(UTC) - timedelta(hours=hours)
     bucket = _hour_bucket(NormalizedEvent.timestamp, session)
     stmt = select(bucket.label("bucket"), func.count(NormalizedEvent.id)).where(
         NormalizedEvent.timestamp >= since,
@@ -165,9 +183,12 @@ def event_timeline(
 
 
 def alert_timeline(
-    session: Session, hours: int = 24, org: str | None = None, include_demo: bool = False
+    session: Session,
+    hours: int = 24,
+    org: str | None = None,
+    include_demo: bool = False,
 ) -> list[dict]:
-    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    since = datetime.now(UTC) - timedelta(hours=hours)
     bucket = _hour_bucket(Alert.created_at, session)
     stmt = select(bucket.label("bucket"), func.count(Alert.id)).where(
         Alert.created_at >= since,
@@ -197,9 +218,7 @@ def severity_distribution(
     )
     rows = session.execute(stmt.group_by(Alert.severity)).all()
     counts = dict(rows)
-    return [
-        {"severity": s, "count": int(counts.get(s, 0))} for s in SEVERITY_ORDER
-    ]
+    return [{"severity": s, "count": int(counts.get(s, 0))} for s in SEVERITY_ORDER]
 
 
 def attack_stats(
@@ -207,7 +226,10 @@ def attack_stats(
 ) -> list[dict]:
     stmt = (
         select(Alert.name, func.count(Alert.id))
-        .where(Alert.status == "open", *_conds(_alert_org(org), _demo_expr(Alert, include_demo)))
+        .where(
+            Alert.status == "open",
+            *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
+        )
         .group_by(Alert.name)
         .order_by(func.count(Alert.id).desc())
     )
@@ -222,14 +244,11 @@ def top_attackers(
     import re
     from collections import Counter
 
-    stmt = (
-        select(Alert)
-        .where(
-            Alert.status == "open",
-            Alert.mitre_id == "T1110",
-            Alert.evidence != "",
-            *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
-        )
+    stmt = select(Alert).where(
+        Alert.status == "open",
+        Alert.mitre_id == "T1110",
+        Alert.evidence != "",
+        *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
     )
     alerts = session.scalars(stmt).all()
     users: Counter = Counter()
@@ -250,11 +269,15 @@ def user_behavior(
     """Per-user login behavior statistics for the last ``since_hours``."""
     from sqlalchemy import case
 
-    since = datetime.now(timezone.utc) - timedelta(hours=since_hours)
+    since = datetime.now(UTC) - timedelta(hours=since_hours)
     stmt = select(
         NormalizedEvent.user,
-        func.sum(case((NormalizedEvent.event_id == 4624, 1), else_=0)).label("successes"),
-        func.sum(case((NormalizedEvent.event_id == 4625, 1), else_=0)).label("failures"),
+        func.sum(case((NormalizedEvent.event_id == 4624, 1), else_=0)).label(
+            "successes"
+        ),
+        func.sum(case((NormalizedEvent.event_id == 4625, 1), else_=0)).label(
+            "failures"
+        ),
         func.avg(NormalizedEvent.risk_score).label("avg_risk"),
         func.count(NormalizedEvent.id).label("total"),
     ).where(
@@ -285,7 +308,10 @@ def detection_method_breakdown(
     """Open alerts grouped by detection method (rule / hybrid)."""
     stmt = (
         select(Alert.detection_method, func.count(Alert.id))
-        .where(Alert.status == "open", *_conds(_alert_org(org), _demo_expr(Alert, include_demo)))
+        .where(
+            Alert.status == "open",
+            *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
+        )
         .group_by(Alert.detection_method)
     )
     rows = session.execute(stmt).all()
@@ -298,7 +324,10 @@ def risk_distribution(
     """Open alerts grouped by hybrid risk level."""
     stmt = (
         select(Alert.risk_level, func.count(Alert.id))
-        .where(Alert.status == "open", *_conds(_alert_org(org), _demo_expr(Alert, include_demo)))
+        .where(
+            Alert.status == "open",
+            *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
+        )
         .group_by(Alert.risk_level)
     )
     rows = session.execute(stmt).all()
@@ -312,7 +341,7 @@ def snapshot(session: Session) -> DashboardSnapshot:
     """Record a KPI roll-up for historical trending."""
     summary = dashboard_summary(session)
     snap = DashboardSnapshot(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         security_score=summary["security_score"],
         total_events=summary["total_events"],
         active_alerts=summary["active_alerts"],

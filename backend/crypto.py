@@ -22,6 +22,7 @@ Security notes:
 - Encryption is off unless explicitly enabled (``BARAQ_ENCRYPT_AT_REST=1``
   or running the packaged ``BARAQ.exe`` where it defaults on).
 """
+
 from __future__ import annotations
 
 import base64
@@ -44,7 +45,10 @@ def _encryption_enabled() -> bool:
     if ENCRYPT_AT_REST:
         return True
     return os.environ.get("BARAQ_ENCRYPT_AT_REST", "").lower() in (
-        "1", "true", "yes", "on",
+        "1",
+        "true",
+        "yes",
+        "on",
     )
 
 
@@ -92,7 +96,7 @@ def encrypt_text(plaintext: str) -> str | None:
             + ":"
             + base64.urlsafe_b64encode(ciphertext).decode("ascii")
         )
-    except Exception:  # noqa: BLE001 - never break writes on crypto failure
+    except Exception:
         return plaintext
 
 
@@ -100,9 +104,7 @@ def decrypt_text(value: str | None) -> str | None:
     """Decrypt an envelope; passes plaintext/legacy values through."""
     if not value:
         return value
-    if not (
-        value.startswith(_ENVELOPE_PREFIX) or value.startswith(_LEGACY_ENVELOPE_PREFIX)
-    ):
+    if not (value.startswith((_ENVELOPE_PREFIX, _LEGACY_ENVELOPE_PREFIX))):
         return value  # legacy plaintext (pre-hardening row) or encryption off
     try:
         _, nonce_b64, cipher_b64 = value.split(":", 2)
@@ -110,7 +112,7 @@ def decrypt_text(value: str | None) -> str | None:
         ciphertext = base64.urlsafe_b64decode(cipher_b64)
         plain = AESGCM(_load_key()).decrypt(nonce, ciphertext, None)
         return plain.decode("utf-8")
-    except Exception:  # noqa: BLE001 - corrupt/foreign key: do not crash reads
+    except Exception:
         return None
 
 
@@ -155,8 +157,9 @@ def encrypt_file_bytes(plaintext: bytes) -> bytes:
 def decrypt_file_bytes(value: bytes) -> bytes | None:
     """Decrypt a ``baraq-file-v1:`` blob. Returns None on tamper/error."""
     if not (
-        value.startswith(_FILE_PREFIX.encode("ascii"))
-        or value.startswith(_LEGACY_FILE_PREFIX.encode("ascii"))
+        value.startswith(
+            (_FILE_PREFIX.encode("ascii"), _LEGACY_FILE_PREFIX.encode("ascii"))
+        )
     ):
         return None
     try:
@@ -164,5 +167,5 @@ def decrypt_file_bytes(value: bytes) -> bytes | None:
         nonce = base64.urlsafe_b64decode(nonce_b64)
         ciphertext = base64.urlsafe_b64decode(cipher_b64)
         return AESGCM(_load_key()).decrypt(nonce, ciphertext, None)
-    except Exception:  # noqa: BLE001 - tampered/corrupt backup: caller decides
+    except Exception:
         return None

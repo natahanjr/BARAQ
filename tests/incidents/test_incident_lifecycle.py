@@ -1,7 +1,9 @@
 """Phase 7 incident lifecycle tests (spec 7.15, 7.48)."""
+
 from __future__ import annotations
 
 import pytest
+
 from backend.incidents.lifecycle import can_transition, transition_status
 
 
@@ -23,6 +25,7 @@ def test_invalid_transitions():
 
 def test_terminal_states():
     from backend.incidents.lifecycle import is_terminal
+
     assert is_terminal("CLOSED") is True
     assert is_terminal("SUPPRESSED") is True
     assert is_terminal("NEW") is False

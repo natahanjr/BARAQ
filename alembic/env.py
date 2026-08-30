@@ -5,6 +5,7 @@ The target URL follows the same resolution order as the application itself:
 normalised, so ``alembic upgrade head`` always migrates the *configured*
 database (no duplicate connection settings to keep in sync).
 """
+
 from __future__ import annotations
 
 import sys
@@ -23,9 +24,9 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-from backend.database.connection import normalize_database_url  # noqa: E402
-from backend.database.models import Base  # noqa: E402
-from backend.config import DATABASE_URL  # noqa: E402
+from backend.config import DATABASE_URL
+from backend.database.connection import normalize_database_url
+from backend.database.models import Base
 
 target_metadata = Base.metadata
 

@@ -6,9 +6,10 @@ carries its version, description, allowed source types, configured weight
 contribute. No factor exists outside this registry - "suspicious +25" magic
 factors are rejected at the engine boundary (spec 6.43).
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from backend.config import (
     RISK_ALERT_SEVERITY_CONTRIBUTIONS,
@@ -239,10 +240,7 @@ def get_factor(factor_id: str) -> RiskFactorDef:
 
 def list_factors() -> list[dict]:
     """All registered factors (spec 6.41)."""
-    return [
-        FACTOR_REGISTRY[fid].as_dict()
-        for fid in sorted(FACTOR_REGISTRY)
-    ]
+    return [FACTOR_REGISTRY[fid].as_dict() for fid in sorted(FACTOR_REGISTRY)]
 
 
 def model_version() -> str:

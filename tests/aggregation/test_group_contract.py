@@ -1,11 +1,12 @@
 """Phase 4 contract tests (spec 4.2, 4.21, 4.27, 4.35)."""
+
 import pytest
 
 from backend.aggregation.contract import (
     BANNED_TITLE_PHRASES,
     BEHAVIOR_FAMILIES,
-    BehaviorGroup,
     GROUP_STATUSES,
+    BehaviorGroup,
     group_title,
 )
 from backend.aggregation.models import BehaviorGroupRecord
@@ -27,44 +28,88 @@ def test_contract_fields_present():
         highest_severity="high",
     )
     for key in (
-        "behavior_group_id", "group_fingerprint", "title", "description",
-        "status", "first_seen", "last_seen", "alert_count", "occurrence_count",
-        "alert_ids", "host_ids", "user_ids", "source_ips", "mitre_tactics",
-        "mitre_techniques", "observables", "confidence", "highest_severity",
-        "created_at", "updated_at", "closed_at",
+        "behavior_group_id",
+        "group_fingerprint",
+        "title",
+        "description",
+        "status",
+        "first_seen",
+        "last_seen",
+        "alert_count",
+        "occurrence_count",
+        "alert_ids",
+        "host_ids",
+        "user_ids",
+        "source_ips",
+        "mitre_tactics",
+        "mitre_techniques",
+        "observables",
+        "confidence",
+        "highest_severity",
+        "created_at",
+        "updated_at",
+        "closed_at",
     ):
         assert key in bg.to_dict()
 
 
 def test_group_id_format_enforced():
     with pytest.raises(ValueError, match="BG-"):
-        BehaviorGroup(behavior_group_id="ALR-000001", group_fingerprint="f" * 64,
-                      title="x", description="")
+        BehaviorGroup(
+            behavior_group_id="ALR-000001",
+            group_fingerprint="f" * 64,
+            title="x",
+            description="",
+        )
 
 
 def test_status_and_severity_validation():
     with pytest.raises(ValueError, match="status"):
-        BehaviorGroup(behavior_group_id="BG-000001", group_fingerprint="f" * 64,
-                      title="x", description="", status="OPEN")
+        BehaviorGroup(
+            behavior_group_id="BG-000001",
+            group_fingerprint="f" * 64,
+            title="x",
+            description="",
+            status="OPEN",
+        )
     with pytest.raises(ValueError, match="severity"):
-        BehaviorGroup(behavior_group_id="BG-000001", group_fingerprint="f" * 64,
-                      title="x", description="", highest_severity="severe")
+        BehaviorGroup(
+            behavior_group_id="BG-000001",
+            group_fingerprint="f" * 64,
+            title="x",
+            description="",
+            highest_severity="severe",
+        )
 
 
 def test_confidence_bounded_000_1000():
     with pytest.raises(ValueError, match="0.000-1.000"):
-        BehaviorGroup(behavior_group_id="BG-000001", group_fingerprint="f" * 64,
-                      title="x", description="", confidence=1.5)
+        BehaviorGroup(
+            behavior_group_id="BG-000001",
+            group_fingerprint="f" * 64,
+            title="x",
+            description="",
+            confidence=1.5,
+        )
     with pytest.raises(ValueError, match="0.000-1.000"):
-        BehaviorGroup(behavior_group_id="BG-000001", group_fingerprint="f" * 64,
-                      title="x", description="", confidence=-0.1)
+        BehaviorGroup(
+            behavior_group_id="BG-000001",
+            group_fingerprint="f" * 64,
+            title="x",
+            description="",
+            confidence=-0.1,
+        )
 
 
 @pytest.mark.parametrize("phrase", BANNED_TITLE_PHRASES)
 def test_titles_never_overclaim(phrase):
     with pytest.raises(ValueError, match="overclaims"):
-        BehaviorGroup(behavior_group_id="BG-000001", group_fingerprint="f" * 64,
-                      title=f"Confirmed {phrase} here", description="")
+        BehaviorGroup(
+            behavior_group_id="BG-000001",
+            group_fingerprint="f" * 64,
+            title=f"Confirmed {phrase} here",
+            description="",
+        )
 
 
 def test_family_titles_are_behavioral():
@@ -76,7 +121,12 @@ def test_family_titles_are_behavioral():
 
 def test_families_and_statuses_are_documented_sets():
     assert GROUP_STATUSES == ("ACTIVE", "QUIET", "CLOSED")
-    assert set(BEHAVIOR_FAMILIES) == {"authentication", "execution", "encryption", "unknown"}
+    assert set(BEHAVIOR_FAMILIES) == {
+        "authentication",
+        "execution",
+        "encryption",
+        "unknown",
+    }
 
 
 def test_engine_titles_are_never_banned():

@@ -3,21 +3,17 @@
 Performs rule-level deduplication: an open alert for the same rule and
 same signature is not duplicated; instead its evidence is refreshed.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.database.models import Alert, AlertEventLink, NormalizedEvent
-from backend.detection.workflow import ACTIVE_STATES
-from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
-from backend.ml.anomaly import event_feature_vector, get_detector
-from backend.risk.scoring import hybrid_risk, risk_descriptor, risk_level
 from backend.config import (
     ALERT_ESCALATE_AFTER,
     ALERT_THROTTLE_MAX_PER_WINDOW,
@@ -25,6 +21,11 @@ from backend.config import (
     SEVERITY_LADDER,
     TEST_MODE,
 )
+from backend.database.models import Alert, AlertEventLink, NormalizedEvent
+from backend.detection.workflow import ACTIVE_STATES
+from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
+from backend.ml.anomaly import event_feature_vector, get_detector
+from backend.risk.scoring import hybrid_risk, risk_descriptor, risk_level
 
 logger = logging.getLogger("baraq.detection.alerting")
 
@@ -106,7 +107,8 @@ def _is_dev_workflow_fp(facts, rule: str) -> bool:
     if not facts.strong_dev_context:
         return False
     unknown = [
-        p for p in facts.processes
+        p
+        for p in facts.processes
         if facts.reputation.get(p.lower(), "unknown") == "unknown"
     ]
     return not unknown
@@ -157,7 +159,9 @@ class AlertingService:
                 events.append(ev)
         return events
 
-    def _compute_risk(self, result, severity: str | None = None) -> tuple[float, str, str]:
+    def _compute_risk(
+        self, result, severity: str | None = None
+    ) -> tuple[float, str, str]:
         """Hybrid risk: 0.6 * rule score + 0.4 * ML anomaly score of evidence.
 
         ML scores are taken from the stored ``ml_score`` when present (set by
@@ -202,8 +206,15 @@ class AlertingService:
         method = "hybrid" if ml_present else "rule"
         return final, level, method
 
-    def _risk_payload(self, method: str, final_risk: float, modifier: float,
-                      adjustments: list, result, severity: str | None = None) -> dict:
+    def _risk_payload(
+        self,
+        method: str,
+        final_risk: float,
+        modifier: float,
+        adjustments: list,
+        result,
+        severity: str | None = None,
+    ) -> dict:
         """P1 explainable risk: structured 'how was this score built' payload.
 
         Composition (rule vs ML share), the context modifier and every
@@ -241,7 +252,7 @@ class AlertingService:
         new alerts; they refresh the most recent open alert of that rule
         instead (alert-fatigue management).
         """
-        since = datetime.now(timezone.utc) - timedelta(minutes=ALERT_THROTTLE_MINUTES)
+        since = datetime.now(UTC) - timedelta(minutes=ALERT_THROTTLE_MINUTES)
         recent = self.session.scalars(
             select(Alert).where(
                 Alert.rule == rule,
@@ -253,7 +264,9 @@ class AlertingService:
             return None
         return max(recent, key=lambda a: a.created_at)
 
-    def handle_findings(self, findings: list, org: str = "", demo: bool = False) -> list[Alert]:
+    def handle_findings(
+        self, findings: list, org: str = "", demo: bool = False
+    ) -> list[Alert]:
         """Persist rule findings as alerts, scoped to ``org``.
 
         ``org`` is the tenant this batch belongs to; every alert opened or
@@ -292,7 +305,9 @@ class AlertingService:
             if _is_dev_harness(result.evidence):
                 logger.info(
                     "Test-harness finding suppressed (%s, %s): %s",
-                    result.rule, mitre_id, (result.evidence or "")[:200],
+                    result.rule,
+                    mitre_id,
+                    (result.evidence or "")[:200],
                 )
                 continue
 
@@ -303,20 +318,26 @@ class AlertingService:
                 from backend.detection.suppression import find_matching
 
                 suppression = find_matching(
-                    self.session, result.rule,
+                    self.session,
+                    result.rule,
                     host=self._result_host(result.event_ids),
                     user=key.split(":", 2)[2] if ":" in key else "",
                     org=org,
                 )
                 if suppression is not None:
-                    suppression.suppressed_count = (suppression.suppressed_count or 0) + 1
+                    suppression.suppressed_count = (
+                        suppression.suppressed_count or 0
+                    ) + 1
                     logger.info(
                         "Suppressed %s finding (suppression #%s, scope %s/%s/%s)",
-                        result.rule, suppression.id, suppression.rule,
-                        suppression.host, suppression.user,
+                        result.rule,
+                        suppression.id,
+                        suppression.rule,
+                        suppression.host,
+                        suppression.user,
                     )
                     continue
-            except Exception:  # noqa: BLE001 - suppression must never wedge detection
+            except Exception:
                 logger.exception("Suppression check failed for %s", result.rule)
 
             # Roadmap P0/P1 - context calibration: process reputation, dev
@@ -325,7 +346,6 @@ class AlertingService:
             # dampens the hybrid risk, and annotates the evidence so the
             # analyst sees *why* a detection was calibrated.
             from backend.context import assess_events, assess_text
-            from backend.context.engine import DEV_SENSITIVE_RULES
 
             context_events = self._evidence_events(result.event_ids)
             facts = assess_events(context_events, rule=result.rule)
@@ -349,11 +369,9 @@ class AlertingService:
                     )
                     if not facts.chain_known:
                         result.evidence = (
-                            (result.evidence or "").rstrip()
-                            + f"\nNovel behaviour: {_parent} -> {_child} "
-                            "has no baseline history on this host."
-                        )
-            except Exception:  # noqa: BLE001 - baseline must never wedge detection
+                            result.evidence or ""
+                        ).rstrip() + f"\nNovel behaviour: {_parent} -> {_child} " "has no baseline history on this host."
+            except Exception:
                 logger.debug("baseline lookup failed", exc_info=True)
 
             # Deep FP defence: a strongly-developmental context over
@@ -380,7 +398,9 @@ class AlertingService:
                 if demoted:
                     logger.info(
                         "Context demotion: %s %s -> %s (dev workflow evidence)",
-                        result.rule, result.severity, demoted,
+                        result.rule,
+                        result.severity,
+                        demoted,
                     )
                     result.severity = demoted
             context_notes = facts.notes()
@@ -411,7 +431,7 @@ class AlertingService:
             # closed record's counters instead of raising a new alert. This
             # is what stops triaged noise from resurrecting every cycle.
             try:
-                guard_cutoff = datetime.now(timezone.utc) - timedelta(
+                guard_cutoff = datetime.now(UTC) - timedelta(
                     hours=FP_REOPEN_GUARD_HOURS
                 )
                 recently_closed = self.session.scalars(
@@ -439,10 +459,12 @@ class AlertingService:
                     logger.info(
                         "Reopen-guard: %s re-triggered but alert #%s stays "
                         "closed (analyst decision, guard %sh)",
-                        result.rule, guard_match.id, FP_REOPEN_GUARD_HOURS,
+                        result.rule,
+                        guard_match.id,
+                        FP_REOPEN_GUARD_HOURS,
                     )
                     continue
-            except Exception:  # noqa: BLE001 - guard must never wedge detection
+            except Exception:
                 logger.debug("reopen-guard check failed", exc_info=True)
 
             risk_score, risk_level_value, method = self._compute_risk(result)
@@ -455,15 +477,15 @@ class AlertingService:
                 risk_level_value = risk_level(risk_score)
                 logger.info(
                     "Context risk modifier %.2f applied to %s finding (risk %s)",
-                    modifier, result.rule, risk_score,
+                    modifier,
+                    result.rule,
+                    risk_score,
                 )
 
             # P1 explainable risk: capture the pre-dynamic composition NOW -
             # the dynamic block below mutates ``result.severity``, which
             # would otherwise skew the reported rule/ML shares.
-            risk_payload = self._risk_payload(
-                method, risk_score, modifier, [], result
-            )
+            risk_payload = self._risk_payload(method, risk_score, modifier, [], result)
 
             # Roadmap P2 (feature 6) - dynamic risk scoring: additive deltas
             # from live context (developer toolchain, signed tooling, known
@@ -472,7 +494,9 @@ class AlertingService:
             # so the displayed severity and risk level never diverge.
             from backend.risk.dynamic import adjust_risk
 
-            dynamic = adjust_risk(risk_score, facts, context_events, session=self.session)
+            dynamic = adjust_risk(
+                risk_score, facts, context_events, session=self.session
+            )
             if dynamic["adjustments"]:
                 risk_score = dynamic["risk"]
                 risk_level_value = dynamic["level"]
@@ -488,7 +512,10 @@ class AlertingService:
                 if dynamic["severity"] != result.severity:
                     logger.info(
                         "Dynamic risk %s: severity %s -> %s (risk %s)",
-                        result.rule, result.severity, dynamic["severity"], risk_score,
+                        result.rule,
+                        result.severity,
+                        dynamic["severity"],
+                        risk_score,
                     )
                     result.severity = dynamic["severity"]
 
@@ -524,24 +551,31 @@ class AlertingService:
                     risk_score, risk_level_value, method = self._compute_risk(
                         result, severity=alert.severity
                     )
-                    dynamic = adjust_risk(risk_score, facts, context_events, session=self.session)
+                    dynamic = adjust_risk(
+                        risk_score, facts, context_events, session=self.session
+                    )
                     risk_score = dynamic["risk"]
                     risk_level_value = dynamic["level"]
                     risk_payload = self._risk_payload(
-                        method, risk_score, modifier, dynamic["adjustments"], result,
+                        method,
+                        risk_score,
+                        modifier,
+                        dynamic["adjustments"],
+                        result,
                         severity=alert.severity,
                     )
                 alert.risk_score = risk_score
                 alert.risk_level = risk_level_value
                 alert.detection_method = method
                 alert.risk_json = json.dumps(risk_payload, default=str)
-                alert.updated_at = datetime.now(timezone.utc)
+                alert.updated_at = datetime.now(UTC)
                 logger.info(
                     "Updated existing alert #%s (trigger #%s%s)",
-                    alert.id, alert.trigger_count,
+                    alert.id,
+                    alert.trigger_count,
                     " -> severity %s" % escalated if escalated else "",
                 )
-            elif (throttle_target := self._throttle(result.rule, org)):
+            elif throttle_target := self._throttle(result.rule, org):
                 # Rule is above its per-window quota: refresh the newest open
                 # alert instead of opening another one (anti-fatigue).
                 alert = throttle_target
@@ -554,10 +588,11 @@ class AlertingService:
                 alert.risk_level = risk_level_value
                 alert.detection_method = method
                 alert.risk_json = json.dumps(risk_payload, default=str)
-                alert.updated_at = datetime.now(timezone.utc)
+                alert.updated_at = datetime.now(UTC)
                 logger.info(
                     "Throttled duplicate for rule %s -> refreshed alert #%s",
-                    result.rule, alert.id,
+                    result.rule,
+                    alert.id,
                 )
             else:
                 alert = Alert(
@@ -574,7 +609,8 @@ class AlertingService:
                     mitre_id=mitre_id,
                     mitre_name=get_technique_name(mitre_id),
                     mitre_tactic=get_tactic(mitre_id),
-                    recommendation=result.recommendation or get_recommendation(mitre_id),
+                    recommendation=result.recommendation
+                    or get_recommendation(mitre_id),
                     evidence=evidence_display,
                     rule=result.rule,
                     host=self._result_host(result.event_ids),
@@ -590,11 +626,15 @@ class AlertingService:
 
                 try:
                     publish_alert(alert.to_dict())
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
                 logger.info(
                     "Created alert #%s: %s (%s) risk=%s [%s] %s",
-                    alert.id, alert.name, mitre_id, risk_score, risk_level_value,
+                    alert.id,
+                    alert.name,
+                    mitre_id,
+                    risk_score,
+                    risk_level_value,
                     risk_descriptor(risk_level_value),
                 )
 
@@ -608,8 +648,10 @@ class AlertingService:
                     from backend.risk.entity_risk import EntityRiskManager
 
                     EntityRiskManager(self.session).apply_alert(alert, org=org)
-                except Exception:  # noqa: BLE001 - RBA must never wedge detection
-                    logger.exception("Entity RBA accumulation failed for alert #%s", alert.id)
+                except Exception:
+                    logger.exception(
+                        "Entity RBA accumulation failed for alert #%s", alert.id
+                    )
 
                 # Roadmap P2 - incident creation from correlated alerts:
                 # correlation chains and entity-risk escalations become an
@@ -617,8 +659,10 @@ class AlertingService:
                 # incident center instead of one-off alert triage).
                 try:
                     self._maybe_create_incident(alert, org=org)
-                except Exception:  # noqa: BLE001 - incidents must never wedge detection
-                    logger.exception("Auto-incident creation failed for alert #%s", alert.id)
+                except Exception:
+                    logger.exception(
+                        "Auto-incident creation failed for alert #%s", alert.id
+                    )
 
             if alert in created and alert.id not in notified:
                 notified.add(alert.id)
@@ -626,7 +670,7 @@ class AlertingService:
                     from backend.notify import notify_alert
 
                     notify_alert(alert.to_dict())
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
 
             link_events(alert.id, result.event_ids)
@@ -643,8 +687,11 @@ class AlertingService:
                         "Alert #%s annotated with detection-time intel verdicts",
                         alert.id,
                     )
-            except Exception:  # noqa: BLE001 - intel must never wedge detection
-                logger.exception("Detection-time intel annotation failed for alert #%s", getattr(alert, "id", "?"))
+            except Exception:
+                logger.exception(
+                    "Detection-time intel annotation failed for alert #%s",
+                    getattr(alert, "id", "?"),
+                )
 
             # SOAR automation: fire matching playbooks against new alerts
             # (declared triggers -> ordered actions, see backend.automation).
@@ -652,7 +699,7 @@ class AlertingService:
                 from backend.automation.playbooks import fire_playbooks
 
                 fire_playbooks(self.session, alert)
-            except Exception:  # noqa: BLE001 - automation must never wedge detection
+            except Exception:
                 logger.exception("Automation playbooks failed for alert #%s", alert.id)
         self.session.commit()
         return created
@@ -738,7 +785,8 @@ class AlertingService:
             if marker in evidence:
                 logger.info(
                     "Auto-incident skipped: %s alert #%s is developer-workflow context",
-                    alert.rule, alert.id,
+                    alert.rule,
+                    alert.id,
                 )
                 return
 
@@ -758,13 +806,16 @@ class AlertingService:
             if merge_alert(self.session, existing, alert):
                 logger.info(
                     "Auto-incident #%s absorbed alert #%s (dedup key %s)",
-                    existing.id, alert.id, key,
+                    existing.id,
+                    alert.id,
+                    key,
                 )
                 _refresh_chain(self.session, existing)
             else:
                 logger.info(
                     "Auto-incident #%s already contains alert #%s",
-                    existing.id, alert.id,
+                    existing.id,
+                    alert.id,
                 )
             self.session.flush()
             return
@@ -784,7 +835,10 @@ class AlertingService:
                 logger.info(
                     "Correlation group: alert #%s folded into incident #%s "
                     "(host %s, window %dm)",
-                    alert.id, grouped.id, alert.host, GROUP_WINDOW_MINUTES,
+                    alert.id,
+                    grouped.id,
+                    alert.host,
+                    GROUP_WINDOW_MINUTES,
                 )
                 _refresh_chain(self.session, grouped)
             self.session.flush()
@@ -798,10 +852,12 @@ class AlertingService:
         link_ids.discard(alert.id)
         if alert.rule == "correlation_engine" and alert.correlation_id:
             related = self.session.scalars(
-                select(Alert).where(
+                select(Alert)
+                .where(
                     Alert.correlation_id == alert.correlation_id,
                     Alert.id != alert.id,
-                ).limit(50)
+                )
+                .limit(50)
             ).all()
             link_ids.update(a.id for a in related)
 
@@ -820,13 +876,11 @@ class AlertingService:
             risk_level=alert.risk_level,
             confidence=alert.confidence,
             correlation_key=key,
-            opened_at=datetime.now(timezone.utc),
+            opened_at=datetime.now(UTC),
         )
         self.session.add(incident)
         self.session.flush()
-        self.session.add(
-            IncidentAlertLink(incident_id=incident.id, alert_id=alert.id)
-        )
+        self.session.add(IncidentAlertLink(incident_id=incident.id, alert_id=alert.id))
         for alert_id in sorted(link_ids):
             self.session.add(
                 IncidentAlertLink(incident_id=incident.id, alert_id=alert_id)
@@ -850,14 +904,21 @@ class AlertingService:
             if chain["sequence"]:
                 logger.info(
                     "Attack chain on incident #%s: %s (confidence %.2f, risk +%d)",
-                    incident.id, " -> ".join(chain["sequence"]),
-                    chain["confidence"], chain["risk_boost"],
+                    incident.id,
+                    " -> ".join(chain["sequence"]),
+                    chain["confidence"],
+                    chain["risk_boost"],
                 )
-        except Exception:  # noqa: BLE001 - chains must never wedge incidents
-            logger.exception("Attack-chain reconstruction failed for incident #%s", incident.id)
+        except Exception:
+            logger.exception(
+                "Attack-chain reconstruction failed for incident #%s", incident.id
+            )
         logger.info(
             "Auto-incident #%s created for %s alert #%s (+%d contributing alerts)",
-            incident.id, alert.rule, alert.id, len(link_ids),
+            incident.id,
+            alert.rule,
+            alert.id,
+            len(link_ids),
         )
 
 
@@ -883,18 +944,20 @@ def _refresh_chain(session: Session, incident) -> None:
 
     try:
         apply_chain(session, incident)
-    except Exception:  # noqa: BLE001 - chains must never wedge incidents
+    except Exception:
         logger.exception("Attack-chain refresh failed for incident #%s", incident.id)
 
 
-def _maybe_create_incident_helper(service: "AlertingService", alert: Alert, org: str = "") -> None:
+def _maybe_create_incident_helper(
+    service: AlertingService, alert: Alert, org: str = ""
+) -> None:
     """Standalone entry point for auto-incident creation (tests/backfills)."""
     return service._maybe_create_incident(alert, org)
 
 
 def deduplicate_stale(session: Session, hours: int = 24) -> int:
     """Close alerts older than N hours (simple triage lifecycle)."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    cutoff = datetime.now(UTC) - timedelta(hours=hours)
     stale = session.scalars(
         select(Alert).where(Alert.status == "open", Alert.created_at < cutoff)
     ).all()

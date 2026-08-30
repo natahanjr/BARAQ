@@ -114,7 +114,15 @@ _LABEL_BY_VERDICT = {
     "expected_behavior": "suspicious",
 }
 
-_SECRET_CMD_MARKERS = ("password", "passwd", "pwd=", "token", "api_key", "secret", "credential")
+_SECRET_CMD_MARKERS = (
+    "password",
+    "passwd",
+    "pwd=",
+    "token",
+    "api_key",
+    "secret",
+    "credential",
+)
 
 
 def event_type(ev: NormalizedEvent) -> str:
@@ -182,19 +190,32 @@ def to_dataset_row(
         "host_id": anonymizer.field("host", host_id),
         "host_name": anonymizer.field("host", host),
         "user": anonymizer.field("user", user),
-        "process_name": anonymizer.field("process", _fact(ev, "new_process", "NewProcessName", "Image")),
-        "parent_process": anonymizer.field("process", _fact(ev, "ParentProcessName", "parent_process", "parent_image", "parent_name")),
+        "process_name": anonymizer.field(
+            "process", _fact(ev, "new_process", "NewProcessName", "Image")
+        ),
+        "parent_process": anonymizer.field(
+            "process",
+            _fact(
+                ev, "ParentProcessName", "parent_process", "parent_image", "parent_name"
+            ),
+        ),
         "command_line": anonymizer.command_line(cmdline),
-        "file_path": anonymizer.file_path(_fact(ev, "TargetFilename", "ObjectName", "TargetObject")),
+        "file_path": anonymizer.file_path(
+            _fact(ev, "TargetFilename", "ObjectName", "TargetObject")
+        ),
         "source_ip": anonymizer.ips(_fact(ev, "source_ip", "SourceIp", "IpAddress")),
-        "destination_ip": anonymizer.ips(_fact(ev, "DestinationIp", "TargetServerName")),
+        "destination_ip": anonymizer.ips(
+            _fact(ev, "DestinationIp", "TargetServerName")
+        ),
         "destination_port": _fact(ev, "DestinationPort"),
         "protocol": _fact(ev, "Protocol"),
         "authentication_result": _auth_result(ev),
         "severity": ev.severity or ev.risk or "",
         "rule_id": "",
         "mitre_technique": "",
-        "anomaly_score": round(float(ev.ml_score), 4) if ev.ml_score is not None else "",
+        "anomaly_score": (
+            round(float(ev.ml_score), 4) if ev.ml_score is not None else ""
+        ),
         "entity_risk": "",
         "alert_id": "",
         "incident_id": "",

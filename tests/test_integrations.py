@@ -1,4 +1,5 @@
 """Ticketing integrations (roadmap 6.3): Jira, ServiceNow, SDK."""
+
 from __future__ import annotations
 
 import backend.integrations.client as client_mod
@@ -7,10 +8,18 @@ from backend.database.models import Alert
 
 def _mk_alert(db, severity="high", name="Beacon out") -> Alert:
     row = Alert(
-        name=name, description="test", severity=severity, confidence=0.9,
-        score=70, mitre_id="T1071", mitre_name="App Layer Protocol",
-        evidence="http://evil.example/x", rule="test-rule", host="host1",
-        risk_score=70, risk_level="HIGH",
+        name=name,
+        description="test",
+        severity=severity,
+        confidence=0.9,
+        score=70,
+        mitre_id="T1071",
+        mitre_name="App Layer Protocol",
+        evidence="http://evil.example/x",
+        rule="test-rule",
+        host="host1",
+        risk_score=70,
+        risk_level="HIGH",
     )
     db.add(row)
     db.commit()
@@ -163,7 +172,9 @@ def test_sdk_client_http_error(monkeypatch):
 
     def boom(req, timeout=None, context=None):
         resp = io.BytesIO(b'{"detail": "nope"}')
-        raise urllib.error.HTTPError("https://soc.corp/1", 500, "Internal Server Error", {}, resp)
+        raise urllib.error.HTTPError(
+            "https://soc.corp/1", 500, "Internal Server Error", {}, resp
+        )
 
     monkeypatch.setattr(urllib.request, "urlopen", boom)
     client = BARAQClient("https://soc.corp:8443", api_key="k1", verify_ssl=False)

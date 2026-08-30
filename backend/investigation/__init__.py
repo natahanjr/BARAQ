@@ -33,7 +33,7 @@ def build_investigation(session, alert: Alert) -> dict:
 
     try:
         facts: ContextFacts | None = assess_for_alert(session, alert)
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.warning("context assessment failed", exc_info=True)
         facts = None
 

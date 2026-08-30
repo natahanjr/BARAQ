@@ -6,6 +6,7 @@ suppression rule (rule + host) is created automatically from the existing
 suppression store. Every auto-rule carries its signature and expiry so it
 stays auditable and self-healing.
 """
+
 from __future__ import annotations
 
 import logging
@@ -13,8 +14,8 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.database.models import Alert, AlertVerdict
 from backend.context.engine import assess_for_alert
+from backend.database.models import Alert, AlertVerdict
 
 logger = logging.getLogger("baraq.auto_suppress")
 
@@ -34,7 +35,7 @@ def fp_signature(db: Session, alert: Alert) -> dict:
         ),
         (facts.processes[0].lower() if facts.processes else ""),
     )
-    parent = (facts.parent_names[0].lower() if facts.parent_names else "")
+    parent = facts.parent_names[0].lower() if facts.parent_names else ""
     return {
         "rule": (alert.rule or "").strip(),
         "subject": subject,
@@ -81,7 +82,9 @@ def count_prior_fps(db: Session, alert: Alert, sig: dict) -> int:
     return n
 
 
-def maybe_auto_suppress(db: Session, alert: Alert, actor: str = "", org: str = "") -> dict:
+def maybe_auto_suppress(
+    db: Session, alert: Alert, actor: str = "", org: str = ""
+) -> dict:
     """Record-analyst-FP hook: create a suppression rule at the threshold."""
     from backend.detection.suppression import create as create_suppression
 

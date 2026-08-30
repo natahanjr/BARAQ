@@ -6,6 +6,7 @@ trail and controlled suppression. ALERT is NOT an INCIDENT; this package
 never creates incidents, never mutates risk and never executes SOAR.
 See docs/phase3/ALERT_CONTRACT.md.
 """
+
 from backend.alerting.contract import ALERT, ALERT_SEVERITIES, ALERT_STATUSES
 from backend.alerting.engine import process_detection
 

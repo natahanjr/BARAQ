@@ -11,6 +11,7 @@ long-running jobs (ML training, reports, intel ingestion, retention):
 Nothing imports this module unless ``BARAQ_CELERY=1``; the app object is
 only created on demand so the rest of the platform stays dependency-free.
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,7 +25,9 @@ def _make_celery_app():
 
     from backend.config import REDIS_URL
 
-    broker = os.environ.get("BARAQ_CELERY_BROKER", REDIS_URL or "redis://localhost:6379/0")
+    broker = os.environ.get(
+        "BARAQ_CELERY_BROKER", REDIS_URL or "redis://localhost:6379/0"
+    )
     app = Celery("baraq", broker=broker, backend=broker)
     app.conf.update(
         task_default_queue="baraq",
@@ -51,7 +54,7 @@ def enqueue_if_enabled(name: str, *args, **kwargs) -> bool:
     try:
         app.send_task(name, args=args, kwargs=kwargs, queue="baraq")
         return True
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Celery dispatch of %s failed: %s", name, exc)
         return False
 

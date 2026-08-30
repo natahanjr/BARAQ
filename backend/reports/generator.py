@@ -1,4 +1,5 @@
 """Report generation facade - builds context and exports in any format."""
+
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
@@ -8,9 +9,7 @@ from backend.reports.context import executive_context, technical_context
 from backend.reports.exporters import export_report
 
 
-def generate_report(
-    session: Session, report_type: str, fmt: str = "pdf"
-) -> dict:
+def generate_report(session: Session, report_type: str, fmt: str = "pdf") -> dict:
     """Generate a report of the given type/format and record its metadata."""
     if report_type == "executive":
         context = executive_context(session)

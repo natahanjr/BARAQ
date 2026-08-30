@@ -6,15 +6,16 @@ No manual finding manipulation is exposed (spec 5.51). Gated by
 ``CORRELATION_ENABLED`` (PEP 562, mirroring telemetry/alerting/
 aggregation) and inert against the production database.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
 
-import backend.config as config
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend import config
 from backend.alerting.models import AlertRecord
 from backend.correlation import metrics as metrics_module
 from backend.correlation.contract import CORRELATION_STATUSES, CORRELATION_TYPES
@@ -108,7 +109,9 @@ def list_correlations(
         stmt = stmt.where(CorrelationFindingRecord.source_ips.contains([source_ip]))
     if destination_ip is not None:
         stmt = stmt.where(
-            CorrelationFindingRecord.observables["destination_ips"].contains([destination_ip])
+            CorrelationFindingRecord.observables["destination_ips"].contains(
+                [destination_ip]
+            )
         )
     if tactic is not None:
         stmt = stmt.where(CorrelationFindingRecord.mitre_tactics.contains([tactic]))
@@ -126,9 +129,7 @@ def list_correlations(
     if rule_id is not None:
         rows = [r for r in rows if _rule_fired(db, r.correlation_id, rule_id)]
     if member_count_min is not None:
-        rows = [
-            r for r in rows if len(r.member_group_ids or []) >= member_count_min
-        ]
+        rows = [r for r in rows if len(r.member_group_ids or []) >= member_count_min]
     return {"total": len(rows), "correlations": [r.to_dict() for r in rows]}
 
 
@@ -307,7 +308,8 @@ def correlation_graph(correlation_id: str, db: Session = Depends(get_db)) -> dic
         .order_by(CorrelationEdge.id)
     ).all()
     nodes = [
-        {"behavior_group_id": gid, "role": "member"} for gid in (finding.member_group_ids or [])
+        {"behavior_group_id": gid, "role": "member"}
+        for gid in (finding.member_group_ids or [])
     ]
     return {
         "correlation_id": correlation_id,

@@ -1,5 +1,6 @@
 """Dashboard API endpoints (read-only; served from the replica when
 BARAQ_READONLY_DATABASE_URL is configured - roadmap 3.1)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -27,7 +28,9 @@ def summary(
     include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db_readonly),
 ):
-    return dashboard.dashboard_summary(db, org=_scope(request), include_demo=bool(include_demo))
+    return dashboard.dashboard_summary(
+        db, org=_scope(request), include_demo=bool(include_demo)
+    )
 
 
 @router.get("/timeline")
@@ -39,8 +42,12 @@ def timeline(
 ):
     show_demo = bool(include_demo)
     return {
-        "events": dashboard.event_timeline(db, hours, org=_scope(request), include_demo=show_demo),
-        "alerts": dashboard.alert_timeline(db, hours, org=_scope(request), include_demo=show_demo),
+        "events": dashboard.event_timeline(
+            db, hours, org=_scope(request), include_demo=show_demo
+        ),
+        "alerts": dashboard.alert_timeline(
+            db, hours, org=_scope(request), include_demo=show_demo
+        ),
     }
 
 
@@ -50,7 +57,9 @@ def threat_categories(
     include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db_readonly),
 ):
-    return dashboard.threat_categories(db, org=_scope(request), include_demo=bool(include_demo))
+    return dashboard.threat_categories(
+        db, org=_scope(request), include_demo=bool(include_demo)
+    )
 
 
 @router.get("/severity-distribution")
@@ -59,7 +68,9 @@ def severity_distribution(
     include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db_readonly),
 ):
-    return dashboard.severity_distribution(db, org=_scope(request), include_demo=bool(include_demo))
+    return dashboard.severity_distribution(
+        db, org=_scope(request), include_demo=bool(include_demo)
+    )
 
 
 @router.get("/attack-stats")
@@ -68,7 +79,9 @@ def attack_stats(
     include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db_readonly),
 ):
-    return dashboard.attack_stats(db, org=_scope(request), include_demo=bool(include_demo))
+    return dashboard.attack_stats(
+        db, org=_scope(request), include_demo=bool(include_demo)
+    )
 
 
 @router.get("/top-attackers")
@@ -78,7 +91,9 @@ def top_attackers(
     include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db_readonly),
 ):
-    return dashboard.top_attackers(db, limit, org=_scope(request), include_demo=bool(include_demo))
+    return dashboard.top_attackers(
+        db, limit, org=_scope(request), include_demo=bool(include_demo)
+    )
 
 
 @router.get("/user-behavior")
@@ -88,7 +103,9 @@ def user_behavior(
     include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db_readonly),
 ):
-    return dashboard.user_behavior(db, limit, org=_scope(request), include_demo=bool(include_demo))
+    return dashboard.user_behavior(
+        db, limit, org=_scope(request), include_demo=bool(include_demo)
+    )
 
 
 @router.get("/detection-methods")
@@ -97,7 +114,9 @@ def detection_methods(
     include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db_readonly),
 ):
-    return dashboard.detection_method_breakdown(db, org=_scope(request), include_demo=bool(include_demo))
+    return dashboard.detection_method_breakdown(
+        db, org=_scope(request), include_demo=bool(include_demo)
+    )
 
 
 @router.get("/risk-distribution")
@@ -106,4 +125,6 @@ def risk_distribution(
     include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db_readonly),
 ):
-    return dashboard.risk_distribution(db, org=_scope(request), include_demo=bool(include_demo))
+    return dashboard.risk_distribution(
+        db, org=_scope(request), include_demo=bool(include_demo)
+    )

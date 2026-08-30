@@ -9,6 +9,7 @@ produce no detection.
 The context reads ``v2_events`` only. It never writes, never touches v1
 tables.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -45,7 +46,9 @@ class DetectionContext:
         since = anchor - timedelta(minutes=window_minutes)
         stmt = (
             select(TelemetryEvent)
-            .where(TelemetryEvent.timestamp >= since, TelemetryEvent.timestamp <= anchor)
+            .where(
+                TelemetryEvent.timestamp >= since, TelemetryEvent.timestamp <= anchor
+            )
             .order_by(TelemetryEvent.timestamp, TelemetryEvent.id)
             .limit(limit)
         )

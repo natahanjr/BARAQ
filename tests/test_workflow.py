@@ -1,7 +1,6 @@
 """Tests for the alert workflow state machine and per-rule throttling."""
-from __future__ import annotations
 
-import pytest
+from __future__ import annotations
 
 from backend.database.models import Alert
 from backend.detection.alerting import AlertingService
@@ -9,7 +8,9 @@ from backend.detection.rules.base import DetectionResult
 from backend.detection.workflow import TRANSITIONS, can_transition, next_states
 
 
-def _result(rule: str, name: str, severity: str = "high", evidence: str = "") -> DetectionResult:
+def _result(
+    rule: str, name: str, severity: str = "high", evidence: str = ""
+) -> DetectionResult:
     return DetectionResult(
         rule=rule,
         name=name,
@@ -44,7 +45,13 @@ def test_alerting_throttle_caps_alerts_per_rule(db):
     # 6 findings of the same rule within the same window
     for i in range(6):
         service.handle_findings(
-            [_result("brute_force", f"Brute Force #{i}", evidence=f"User 'admin' attempt {i}")]
+            [
+                _result(
+                    "brute_force",
+                    f"Brute Force #{i}",
+                    evidence=f"User 'admin' attempt {i}",
+                )
+            ]
         )
     alerts = db.query(Alert).all()
     # The 6th finding should refresh instead of opening a new alert.
@@ -56,11 +63,11 @@ def test_alerting_throttle_caps_alerts_per_rule(db):
 
 def test_throttle_does_not_merge_different_rules(db):
     service = AlertingService(db)
-    service.handle_findings(
-        [_result("brute_force", "BF", evidence="User 'admin' x1")]
-    )
+    service.handle_findings([_result("brute_force", "BF", evidence="User 'admin' x1")])
     service.handle_findings([_result("brute_force", "BF", evidence="User 'admin' x2")])
-    service.handle_findings([_result("network_recon", "Recon", evidence="User 'alice' scan")])
+    service.handle_findings(
+        [_result("network_recon", "Recon", evidence="User 'alice' scan")]
+    )
     rules = {a.rule for a in db.query(Alert).all()}
     assert rules == {"brute_force", "network_recon"}
 
@@ -71,7 +78,9 @@ def test_acknowledged_alert_refreshes_not_duplicates(db):
     alert = db.query(Alert).one()
     alert.status = "acknowledged"
     db.commit()
-    service.handle_findings([_result("brute_force", "BF", evidence="User 'admin' hit again")])
+    service.handle_findings(
+        [_result("brute_force", "BF", evidence="User 'admin' hit again")]
+    )
     assert db.query(Alert).count() == 1  # refreshed, not duplicated
     assert db.query(Alert).one().status == "acknowledged"
 
@@ -84,8 +93,8 @@ def test_dev_harness_evidence_is_not_persisted(db):
     assert _is_dev_harness(
         "Artifact-hiding activity by 'HAARAPHEL\\Haaraphel' (pid 7260 "
         "(powershell.exe)): ADS reference '\\evil.exe:payload'. Command line: "
-        "powershell.exe -c \"from backend.detection.rules.hidden_artifacts "
-        "import _ADS; tests = [...]\""
+        'powershell.exe -c "from backend.detection.rules.hidden_artifacts '
+        'import _ADS; tests = [...]"'
     )
     assert not _is_dev_harness(
         "Artifact-hiding activity by 'haaked' (pid 9001 (cmd.exe)): "
@@ -103,8 +112,8 @@ def test_dev_harness_evidence_is_not_persisted(db):
                 evidence=(
                     "Artifact-hiding activity by 'HAARAPHEL\\Haaraphel' "
                     "(pid 7260 (powershell.exe)): ADS reference '\\evil.exe:payload'. "
-                    "Command line: powershell.exe -c \"from "
-                    "backend.detection.rules.hidden_artifacts import _ADS\""
+                    'Command line: powershell.exe -c "from '
+                    'backend.detection.rules.hidden_artifacts import _ADS"'
                 ),
             )
         ]
@@ -125,4 +134,8 @@ def test_dev_harness_evidence_is_not_persisted(db):
         ]
     )
     assert db.query(Alert).count() == 1
-    assert db.query(Alert).one().evidence.startswith("Artifact-hiding activity by 'haaked'")
+    assert (
+        db.query(Alert)
+        .one()
+        .evidence.startswith("Artifact-hiding activity by 'haaked'")
+    )

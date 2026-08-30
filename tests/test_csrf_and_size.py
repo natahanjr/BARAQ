@@ -5,6 +5,7 @@ The session cookie path is exercised with a bare TestClient (no API key, no
 Authorization header) exactly like a browser that only has the httpOnly
 session cookie. Bearer/API-key callers must remain unaffected by CSRF.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -28,12 +29,14 @@ def seeded_admin():
     db = SessionLocal()
     try:
         if not db.query(User).filter(User.username == "admin").first():
-            db.add(User(
-                username="admin",
-                password_hash=hash_password("baraqadmin"),
-                role="admin",
-                is_active=True,
-            ))
+            db.add(
+                User(
+                    username="admin",
+                    password_hash=hash_password("baraqadmin"),
+                    role="admin",
+                    is_active=True,
+                )
+            )
             db.commit()
     finally:
         db.close()
@@ -44,10 +47,13 @@ def cookie_browser(app, seeded_admin):
     """A client that logs in with the real login form and keeps ONLY the
     session cookie (browser semantics: no API key, no Authorization header)."""
     with TestClient(app) as client:
-        resp = client.post("/api/auth/login", json={
-            "username": "admin",
-            "password": "baraqadmin",
-        })
+        resp = client.post(
+            "/api/auth/login",
+            json={
+                "username": "admin",
+                "password": "baraqadmin",
+            },
+        )
         assert resp.status_code == 200, resp.text
         yield client
 
@@ -116,19 +122,25 @@ def test_api_key_caller_skips_csrf(app):
 def test_public_login_no_csrf_needed(app, seeded_admin):
     """Pre-auth endpoints (login) must not demand a CSRF token."""
     with TestClient(app) as client:
-        resp = client.post("/api/auth/login", json={
-            "username": "admin",
-            "password": "baraqadmin",
-        })
+        resp = client.post(
+            "/api/auth/login",
+            json={
+                "username": "admin",
+                "password": "baraqadmin",
+            },
+        )
         assert resp.status_code == 200, resp.text
 
 
 def test_csrf_cookie_reissued_on_relogin(cookie_browser):
     first = cookie_browser.cookies["baraq_csrf"]
-    resp = cookie_browser.post("/api/auth/login", json={
-        "username": "admin",
-        "password": "baraqadmin",
-    })
+    resp = cookie_browser.post(
+        "/api/auth/login",
+        json={
+            "username": "admin",
+            "password": "baraqadmin",
+        },
+    )
     assert resp.status_code == 200
     assert cookie_browser.cookies["baraq_csrf"] != first
 
@@ -137,8 +149,10 @@ def test_csrf_cookie_reissued_on_relogin(cookie_browser):
 # Request body size limits
 # ---------------------------------------------------------------------------
 
+
 def test_content_length_over_limit_rejected(app, seeded_admin, monkeypatch):
     import backend.config as cfg
+
     monkeypatch.setattr(cfg, "MAX_REQUEST_BYTES", 1024)
     with TestClient(app) as client:
         # The assistant chat endpoint accepts text; a huge body must 413

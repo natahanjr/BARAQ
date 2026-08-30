@@ -1,7 +1,8 @@
 """Tests for the Entity Risk-Based Alerting (RBA) engine."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -42,7 +43,9 @@ def _mk_alert(
 
 def test_apply_alert_accumulates_on_entities(db):
     manager = EntityRiskManager(db)
-    alert = _mk_alert(db, risk_score=55.0, evidence="User 'admin' failed to log on from 10.0.0.9")
+    alert = _mk_alert(
+        db, risk_score=55.0, evidence="User 'admin' failed to log on from 10.0.0.9"
+    )
     touched = manager.apply_alert(alert)
 
     assert len(touched) == 3  # host + user + ip
@@ -58,7 +61,9 @@ def test_apply_alert_accumulates_on_entities(db):
 def test_accumulation_adds_across_alerts(db):
     manager = EntityRiskManager(db)
     a1 = _mk_alert(db, risk_score=30.0, evidence="User 'admin' failed to log on")
-    a2 = _mk_alert(db, rule="persistence", risk_score=45.0, evidence="User 'admin' created run key")
+    a2 = _mk_alert(
+        db, rule="persistence", risk_score=45.0, evidence="User 'admin' created run key"
+    )
     manager.apply_alert(a1)
     manager.apply_alert(a2)
 
@@ -88,14 +93,14 @@ def test_decay_halves_score_after_half_life(db):
     row = db.query(EntityRisk).filter_by(entity_kind="user", entity_name="carol").one()
 
     # Half-life is 7 days (ENTITY_RISK_DECAY_DAYS): simulate 7 days elapsed.
-    row.last_updated = datetime.now(timezone.utc) - timedelta(days=7)
+    row.last_updated = datetime.now(UTC) - timedelta(days=7)
     db.flush()
     manager.decay()
     db.refresh(row)
     assert row.score == 45.0  # 90 * 0.5^1
 
     # Another half-life -> 22.5
-    row.last_updated = datetime.now(timezone.utc) - timedelta(days=7)
+    row.last_updated = datetime.now(UTC) - timedelta(days=7)
     db.flush()
     manager.decay()
     db.refresh(row)
@@ -109,7 +114,7 @@ def test_decay_resets_level(db):
     manager.apply_alert(alert)
     row = db.query(EntityRisk).filter_by(entity_kind="user", entity_name="dave").one()
     assert row.risk_level == "CRITICAL"
-    row.last_updated = datetime.now(timezone.utc) - timedelta(days=28)
+    row.last_updated = datetime.now(UTC) - timedelta(days=28)
     db.flush()
     manager.decay()
     db.refresh(row)
@@ -131,7 +136,9 @@ def test_escalate_creates_notable_alert(db):
     assert "erin" in notable.evidence
 
     # Re-escalation within the window refreshes, does not duplicate.
-    alert2 = _mk_alert(db, host="", rule="lsass_dump", risk_score=50.0, evidence="User 'erin'")
+    alert2 = _mk_alert(
+        db, host="", rule="lsass_dump", risk_score=50.0, evidence="User 'erin'"
+    )
     manager.apply_alert(alert2)
     again = manager.escalate(org="")
     assert again == []
@@ -194,11 +201,14 @@ def test_risk_level_helper():
 # analyst-feedback fixes: idempotency, level-gated escalation, MITRE truth
 # ---------------------------------------------------------------------------
 
+
 def test_apply_alert_is_idempotent_per_alert(db):
     """P0: the same alert must never contribute risk twice - repeated calls
     (dedup refresh, backfill sweep, scheduler re-run) are no-ops."""
     manager = EntityRiskManager(db)
-    alert = _mk_alert(db, risk_score=55.0, evidence="User 'idem' failed to log on from 10.0.0.9")
+    alert = _mk_alert(
+        db, risk_score=55.0, evidence="User 'idem' failed to log on from 10.0.0.9"
+    )
 
     first = manager.apply_alert(alert)
     again = manager.apply_alert(alert)
@@ -210,9 +220,9 @@ def test_apply_alert_is_idempotent_per_alert(db):
     row = db.query(EntityRisk).filter_by(entity_kind="user", entity_name="idem").one()
     assert row.score == 55.0
     assert row.alerts_count == 1
-    events = db.query(EntityRiskEvent).filter(
-        EntityRiskEvent.alert_id == alert.id
-    ).all()
+    events = (
+        db.query(EntityRiskEvent).filter(EntityRiskEvent.alert_id == alert.id).all()
+    )
     assert len(events) == 3  # one contribution per entity, never more
     db.commit()
 
@@ -247,15 +257,21 @@ def test_escalation_new_alert_only_on_level_change(db):
 
     created1 = manager.escalate(org="")
     assert len(notables()) == 1  # host + user both escalate, but only one 'lev'
-    assert created1[0].severity == "high" or any(a.name.endswith("lev") for a in created1)
+    assert created1[0].severity == "high" or any(
+        a.name.endswith("lev") for a in created1
+    )
 
     # Same level, more detections: refresh, never duplicate.
-    manager.apply_alert(_mk_alert(db, rule="persistence", risk_score=10.0, evidence="User 'lev'"))
+    manager.apply_alert(
+        _mk_alert(db, rule="persistence", risk_score=10.0, evidence="User 'lev'")
+    )
     assert manager.escalate(org="") == []
     assert len(notables()) == 1
 
     # Crosses into CRITICAL: exactly one new alert for the climb.
-    manager.apply_alert(_mk_alert(db, rule="lsass_dump", risk_score=30.0, evidence="User 'lev'"))
+    manager.apply_alert(
+        _mk_alert(db, rule="lsass_dump", risk_score=30.0, evidence="User 'lev'")
+    )
     created2 = manager.escalate(org="")
     assert created2, "level cross must create a fresh notable"
     assert len(notables()) == 2
@@ -276,7 +292,9 @@ def test_escalation_reopens_when_no_open_notable(db):
     db.commit()
 
     # Level unchanged, notable closed: refresh it back to open, no duplicate.
-    manager.apply_alert(_mk_alert(db, rule="persistence", risk_score=5.0, evidence="User 'reopen'"))
+    manager.apply_alert(
+        _mk_alert(db, rule="persistence", risk_score=5.0, evidence="User 'reopen'")
+    )
     assert manager.escalate(org="") == []
     notables = (
         db.query(Alert)
@@ -292,9 +310,27 @@ def test_escalation_mitre_derived_from_contributions(db):
     """P0: the notable's MITRE technique comes from the contributions that
     actually built the risk, never a hardcoded default."""
     manager = EntityRiskManager(db)
-    manager.apply_alert(_mk_alert(db, risk_score=40.0, mitre_id="T1110", evidence="User 'mitre'"))
-    manager.apply_alert(_mk_alert(db, rule="kerberoast", risk_score=30.0, mitre_id="T1558.003", evidence="User 'mitre'"))
-    manager.apply_alert(_mk_alert(db, rule="kerberoast", risk_score=30.0, mitre_id="T1558.003", evidence="User 'mitre'"))
+    manager.apply_alert(
+        _mk_alert(db, risk_score=40.0, mitre_id="T1110", evidence="User 'mitre'")
+    )
+    manager.apply_alert(
+        _mk_alert(
+            db,
+            rule="kerberoast",
+            risk_score=30.0,
+            mitre_id="T1558.003",
+            evidence="User 'mitre'",
+        )
+    )
+    manager.apply_alert(
+        _mk_alert(
+            db,
+            rule="kerberoast",
+            risk_score=30.0,
+            mitre_id="T1558.003",
+            evidence="User 'mitre'",
+        )
+    )
 
     created = manager.escalate(org="")
     notable = next(a for a in created if a.name == "Entity Risk Escalation: mitre")
@@ -315,14 +351,24 @@ def test_demo_propagation_through_risk_store(db):
     manager.apply_alert(demo_alert)
     db.commit()
 
-    row = db.query(EntityRisk).filter_by(entity_kind="user", entity_name="demo-user").one()
+    row = (
+        db.query(EntityRisk)
+        .filter_by(entity_kind="user", entity_name="demo-user")
+        .one()
+    )
     assert row.demo is True
-    ev = db.query(EntityRiskEvent).filter_by(entity_kind="user", entity_name="demo-user").one()
+    ev = (
+        db.query(EntityRiskEvent)
+        .filter_by(entity_kind="user", entity_name="demo-user")
+        .one()
+    )
     assert ev.demo is True
 
     created = manager.escalate(org="")
     assert any(a.name == "Entity Risk Escalation: demo-user" for a in created)
-    demo_notable = next(a for a in created if a.name == "Entity Risk Escalation: demo-user")
+    demo_notable = next(
+        a for a in created if a.name == "Entity Risk Escalation: demo-user"
+    )
     assert demo_notable.demo is True
     assert demo_notable.correlation_id.startswith("CORR-")
     db.commit()
@@ -334,7 +380,9 @@ def test_correlation_ids_are_unique_and_traceable(db):
     for name in ("c1", "c2", "c3"):
         manager.apply_alert(_mk_alert(db, risk_score=90.0, evidence=f"User '{name}'"))
         created = manager.escalate(org="")
-        user_notable = next(a for a in created if a.name == f"Entity Risk Escalation: {name}")
+        user_notable = next(
+            a for a in created if a.name == f"Entity Risk Escalation: {name}"
+        )
         cid = user_notable.correlation_id
         assert cid.startswith("CORR-")
         ids.add(cid)

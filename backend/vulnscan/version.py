@@ -1,4 +1,5 @@
 """Safe dotted-version comparison for CVE range matching."""
+
 from __future__ import annotations
 
 import re
@@ -31,6 +32,7 @@ def version_lt(installed: str, upper_exclusive: str) -> bool:
 
 
 def version_in(installed: str, lower_inclusive: str, upper_exclusive: str) -> bool:
-    return compare_versions(installed, lower_inclusive) >= 0 and compare_versions(
-        installed, upper_exclusive
-    ) < 0
+    return (
+        compare_versions(installed, lower_inclusive) >= 0
+        and compare_versions(installed, upper_exclusive) < 0
+    )

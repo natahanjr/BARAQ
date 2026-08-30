@@ -13,6 +13,7 @@ rules engine + alerting run over them, and a confusion matrix is built:
 - FN: scenario positives minus TP.
 - FP/TN: baseline records linked to alerts / clean baseline records.
 """
+
 from __future__ import annotations
 
 import logging
@@ -57,8 +58,6 @@ def run_evaluation(db, with_ml: bool = True) -> dict:
     Returns the per-scenario + overall metrics and persists only the
     ``EvaluationRun`` history rows into the production DB.
     """
-    from tests import fixtures
-
     from backend.database.models import EvaluationRun
     from backend.evaluation.holdout import (
         _cleanup,
@@ -66,12 +65,15 @@ def run_evaluation(db, with_ml: bool = True) -> dict:
         _persist,
         _run_test_detection,
     )
+    from tests import fixtures
 
     test_db, engine, path = _empty_session()
     try:
         # ---- Negative class: benign baseline ------------------------------
         baseline_records = fixtures.benign_baseline(60)
-        baseline_events, _baseline_conns, n_baseline = _persist(test_db, baseline_records)
+        baseline_events, _baseline_conns, n_baseline = _persist(
+            test_db, baseline_records
+        )
 
         # ---- Positive class: five attack scenarios ------------------------
         per_scenario: dict[str, dict] = {}
@@ -86,10 +88,13 @@ def run_evaluation(db, with_ml: bool = True) -> dict:
                 "port_scan": fixtures.port_scan,
             }[scenario]()
             event_ids, conn_ids, total = _persist(test_db, records)
-            conn_ips = sorted({
-                r["remote_ip"] for r in records
-                if r.get("source") == "network" and r.get("remote_ip")
-            })
+            conn_ips = sorted(
+                {
+                    r["remote_ip"]
+                    for r in records
+                    if r.get("source") == "network" and r.get("remote_ip")
+                }
+            )
             per_scenario[scenario] = {
                 "rule": rule,
                 "event_ids": event_ids,
@@ -107,9 +112,9 @@ def run_evaluation(db, with_ml: bool = True) -> dict:
         #: Actual per-alert latency (last evidence event -> alert creation).
         #: The wall-clock runtime is kept as pipeline overhead for context.
         latency = detection["per_alert_latency_ms"]
-        latency_avg_ms = float(latency.get("avg_ms", 0.0))
+        float(latency.get("avg_ms", 0.0))
 
-# ---- Per-scenario + overall confusion matrices --------------------
+        # ---- Per-scenario + overall confusion matrices --------------------
         #: Honest "detection time" = wall-clock pipeline time. The per-alert
         #: latency field is kept separately in ``info`` - in the evaluation
         #: fixtures are backdated so ``now - last_evidence`` is meaningless.
@@ -123,48 +128,58 @@ def run_evaluation(db, with_ml: bool = True) -> dict:
                 tp = info["n_positives"] if rule_fired else 0
             else:
                 linked_tp = len([e for e in info["event_ids"] if e in linked])
-                tp = linked_tp if linked_tp else (info["n_positives"] if rule_fired else 0)
+                tp = (
+                    linked_tp
+                    if linked_tp
+                    else (info["n_positives"] if rule_fired else 0)
+                )
             fn = max(0, info["n_positives"] - tp)
             tn = max(0, n_baseline - fp_total)
             metrics = _metrics(tp, fp_total, tn, fn)
             tp_total += tp
-            runs.append(EvaluationRun(
-                scenario=scenario,
-                total_samples=metrics["total_samples"],
-                attack_samples=info["n_positives"],
-                baseline_samples=n_baseline,
-                true_positives=metrics["true_positives"],
-                false_positives=metrics["false_positives"],
-                true_negatives=metrics["true_negatives"],
-                false_negatives=metrics["false_negatives"],
-                accuracy=metrics["accuracy"],
-                precision=metrics["precision"],
-                recall=metrics["recall"],
-                f1_score=metrics["f1_score"],
-false_positive_rate=metrics["false_positive_rate"],
-                detection_time_ms=round(elapsed, 2),
-            ))
+            runs.append(
+                EvaluationRun(
+                    scenario=scenario,
+                    total_samples=metrics["total_samples"],
+                    attack_samples=info["n_positives"],
+                    baseline_samples=n_baseline,
+                    true_positives=metrics["true_positives"],
+                    false_positives=metrics["false_positives"],
+                    true_negatives=metrics["true_negatives"],
+                    false_negatives=metrics["false_negatives"],
+                    accuracy=metrics["accuracy"],
+                    precision=metrics["precision"],
+                    recall=metrics["recall"],
+                    f1_score=metrics["f1_score"],
+                    false_positive_rate=metrics["false_positive_rate"],
+                    detection_time_ms=round(elapsed, 2),
+                )
+            )
 
         # Baseline row: TN = clean baseline, FP = baseline events linked.
         baseline_metrics = _metrics(0, fp_total, max(0, n_baseline - fp_total), 0)
-        runs.append(EvaluationRun(
-            scenario="baseline",
-            total_samples=baseline_metrics["total_samples"],
-            attack_samples=0,
-            baseline_samples=n_baseline,
-            true_positives=0,
-            false_positives=baseline_metrics["false_positives"],
-            true_negatives=baseline_metrics["true_negatives"],
-            false_negatives=0,
-            accuracy=baseline_metrics["accuracy"],
-            precision=baseline_metrics["precision"],
-            recall=baseline_metrics["recall"],
-            f1_score=baseline_metrics["f1_score"],
-false_positive_rate=baseline_metrics["false_positive_rate"],
-            detection_time_ms=round(elapsed, 2),
-        ))
+        runs.append(
+            EvaluationRun(
+                scenario="baseline",
+                total_samples=baseline_metrics["total_samples"],
+                attack_samples=0,
+                baseline_samples=n_baseline,
+                true_positives=0,
+                false_positives=baseline_metrics["false_positives"],
+                true_negatives=baseline_metrics["true_negatives"],
+                false_negatives=0,
+                accuracy=baseline_metrics["accuracy"],
+                precision=baseline_metrics["precision"],
+                recall=baseline_metrics["recall"],
+                f1_score=baseline_metrics["f1_score"],
+                false_positive_rate=baseline_metrics["false_positive_rate"],
+                detection_time_ms=round(elapsed, 2),
+            )
+        )
 
-        overall_metrics = _metrics(tp_total, fp_total, max(0, n_baseline - fp_total), n_positives - tp_total)
+        overall_metrics = _metrics(
+            tp_total, fp_total, max(0, n_baseline - fp_total), n_positives - tp_total
+        )
         overall = EvaluationRun(
             scenario="overall",
             total_samples=overall_metrics["total_samples"],
@@ -178,11 +193,11 @@ false_positive_rate=baseline_metrics["false_positive_rate"],
             precision=overall_metrics["precision"],
             recall=overall_metrics["recall"],
             f1_score=overall_metrics["f1_score"],
-false_positive_rate=overall_metrics["false_positive_rate"],
+            false_positive_rate=overall_metrics["false_positive_rate"],
             detection_time_ms=round(elapsed, 2),
         )
 
-# ---- Persist ONLY the metric history (never the alerts) -----------
+        # ---- Persist ONLY the metric history (never the alerts) -----------
         db.add(overall)
         for run in runs:
             db.add(run)
@@ -199,7 +214,9 @@ false_positive_rate=overall_metrics["false_positive_rate"],
         }
         logger.info(
             "Scenario evaluation: %d positives, %d baseline, %d rules fired",
-            n_positives, n_baseline, len(fired),
+            n_positives,
+            n_baseline,
+            len(fired),
         )
 
         result = {
@@ -214,4 +231,3 @@ false_positive_rate=overall_metrics["false_positive_rate"],
         return result
     finally:
         _cleanup(test_db, engine, path)
-

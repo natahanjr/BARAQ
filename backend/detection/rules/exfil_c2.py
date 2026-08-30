@@ -4,13 +4,14 @@ C2 (T1102.001) and DNS tunneling (T1071.004).
 Cloud sync and webhook C2 are command-line / DNS detections; DNS tunneling
 uses Sysmon 22 / snoop DNS telemetry (query length, label structure, volume).
 """
+
 from __future__ import annotations
 
 import re
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from backend.database.models import DnsQuery
 from backend.detection.rules.base import BaseRule, DetectionResult
@@ -44,7 +45,7 @@ class CloudSyncExfilRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):
                 continue
@@ -92,7 +93,7 @@ class WebhookC2Rule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):
@@ -152,7 +153,7 @@ class DnsTunnelingRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(DnsQuery).where(
                 DnsQuery.observed_at >= since,
@@ -171,7 +172,10 @@ class DnsTunnelingRule(BaseRule):
             if not query:
                 continue
             labels = query.split(".")
-            if len(labels) >= 3 and max(len(x) for x in labels[:-2]) > self._MAX_LABEL_LEN:
+            if (
+                len(labels) >= 3
+                and max(len(x) for x in labels[:-2]) > self._MAX_LABEL_LEN
+            ):
                 long_label.append(query)
             if len(query) > self._MAX_QUERY_LEN:
                 long_query.append(query)
@@ -182,40 +186,48 @@ class DnsTunnelingRule(BaseRule):
 
         loud = [k for k, c in by_base.items() if c >= self._MIN_UNIQUE_QUERIES]
         if long_label:
-            findings.append(self._result(
-                evidence=(
-                    f"DNS queries with tunnel-style long labels: "
-                    f"{', '.join(long_label[:5])}."
-                ),
-                event_ids=[],
-                confidence=min(0.9, self.confidence + 0.15),
-            ))
+            findings.append(
+                self._result(
+                    evidence=(
+                        f"DNS queries with tunnel-style long labels: "
+                        f"{', '.join(long_label[:5])}."
+                    ),
+                    event_ids=[],
+                    confidence=min(0.9, self.confidence + 0.15),
+                )
+            )
         if long_query:
-            findings.append(self._result(
-                evidence=(
-                    f"DNS queries longer than {self._MAX_QUERY_LEN} chars: "
-                    f"{', '.join(long_query[:5])}."
-                ),
-                event_ids=[],
-            ))
+            findings.append(
+                self._result(
+                    evidence=(
+                        f"DNS queries longer than {self._MAX_QUERY_LEN} chars: "
+                        f"{', '.join(long_query[:5])}."
+                    ),
+                    event_ids=[],
+                )
+            )
         if big_responses >= 5:
-            findings.append(self._result(
-                evidence=(
-                    f"{big_responses} oversized DNS responses (>= "
-                    f"{self._LARGE_RESPONSE} B) - possible TXT-payload "
-                    f"tunneling."
-                ),
-                event_ids=[],
-            ))
+            findings.append(
+                self._result(
+                    evidence=(
+                        f"{big_responses} oversized DNS responses (>= "
+                        f"{self._LARGE_RESPONSE} B) - possible TXT-payload "
+                        f"tunneling."
+                    ),
+                    event_ids=[],
+                )
+            )
         for process, pid, base in loud:
-            findings.append(self._result(
-                evidence=(
-                    f"Process '{process}' (pid {pid}) issued "
-                    f"{by_base[(process, pid, base)]} unique queries to base "
-                    f"domain '{base}' - DNS tunneling volume."
-                ),
-                event_ids=[],
-                severity="high",
-                confidence=min(0.9, self.confidence + 0.2),
-            ))
+            findings.append(
+                self._result(
+                    evidence=(
+                        f"Process '{process}' (pid {pid}) issued "
+                        f"{by_base[(process, pid, base)]} unique queries to base "
+                        f"domain '{base}' - DNS tunneling volume."
+                    ),
+                    event_ids=[],
+                    severity="high",
+                    confidence=min(0.9, self.confidence + 0.2),
+                )
+            )
         return findings

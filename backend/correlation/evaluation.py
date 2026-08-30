@@ -6,6 +6,7 @@ correlation. No accuracy percentage is ever fabricated. The corpus
 measures the correlation layer itself, so findings are compared to the
 labeled expected chains, not to group internals.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -29,21 +30,17 @@ def run_evaluation(db: Session) -> dict:
         from backend.correlation.evaluation_data import build_groups
 
         build_groups(db, scenario)
-        findings = correlate(db)
+        correlate(db)
         finding_members = {
             f.correlation_id: list(f.member_group_ids or [])
             for f in db.scalars(select(CorrelationFindingRecord)).all()
         }
-        member_groups = {
+        {
             m.behavior_group_id: m.correlation_id
             for m in db.scalars(select(CorrelationMember)).all()
         }
 
-        all_group_ids = {
-            member_id
-            for members in finding_members.values()
-            for member_id in members
-        }
+        {member_id for members in finding_members.values() for member_id in members}
         for label in scenario.get("labels", []):
             labeled += 1
             expected_ids = {

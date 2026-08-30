@@ -4,13 +4,14 @@ Covers the methodology v2 scoring: attack variants are scored against a
 separate benign-only corpus, so precision is real, and the seed is
 reproducible.
 """
+
 from __future__ import annotations
 
 from scripts.tune_parameters import (
     BENIGN_BUILDERS,
     EXPECTED_RULE,
-    _build_benign_session,
     _build_attack_sessions,
+    _build_benign_session,
     _score,
 )
 
@@ -41,7 +42,8 @@ def test_tuner_override_thresholds_changes_score(db):
     benign = _build_benign_session()
 
     strict = _score(
-        attack, benign,
+        attack,
+        benign,
         {"brute_force": {"threshold": 99}},
         window_minutes=10,
     )
@@ -49,7 +51,8 @@ def test_tuner_override_thresholds_changes_score(db):
     assert strict[2] == 1
 
     exact = _score(
-        attack, benign,
+        attack,
+        benign,
         {"network_recon": {"distinct_ports": 999}},
         window_minutes=10,
     )

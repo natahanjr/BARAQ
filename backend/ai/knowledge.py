@@ -3,6 +3,7 @@
 Each intent carries example phrases that are vectorised with TF-IDF to
 match analyst questions at runtime.
 """
+
 INTENTS: list[dict] = [
     {
         "id": "explain_alert",

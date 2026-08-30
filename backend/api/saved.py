@@ -267,7 +267,11 @@ def _render_panel(
     if saved_id:
         saved = db.get(SavedSearch, saved_id)
         if saved is None:
-            return {"id": panel.get("id"), "title": panel.get("title"), "error": "saved search deleted"}
+            return {
+                "id": panel.get("id"),
+                "title": panel.get("title"),
+                "error": "saved search deleted",
+            }
         query = saved.query
         earliest = saved.earliest or "-24h"
         latest = saved.latest or None
@@ -275,11 +279,20 @@ def _render_panel(
         earliest = "-24h"
         latest = None
     if not query:
-        return {"id": panel.get("id"), "title": panel.get("title"), "error": "panel has no query"}
+        return {
+            "id": panel.get("id"),
+            "title": panel.get("title"),
+            "error": "panel has no query",
+        }
     try:
         result = execute_search(
-            db, query, org=org, earliest=earliest, latest=latest,
-            default_limit=1000, include_demo=include_demo,
+            db,
+            query,
+            org=org,
+            earliest=earliest,
+            latest=latest,
+            default_limit=1000,
+            include_demo=include_demo,
         )
     except SearchError as exc:
         return {"id": panel.get("id"), "title": panel.get("title"), "error": str(exc)}
@@ -301,7 +314,11 @@ def _render_panel(
             count_idx = len(result.columns) - 1
         if viz == "count":
             out["count"] = sum(
-                r[count_idx] if len(r) > count_idx and isinstance(r[count_idx], (int, float)) else 1
+                (
+                    r[count_idx]
+                    if len(r) > count_idx and isinstance(r[count_idx], (int, float))
+                    else 1
+                )
                 for r in result.rows
             )
         elif viz == "top":
@@ -310,7 +327,14 @@ def _render_panel(
                 return {**out, "error": f"field {target!r} not in results"}
             idx = result.columns.index(target)
             out["data"] = [
-                {"name": r[idx], "count": r[count_idx] if len(r) > count_idx and isinstance(r[count_idx], (int, float)) else 1}
+                {
+                    "name": r[idx],
+                    "count": (
+                        r[count_idx]
+                        if len(r) > count_idx and isinstance(r[count_idx], (int, float))
+                        else 1
+                    ),
+                }
                 for r in result.rows[:limit]
             ]
         elif viz == "area":
@@ -319,15 +343,23 @@ def _render_panel(
                 out["data"] = [
                     {
                         "t": r[0],
-                        "value": r[value_idx]
-                        if len(r) > value_idx and isinstance(r[value_idx], (int, float))
-                        else 0,
+                        "value": (
+                            r[value_idx]
+                            if len(r) > value_idx
+                            and isinstance(r[value_idx], (int, float))
+                            else 0
+                        ),
                     }
                     for r in result.rows[:limit]
                 ]
                 return out
             time_idx = next(
-                (i for i, c in enumerate(result.columns) if c in ("timestamp", "created_at")), 0
+                (
+                    i
+                    for i, c in enumerate(result.columns)
+                    if c in ("timestamp", "created_at")
+                ),
+                0,
             )
             target = field or (result.columns[-1] if result.columns else "count")
             if target in result.columns:

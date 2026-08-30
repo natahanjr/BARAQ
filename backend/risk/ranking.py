@@ -15,13 +15,13 @@ Formula:
 
 Each component is separately stored for full explainability.
 """
+
 from __future__ import annotations
 
 import logging
-import math
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timedelta, timezone
-from typing import Sequence
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime, timedelta
 
 logger = logging.getLogger("baraq.risk.ranking")
 
@@ -72,7 +72,9 @@ def asset_criticality_multiplier(criticality: str | None) -> float:
 
 
 # ── Correlation Multiplier (Section 4) ───────────────────────────────
-def correlation_multiplier(correlated_count: int, is_attack_chain: bool = False) -> float:
+def correlation_multiplier(
+    correlated_count: int, is_attack_chain: bool = False
+) -> float:
     """Map the number of related alerts to a ranking multiplier.
 
     ``correlated_count`` is the total number of alerts in the correlation
@@ -90,7 +92,9 @@ def correlation_multiplier(correlated_count: int, is_attack_chain: bool = False)
 
 
 # ── Recency / Time Decay (Section 5) ─────────────────────────────────
-def recency_multiplier(last_seen: datetime | None, now: datetime | None = None) -> float:
+def recency_multiplier(
+    last_seen: datetime | None, now: datetime | None = None
+) -> float:
     """Apply time decay based on how recently the alert was seen.
 
     The decay is deterministic and testable.
@@ -98,12 +102,12 @@ def recency_multiplier(last_seen: datetime | None, now: datetime | None = None) 
     if last_seen is None:
         return 0.50  # unknown age → moderate dampening
     if now is None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
     # Ensure both are timezone-aware
     if last_seen.tzinfo is None:
-        last_seen = last_seen.replace(tzinfo=timezone.utc)
+        last_seen = last_seen.replace(tzinfo=UTC)
     if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
+        now = now.replace(tzinfo=UTC)
     age = max(timedelta(0), now - last_seen)
     minutes = age.total_seconds() / 60.0
     if minutes <= 15:
@@ -181,17 +185,24 @@ class RiskBreakdown:
             f"Asset: {self.asset_criticality.upper()}      ×{self.asset_multiplier:.2f}",
         ]
         corr_label = (
-            "Attack chain" if self.is_attack_chain
+            "Attack chain"
+            if self.is_attack_chain
             else f"{self.correlated_alerts} alert{'s' if self.correlated_alerts != 1 else ''}"
         )
         parts.append(f"Correlation: {corr_label} ×{self.correlation_multiplier:.2f}")
         if self.recency_minutes < 60:
-            parts.append(f"Recency: {self.recency_minutes:.0f} minutes   ×{self.recency_multiplier:.2f}")
+            parts.append(
+                f"Recency: {self.recency_minutes:.0f} minutes   ×{self.recency_multiplier:.2f}"
+            )
         else:
             hours = self.recency_minutes / 60
-            parts.append(f"Recency: {hours:.1f} hours     ×{self.recency_multiplier:.2f}")
+            parts.append(
+                f"Recency: {hours:.1f} hours     ×{self.recency_multiplier:.2f}"
+            )
         if self.occurrence > 1:
-            parts.append(f"Repeat: #{self.occurrence}              ×{self.repeat_dampener:.2f}")
+            parts.append(
+                f"Repeat: #{self.occurrence}              ×{self.repeat_dampener:.2f}"
+            )
         parts.append(f"\nRisk Score: {self.risk_score:.3f}")
         return "\n".join(parts)
 
@@ -252,7 +263,13 @@ def compute_risk_score(
         correlation_multiplier=crm,
         is_attack_chain=is_attack_chain,
         recency_minutes=(
-            max(0.0, ((now or datetime.now(timezone.utc)) - last_seen.replace(tzinfo=timezone.utc)).total_seconds() / 60.0)
+            max(
+                0.0,
+                (
+                    (now or datetime.now(UTC)) - last_seen.replace(tzinfo=UTC)
+                ).total_seconds()
+                / 60.0,
+            )
             if last_seen
             else 0.0
         ),
@@ -281,14 +298,12 @@ def rank_alerts(
     sorted by risk_score descending.
     """
     if now is None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
     scored = []
     for alert in alerts:
         last_seen = (
-            alert.get("updated_at")
-            or alert.get("created_at")
-            or alert.get("last_seen")
+            alert.get("updated_at") or alert.get("created_at") or alert.get("last_seen")
         )
         if isinstance(last_seen, str):
             try:
@@ -312,7 +327,14 @@ def rank_alerts(
         scored.append(alert)
 
     # Sort: risk_score DESC, confidence DESC, severity DESC, last_seen DESC
-    severity_order = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0, "healthy": 0}
+    severity_order = {
+        "critical": 4,
+        "high": 3,
+        "medium": 2,
+        "low": 1,
+        "info": 0,
+        "healthy": 0,
+    }
     scored.sort(
         key=lambda a: (
             a["risk_score"],

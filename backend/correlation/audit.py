@@ -1,7 +1,8 @@
 """Phase 5 correlation audit (spec 5.63)."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -22,7 +23,7 @@ def record(
         action=action,
         actor=actor,
         details=details or {},
-        created_at=now or datetime.now(timezone.utc),
+        created_at=now or datetime.now(UTC),
     )
     db.add(event)
     return event

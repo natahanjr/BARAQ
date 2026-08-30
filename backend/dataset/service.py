@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from sqlalchemy import String, func, select
 from sqlalchemy.orm import Session
@@ -23,7 +23,6 @@ from backend.database.models import (
     DatasetEvent,
     DatasetExport,
     DatasetExportFile,
-    NormalizedEvent,
 )
 
 from .collector import active_collection
@@ -51,7 +50,9 @@ def status(session: Session) -> dict:
     next_export = None
     if coll.status != "complete" and last:
         next_export = last + timedelta(hours=coll.export_interval_hours)
-    progress = (coll.total_events / coll.target_events * 100.0) if coll.target_events else 0.0
+    progress = (
+        (coll.total_events / coll.target_events * 100.0) if coll.target_events else 0.0
+    )
 
     return {
         "enabled": True,
@@ -127,7 +128,9 @@ def export_now(session: Session) -> dict:
             finally:
                 worker.close()
 
-        _export_thread = threading.Thread(target=_run, daemon=True, name="dataset-export")
+        _export_thread = threading.Thread(
+            target=_run, daemon=True, name="dataset-export"
+        )
         _export_thread.start()
         return {"status": "started", "collection_id": coll.id}
 
@@ -139,7 +142,7 @@ def stats(session: Session, collection_id: int | None = None) -> dict:
         return {}
     coll = session.get(DatasetCollection, coll.id)
 
-    base = select(DatasetEvent).where(DatasetEvent.collection_id == coll.id)
+    select(DatasetEvent).where(DatasetEvent.collection_id == coll.id)
 
     by_type: dict[str, int] = {}
     rows = session.execute(
@@ -241,12 +244,16 @@ def exports(session: Session, limit: int = 20) -> dict:
     coll = active_collection(session, create_if_missing=False)
     if coll is None:
         return {"items": []}
-    rows = session.execute(
-        select(DatasetExport)
-        .where(DatasetExport.collection_id == coll.id)
-        .order_by(DatasetExport.id.desc())
-        .limit(limit)
-    ).scalars().all()
+    rows = (
+        session.execute(
+            select(DatasetExport)
+            .where(DatasetExport.collection_id == coll.id)
+            .order_by(DatasetExport.id.desc())
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
     return {"items": [e.to_dict() for e in rows]}
 
 
@@ -254,11 +261,15 @@ def export_detail(session: Session, export_id: int) -> dict:
     export = session.get(DatasetExport, export_id)
     if export is None:
         return None
-    files = session.execute(
-        select(DatasetExportFile)
-        .where(DatasetExportFile.export_id == export.id)
-        .order_by(DatasetExportFile.part_number.asc())
-    ).scalars().all()
+    files = (
+        session.execute(
+            select(DatasetExportFile)
+            .where(DatasetExportFile.export_id == export.id)
+            .order_by(DatasetExportFile.part_number.asc())
+        )
+        .scalars()
+        .all()
+    )
     return {**export.to_dict(), "files": [f.to_dict() for f in files]}
 
 
@@ -268,11 +279,15 @@ def manifest(session: Session) -> dict | None:
         return None
     path = os.path.join(DATASET_DIR, f"{coll.name}_{'manifest.json'}")
     if not os.path.exists(path):
-        files = session.execute(
-            select(DatasetExportFile)
-            .where(DatasetExportFile.collection_id == coll.id)
-            .order_by(DatasetExportFile.part_number.asc())
-        ).scalars().all()
+        files = (
+            session.execute(
+                select(DatasetExportFile)
+                .where(DatasetExportFile.collection_id == coll.id)
+                .order_by(DatasetExportFile.part_number.asc())
+            )
+            .scalars()
+            .all()
+        )
         if not files:
             return None
         return _manifest_from_db(coll, files)

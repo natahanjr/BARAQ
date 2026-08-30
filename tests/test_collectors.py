@@ -1,4 +1,5 @@
 """Test collectors: live collectors and collector manager wiring."""
+
 from __future__ import annotations
 
 import pytest
@@ -24,7 +25,16 @@ def clean_health_registry():
 def test_collector_manager_registers_live_collectors():
     manager = CollectorManager()
     names = {c.name for c in manager.collectors}
-    assert {"eventlog", "powershell", "process", "network", "dns_http", "email", "usb", "malware"} <= names
+    assert {
+        "eventlog",
+        "powershell",
+        "process",
+        "network",
+        "dns_http",
+        "email",
+        "usb",
+        "malware",
+    } <= names
     assert "simulator" not in names
 
 
@@ -68,7 +78,10 @@ def test_malware_collector_ignores_empty_files(monkeypatch, tmp_path):
     for r in records:
         assert r["is_malicious"] is False
         assert r["signature_name"] == ""
-        assert r["sha256"] == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        assert (
+            r["sha256"]
+            == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        )
 
 
 def test_malware_collector_still_flags_real_bad_hash(monkeypatch, tmp_path):
@@ -84,7 +97,9 @@ def test_malware_collector_still_flags_real_bad_hash(monkeypatch, tmp_path):
 
     sig = tmp_path / "signatures.json"
     sig.write_text(
-        json.dumps({"hashes": {digest: "known-bad-sample"}, "paths": [], "malware_names": []}),
+        json.dumps(
+            {"hashes": {digest: "known-bad-sample"}, "paths": [], "malware_names": []}
+        ),
         encoding="utf-8",
     )
     monkeypatch.setattr(malware_mod, "SCAN_TARGETS", ((str(tmp_path), 50),))
@@ -102,7 +117,9 @@ def test_fixtures_produce_eventlog_records():
 
 def test_fixtures_port_scan_records():
     records = port_scan(ports=30)
-    assert {r["remote_port"] for r in records} == {1 + (i * 137) % 65535 for i in range(30)}
+    assert {r["remote_port"] for r in records} == {
+        1 + (i * 137) % 65535 for i in range(30)
+    }
     assert all(r["state"] == "SYN_SENT" for r in records)
 
 
@@ -132,7 +149,6 @@ def test_health_registry_tracks_channels(clean_health_registry):
 
 
 def test_health_permission_error_marked(clean_health_registry):
-    from backend.collectors.health import PRIVILEGE_NOT_HELD
 
     registry = clean_health_registry
 

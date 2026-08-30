@@ -5,6 +5,7 @@ a blind detector (default thresholds, no supervised opinion). The bundled
 bootstrap asset arms detection on day 1; the first local retrain replaces
 it and the status surface always discloses which model is serving.
 """
+
 from __future__ import annotations
 
 import os
@@ -25,8 +26,8 @@ def fresh_env(monkeypatch):
 def _fresh_detector(fresh_env):
     import importlib
 
-    import backend.ml.anomaly as anomaly_mod
     import backend.config as config_mod
+    import backend.ml.anomaly as anomaly_mod
 
     # Re-read config so the redirected env vars take effect.
     importlib.reload(config_mod)
@@ -59,7 +60,6 @@ def test_real_training_supersedes_bootstrap(fresh_env, db):
     from tests.fixtures import benign_baseline, ml_credential_spray
 
     detector, _ = _fresh_detector(fresh_env)
-    initial_source = detector.model_source  # "bootstrap" or "none"
 
     for r in benign_baseline(80):
         db.add(NormalizedEventRow(r))

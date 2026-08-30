@@ -6,6 +6,7 @@ sliding-window corruption rate crosses the CRITICAL threshold - triggers
 the repair sequence automatically (clear logs, restart EventLog service,
 retrain ML, notify the admin).
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,12 +36,13 @@ def _monitor_loop() -> None:
                 if DATA_QUALITY_AUTO_REPAIR and rate >= DATA_QUALITY_CRITICAL_RATE:
                     logger.warning(
                         "Data-quality corruption rate %.1f%% crossed CRITICAL "
-                        "(%.1f%%) - running auto-repair", rate * 100,
+                        "(%.1f%%) - running auto-repair",
+                        rate * 100,
                         DATA_QUALITY_CRITICAL_RATE * 100,
                     )
                     run_repair(db, f"auto: corruption rate {rate * 100:.0f}%")
                 persist_snapshot(db)
-        except Exception:  # noqa: BLE001 - monitor must never kill the app
+        except Exception:
             logger.exception("Data-quality monitor cycle failed")
 
 

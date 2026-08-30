@@ -3,6 +3,7 @@
 Usage:
     py -m backend.pipeline            # live collection (Windows)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -11,7 +12,9 @@ import sys
 
 from backend.database.connection import SessionLocal, init_db
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(message)s"
+)
 logger = logging.getLogger("baraq.pipeline")
 
 
@@ -33,11 +36,16 @@ def main() -> int:
         for f in result["findings"]:
             logger.warning(
                 "ALERT [%s] %s | MITRE %s | %s",
-                f["severity"].upper(), f["name"], f["mitre_id"], f["evidence"][:160],
+                f["severity"].upper(),
+                f["name"],
+                f["mitre_id"],
+                f["evidence"][:160],
             )
-        print(f"\nPipeline complete: {result['collected']} records, "
-              f"{result['alerts_created']} new alerts, "
-              f"{len(result['findings'])} findings.")
+        print(
+            f"\nPipeline complete: {result['collected']} records, "
+            f"{result['alerts_created']} new alerts, "
+            f"{len(result['findings'])} findings."
+        )
         return 0
     finally:
         db.close()

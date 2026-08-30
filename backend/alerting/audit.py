@@ -4,6 +4,7 @@ Every state-changing operation on an alert creates an
 ``alert_audit_events`` row: CREATED, OCCURRENCE, ACKNOWLEDGED, ASSIGNED,
 IN_PROGRESS, RESOLVED, CLOSED, SUPPRESSED, REOPENED, FEEDBACK.
 """
+
 from __future__ import annotations
 
 from sqlalchemy.orm import Session

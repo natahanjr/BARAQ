@@ -28,7 +28,16 @@ SIGMA_SLUG = "sigma-master"
 
 DEFAULT_SUBDIRS = ("windows",)
 ALL_SUBDIRS = (
-    "windows", "linux", "macos", "cloud", "network", "application", "web", "aws", "gcp", "azure",
+    "windows",
+    "linux",
+    "macos",
+    "cloud",
+    "network",
+    "application",
+    "web",
+    "aws",
+    "gcp",
+    "azure",
 )
 
 RULES_REL = "rules"
@@ -49,14 +58,14 @@ def extract_subdirs(archive: bytes, subdirs: tuple[str, ...], out_dir: Path) -> 
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
         names = tar.getnames()
         root = next((n.split("/", 1)[0] for n in names if n and "/" in n), SIGMA_SLUG)
-        wanted_roots = {
-            f"{root}/{RULES_REL}/{s}" for s in subdirs
-        } if subdirs else set()
+        wanted_roots = (
+            {f"{root}/{RULES_REL}/{s}" for s in subdirs} if subdirs else set()
+        )
         for member in tar.getmembers():
             if not member.isfile():
                 continue
             name = member.name.replace("\\", "/")
-            if not (name.endswith(".yml") or name.endswith(".yaml")):
+            if not (name.endswith((".yml", ".yaml"))):
                 continue
             if subdirs and not any(name.startswith(r + "/") for r in wanted_roots):
                 continue
@@ -77,18 +86,28 @@ def extract_subdirs(archive: bytes, subdirs: tuple[str, ...], out_dir: Path) -> 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Download SigmaHQ rules for BARAQ")
     parser.add_argument(
-        "--subdirs", default=",".join(DEFAULT_SUBDIRS),
+        "--subdirs",
+        default=",".join(DEFAULT_SUBDIRS),
         help="comma-separated rules subdirectories to pull "
-             f"(one of: {', '.join(ALL_SUBDIRS)}; 'all' for everything)",
+        f"(one of: {', '.join(ALL_SUBDIRS)}; 'all' for everything)",
     )
     parser.add_argument(
-        "--out", default=None,
+        "--out",
+        default=None,
         help="output directory (default: <repo>/sigma_rules)",
     )
-    parser.add_argument("--dry-run", action="store_true", help="show what would be pulled without downloading")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what would be pulled without downloading",
+    )
     args = parser.parse_args()
 
-    out_dir = Path(args.out) if args.out else Path(__file__).resolve().parent.parent / "sigma_rules"
+    out_dir = (
+        Path(args.out)
+        if args.out
+        else Path(__file__).resolve().parent.parent / "sigma_rules"
+    )
 
     if args.subdirs.strip().lower() == "all":
         subdirs = ALL_SUBDIRS
@@ -104,12 +123,16 @@ def main() -> int:
     print(f"Subdirectories: {', '.join(subdirs)}")
 
     if args.dry_run:
-        print("Dry run - nothing downloaded. Enable the Sigma engine by restarting BARAQ.")
+        print(
+            "Dry run - nothing downloaded. Enable the Sigma engine by restarting BARAQ."
+        )
         return 0
 
     archive = fetch_sigma_archive()
     extracted, skipped = extract_subdirs(archive, subdirs, out_dir)
-    print(f"Extracted {extracted} rule file(s) to {out_dir} ({skipped} existing skipped).")
+    print(
+        f"Extracted {extracted} rule file(s) to {out_dir} ({skipped} existing skipped)."
+    )
     if extracted:
         sample = sorted(out_dir.rglob("*.yml"))[:3]
         for path in sample:

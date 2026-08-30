@@ -1,8 +1,8 @@
 """Detector D004 - Python from user-writable path tests (Phase 2)."""
+
 from __future__ import annotations
 
 from backend.detection.engine import run_detection
-
 from tests.detection.helpers import event
 
 
@@ -76,7 +76,9 @@ def test_missing_path_no_detection():
 
 
 def test_pythonw_supported():
-    assert d004(py("C:\\Users\\alice\\Downloads\\x.pyw", name="pythonw.exe")) is not None
+    assert (
+        d004(py("C:\\Users\\alice\\Downloads\\x.pyw", name="pythonw.exe")) is not None
+    )
 
 
 def test_confidence_grows_in_temp():
@@ -94,7 +96,10 @@ def test_empty_command_line_still_detected_with_path():
         action="process_start",
         event_type="process",
         user="alice",
-        process={"name": "python.exe", "path": "C:\\Users\\alice\\AppData\\Local\\Temp\\tool.py"},
+        process={
+            "name": "python.exe",
+            "path": "C:\\Users\\alice\\AppData\\Local\\Temp\\tool.py",
+        },
         facts={},
     )
     assert d004(detection) is not None

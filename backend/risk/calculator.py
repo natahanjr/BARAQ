@@ -7,9 +7,10 @@ propagation adjustments, final score, severity, state, confidence). It has no
 database access and no hidden state, so the same factors always produce the
 same result.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.config import (
     RISK_DECAY_HALF_LIFE_HOURS,
@@ -25,7 +26,9 @@ def decay_factor(age_hours: float, half_life_hours: float | None = None) -> floa
     full value; evidence half a life old keeps half; nothing ever goes
     negative - decay is a multiplier, not a subtraction.
     """
-    half_life = RISK_DECAY_HALF_LIFE_HOURS if half_life_hours is None else half_life_hours
+    half_life = (
+        RISK_DECAY_HALF_LIFE_HOURS if half_life_hours is None else half_life_hours
+    )
     if half_life <= 0:
         return 1.0
     if age_hours <= 0:
@@ -74,7 +77,9 @@ def thresholds_crossed(old_score: float, new_score: float) -> list[str]:
     return order[lo + 1 : hi + 1]
 
 
-def trend_for(previous_score: float | None, current_score: float, delta: float = 3.0) -> str:
+def trend_for(
+    previous_score: float | None, current_score: float, delta: float = 3.0
+) -> str:
     """Trend from consecutive snapshots (spec 6.24): descriptive only."""
     if previous_score is None:
         return "UNKNOWN"
@@ -180,11 +185,7 @@ def calculate_risk(factors: list, now: datetime) -> RiskCalculation:
     state = state_for(final_score)
 
     total_score = direct_total + contextual_total
-    confidence = (
-        round(direct_total / total_score, 4)
-        if total_score > 0
-        else 1.0
-    )
+    confidence = round(direct_total / total_score, 4) if total_score > 0 else 1.0
 
     return RiskCalculation(
         base_score=base_score,
@@ -202,4 +203,4 @@ def calculate_risk(factors: list, now: datetime) -> RiskCalculation:
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)

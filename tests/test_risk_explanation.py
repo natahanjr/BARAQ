@@ -5,6 +5,7 @@ risk score: the rule-vs-ML composition, the context modifier and each
 dynamic adjustment (signal, delta, reason) - not just a number and a
 text dump in the evidence.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,14 +26,20 @@ class TestHybridComposition:
     def test_hybrid_parts_sum_to_final(self):
         events = [{"ml_score": 0.7}, {"ml_score": 0.5}]
         final, rule_part, ml_part, level = hybrid_parts(
-            severity="high", confidence=0.8, event_count=3, anomaly_scores=events,
+            severity="high",
+            confidence=0.8,
+            event_count=3,
+            anomaly_scores=events,
         )
         assert abs(final - (rule_part + ml_part)) < 0.02
         assert rule_part > ml_part  # rule carries 0.6 weight
         assert level in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
         # backward compat: hybrid_risk still returns (final, level)
-        f2, l2 = hybrid_risk(
-            severity="high", confidence=0.8, event_count=3, anomaly_scores=events,
+        f2, _l2 = hybrid_risk(
+            severity="high",
+            confidence=0.8,
+            event_count=3,
+            anomaly_scores=events,
         )
         assert f2 == pytest.approx(final, abs=0.02)
 
@@ -59,7 +66,9 @@ class TestStructuredPayload:
         expected = base * payload["context_modifier"] + sum(
             a["delta"] for a in payload["adjustments"]
         )
-        assert payload["final"] == pytest.approx(min(100.0, max(0.0, expected)), abs=1.0)
+        assert payload["final"] == pytest.approx(
+            min(100.0, max(0.0, expected)), abs=1.0
+        )
         assert payload["context_modifier"] >= 0.5
         assert isinstance(payload["adjustments"], list)
 
@@ -79,7 +88,7 @@ class TestStructuredPayload:
         for signal, delta in deltas.items():
             assert f"{signal} {delta:+d}" in alert.evidence
         for adj in payload["adjustments"]:
-            assert "note" in adj and adj["note"]
+            assert adj.get("note")
 
     def test_migration_adds_risk_json_column(self, db):
         from sqlalchemy import inspect

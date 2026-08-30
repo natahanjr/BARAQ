@@ -4,11 +4,12 @@ Flags sustained high-volume connections from a single process to a
 single *external* remote IP - the network signature of a command-and-control
 beacon or bulk data transfer that normal client traffic does not exhibit.
 """
+
 from __future__ import annotations
 
 import ipaddress
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -39,9 +40,7 @@ def _is_external(ip: str) -> bool:
         return True
     if addr.is_loopback or addr.is_link_local or addr.is_private:
         return False
-    if addr.is_multicast or addr.is_reserved:
-        return False
-    return True
+    return not (addr.is_multicast or addr.is_reserved)
 
 
 class C2BeaconRule(BaseRule):
@@ -75,7 +74,7 @@ class C2BeaconRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NetworkConnection).where(
                 NetworkConnection.observed_at >= since,
@@ -95,7 +94,9 @@ class C2BeaconRule(BaseRule):
             bucket["count"] += 1
             bucket["sent"] += conn.bytes_sent or 0
             bucket["recv"] += conn.bytes_recv or 0
-            bucket["max_duration"] = max(bucket["max_duration"], conn.duration_seconds or 0.0)
+            bucket["max_duration"] = max(
+                bucket["max_duration"], conn.duration_seconds or 0.0
+            )
 
         for (process, remote), stats in buckets.items():
             total = stats["sent"] + stats["recv"]

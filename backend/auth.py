@@ -5,6 +5,7 @@ where the signature is an HMAC-SHA256 over the payload using a secret derived
 from the same secret as the API keys; payload carries user id, username, role
 and an expiry timestamp, so sessions are stateless and survive restarts.
 """
+
 from __future__ import annotations
 
 import base64
@@ -64,16 +65,16 @@ def create_token(
         "exp": int(time.time()) + ttl_seconds,
         "jti": secrets.token_hex(8),
     }
-    body = base64.urlsafe_b64encode(
-        json.dumps(payload).encode("utf-8")
-    ).rstrip(b"=").decode("ascii")
+    body = (
+        base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8"))
+        .rstrip(b"=")
+        .decode("ascii")
+    )
     sig = hmac.new(_token_secret(), body.encode("ascii"), hashlib.sha256).hexdigest()
     return f"{body}.{sig}"
 
 
-def create_mfa_challenge(
-    user_id: int, username: str, ttl_seconds: int = 300
-) -> str:
+def create_mfa_challenge(user_id: int, username: str, ttl_seconds: int = 300) -> str:
     """Short-lived token proving password verification passed.
 
     Carries ``mfa`` in the payload so the login endpoint can tell it apart
@@ -88,9 +89,11 @@ def create_mfa_challenge(
         "exp": int(time.time()) + ttl_seconds,
         "jti": secrets.token_hex(8),
     }
-    body = base64.urlsafe_b64encode(
-        json.dumps(payload).encode("utf-8")
-    ).rstrip(b"=").decode("ascii")
+    body = (
+        base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8"))
+        .rstrip(b"=")
+        .decode("ascii")
+    )
     sig = hmac.new(_token_secret(), body.encode("ascii"), hashlib.sha256).hexdigest()
     return f"{body}.{sig}"
 
@@ -104,9 +107,7 @@ def verify_token(token: str) -> dict | None:
         ).hexdigest()
         if not hmac.compare_digest(sig, expected):
             return None
-        payload = json.loads(
-            base64.urlsafe_b64decode(body + "=" * (-len(body) % 4))
-        )
+        payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
         if int(payload.get("exp", 0)) < time.time():
             return None
         return payload

@@ -24,12 +24,12 @@ The engine produces two calibrations used by the alerting layer:
   when the evidence is strongly developmental and confidence is low - the
   classic false-positive profile on a developer laptop.
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from dataclasses import dataclass, field
-from pathlib import PureWindowsPath
 
 from sqlalchemy import select
 
@@ -51,79 +51,285 @@ _SYSTEM_ROOT_MARKERS = (
 )
 
 _KNOWN_SERVICE_PROCESSES = {
-    "svchost.exe", "lsass.exe", "csrss.exe", "wininit.exe", "winlogon.exe",
-    "services.exe", "smss.exe", "spoolsv.exe", "SearchHost.exe",
-    "SearchIndexer.exe", "OneDrive.exe", "Teams.exe", "MsMpEng.exe",
-    "MsMpEngCp.exe", "TrustedInstaller.exe", "TiWorker.exe", "conhost.exe",
-    "sihost.exe", "taskhostw.exe", "RuntimeBroker.exe", "dllhost.exe",
-    "registry.exe", "wmiprvse.exe", "WmiPrvSE.exe", "audiodg.exe",
-    "fontdrvhost.exe", "dwm.exe", "ShellExperienceHost.exe",
-    "StartMenuExperienceHost.exe", "Widgets.exe", "ctfmon.exe",
-    "PresentationFontCache.exe", "PcaSvc.exe", "consent.exe", "explorer.exe",
-    "agent_service.exe", "securityhealthservice.exe", "SecurityHealthSystray.exe",
-    "msiexec.exe", "sihost.exe", "taskhostex.exe", "fontdrvhost.exe",
-    "winlogon.exe", "LogonUI.exe", "userinit.exe", "dllhost.exe",
-    "postgres.exe", "postmaster.exe", "sqlservr.exe", "mysqld.exe", "mongod.exe",
-    "redis-server.exe", "nginx.exe", "httpd.exe", "w3wp.exe", "node-red.exe",
+    "svchost.exe",
+    "lsass.exe",
+    "csrss.exe",
+    "wininit.exe",
+    "winlogon.exe",
+    "services.exe",
+    "smss.exe",
+    "spoolsv.exe",
+    "SearchHost.exe",
+    "SearchIndexer.exe",
+    "OneDrive.exe",
+    "Teams.exe",
+    "MsMpEng.exe",
+    "MsMpEngCp.exe",
+    "TrustedInstaller.exe",
+    "TiWorker.exe",
+    "conhost.exe",
+    "sihost.exe",
+    "taskhostw.exe",
+    "RuntimeBroker.exe",
+    "dllhost.exe",
+    "registry.exe",
+    "wmiprvse.exe",
+    "WmiPrvSE.exe",
+    "audiodg.exe",
+    "fontdrvhost.exe",
+    "dwm.exe",
+    "ShellExperienceHost.exe",
+    "StartMenuExperienceHost.exe",
+    "Widgets.exe",
+    "ctfmon.exe",
+    "PresentationFontCache.exe",
+    "PcaSvc.exe",
+    "consent.exe",
+    "explorer.exe",
+    "agent_service.exe",
+    "securityhealthservice.exe",
+    "SecurityHealthSystray.exe",
+    "msiexec.exe",
+    "taskhostex.exe",
+    "LogonUI.exe",
+    "userinit.exe",
+    "postgres.exe",
+    "postmaster.exe",
+    "sqlservr.exe",
+    "mysqld.exe",
+    "mongod.exe",
+    "redis-server.exe",
+    "nginx.exe",
+    "httpd.exe",
+    "w3wp.exe",
+    "node-red.exe",
 }
 
 _KNOWN_TOOL_PROCESSES = {
-    "cmd.exe", "powershell.exe", "pwsh.exe", "WindowsTerminal.exe", "wt.exe",
-    "conhost.exe", "notepad.exe", "mspaint.exe", "calc.exe", "explorer.exe",
-    "taskmgr.exe", "regedit.exe", "mmc.exe", "powershell_ise.exe",
-    "msedge.exe", "chrome.exe", "firefox.exe", "opera.exe", "brave.exe",
-    "outlook.exe", "winword.exe", "excel.exe", "powerpnt.exe", "onenote.exe",
-    "teams.exe", "slack.exe", "discord.exe", "zoom.exe", "code.exe",
-    "code-insiders.exe", "winpty.exe", "agent.exe", "grep.exe", "find.exe",
+    "cmd.exe",
+    "powershell.exe",
+    "pwsh.exe",
+    "WindowsTerminal.exe",
+    "wt.exe",
+    "conhost.exe",
+    "notepad.exe",
+    "mspaint.exe",
+    "calc.exe",
+    "explorer.exe",
+    "taskmgr.exe",
+    "regedit.exe",
+    "mmc.exe",
+    "powershell_ise.exe",
+    "msedge.exe",
+    "chrome.exe",
+    "firefox.exe",
+    "opera.exe",
+    "brave.exe",
+    "outlook.exe",
+    "winword.exe",
+    "excel.exe",
+    "powerpnt.exe",
+    "onenote.exe",
+    "teams.exe",
+    "slack.exe",
+    "discord.exe",
+    "zoom.exe",
+    "code.exe",
+    "code-insiders.exe",
+    "winpty.exe",
+    "agent.exe",
+    "grep.exe",
+    "find.exe",
     # Communication / collaboration apps (legitimate external connections).
-    "spotify.exe", "telegram.exe", "signal.exe", "whatsapp.exe",
+    "spotify.exe",
+    "telegram.exe",
+    "signal.exe",
+    "whatsapp.exe",
     # System update / security agents.
-    "MpCmdRun.exe", "MpDlpCmd.exe", "MsMpEng.exe",
+    "MpCmdRun.exe",
+    "MpDlpCmd.exe",
+    "MsMpEng.exe",
 }
 
 _DEV_PROCESSES = {
-    "python.exe", "pythonw.exe", "py.exe", "python3.exe", "pip.exe", "pip3.exe",
-    "node.exe", "npm.exe", "npx.exe", "yarn.exe", "pnpm.exe", "tsc.exe",
-    "tsx.exe", "vite.exe", "git.exe", "git-bash.exe", "bash.exe", "sh.exe",
-    "jupyter-notebook.exe", "jupyter.exe", "ipython.exe", "conda.exe",
-    "mamba.exe", "poetry.exe", "uv.exe", "docker.exe", "docker-compose.exe",
-    "wsl.exe", "wslhost.exe", "sqlite3.exe", "psql.exe", "mysql.exe",
-    "redis-cli.exe", "mongod.exe", "go.exe", "cargo.exe", "rustc.exe",
-    "javac.exe", "java.exe", "gradle.exe", "mvn.exe", "dotnet.exe",
-    "dotnet.exe", "cl.exe", "gcc.exe", "g++.exe", "make.exe", "cmake.exe",
-    "ninja.exe", "bun.exe", "deno.exe", "php.exe", "ruby.exe", "perl.exe",
-    "lua.exe", "rscript.exe", "swift.exe", "kotlinc.exe", "flutter.exe",
-    "adb.exe", "kubectl.exe", "terraform.exe", "ansible.exe", "scp.exe",
-    "ssh.exe", "curl.exe", "wget.exe", "jq.exe", "rg.exe", "ripgrep.exe",
-    "eslint.exe", "prettier.exe", "ruff.exe", "black.exe", "mypy.exe",
-    "pytest.exe", "jest.exe", "next.exe", "ng.exe", "nest.exe", "create-react-app.exe",
+    "python.exe",
+    "pythonw.exe",
+    "py.exe",
+    "python3.exe",
+    "pip.exe",
+    "pip3.exe",
+    "node.exe",
+    "npm.exe",
+    "npx.exe",
+    "yarn.exe",
+    "pnpm.exe",
+    "tsc.exe",
+    "tsx.exe",
+    "vite.exe",
+    "git.exe",
+    "git-bash.exe",
+    "bash.exe",
+    "sh.exe",
+    "jupyter-notebook.exe",
+    "jupyter.exe",
+    "ipython.exe",
+    "conda.exe",
+    "mamba.exe",
+    "poetry.exe",
+    "uv.exe",
+    "docker.exe",
+    "docker-compose.exe",
+    "wsl.exe",
+    "wslhost.exe",
+    "sqlite3.exe",
+    "psql.exe",
+    "mysql.exe",
+    "redis-cli.exe",
+    "mongod.exe",
+    "go.exe",
+    "cargo.exe",
+    "rustc.exe",
+    "javac.exe",
+    "java.exe",
+    "gradle.exe",
+    "mvn.exe",
+    "dotnet.exe",
+    "cl.exe",
+    "gcc.exe",
+    "g++.exe",
+    "make.exe",
+    "cmake.exe",
+    "ninja.exe",
+    "bun.exe",
+    "deno.exe",
+    "php.exe",
+    "ruby.exe",
+    "perl.exe",
+    "lua.exe",
+    "rscript.exe",
+    "swift.exe",
+    "kotlinc.exe",
+    "flutter.exe",
+    "adb.exe",
+    "kubectl.exe",
+    "terraform.exe",
+    "ansible.exe",
+    "scp.exe",
+    "ssh.exe",
+    "curl.exe",
+    "wget.exe",
+    "jq.exe",
+    "rg.exe",
+    "ripgrep.exe",
+    "eslint.exe",
+    "prettier.exe",
+    "ruff.exe",
+    "black.exe",
+    "mypy.exe",
+    "pytest.exe",
+    "jest.exe",
+    "next.exe",
+    "ng.exe",
+    "nest.exe",
+    "create-react-app.exe",
     # Agentic / AI coding CLIs - developer workflow by definition.
-    "opencode.exe", "aider.exe", "claude.exe", "codex.exe", "gemini.exe",
-    "cursor.exe", "copilot.exe",
+    "opencode.exe",
+    "aider.exe",
+    "claude.exe",
+    "codex.exe",
+    "gemini.exe",
+    "cursor.exe",
+    "copilot.exe",
 }
 
 _DEV_PATH_MARKERS = (
-    "\\venv\\", "\\.venv\\", "\\site-packages\\", "\\node_modules\\",
-    "\\PycharmProjects\\", "\\IdeaProjects\\", "\\WebstormProjects\\",
-    "\\Projects\\", "\\Repos\\", "\\Workspace\\", "\\workspace\\", "\\src\\",
-    "\\Sources\\", "\\Code\\", "\\dev\\", "\\Development\\",
+    "\\venv\\",
+    "\\.venv\\",
+    "\\site-packages\\",
+    "\\node_modules\\",
+    "\\PycharmProjects\\",
+    "\\IdeaProjects\\",
+    "\\WebstormProjects\\",
+    "\\Projects\\",
+    "\\Repos\\",
+    "\\Workspace\\",
+    "\\workspace\\",
+    "\\src\\",
+    "\\Sources\\",
+    "\\Code\\",
+    "\\dev\\",
+    "\\Development\\",
     "\\AppData\\Local\\Programs\\Python",
 )
 
 _DEV_CMD_MARKERS = (
-    "python -m ", "py -m ", "python3 -m ", "pip install", "pip3 install",
-    "uv run", "uv pip", "poetry run", "poetry install", "conda run",
-    "npm ", "npx ", "yarn ", "pnpm ", "bun ", "deno run", "tsx ",
-    "git ", "git.exe", "git-bash", "git checkout", "git pull", "git push",
-    "git clone", "git status", "git add", "git commit",
-    "jupyter", "ipython", "pytest", "nose ", "unittest", "mypy", "ruff ",
-    "black ", "eslint", "prettier", "vitest", "jest", "playwright",
-    "node ", "node.exe", "vite ", "next dev", "ng serve", "nest start",
-    "make ", "cmake", "cargo ", "go run", "go build", "dotnet run",
-    "dotnet build", "flutter run", "docker compose", "docker-compose",
-    "terraform ", "kubectl ", "ansible-playbook", "sqlite3 ",
-    "ssh ", "scp ", "curl http://localhost", "curl 127.0.0.1",
-    "localhost:", "127.0.0.1:", "::1",
+    "python -m ",
+    "py -m ",
+    "python3 -m ",
+    "pip install",
+    "pip3 install",
+    "uv run",
+    "uv pip",
+    "poetry run",
+    "poetry install",
+    "conda run",
+    "npm ",
+    "npx ",
+    "yarn ",
+    "pnpm ",
+    "bun ",
+    "deno run",
+    "tsx ",
+    "git ",
+    "git.exe",
+    "git-bash",
+    "git checkout",
+    "git pull",
+    "git push",
+    "git clone",
+    "git status",
+    "git add",
+    "git commit",
+    "jupyter",
+    "ipython",
+    "pytest",
+    "nose ",
+    "unittest",
+    "mypy",
+    "ruff ",
+    "black ",
+    "eslint",
+    "prettier",
+    "vitest",
+    "jest",
+    "playwright",
+    "node ",
+    "node.exe",
+    "vite ",
+    "next dev",
+    "ng serve",
+    "nest start",
+    "make ",
+    "cmake",
+    "cargo ",
+    "go run",
+    "go build",
+    "dotnet run",
+    "dotnet build",
+    "flutter run",
+    "docker compose",
+    "docker-compose",
+    "terraform ",
+    "kubectl ",
+    "ansible-playbook",
+    "sqlite3 ",
+    "ssh ",
+    "scp ",
+    "curl http://localhost",
+    "curl 127.0.0.1",
+    "localhost:",
+    "127.0.0.1:",
+    "::1",
 )
 
 _LOCALHOST_DSTS = {"127.0.0.1", "::1", "localhost", "0.0.0.0", "::", "127.0.0.0"}
@@ -132,9 +338,15 @@ _LOCALHOST_DSTS = {"127.0.0.1", "::1", "localhost", "0.0.0.0", "::", "127.0.0.0"
 #: laptop - the context engine demotes them one step when the evidence is
 #: strongly developmental and the rule confidence is low.
 DEV_SENSITIVE_RULES = (
-    "suspicious_powershell", "python_execution", "screen_capture",
-    "account_discovery", "filesystem_discovery", "git_activity",
-    "cmd_script_execution", "archive_collection", "local_data_collection",
+    "suspicious_powershell",
+    "python_execution",
+    "screen_capture",
+    "account_discovery",
+    "filesystem_discovery",
+    "git_activity",
+    "cmd_script_execution",
+    "archive_collection",
+    "local_data_collection",
 )
 
 _IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
@@ -234,7 +446,9 @@ class ContextFacts:
             pl = path.lower()
             if any(pl.startswith(m) or m in pl for m in _SYSTEM_ROOT_MARKERS):
                 return "system"
-            if any(marker in pl for marker in ("\\node_modules\\", "\\venv\\", "\\.venv\\")):
+            if any(
+                marker in pl for marker in ("\\node_modules\\", "\\venv\\", "\\.venv\\")
+            ):
                 return "developer"
         return "unknown"
 
@@ -260,8 +474,14 @@ class ContextFacts:
         """A virtual environment (venv/.venv) or Python dev runtime in paths."""
         lower_paths = [p.lower() for p in self.paths + self.project_paths]
         return any(
-            m in p for p in lower_paths
-            for m in ("\\venv\\", "\\.venv\\", "\\site-packages\\", "\\pycharmprojects\\")
+            m in p
+            for p in lower_paths
+            for m in (
+                "\\venv\\",
+                "\\.venv\\",
+                "\\site-packages\\",
+                "\\pycharmprojects\\",
+            )
         )
 
     @property
@@ -325,7 +545,9 @@ class ContextFacts:
         if self._dev_parent_present() and not subjects_unknown:
             return True
         dev_bits = 0
-        if any(p for p in self.processes if self.reputation.get(p.lower()) == "developer"):
+        if any(
+            p for p in self.processes if self.reputation.get(p.lower()) == "developer"
+        ):
             dev_bits += 1
         if self.dev_signals:
             dev_bits += 1
@@ -342,8 +564,12 @@ class ContextFacts:
         system/trusted tooling and strong developer context dampen it.
         """
         modifier = 1.0
-        unknown = [p for p in self.processes if self.reputation.get(p.lower()) == "unknown"]
-        dev = [p for p in self.processes if self.reputation.get(p.lower()) == "developer"]
+        unknown = [
+            p for p in self.processes if self.reputation.get(p.lower()) == "unknown"
+        ]
+        dev = [
+            p for p in self.processes if self.reputation.get(p.lower()) == "developer"
+        ]
         if unknown:
             modifier = min(modifier, 1.0)  # unknown reputation: no dampening
         elif dev and not unknown:
@@ -398,15 +624,15 @@ class ContextFacts:
                 display += f" ({path})"
             out.append(display)
         if self.project_paths:
-            out.append("  project/workspace paths: " + "; ".join(self.project_paths[:3]))
+            out.append(
+                "  project/workspace paths: " + "; ".join(self.project_paths[:3])
+            )
         if self.dev_signals:
             out.append("  dev workflow signals: " + ", ".join(self.dev_signals[:4]))
         workflow = self.developer_workflow()
         if workflow["detected"]:
             out.append(
-                "  developer workflow detected ("
-                + ", ".join(workflow["signals"])
-                + ")"
+                "  developer workflow detected (" + ", ".join(workflow["signals"]) + ")"
             )
         if self.localhost_flows:
             out.append("  localhost-only flow (never leaves the host)")
@@ -424,6 +650,7 @@ class ContextFacts:
 # ---------------------------------------------------------------------------
 # fact extraction from stored evidence
 # ---------------------------------------------------------------------------
+
 
 def _facts_of_event(event) -> dict:
     """The fact payload of a normalized event, best-effort."""
@@ -454,29 +681,67 @@ def assess_events(events: list, rule: str = "") -> ContextFacts:
     facts = ContextFacts(rule=rule)
     for event in events or []:
         payload = _facts_of_event(event)
-        image = _first_fact(payload, "image_path", "image", "process_path",
-                            "process_image", "new_process_name", "source_image",
-                            "newprocessname", "newprocess", "imagepath")
-        name = _first_fact(payload, "process_name", "image_name", "new_process_name",
-                           "newprocessname", "processname")
+        image = _first_fact(
+            payload,
+            "image_path",
+            "image",
+            "process_path",
+            "process_image",
+            "new_process_name",
+            "source_image",
+            "newprocessname",
+            "newprocess",
+            "imagepath",
+        )
+        name = _first_fact(
+            payload,
+            "process_name",
+            "image_name",
+            "new_process_name",
+            "newprocessname",
+            "processname",
+        )
         if not name and image:
             name = image.replace("\\", "/").rsplit("/", 1)[-1]
         if name:
             facts.add_process(name, image)
-        parent = _first_fact(payload, "parent_image", "parent_process",
-                             "parent_process_name", "parent_name",
-                             "parentimage", "parentprocessname",
-                             "parentprocess")
+        parent = _first_fact(
+            payload,
+            "parent_image",
+            "parent_process",
+            "parent_process_name",
+            "parent_name",
+            "parentimage",
+            "parentprocessname",
+            "parentprocess",
+        )
         if parent and parent not in facts.parent_names:
-            facts.parent_names.append(parent.replace("\\", "/").rsplit("/", 1)[-1][:128])
-        cmdline = _first_fact(payload, "command_line", "cmdline", "command",
-                              "full_command_line", "commandline",
-                              "fullcommandline", "processcommandline")
+            facts.parent_names.append(
+                parent.replace("\\", "/").rsplit("/", 1)[-1][:128]
+            )
+        cmdline = _first_fact(
+            payload,
+            "command_line",
+            "cmdline",
+            "command",
+            "full_command_line",
+            "commandline",
+            "fullcommandline",
+            "processcommandline",
+        )
         if cmdline:
             facts.add_command_line(cmdline)
-        user = _first_fact(payload, "user", "subject_user_name", "account",
-                           "target_user_name", "subjectusername",
-                           "accountname", "targetusername", "username")
+        user = _first_fact(
+            payload,
+            "user",
+            "subject_user_name",
+            "account",
+            "target_user_name",
+            "subjectusername",
+            "accountname",
+            "targetusername",
+            "username",
+        )
         if user:
             facts.add_user(user)
         else:
@@ -484,8 +749,14 @@ def assess_events(events: list, rule: str = "") -> ContextFacts:
         host = getattr(event, "host", "") or ""
         if host and host not in facts.hosts:
             facts.hosts.append(host[:128])
-        for ip_key in ("dst_ip", "destination_ip", "src_ip", "source_ip",
-                       "remote_ip", "local_ip"):
+        for ip_key in (
+            "dst_ip",
+            "destination_ip",
+            "src_ip",
+            "source_ip",
+            "remote_ip",
+            "local_ip",
+        ):
             ip = _first_fact(payload, ip_key)
             if ip:
                 facts.add_ip(ip)
@@ -498,7 +769,9 @@ def assess_text(evidence: str, rule: str = "") -> ContextFacts:
     text = facts.evidence_text
     for m in re.finditer(r"process '([^']+)'", text, re.IGNORECASE):
         facts.add_process(m.group(1))
-    for m in re.finditer(r"(?:command|cmdline|command_line) '([^']+)'", text, re.IGNORECASE):
+    for m in re.finditer(
+        r"(?:command|cmdline|command_line) '([^']+)'", text, re.IGNORECASE
+    ):
         facts.add_command_line(m.group(1))
     for m in _IP_RE.finditer(text):
         facts.add_ip(m.group(0))

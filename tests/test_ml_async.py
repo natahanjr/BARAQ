@@ -1,4 +1,5 @@
 """Tests for background ML training (non-blocking API behaviour)."""
+
 from __future__ import annotations
 
 import time
@@ -16,7 +17,9 @@ def client():
 
 
 def test_ml_train_async_returns_immediately_and_status_reports_training(client):
-    resp = client.post("/api/system/ml/train", params={"async_mode": "true", "hours": 24})
+    resp = client.post(
+        "/api/system/ml/train", params={"async_mode": "true", "hours": 24}
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert body["scheduled"] is True
@@ -38,4 +41,9 @@ def test_ml_train_async_returns_immediately_and_status_reports_training(client):
 def test_ml_train_sync_path(client):
     resp = client.post("/api/system/ml/train", params={"async_mode": "false"})
     assert resp.status_code == 200
-    assert resp.json()["status"] in ("ok", "insufficient-data", "not-enough-data", "sklearn-not-installed")
+    assert resp.json()["status"] in (
+        "ok",
+        "insufficient-data",
+        "not-enough-data",
+        "sklearn-not-installed",
+    )

@@ -13,6 +13,7 @@ on a truncated image).  This module separates three states:
   Corrupted events are *discarded before detection* so they can never
   generate alerts, and every discard is counted by the quality tracker.
 """
+
 from __future__ import annotations
 
 import re
@@ -24,18 +25,62 @@ import re
 _DEBRIS = {
     *"abcdefghijklmnopqrstuvwxyz",
     *"0123456789",
-    "\\", "/", "-", ".", "..", "...", "?", "*", "(", ")", "[", "]", "{", "}",
-    '"', "'", ",", ":", ";", "|", "&", "<", ">", "=", "+", "_", "~", "`", "!", "@", "#", "$", "%", "^",
-    "n/a", "na", "- ", " -",
+    "\\",
+    "/",
+    "-",
+    ".",
+    "..",
+    "...",
+    "?",
+    "*",
+    "(",
+    ")",
+    "[",
+    "]",
+    "{",
+    "}",
+    '"',
+    "'",
+    ",",
+    ":",
+    ";",
+    "|",
+    "&",
+    "<",
+    ">",
+    "=",
+    "+",
+    "_",
+    "~",
+    "`",
+    "!",
+    "@",
+    "#",
+    "$",
+    "%",
+    "^",
+    "n/a",
+    "na",
+    "- ",
+    " -",
 }
 #: Facts keys that carry a process image / creator / parent value.
 _PROCESS_VALUE_KEYS = (
-    "new_process", "image_path", "NewProcessName", "image", "creator_process",
-    "parent_image", "old_process", "OldProcessName",
+    "new_process",
+    "image_path",
+    "NewProcessName",
+    "image",
+    "creator_process",
+    "parent_image",
+    "old_process",
+    "OldProcessName",
 )
 #: Facts keys that carry a command line / script block value.
 _CMDLINE_VALUE_KEYS = (
-    "command_line", "CommandLine", "script_block", "ScriptBlockText",
+    "command_line",
+    "CommandLine",
+    "script_block",
+    "ScriptBlockText",
 )
 
 #: Structured process records (sysmon / agent) use these keys instead.
@@ -55,9 +100,7 @@ def _debris_value(value: str) -> bool:
         return False
     if v.lower() in _DEBRIS:
         return True
-    if len(v) < 3 and not _SEPARATOR.search(v):
-        return True
-    return False
+    return bool(len(v) < 3 and not _SEPARATOR.search(v))
 
 
 def is_debris_value(value: str) -> bool:
@@ -108,7 +151,9 @@ def orm_event_is_corrupted(event) -> tuple[bool, str]:
     raw = getattr(event, "raw_json", None) or {}
     if getattr(event, "data_integrity", None) == "corrupted":
         return True, "event marked corrupted"
-    return normalized_is_corrupted({"user": getattr(event, "user", "-"), "raw_json": raw})
+    return normalized_is_corrupted(
+        {"user": getattr(event, "user", "-"), "raw_json": raw}
+    )
 
 
 def structured_record_is_corrupted(record: dict) -> tuple[bool, str]:

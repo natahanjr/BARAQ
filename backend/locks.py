@@ -16,12 +16,12 @@ Two backends are supported (roadmap 3.1 multi-node):
 The lock is held for the process lifetime and released on shutdown, or
 auto-released by the backend if the process dies.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import threading
-import time
 import uuid
 
 from sqlalchemy.engine import Engine
@@ -64,7 +64,9 @@ class InstanceLock:
             )
             return False
         try:
-            client = redis.Redis.from_url(REDIS_URL, socket_timeout=5, decode_responses=True)
+            client = redis.Redis.from_url(
+                REDIS_URL, socket_timeout=5, decode_responses=True
+            )
             token = uuid.uuid4().hex
             got = client.set(self._name, token, nx=True, ex=30)
             if not got:
@@ -79,7 +81,7 @@ class InstanceLock:
             self._start_heartbeat()
             logger.info("Instance lock acquired (redis, %s)", self._name)
             return True
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("Redis lock unavailable (%s); falling back to Postgres", exc)
             return False
 
@@ -89,8 +91,10 @@ class InstanceLock:
         def _beat():
             while not self._heartbeat_stop.is_set():
                 try:
-                    self._redis.set(self._name, self._redis_token, ex=SCHEDULER_LOCK_TTL_SECONDS)
-                except Exception:  # noqa: BLE001
+                    self._redis.set(
+                        self._name, self._redis_token, ex=SCHEDULER_LOCK_TTL_SECONDS
+                    )
+                except Exception:
                     logger.debug("Redis lock heartbeat failed")
                 self._heartbeat_stop.wait(SCHEDULER_LOCK_TTL_SECONDS / 3)
 
@@ -122,7 +126,7 @@ class InstanceLock:
                 self._name,
             )
             return False
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("Postgres advisory lock failed; scheduler disabled")
             return False
 
@@ -133,9 +137,11 @@ class InstanceLock:
                 self._redis.eval(
                     "if redis.call('get', KEYS[1]) == ARGV[1] then "
                     "return redis.call('del', KEYS[1]) else return 0 end",
-                    1, self._name, self._redis_token,
+                    1,
+                    self._name,
+                    self._redis_token,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.debug("Redis unlock failed (TTL will expire it)")
             self._redis.close()
             self._redis = None
@@ -147,7 +153,7 @@ class InstanceLock:
                     ),
                     {"name": self._name},
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.debug("Advisory unlock failed (session close releases it)")
             self._pg_conn.close()
             self._pg_conn = None

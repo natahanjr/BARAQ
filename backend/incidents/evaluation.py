@@ -1,4 +1,5 @@
 """Phase 7 incident evaluation runner (spec 7.40)."""
+
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
@@ -8,9 +9,8 @@ from typing import Any
 from sqlalchemy import func, select
 
 from backend.incidents import engine
-from backend.incidents.contract import INCIDENT_STATES
-from backend.incidents.models import IncidentV2Evidence, IncidentV2
-from backend.incidents.evaluation_data import SCENARIOS, EVAL_T0
+from backend.incidents.evaluation_data import EVAL_T0, SCENARIOS
+from backend.incidents.models import IncidentV2, IncidentV2Evidence
 
 
 def _run_step(db, step: dict, now: datetime) -> list[str]:
@@ -22,8 +22,10 @@ def _run_step(db, step: dict, now: datetime) -> list[str]:
     created_ids: list[str] = []
 
     if step.get("concurrent"):
+
         def _ingest(_idx: int) -> str | None:
             from backend.database.connection import SessionLocal
+
             session = SessionLocal()
             try:
                 res = engine.create_incident(
@@ -37,7 +39,7 @@ def _run_step(db, step: dict, now: datetime) -> list[str]:
                 )
                 session.commit()
                 return res.get("incident_id")
-            except Exception:  # noqa: BLE001
+            except Exception:
                 session.rollback()
                 return None
             finally:
@@ -62,7 +64,13 @@ def _run_step(db, step: dict, now: datetime) -> list[str]:
         if iid:
             created_ids.append(iid)
             if step.get("close_after"):
-                engine.transition_incident(db, iid, "CLOSED", actor="evaluation", reason="close for reopen test")
+                engine.transition_incident(
+                    db,
+                    iid,
+                    "CLOSED",
+                    actor="evaluation",
+                    reason="close for reopen test",
+                )
             if step.get("suppress_after"):
                 engine.suppress_incident(
                     db,
@@ -89,7 +97,9 @@ def run_evaluation(db) -> dict[str, Any]:
         try:
             if expected.get("incident_created") is False:
                 if created_ids:
-                    raise AssertionError(f"{scenario['id']}: expected no incident, got {created_ids}")
+                    raise AssertionError(
+                        f"{scenario['id']}: expected no incident, got {created_ids}"
+                    )
             elif expected.get("incidents_created") is not None:
                 if len(set(created_ids)) != expected["incidents_created"]:
                     raise AssertionError(
@@ -97,13 +107,18 @@ def run_evaluation(db) -> dict[str, Any]:
                     )
             else:
                 if not created_ids:
-                    raise AssertionError(f"{scenario['id']}: expected incident, got none")
+                    raise AssertionError(
+                        f"{scenario['id']}: expected incident, got none"
+                    )
                 incident = db.scalars(
                     select(IncidentV2).where(IncidentV2.incident_id == created_ids[0])
                 ).first()
                 if incident is None:
                     raise AssertionError(f"{scenario['id']}: incident not found")
-                if "policy_id" in expected and incident.policy_id != expected["policy_id"]:
+                if (
+                    "policy_id" in expected
+                    and incident.policy_id != expected["policy_id"]
+                ):
                     raise AssertionError(
                         f"{scenario['id']}: policy {incident.policy_id} != {expected['policy_id']}"
                     )
@@ -127,17 +142,21 @@ def run_evaluation(db) -> dict[str, Any]:
                         )
                 if expected.get("evidence_count") is not None:
                     actual = db.scalars(
-                        select(func.count()).select_from(IncidentV2Evidence).where(
-                            IncidentV2Evidence.incident_id == incident.incident_id
-                        )
+                        select(func.count())
+                        .select_from(IncidentV2Evidence)
+                        .where(IncidentV2Evidence.incident_id == incident.incident_id)
                     ).one()
                     if actual != expected["evidence_count"]:
-                        raise AssertionError(f"{scenario['id']}: evidence_count {actual} != {expected['evidence_count']}")
+                        raise AssertionError(
+                            f"{scenario['id']}: evidence_count {actual} != {expected['evidence_count']}"
+                        )
             passed += 1
         except AssertionError:
             raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise AssertionError(f"{scenario['id']}: {exc}") from exc
-    return {"scenarios": len(SCENARIOS), "passed": passed, "failed": len(SCENARIOS) - passed}
-
-
+    return {
+        "scenarios": len(SCENARIOS),
+        "passed": passed,
+        "failed": len(SCENARIOS) - passed,
+    }

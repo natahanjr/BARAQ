@@ -6,11 +6,11 @@ Enhanced drift detection with:
 3. Concept drift detection - monitors relationship between features and labels
 4. Automated drift response - triggers retraining with severity-based actions
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 
@@ -47,7 +47,9 @@ def psi(reference: np.ndarray, current: np.ndarray, buckets: int = 10) -> float:
     return float(np.sum((cur_p - ref_p) * np.log(cur_p / ref_p)))
 
 
-def feature_psi(reference_features: np.ndarray, current_features: np.ndarray) -> List[float]:
+def feature_psi(
+    reference_features: np.ndarray, current_features: np.ndarray
+) -> list[float]:
     """Compute PSI for each feature independently.
 
     Returns list of PSI values, one per feature column.
@@ -99,11 +101,10 @@ def check_drift(session=None, hours: int = 12) -> dict:
             _load_network_features,
         )
 
-        since = datetime.now(timezone.utc) - timedelta(hours=hours)
+        since = datetime.now(UTC) - timedelta(hours=hours)
         streams: dict[str, dict] = {}
 
         # Store reference features for feature-level drift
-        reference_features: Dict[str, np.ndarray] = {}
 
         for behavior, loader, events in (
             ("login", _load_behavior_features, LOGIN_EVENTS),
@@ -118,7 +119,10 @@ def check_drift(session=None, hours: int = 12) -> dict:
 
             # Score-level PSI
             scores = detector._rank_of(
-                [float(detector._score_with(detector.models[behavior], row)) for row in X],
+                [
+                    float(detector._score_with(detector.models[behavior], row))
+                    for row in X
+                ],
                 baseline,
             )
             score_psi = psi(baseline, np.asarray(scores))
@@ -130,11 +134,13 @@ def check_drift(session=None, hours: int = 12) -> dict:
             streams[behavior] = {
                 "psi": round(score_psi, 4),
                 "verdict": _verdict(score_psi),
-                "samples": int(len(X)),
+                "samples": len(X),
                 "window_hours": hours,
                 "feature_drift_count": len(feature_drift),
                 "feature_drifted_indices": feature_drift[:5],  # Top 5 drifted features
-                "feature_psi_values": [round(p, 4) for p in feature_psi_values[:10]],  # Top 10
+                "feature_psi_values": [
+                    round(p, 4) for p in feature_psi_values[:10]
+                ],  # Top 10
             }
 
         # Network stream
@@ -150,22 +156,34 @@ def check_drift(session=None, hours: int = 12) -> dict:
                 score_psi = psi(net_baseline, np.asarray(scores))
 
                 # Feature-level PSI for network
-                feature_psi_values = feature_psi(net_baseline, net_X) if len(net_X) > 10 else []
-                feature_drift = [i for i, p in enumerate(feature_psi_values) if p > 0.25]
+                feature_psi_values = (
+                    feature_psi(net_baseline, net_X) if len(net_X) > 10 else []
+                )
+                feature_drift = [
+                    i for i, p in enumerate(feature_psi_values) if p > 0.25
+                ]
 
                 streams["network"] = {
                     "psi": round(score_psi, 4),
                     "verdict": _verdict(score_psi),
-                    "samples": int(len(net_X)),
+                    "samples": len(net_X),
                     "window_hours": hours,
                     "feature_drift_count": len(feature_drift),
                     "feature_drifted_indices": feature_drift[:5],
-                    "feature_psi_values": [round(p, 4) for p in feature_psi_values[:10]],
+                    "feature_psi_values": [
+                        round(p, 4) for p in feature_psi_values[:10]
+                    ],
                 }
 
         # Overall status
-        status = "drift" if any(s["verdict"] == "drift" for s in streams.values()) else (
-            "watch" if any(s["verdict"] == "watch" for s in streams.values()) else "ok"
+        status = (
+            "drift"
+            if any(s["verdict"] == "drift" for s in streams.values())
+            else (
+                "watch"
+                if any(s["verdict"] == "watch" for s in streams.values())
+                else "ok"
+            )
         )
 
         # Determine recommended action
@@ -178,15 +196,15 @@ def check_drift(session=None, hours: int = 12) -> dict:
 
         report = {
             "status": status,
-            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "checked_at": datetime.now(UTC).isoformat(),
             "streams": streams,
             "recommended_action": action,
             "note": "PSI > BARAQ_ML_DRIFT_RATE triggers scheduler retraining",
         }
         if status != "ok":
-            logger.warning("ML drift: %s (%s)", status, {
-                k: v["psi"] for k, v in streams.items()
-            })
+            logger.warning(
+                "ML drift: %s (%s)", status, {k: v["psi"] for k, v in streams.items()}
+            )
         return report
     finally:
         if close:
@@ -206,11 +224,12 @@ def check_concept_drift(session=None, hours: int = 24) -> dict:
     close = session is None
     session = session or SessionLocal()
     try:
-        from backend.ml.anomaly import _verdict_map
         from sqlalchemy import select
-        from backend.database.models import NormalizedEvent
 
-        since = datetime.now(timezone.utc) - timedelta(hours=hours)
+        from backend.database.models import NormalizedEvent
+        from backend.ml.anomaly import _verdict_map
+
+        since = datetime.now(UTC) - timedelta(hours=hours)
 
         # Get recent verdicts
         verdicts = _verdict_map(session)
@@ -219,15 +238,16 @@ def check_concept_drift(session=None, hours: int = 24) -> dict:
 
         # Count positive/negative labels
         recent_events = session.scalars(
-            select(NormalizedEvent.id)
-            .where(NormalizedEvent.timestamp >= since)
+            select(NormalizedEvent.id).where(NormalizedEvent.timestamp >= since)
         ).all()
 
         labeled_ids = [eid for eid in recent_events if eid in verdicts]
         if len(labeled_ids) < 20:
             return {"status": "insufficient_data", "samples": len(labeled_ids)}
 
-        positive_rate = sum(1 for eid in labeled_ids if verdicts[eid] == 1) / len(labeled_ids)
+        positive_rate = sum(1 for eid in labeled_ids if verdicts[eid] == 1) / len(
+            labeled_ids
+        )
 
         # Compare with training distribution (approximate)
         # High positive rate in recent data suggests concept drift

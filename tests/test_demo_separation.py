@@ -5,12 +5,12 @@ Every production-facing endpoint excludes demo rows by default; include_demo=1
 opts back in. Search excludes demo unless include_demo or an explicit
 demo=true filter is given.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from fastapi.testclient import TestClient
 
 from backend.database.connection import get_db
@@ -43,7 +43,7 @@ def _mk_event(db, demo: bool, user="prod", host="WS-PROD", event_id=4625):
         risk="Medium",
         severity="medium",
         message=f"Logon failure for {user}",
-        timestamp=datetime.now(timezone.utc) - timedelta(minutes=5),
+        timestamp=datetime.now(UTC) - timedelta(minutes=5),
         raw_json={"facts": {}},
         demo=demo,
     )
@@ -116,7 +116,6 @@ def seeded(db, client):
     _mk_risk(db, demo=False, name="prod-user")
     _mk_risk(db, demo=True, name="demo-user")
     db.commit()
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +128,9 @@ def test_alerts_exclude_demo_by_default(seeded, client, db):
 
 
 def test_alerts_include_demo_on_demand(seeded, client):
-    items = client.get("/api/alerts", params={"page_size": 50, "include_demo": 1}).json()["items"]
+    items = client.get(
+        "/api/alerts", params={"page_size": 50, "include_demo": 1}
+    ).json()["items"]
     assert any(i["demo"] for i in items)
     assert any("demo-user" in i["evidence"] for i in items)
     assert any("prod-user" in i["evidence"] for i in items)
@@ -145,7 +146,9 @@ def test_events_exclude_demo_by_default(seeded, client):
 
 
 def test_events_include_demo_on_demand(seeded, client):
-    items = client.get("/api/events", params={"page_size": 50, "include_demo": 1}).json()["items"]
+    items = client.get(
+        "/api/events", params={"page_size": 50, "include_demo": 1}
+    ).json()["items"]
     assert {i["user"] for i in items} == {"prod-user", "demo-user"}
 
 
@@ -172,7 +175,9 @@ def test_rba_entities_exclude_demo_by_default(seeded, client):
 
 
 def test_rba_entities_include_demo_on_demand(seeded, client):
-    data = client.get("/api/rba/entities", params={"page_size": 50, "include_demo": 1}).json()
+    data = client.get(
+        "/api/rba/entities", params={"page_size": 50, "include_demo": 1}
+    ).json()
     assert {e["entity_name"] for e in data["entities"]} == {"prod-user", "demo-user"}
 
 
@@ -209,24 +214,34 @@ def test_dashboard_summary_include_demo(seeded, client):
 
 def test_dashboard_timeline_excludes_demo(seeded, client):
     data = client.get("/api/dashboard/timeline", params={"hours": 24}).json()
-    totals = sum(s["count"] for s in data["events"]) + sum(s["count"] for s in data["alerts"])
+    totals = sum(s["count"] for s in data["events"]) + sum(
+        s["count"] for s in data["alerts"]
+    )
     assert totals == 2  # one prod event + one prod alert
-    data = client.get("/api/dashboard/timeline", params={"hours": 24, "include_demo": 1}).json()
-    totals = sum(s["count"] for s in data["events"]) + sum(s["count"] for s in data["alerts"])
+    data = client.get(
+        "/api/dashboard/timeline", params={"hours": 24, "include_demo": 1}
+    ).json()
+    totals = sum(s["count"] for s in data["events"]) + sum(
+        s["count"] for s in data["alerts"]
+    )
     assert totals == 4
 
 
 def test_dashboard_threat_categories_excludes_demo(seeded, client):
     data = client.get("/api/dashboard/threat-categories").json()
     assert sum(c["count"] for c in data) == 1
-    data = client.get("/api/dashboard/threat-categories", params={"include_demo": 1}).json()
+    data = client.get(
+        "/api/dashboard/threat-categories", params={"include_demo": 1}
+    ).json()
     assert sum(c["count"] for c in data) == 2
 
 
 def test_dashboard_risk_distribution_excludes_demo(seeded, client):
     data = client.get("/api/dashboard/risk-distribution").json()
     assert sum(b["count"] for b in data) == 1
-    data = client.get("/api/dashboard/risk-distribution", params={"include_demo": 1}).json()
+    data = client.get(
+        "/api/dashboard/risk-distribution", params={"include_demo": 1}
+    ).json()
     assert sum(b["count"] for b in data) == 2
 
 
@@ -241,7 +256,9 @@ def test_search_excludes_demo_by_default(seeded, client):
 
 
 def test_search_include_demo_flag(seeded, client):
-    data = client.post("/api/search", json={"query": "index=alerts", "include_demo": 1}).json()
+    data = client.post(
+        "/api/search", json={"query": "index=alerts", "include_demo": 1}
+    ).json()
     assert data["total"] == 2
 
 
@@ -260,7 +277,9 @@ def test_search_events_exclude_demo_by_default(seeded, client):
     assert data["total"] == 1
     u = data["columns"].index("user")
     assert {r[u] for r in data["rows"]} == {"prod-user"}
-    data = client.post("/api/search", json={"query": "event_id=4625", "include_demo": 1}).json()
+    data = client.post(
+        "/api/search", json={"query": "event_id=4625", "include_demo": 1}
+    ).json()
     assert data["total"] == 2
     assert {r[u] for r in data["rows"]} == {"prod-user", "demo-user"}
 

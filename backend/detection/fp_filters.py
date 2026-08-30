@@ -9,6 +9,7 @@ via a configurable allowlist of trusted paths.
 Configure extra allowed path fragments with ``BARAQ_FP_ALLOW_PATHS``
 (semicolon-separated, matched case-insensitively anywhere in the text).
 """
+
 from __future__ import annotations
 
 import os

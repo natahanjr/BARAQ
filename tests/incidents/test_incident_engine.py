@@ -1,18 +1,28 @@
 """Phase 7 incident engine tests (spec 7.1-7.8, 7.15, 7.23-7.25, 7.42, 7.45-7.47)."""
+
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
 from sqlalchemy import select
 
 from backend.incidents import engine
-from backend.incidents.models import IncidentV2Evidence, IncidentV2
 from backend.incidents.contract import INCIDENT_STATES
+from backend.incidents.models import IncidentV2, IncidentV2Evidence
 
-EVAL_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=timezone.utc)
+EVAL_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=UTC)
 
 
-def _group(group_id, hosts, techniques, severity="high", alert_count=10, first_seen=EVAL_T0, last_seen=EVAL_T0):
+def _group(
+    group_id,
+    hosts,
+    techniques,
+    severity="high",
+    alert_count=10,
+    first_seen=EVAL_T0,
+    last_seen=EVAL_T0,
+):
     return {
         "kind": "BEHAVIOR_GROUP",
         "group_id": group_id,
@@ -120,9 +130,13 @@ def test_transition_incident(db):
         now=EVAL_T0,
     )
     db.commit()
-    transition = engine.transition_incident(db, res["incident_id"], "TRIAGED", actor="tester")
+    transition = engine.transition_incident(
+        db, res["incident_id"], "TRIAGED", actor="tester"
+    )
     assert transition["new_status"] == "TRIAGED"
-    incident = db.scalars(select(IncidentV2).where(IncidentV2.incident_id == res["incident_id"])).first()
+    incident = db.scalars(
+        select(IncidentV2).where(IncidentV2.incident_id == res["incident_id"])
+    ).first()
     assert incident.status == "TRIAGED"
 
 
@@ -168,7 +182,11 @@ def test_banned_phrase_rejected(db):
 def test_no_incident_for_single_low_alert(db):
     res = engine.create_incident(
         db,
-        groups=[_group("g-eng-007a", ["h-eng-007"], ["T1078"], severity="low", alert_count=1)],
+        groups=[
+            _group(
+                "g-eng-007a", ["h-eng-007"], ["T1078"], severity="low", alert_count=1
+            )
+        ],
         findings=[],
         now=EVAL_T0,
     )
@@ -187,8 +205,8 @@ def test_evidence_preserved(db):
     )
     db.commit()
     evidence = db.scalars(
-        select(IncidentV2Evidence).where(IncidentV2Evidence.incident_id == res["incident_id"])
+        select(IncidentV2Evidence).where(
+            IncidentV2Evidence.incident_id == res["incident_id"]
+        )
     ).all()
     assert len(evidence) >= 0
-
-

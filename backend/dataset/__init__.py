@@ -16,6 +16,7 @@ configurable 100k-events-per-file boundary up to a 1M-event target.
 
 from .collector import active_collection, sweep
 from .exporter import export_all_pending, export_pending
+from .scheduler import dataset_maybe_export, dataset_sweep
 from .service import (
     export_detail,
     export_now,
@@ -28,23 +29,22 @@ from .service import (
     status,
     update_config,
 )
-from .scheduler import dataset_maybe_export, dataset_sweep
 
 __all__ = [
     "active_collection",
-    "sweep",
-    "export_pending",
+    "dataset_maybe_export",
+    "dataset_sweep",
     "export_all_pending",
-    "status",
-    "start",
+    "export_detail",
+    "export_now",
+    "export_pending",
+    "exports",
+    "manifest",
     "pause",
     "resume",
-    "export_now",
+    "start",
     "stats",
-    "exports",
-    "export_detail",
-    "manifest",
+    "status",
+    "sweep",
     "update_config",
-    "dataset_sweep",
-    "dataset_maybe_export",
 ]

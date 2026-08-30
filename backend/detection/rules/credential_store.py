@@ -6,10 +6,11 @@ Flags commands that enumerate or export the Windows Credential Manager
 Unprotect), or read browser credential stores (Login Data, cookies,
 logins.json) - each a signal of credential-store theft.
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from backend.detection.rules.base import BaseRule, DetectionResult
 
@@ -55,7 +56,7 @@ class CredentialStoreTheftRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             match = _CRED_STORE.search(cmdline) or _BROWSER_CRED.search(cmdline)
             if not match:

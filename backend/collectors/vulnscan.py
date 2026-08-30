@@ -5,11 +5,12 @@ finding. Findings are forwarded centrally by agents using the standard
 ``CollectorManager``; the pipeline persists them as ``VulnFinding`` rows
 which the vulnerability rule aggregates into MITRE-mapped alerts.
 """
+
 from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.collectors.base import BaseCollector
 from backend.vulnscan.engine import load_cves, scan_inventory
@@ -34,7 +35,7 @@ class VulnScanCollector(BaseCollector):
             return []
         inventory = self._inventory or host_inventory()
         findings = scan_inventory(inventory, load_cves())
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         records: list[dict] = []
         for finding in findings:
             key = (finding["product"], finding["cve_id"])

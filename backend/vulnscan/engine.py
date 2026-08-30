@@ -1,4 +1,5 @@
 """CVE database loader + product/version matching engine."""
+
 from __future__ import annotations
 
 import json

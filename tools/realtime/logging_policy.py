@@ -9,11 +9,11 @@ Every change records its prior state in ``database/realtime_policy_state.json``
 so :func:`revert` can restore the host exactly. No policy change is made
 unless this module is explicitly invoked (``python -m tools.realtime.logging_policy``).
 """
+
 from __future__ import annotations
 
 import json
 import logging
-import os
 import subprocess
 from pathlib import Path
 
@@ -32,7 +32,10 @@ _PS_VALUE = "EnableScriptBlockLogging"
 def _run(args: list[str]) -> tuple[int, str]:
     try:
         proc = subprocess.run(
-            args, capture_output=True, text=True, timeout=30,
+            args,
+            capture_output=True,
+            text=True,
+            timeout=30,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
@@ -62,7 +65,9 @@ def _reg_query(key: str, value: str) -> str | None:
 
 
 def _reg_set(key: str, value: str, data: str) -> bool:
-    code, _ = _run(["reg", "add", key, "/v", value, "/t", "REG_DWORD", "/d", data, "/f"])
+    code, _ = _run(
+        ["reg", "add", key, "/v", value, "/t", "REG_DWORD", "/d", data, "/f"]
+    )
     return code == 0
 
 
@@ -104,7 +109,9 @@ def enable() -> dict:
         results[f"audit_{sub.lower().replace(' ', '_')}"] = _auditpol_set(
             sub, "/success:enable", "/failure:enable"
         )
-    results["cmdline_reg"] = "ok" if _reg_set(_CMD_LINE_KEY, _CMD_LINE_VALUE, "1") else "failed"
+    results["cmdline_reg"] = (
+        "ok" if _reg_set(_CMD_LINE_KEY, _CMD_LINE_VALUE, "1") else "failed"
+    )
     results["psblock_reg"] = "ok" if _reg_set(_PS_KEY, _PS_VALUE, "1") else "failed"
 
     state["enabled_at"] = __import__("datetime").datetime.now().isoformat()
@@ -128,13 +135,19 @@ def revert() -> dict:
             results[key] = "no prior state"
     prior_cmdline = state.get("cmdline_dword")
     if prior_cmdline:
-        results["cmdline_reg"] = "ok" if _reg_set(_CMD_LINE_KEY, _CMD_LINE_VALUE, prior_cmdline) else "failed"
+        results["cmdline_reg"] = (
+            "ok"
+            if _reg_set(_CMD_LINE_KEY, _CMD_LINE_VALUE, prior_cmdline)
+            else "failed"
+        )
     else:
         _reg_delete(_CMD_LINE_KEY, _CMD_LINE_VALUE)
         results["cmdline_reg"] = "reverted (removed)"
     prior_ps = state.get("psblock_dword")
     if prior_ps:
-        results["psblock_reg"] = "ok" if _reg_set(_PS_KEY, _PS_VALUE, prior_ps) else "failed"
+        results["psblock_reg"] = (
+            "ok" if _reg_set(_PS_KEY, _PS_VALUE, prior_ps) else "failed"
+        )
     else:
         _reg_delete(_PS_KEY, _PS_VALUE)
         results["psblock_reg"] = "reverted (removed)"

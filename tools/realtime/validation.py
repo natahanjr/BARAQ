@@ -22,27 +22,25 @@ Run::
 
     python -m tools.realtime.validation --run-id campaign_20260806_a
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import func, select
 
 from backend.database.connection import SessionLocal
 from backend.database.models import (
-    Alert,
     AlertEventLink,
     NetworkConnection,
     NormalizedEvent,
     ProcessRecord,
 )
 from backend.ml.anomaly import (
-    LOGIN_EVENTS,
-    PROCESS_EVENTS,
     MLAnomalyDetector,
     _behavior_of,
     event_feature_vector,
@@ -76,7 +74,7 @@ def _train_baseline(session, cutoff: datetime) -> MLAnomalyDetector | None:
     try:
         detector.train(session, hours=48, validate=True, persist=True, cutoff=cutoff)
         return detector
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("baseline training failed: %s", exc)
         return None
 
@@ -86,7 +84,7 @@ def _rules_detection(session, end: datetime) -> tuple[set[int], set[str]]:
     from backend.detection.alerting import AlertingService
     from backend.detection.rules_engine import RulesEngine
 
-    minutes = max(15, int((end - datetime.now(timezone.utc)).total_seconds() / 60) + 5)
+    minutes = max(15, int((end - datetime.now(UTC)).total_seconds() / 60) + 5)
     engine = RulesEngine(session)
     findings = engine.run(window_minutes=minutes)
     alerting = AlertingService(session)
@@ -103,7 +101,9 @@ def _rules_detection(session, end: datetime) -> tuple[set[int], set[str]]:
     return linked, {f.rule for f in findings}
 
 
-def _ml_scores(session, detector, start: datetime, end: datetime) -> tuple[dict[int, float], dict[str, float]]:
+def _ml_scores(
+    session, detector, start: datetime, end: datetime
+) -> tuple[dict[int, float], dict[str, float]]:
     """Per-event ML scores + per-remote-IP network scores in the window."""
     ml_scores: dict[int, float] = {}
     net_scores: dict[str, float] = {}
@@ -122,7 +122,7 @@ def _ml_scores(session, detector, start: datetime, end: datetime) -> tuple[dict[
         behavior = _behavior_of(int(ev.event_id))
         try:
             ml_scores[ev.id] = detector.score_event_for_behavior(behavior, features)
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
 
     flows = session.execute(
@@ -144,14 +144,20 @@ def _ml_scores(session, detector, start: datetime, end: datetime) -> tuple[dict[
         try:
             net_scores[remote_ip or "unknown"] = detector.score_network_connection(
                 remote_ip or "unknown",
-                int(count), int(ports), int(sent or 0), int(recv or 0), float(dur or 0.0),
+                int(count),
+                int(ports),
+                int(sent or 0),
+                int(recv or 0),
+                float(dur or 0.0),
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
     return ml_scores, net_scores
 
 
-def _sim_matches(sim: dict, behavior: str, ip: str | None = None, process: str = "") -> bool:
+def _sim_matches(
+    sim: dict, behavior: str, ip: str | None = None, process: str = ""
+) -> bool:
     """Ground-truth matcher: behavior must match, network sims must hit a
     target IP, and process sims match on the binary basename (real 4688
     events carry full paths)."""
@@ -191,12 +197,18 @@ def run_validation(run_id: str) -> dict:
                 return ""
             facts = raw.get("facts") or {}
             return str(
-                facts.get("new_process") or facts.get("NewProcessName")
-                or facts.get("process_name") or ""
+                facts.get("new_process")
+                or facts.get("NewProcessName")
+                or facts.get("process_name")
+                or ""
             )
 
         event_rows = {
-            ev.id: (_behavior_of(int(ev.event_id)), _event_process(ev.raw_json), ev.timestamp)
+            ev.id: (
+                _behavior_of(int(ev.event_id)),
+                _event_process(ev.raw_json),
+                ev.timestamp,
+            )
             for ev in events
         }
         if detector is not None:
@@ -213,7 +225,9 @@ def run_validation(run_id: str) -> dict:
             )
         ).all()
         for pr in proc_rows:
-            process_evidence.setdefault(str(pr.name or "").lower(), []).append(pr.observed_at)
+            process_evidence.setdefault(str(pr.name or "").lower(), []).append(
+                pr.observed_at
+            )
 
         def _process_observed(sim: dict) -> bool:
             """Was the sim's binary observed by the process stream in its window?"""
@@ -221,7 +235,9 @@ def run_validation(run_id: str) -> dict:
             if not expect:
                 return False
             band_start = _parse(sim["started_at"]) - timedelta(seconds=10)
-            band_end = _parse(sim["finished_at"] or sim["started_at"]) + timedelta(seconds=60)
+            band_end = _parse(sim["finished_at"] or sim["started_at"]) + timedelta(
+                seconds=60
+            )
             return any(
                 (name == expect or name.startswith(expect))
                 and band_start <= ts <= band_end
@@ -245,7 +261,9 @@ def run_validation(run_id: str) -> dict:
                     continue
                 if eid in linked:
                     rule_hit = True
-                if beh != "network" and ml_scores.get(eid, 0.0) > (detector.thresholds or {}).get(beh, 0.5):
+                if beh != "network" and ml_scores.get(eid, 0.0) > (
+                    detector.thresholds or {}
+                ).get(beh, 0.5):
                     ml_hit = True
                 if rule_hit or ml_hit:
                     break
@@ -271,17 +289,21 @@ def run_validation(run_id: str) -> dict:
 
         # False positives: flagged window events / IPs not matching any sim.
         fp_events = [
-            eid for eid in linked
-            if eid in event_rows and not any(
+            eid
+            for eid in linked
+            if eid in event_rows
+            and not any(
                 _sim_matches(s, event_rows[eid][0], process=event_rows[eid][1])
-                and _parse(s["started_at"]) - timedelta(seconds=5) <= event_rows[eid][2]
+                and _parse(s["started_at"]) - timedelta(seconds=5)
+                <= event_rows[eid][2]
                 <= _parse(s["finished_at"] or s["started_at"]) + timedelta(seconds=30)
                 and event_rows[eid][0] != "network"
                 for s in truth
             )
         ]
         fp_ips = [
-            ip for ip, score in net_scores.items()
+            ip
+            for ip, score in net_scores.items()
             if score > net_threshold
             and not any(_sim_matches(s, "network", ip=ip) for s in truth)
         ]
@@ -296,8 +318,19 @@ def run_validation(run_id: str) -> dict:
         def score(tp, fp):
             precision = tp / (tp + fp) if (tp + fp) else 1.0
             recall = tp / n_sims if n_sims else 1.0
-            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
-            return {"tp": tp, "fp": fp, "n_attacks": n_sims, "precision": precision, "recall": recall, "f1": f1}
+            f1 = (
+                2 * precision * recall / (precision + recall)
+                if (precision + recall)
+                else 0.0
+            )
+            return {
+                "tp": tp,
+                "fp": fp,
+                "n_attacks": n_sims,
+                "precision": precision,
+                "recall": recall,
+                "f1": f1,
+            }
 
         return {
             "run_id": run_id,

@@ -5,6 +5,7 @@ attack hypothesis. It is NOT an incident, NOT a risk score and NOT a
 confirmation of compromise (spec 5.1, 5.69). All values are deterministic
 and bounded; titles never overclaim.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -48,24 +49,24 @@ PHASES = ("INITIAL_ACCESS", "CREDENTIAL_ACCESS", "LATERAL_MOVEMENT", "EXECUTION"
 #: Technique -> phase map (deterministic, narrow; MITRE is context, never
 #: proof of attack - spec 5.17).
 TECHNIQUE_PHASES = {
-    "T1133": "INITIAL_ACCESS",       # External Remote Services
-    "T1190": "INITIAL_ACCESS",       # Exploit Public-Facing Application
-    "T1566.001": "INITIAL_ACCESS",   # Phishing: Spearphishing Attachment
-    "T1110": "CREDENTIAL_ACCESS",    # Brute Force
+    "T1133": "INITIAL_ACCESS",  # External Remote Services
+    "T1190": "INITIAL_ACCESS",  # Exploit Public-Facing Application
+    "T1566.001": "INITIAL_ACCESS",  # Phishing: Spearphishing Attachment
+    "T1110": "CREDENTIAL_ACCESS",  # Brute Force
     "T1110.001": "CREDENTIAL_ACCESS",
     "T1110.003": "CREDENTIAL_ACCESS",
     "T1110.004": "CREDENTIAL_ACCESS",
-    "T1621": "CREDENTIAL_ACCESS",    # Multi-Factor Authentication Request Generation
-    "T1021.001": "LATERAL_MOVEMENT", # Remote Desktop Protocol
-    "T1021.002": "LATERAL_MOVEMENT", # SMB/Windows Admin Shares
-    "T1021.003": "LATERAL_MOVEMENT", # Distributed Component Object Model
-    "T1570": "LATERAL_MOVEMENT",     # Lateral Tool Transfer
-    "T1059.001": "EXECUTION",        # PowerShell
-    "T1059.003": "EXECUTION",        # Windows Command Shell
-    "T1059.007": "EXECUTION",        # JavaScript
-    "T1047": "EXECUTION",            # Windows Management Instrumentation
-    "T1053.005": "EXECUTION",        # Scheduled Task
-    "T1486": "IMPACT",               # Data Encrypted for Impact (context only)
+    "T1621": "CREDENTIAL_ACCESS",  # Multi-Factor Authentication Request Generation
+    "T1021.001": "LATERAL_MOVEMENT",  # Remote Desktop Protocol
+    "T1021.002": "LATERAL_MOVEMENT",  # SMB/Windows Admin Shares
+    "T1021.003": "LATERAL_MOVEMENT",  # Distributed Component Object Model
+    "T1570": "LATERAL_MOVEMENT",  # Lateral Tool Transfer
+    "T1059.001": "EXECUTION",  # PowerShell
+    "T1059.003": "EXECUTION",  # Windows Command Shell
+    "T1059.007": "EXECUTION",  # JavaScript
+    "T1047": "EXECUTION",  # Windows Management Instrumentation
+    "T1053.005": "EXECUTION",  # Scheduled Task
+    "T1486": "IMPACT",  # Data Encrypted for Impact (context only)
 }
 TECHNIQUE_PHASE_DEFAULT = "UNKNOWN_PHASE"
 

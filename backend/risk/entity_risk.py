@@ -13,11 +13,12 @@ alert*, this engine maintains a **persistent risk score per entity**
   escalated "entity notable" alert is raised that links the contributing
   findings (the RBA equivalent of a notable event).
 """
+
 from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -25,18 +26,15 @@ from sqlalchemy.orm import Session
 
 from backend.config import (
     ENTITY_RISK_DECAY_DAYS,
-    ENTITY_RISK_ENABLED,
     ENTITY_RISK_LEVEL_CRITICAL,
     ENTITY_RISK_LEVEL_HIGH,
     ENTITY_RISK_LEVEL_MEDIUM,
     ENTITY_RISK_NOTABLE_WINDOW_HOURS,
-    RULE_RISK_WEIGHTS,
 )
 from backend.database.models import (
     Alert,
     EntityRisk,
     EntityRiskEvent,
-    NormalizedEvent,
 )
 
 logger = logging.getLogger("baraq.risk.entity_risk")
@@ -53,7 +51,9 @@ _USER_PATTERNS = (
 )
 
 
-def risk_level(score: float, thresholds: tuple[float, float, float] | None = None) -> str:
+def risk_level(
+    score: float, thresholds: tuple[float, float, float] | None = None
+) -> str:
     """Map an accumulated entity score to a risk level.
 
     ``thresholds`` is an optional (medium, high, critical) tuple from the
@@ -176,7 +176,9 @@ class EntityRiskManager:
         if not self.enabled:
             return []
         org = org or getattr(alert, "org", "") or ""
-        delta = float(alert.risk_score if alert.risk_score is not None else alert.score or 0.0)
+        delta = float(
+            alert.risk_score if alert.risk_score is not None else alert.score or 0.0
+        )
         weights = self.tuning.get("rule_risk_weights") or {}
         weight = float(weights.get(alert.rule, 1.0))
         contribution = round(delta * weight, 2)
@@ -201,13 +203,16 @@ class EntityRiskManager:
             contribution = round(contribution * 0.25, 2)
             logger.info(
                 "RBA: developer-context dampening %.2f -> %.2f for alert #%s (%s)",
-                delta * weight, contribution, alert.id, alert.rule,
+                delta * weight,
+                contribution,
+                alert.id,
+                alert.rule,
             )
             if contribution <= 0:
                 return []
 
         touched: list[EntityRisk] = []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for kind, name in self._alert_entities(alert):
             if self._already_applied(kind, name, org, alert.id):
                 continue
@@ -250,7 +255,11 @@ class EntityRiskManager:
             touched.append(entity)
             logger.info(
                 "RBA: %s '%s' += %s -> %s (%s)",
-                kind, name, contribution, new_score, entity.risk_level,
+                kind,
+                name,
+                contribution,
+                new_score,
+                entity.risk_level,
             )
         self.session.flush()
         return touched
@@ -300,8 +309,7 @@ class EntityRiskManager:
             ).first()
         if entity is None:
             raise IntegrityError(
-                "entity_risk get-or-create returned no row "
-                f"({kind}, {name}, {org})",
+                "entity_risk get-or-create returned no row " f"({kind}, {name}, {org})",
                 params=None,
                 orig=Exception("concurrent insert resolved to no row"),
             )
@@ -319,8 +327,10 @@ class EntityRiskManager:
         """
         if not self.enabled:
             return 0
-        now = now or datetime.now(timezone.utc)
-        half_life_days = max(0.1, float(self.tuning.get("risk_decay_days", ENTITY_RISK_DECAY_DAYS)))
+        now = now or datetime.now(UTC)
+        half_life_days = max(
+            0.1, float(self.tuning.get("risk_decay_days", ENTITY_RISK_DECAY_DAYS))
+        )
         entities = self.session.scalars(select(EntityRisk)).all()
         decayed = 0
         for entity in entities:
@@ -407,9 +417,13 @@ class EntityRiskManager:
         """
         if not self.enabled:
             return []
-        now = now or datetime.now(timezone.utc)
+        now = now or datetime.now(UTC)
         notable_window = timedelta(
-            hours=float(self.tuning.get("risk_notable_window_hours", ENTITY_RISK_NOTABLE_WINDOW_HOURS))
+            hours=float(
+                self.tuning.get(
+                    "risk_notable_window_hours", ENTITY_RISK_NOTABLE_WINDOW_HOURS
+                )
+            )
         )
         entities = self.session.scalars(
             select(EntityRisk).where(EntityRisk.org == org)
@@ -428,11 +442,13 @@ class EntityRiskManager:
                     Alert.org == org,
                     # kind disambiguation: the same name can exist for a host
                     # and a user (e.g. "Haaraphel" the machine + account).
-                    Alert.host == (entity.entity_name if entity.entity_kind == "host" else ""),
+                    Alert.host
+                    == (entity.entity_name if entity.entity_kind == "host" else ""),
                 )
             ).all()
             active = [
-                a for a in existing
+                a
+                for a in existing
                 if a.status in ("open", "acknowledged", "investigating", "contained")
             ]
 
@@ -440,10 +456,7 @@ class EntityRiskManager:
             # notable is refreshed with the latest evidence so analysts see
             # the accumulated campaign, not a pile of identical alerts.
             if entity.last_escalated_level == level:
-                fresh = [
-                    a for a in active
-                    if (now - a.created_at) < notable_window
-                ]
+                fresh = [a for a in active if (now - a.created_at) < notable_window]
                 if fresh:
                     target = max(fresh, key=lambda a: a.created_at)
                     target.evidence = self._notable_evidence(entity)
@@ -518,7 +531,7 @@ class EntityRiskManager:
                         "RBA escalation alert #%s annotated with intel verdicts",
                         alert.id,
                     )
-            except Exception:  # noqa: BLE001 - intel must never wedge RBA
+            except Exception:
                 logger.exception("RBA intel annotation failed for alert #%s", alert.id)
             entity.last_escalated_level = level
             entity.last_escalated_score = entity.score
@@ -526,7 +539,10 @@ class EntityRiskManager:
             created.append(alert)
             logger.info(
                 "RBA escalation: %s '%s' -> %s (score %.1f)",
-                entity.entity_kind, entity.entity_name, level, entity.score,
+                entity.entity_kind,
+                entity.entity_name,
+                level,
+                entity.score,
             )
         if created:
             self.session.commit()
@@ -540,11 +556,16 @@ class EntityRiskManager:
         """
         from sqlalchemy import func
 
-        day = datetime.now(timezone.utc).strftime("%Y%m%d")
+        day = datetime.now(UTC).strftime("%Y%m%d")
         prefix = f"CORR-{day}-"
-        count = self.session.scalar(
-            select(func.count(Alert.id)).where(Alert.correlation_id.like(f"{prefix}%"))
-        ) or 0
+        count = (
+            self.session.scalar(
+                select(func.count(Alert.id)).where(
+                    Alert.correlation_id.like(f"{prefix}%")
+                )
+            )
+            or 0
+        )
         return f"{prefix}{count + 1:05d}"
 
     @staticmethod
@@ -559,7 +580,7 @@ class EntityRiskManager:
         ]
         seen: set[tuple[str, str]] = set()
         for c in (entity.contributions or [])[-10:]:
-            key = (str(c.get('alert_id')), c.get('rule', ''))
+            key = (str(c.get("alert_id")), c.get("rule", ""))
             if key in seen:
                 continue
             seen.add(key)
@@ -636,7 +657,7 @@ class EntityRiskManager:
         """
         if not self.enabled:
             return 0
-        since = datetime.now(timezone.utc) - timedelta(hours=hours)
+        since = datetime.now(UTC) - timedelta(hours=hours)
         alerts = self.session.scalars(
             select(Alert).where(
                 Alert.org == org,

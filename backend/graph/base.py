@@ -14,6 +14,7 @@ All methods take the SQLAlchemy session first so the Postgres backend can use
 it; Neo4j implementations ignore it. Records are plain dicts (see the module
 functions in ``backend.graph`` for the canonical shapes).
 """
+
 from __future__ import annotations
 
 import logging

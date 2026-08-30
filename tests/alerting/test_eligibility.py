@@ -1,15 +1,18 @@
 """Alert eligibility tests (spec 3.5, 3.6)."""
+
 from __future__ import annotations
 
 from backend.alerting.eligibility import ALERT_POLICIES, evaluate_detection, policy_for
 from backend.detection.contract import make_detection_id
-
 from tests.alerting.helpers import detection
 
 
 def _d(detector_id="D001", **kw):
-    return detection(detector_id=detector_id,
-                     detection_id=make_detection_id(detector_id, "e", "t"), **kw)
+    return detection(
+        detector_id=detector_id,
+        detection_id=make_detection_id(detector_id, "e", "t"),
+        **kw,
+    )
 
 
 def test_d001_high_severity_eligible():
@@ -63,7 +66,9 @@ def test_d005_lower_threshold():
 
 
 def test_d005_below_minimum_confidence_rejected():
-    assert not evaluate_detection(_d("D005", severity="medium", confidence=0.3)).eligible
+    assert not evaluate_detection(
+        _d("D005", severity="medium", confidence=0.3)
+    ).eligible
 
 
 def test_unknown_detector_fails_closed():

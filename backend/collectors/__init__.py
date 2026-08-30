@@ -1,4 +1,5 @@
 """Collector registry - unified entry point for the collection layer."""
+
 from __future__ import annotations
 
 import logging
@@ -43,7 +44,7 @@ class CollectorManager:
             try:
                 if collector.enabled():
                     records.extend(collector.collect())
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("Collector %s failed: %s", collector.name, exc)
                 registry.record_failure(collector.name, str(exc))
         logger.info("Collector manager returned %d raw records", len(records))

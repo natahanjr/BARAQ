@@ -5,6 +5,7 @@ The analyst interface must never receive SafeFormatMessage debris
 values are repaired from the authoritative structured copy, and lossy
 sources are flagged with data_integrity + repair metadata.
 """
+
 from __future__ import annotations
 
 from backend.analyzers.normalizer import Normalizer
@@ -31,7 +32,7 @@ def _mk_4688(structured: dict, message: str) -> dict:
 TRUNCATED_MESSAGE = (
     "A new process has been created.\n"
     "New Process Name: C\n"
-    "Process Command Line: \"\n"
+    'Process Command Line: "\n'
     "Creator Process Name: C"
 )
 
@@ -52,11 +53,20 @@ def test_debris_values_detected():
 
 def test_repair_message_from_structured_facts():
     repaired, fields = Normalizer.repair_message(TRUNCATED_MESSAGE, STRUCTURED)
-    assert "New Process Name: C:\\Users\\haaraphel\\venv\\Scripts\\python.exe" in repaired
-    assert "Creator Process Name: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" in repaired
+    assert (
+        "New Process Name: C:\\Users\\haaraphel\\venv\\Scripts\\python.exe" in repaired
+    )
+    assert (
+        "Creator Process Name: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+        in repaired
+    )
     assert "python.exe" in repaired
     assert "C\n" not in repaired
-    assert set(fields) == {"New Process Name", "Process Command Line", "Creator Process Name"}
+    assert set(fields) == {
+        "New Process Name",
+        "Process Command Line",
+        "Creator Process Name",
+    }
 
 
 def test_clean_message_untouched():
@@ -67,7 +77,9 @@ def test_clean_message_untouched():
 
 
 def test_debris_without_structured_facts_left_alone():
-    repaired, fields = Normalizer.repair_message(TRUNCATED_MESSAGE, {"NewProcessName": "C"})
+    repaired, fields = Normalizer.repair_message(
+        TRUNCATED_MESSAGE, {"NewProcessName": "C"}
+    )
     assert fields == []  # no authoritative copy to repair from
     assert "New Process Name: C" in repaired
 
@@ -76,11 +88,18 @@ def test_normalize_repairs_message_and_flags_integrity():
     norm = Normalizer(hostname="WS-DEV")
     out = norm.normalize(_mk_4688(STRUCTURED, TRUNCATED_MESSAGE))
 
-    assert "New Process Name: C:\\Users\\haaraphel\\venv\\Scripts\\python.exe" in out["message"]
+    assert (
+        "New Process Name: C:\\Users\\haaraphel\\venv\\Scripts\\python.exe"
+        in out["message"]
+    )
     assert out["data_integrity"] == "truncated"
     di = out["raw_json"]["data_integrity"]
     assert di["truncated_fields"] == ["message"]
-    assert di["repaired_fields"] == ["New Process Name", "Process Command Line", "Creator Process Name"]
+    assert di["repaired_fields"] == [
+        "New Process Name",
+        "Process Command Line",
+        "Creator Process Name",
+    ]
     assert out["raw_json"]["facts"]["NewProcessName"] == STRUCTURED["NewProcessName"]
     assert out["raw_json"]["facts"]["CommandLine"] == STRUCTURED["CommandLine"]
 
@@ -96,12 +115,17 @@ def test_normalize_clean_message_stays_complete():
 
 def test_normalize_repairs_sysmon_style_message():
     norm = Normalizer(hostname="WS-DEV")
-    msg = "Process Create:\nProcessName: C\nImage: C\nCommandLine: \""
-    out = norm.normalize(_mk_4688(
-        {"NewProcessName": "C:\\tools\\node.exe", "CommandLine": "node server.js",
-         "Image": "C:\\tools\\node.exe"},
-        msg,
-    ))
+    msg = 'Process Create:\nProcessName: C\nImage: C\nCommandLine: "'
+    out = norm.normalize(
+        _mk_4688(
+            {
+                "NewProcessName": "C:\\tools\\node.exe",
+                "CommandLine": "node server.js",
+                "Image": "C:\\tools\\node.exe",
+            },
+            msg,
+        )
+    )
     assert "CommandLine: node server.js" in out["message"]
     assert "node.exe" in out["message"]
     assert out["raw_json"]["data_integrity"]["repaired_fields"]

@@ -10,6 +10,7 @@ node in the entity graph with ``ATTRIBUTED_TO`` edges from its indicators.
 The Entity Graph screen and ``?kind=threat_actor`` listings then provide a
 true threat-actor view over the current attack surface.
 """
+
 from __future__ import annotations
 
 import logging
@@ -72,18 +73,33 @@ def upsert_actors(db: Session, store: GraphStore, items: list[dict]) -> list[dic
             props = {
                 "category": top.get("category", "unknown"),
                 "indicator_count": len(group["items"]),
-                "sources": list({s for i in group["items"] for s in (i.get("sources") or [])}),
+                "sources": list(
+                    {s for i in group["items"] for s in (i.get("sources") or [])}
+                ),
             }
-            nodes.append(_node(
-                "threat_actor", label, risk=risk,
-                label=label, alerts=0, events=len(group["items"]), props=props,
-            ))
+            nodes.append(
+                _node(
+                    "threat_actor",
+                    label,
+                    risk=risk,
+                    label=label,
+                    alerts=0,
+                    events=len(group["items"]),
+                    props=props,
+                )
+            )
             for item in group["items"]:
-                edges.append(_edge(
-                    item.get("kind", "ip"), item["indicator"], "ATTRIBUTED_TO",
-                    "threat_actor", label,
-                    weight=1, props={"confidence": float(item.get("confidence") or 0.0)},
-                ))
+                edges.append(
+                    _edge(
+                        item.get("kind", "ip"),
+                        item["indicator"],
+                        "ATTRIBUTED_TO",
+                        "threat_actor",
+                        label,
+                        weight=1,
+                        props={"confidence": float(item.get("confidence") or 0.0)},
+                    )
+                )
         if nodes:
             store.upsert_entities(db, nodes)
             store.upsert_edges(db, edges)
@@ -93,12 +109,14 @@ def upsert_actors(db: Session, store: GraphStore, items: list[dict]) -> list[dic
     for label, group in clusters.items():
         top = max(group["items"], key=lambda i: float(i.get("confidence") or 0.0))
         risk = max(float(top.get("confidence") or 0.0) * 100.0, 60.0)
-        actors.append({
-            "name": label,
-            "category": top.get("category", "unknown"),
-            "risk_level": _risk_level(risk),
-            "risk_score": round(risk, 2),
-            "items": [i.get("indicator") for i in group["items"]],
-        })
+        actors.append(
+            {
+                "name": label,
+                "category": top.get("category", "unknown"),
+                "risk_level": _risk_level(risk),
+                "risk_score": round(risk, 2),
+                "items": [i.get("indicator") for i in group["items"]],
+            }
+        )
     actors.sort(key=lambda a: a["risk_score"], reverse=True)
     return actors

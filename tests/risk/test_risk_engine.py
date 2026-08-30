@@ -1,4 +1,5 @@
 """Phase 6 engine tests (spec 6.1, 6.12, 6.13, 6.16, 6.27, 6.30-6.38, 6.42)."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -6,15 +7,11 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import select
 
-import backend.config as config
+from backend import config
 from backend.risk import engine
 from backend.risk.models import (
-    EntityRiskV2,
-    EntityRiskV2AuditEvent,
     EntityRiskV2Factor,
-    EntityRiskV2Snapshot,
 )
-
 from tests.risk.helpers import (
     RISK_T0,
     alert_evidence,
@@ -55,13 +52,23 @@ def test_next_risk_id_sequences(db):
 
 def test_apply_alert_resolves_all_six_entity_types(db):
     alert = alert_evidence(
-        "ALR-000001", "h1", user="u1", source="203.0.113.1",
-        destination_ip="10.0.0.1", account="svc-1", process="pwsh.exe",
+        "ALR-000001",
+        "h1",
+        user="u1",
+        source="203.0.113.1",
+        destination_ip="10.0.0.1",
+        account="svc-1",
+        process="pwsh.exe",
     )
     engine.apply_alert(db, alert, now=RISK_T0)
     types = {r.entity_type for r in stored_risks(db)}
     assert types == {
-        "HOST", "USER", "SOURCE_IP", "DESTINATION_IP", "ACCOUNT", "PROCESS",
+        "HOST",
+        "USER",
+        "SOURCE_IP",
+        "DESTINATION_IP",
+        "ACCOUNT",
+        "PROCESS",
     }
 
 
@@ -75,8 +82,7 @@ def test_apply_alert_severity_tier_dedupes_per_entity(db):
     risk = engine.risk_for_entity(db, "HOST", "h1")
     assert risk.score == 43.0
     factors = db.scalars(
-        select(EntityRiskV2Factor)
-        .where(EntityRiskV2Factor.risk_id == risk.risk_id)
+        select(EntityRiskV2Factor).where(EntityRiskV2Factor.risk_id == risk.risk_id)
     ).all()
     tier_factors = [f for f in factors if f.factor_id == "RF009_ALERT_SEVERITY"]
     assert len(tier_factors) == 1
@@ -97,8 +103,11 @@ def test_apply_group_membership_and_technique_factors(db):
     assert risk.group_count == 1
     factor_ids = {f.factor_id for f in stored_factors(db) if f.risk_id == risk.risk_id}
     assert factor_ids == {
-        "RF003_LATERAL_MOVEMENT", "RF005_EXECUTION", "RF010_BEHAVIOR_GROUP",
-        "RF009_ALERT_SEVERITY", "RF008_RECENCY",
+        "RF003_LATERAL_MOVEMENT",
+        "RF005_EXECUTION",
+        "RF010_BEHAVIOR_GROUP",
+        "RF009_ALERT_SEVERITY",
+        "RF008_RECENCY",
     }
 
 
@@ -106,8 +115,14 @@ def test_apply_group_external_destination_gets_external_access(db):
     engine.apply_group(
         db,
         group_evidence(
-            "g4", "h-src", ["T1133"], severity="medium", user="u1",
-            source="198.51.100.9", destination="10.0.0.7", alert_count=5,
+            "g4",
+            "h-src",
+            ["T1133"],
+            severity="medium",
+            user="u1",
+            source="198.51.100.9",
+            destination="10.0.0.7",
+            alert_count=5,
         ),
         now=RISK_T0,
     )
@@ -148,19 +163,27 @@ def test_spread_applies_to_entities_in_many_groups(db):
     )
     user_risk = engine.risk_for_entity(db, "USER", "u-eval")
     assert user_risk is not None
-    factor_ids = {f.factor_id for f in stored_factors(db) if f.risk_id == user_risk.risk_id}
+    factor_ids = {
+        f.factor_id for f in stored_factors(db) if f.risk_id == user_risk.risk_id
+    }
     assert "RF013_ENTITY_SPREAD" in factor_ids
     host_risk = engine.risk_for_entity(db, "HOST", "h0")
-    factor_ids = {f.factor_id for f in stored_factors(db) if f.risk_id == host_risk.risk_id}
+    factor_ids = {
+        f.factor_id for f in stored_factors(db) if f.risk_id == host_risk.risk_id
+    }
     assert "RF013_ENTITY_SPREAD" not in factor_ids
 
 
 def test_apply_finding_adds_only_sequence_factor(db):
     engine.apply_group(
-        db, group_evidence("g1", "h1", ["T1110"]), now=RISK_T0,
+        db,
+        group_evidence("g1", "h1", ["T1110"]),
+        now=RISK_T0,
     )
     engine.apply_finding(
-        db, finding_evidence("CF-000001", ["h1"]), now=RISK_T0,
+        db,
+        finding_evidence("CF-000001", ["h1"]),
+        now=RISK_T0,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     assert risk.score == 48.0
@@ -168,18 +191,24 @@ def test_apply_finding_adds_only_sequence_factor(db):
     factor_ids = {f.factor_id for f in stored_factors(db) if f.risk_id == risk.risk_id}
     assert len(factor_ids) == 5
     assert factor_ids == {
-        "RF002_CREDENTIAL_ACCESS", "RF010_BEHAVIOR_GROUP",
-        "RF009_ALERT_SEVERITY", "RF008_RECENCY",
+        "RF002_CREDENTIAL_ACCESS",
+        "RF010_BEHAVIOR_GROUP",
+        "RF009_ALERT_SEVERITY",
+        "RF008_RECENCY",
         "RF006_MULTI_STAGE_CORRELATION",
     }
 
 
 def test_apply_propagation_is_bounded_and_expiring(db):
     engine.apply_group(
-        db, group_evidence("g1", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g1", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     engine.apply_propagation(
-        db, "USER", "u1",
+        db,
+        "USER",
+        "u1",
         from_entity="HOST:h1",
         relationship_type="host_to_user",
         reason="user on high-risk host",
@@ -204,15 +233,19 @@ def test_apply_propagation_is_bounded_and_expiring(db):
 def test_apply_propagation_rejects_unknown_relationship(db):
     with pytest.raises(ValueError):
         engine.apply_propagation(
-            db, "HOST", "h1",
-            from_entity="HOST:x", relationship_type="suspicious",
+            db,
+            "HOST",
+            "h1",
+            from_entity="HOST:x",
+            relationship_type="suspicious",
             now=RISK_T0,
         )
 
 
 def test_factors_carry_full_provenance(db):
     engine.apply_group(
-        db, group_evidence("g5", "h1", ["T1021.001"], alert_count=10),
+        db,
+        group_evidence("g5", "h1", ["T1021.001"], alert_count=10),
         now=RISK_T0,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
@@ -233,7 +266,9 @@ def test_factors_carry_full_provenance(db):
 
 def test_recalculate_creates_snapshot_and_audit(db):
     engine.apply_group(
-        db, group_evidence("g5", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g5", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     snapshots = [s for s in stored_snapshots(db) if s.risk_id == risk.risk_id]
@@ -247,7 +282,9 @@ def test_recalculate_creates_snapshot_and_audit(db):
 
 def test_manual_recalculate_is_same_path(db):
     engine.apply_group(
-        db, group_evidence("g5", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g5", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     result = engine.manual_recalculate(db, risk.risk_id, now=RISK_T0)
@@ -264,7 +301,9 @@ def test_expire_factors_marks_and_audits(db):
     engine.apply_group(
         db,
         group_evidence(
-            "g5", "h1", ["T1021.001"],
+            "g5",
+            "h1",
+            ["T1021.001"],
             observed=RISK_T0 - timedelta(days=30),
         ),
         now=RISK_T0,
@@ -320,10 +359,14 @@ def test_determinism_same_evidence_same_score(db):
 
 def test_recalculate_all_returns_count(db):
     engine.apply_group(
-        db, group_evidence("g5", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g5", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     engine.apply_group(
-        db, group_evidence("g6", "h2", ["T1110"]), now=RISK_T0,
+        db,
+        group_evidence("g6", "h2", ["T1110"]),
+        now=RISK_T0,
     )
     count = engine.recalculate_all(db, now=RISK_T0)
     assert count == len(stored_risks(db))
