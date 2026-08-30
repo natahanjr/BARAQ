@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../api.js";
 import { Loading, ErrorBanner } from "../components/Feedback.jsx";
-import { PageHeader, Card, CardHeader, CardTitle, CardContent, Badge, Tabs, MetricCard, SearchInput, FilterBar, Button, Drawer, Tooltip, SkeletonTable } from "../components/ui/index.js";
+import { PageHeader, Card, CardHeader, CardTitle, CardContent, Badge, Tabs, MetricCard, SearchInput, Button, Drawer } from "../components/ui/index.js";
 import { useToast } from "../components/ui/Toast.jsx";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -264,13 +264,13 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
     <div className="relative w-full overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200" style={{ height: 420 }}>
       {/* Controls */}
       <div className="absolute right-3 top-3 z-10 flex gap-1.5">
-        <button onClick={() => setTransform((t) => ({ ...t, scale: Math.min(3, t.scale * 1.2) }))} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors" title="Zoom in">
+        <button onClick={() => setTransform((t) => ({ ...t, scale: Math.min(3, t.scale * 1.2) }))} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-colors p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg-primary)]" title="Zoom in">
           <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v10M3 8h10" /></svg>
         </button>
-        <button onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.3, t.scale * 0.8) }))} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors" title="Zoom out">
+        <button onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.3, t.scale * 0.8) }))} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-colors p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg-primary)]" title="Zoom out">
           <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8h10" /></svg>
         </button>
-        <button onClick={() => setTransform({ x: 0, y: 0, scale: 1 })} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] transition-colors" title="Reset view">
+        <button onClick={() => setTransform({ x: 0, y: 0, scale: 1 })} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-colors p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg-primary)]" title="Reset view">
           <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3h10v10H3z" /></svg>
         </button>
       </div>
@@ -278,8 +278,11 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
       {/* Legend */}
       <div className="absolute left-3 top-3 z-10 flex flex-col gap-1 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200/90 px-2.5 py-2 text-[11px]">
         {[
-          ["Host", "var(--status-healthy)"],
+          ["Host (low risk)", "var(--status-healthy)"],
           ["External IP", "var(--accent-cyan)"],
+          ["Medium risk", "var(--severity-medium)"],
+          ["High risk", "var(--severity-high)"],
+          ["Critical risk", "var(--severity-critical)"],
           ["Internet", "var(--fg-muted)"],
         ].map(([label, color]) => (
           <div key={label} className="flex items-center gap-1.5">
@@ -292,6 +295,8 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
       <svg
         ref={svgRef}
         className="w-full h-full"
+        viewBox="0 0 800 400"
+        preserveAspectRatio="xMidYMid meet"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -521,20 +526,20 @@ function ConnectionInspector({ edge, onClose, navigate, toast }) {
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Byte Flow</span>
             <span className="text-[11px] font-medium text-[var(--fg-secondary)]">
-              {conn.bytes_sent + conn.bytes_recv > 0
-                ? `${Math.round((conn.bytes_sent / (conn.bytes_sent + conn.bytes_recv)) * 100)}% up`
+              {(conn.bytes_sent || 0) + (conn.bytes_recv || 0) > 0
+                ? `${Math.round(((conn.bytes_sent || 0) / ((conn.bytes_sent || 0) + (conn.bytes_recv || 0))) * 100)}% up`
                 : "—"}
             </span>
           </div>
           <div className="flex h-3 rounded-full overflow-hidden">
             <div
               className="h-full bg-[var(--severity-high)] transition-all duration-500"
-              style={{ width: `${(conn.bytes_sent / Math.max(conn.bytes_sent + conn.bytes_recv, 1)) * 100}%` }}
+              style={{ width: `${((conn.bytes_sent || 0) / Math.max((conn.bytes_sent || 0) + (conn.bytes_recv || 0), 1)) * 100}%` }}
               title={`Sent: ${fmtBytes(conn.bytes_sent)}`}
             />
             <div
               className="h-full bg-[var(--accent-cyan)] transition-all duration-500"
-              style={{ width: `${(conn.bytes_recv / Math.max(conn.bytes_sent + conn.bytes_recv, 1)) * 100}%` }}
+              style={{ width: `${((conn.bytes_recv || 0) / Math.max((conn.bytes_sent || 0) + (conn.bytes_recv || 0), 1)) * 100}%` }}
               title={`Recv: ${fmtBytes(conn.bytes_recv)}`}
             />
           </div>
@@ -1592,7 +1597,7 @@ export default function NetworkAnalyzer() {
               a.click(); URL.revokeObjectURL(url);
               toast({ title: `Exported ${data.length} connections`, type: "success" });
             }}
-            className="inline-flex items-center gap-1.5 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 px-2.5 py-1.5 text-[11px] font-semibold text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-colors px-2.5 py-1.5 text-[11px] font-semibold text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
             title="Export filtered connections as JSON"
           >
             <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 2v8M4 10l4 4 4-4M3 14h10" /></svg>

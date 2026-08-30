@@ -19,6 +19,9 @@
   --text-2xs: 0.6875rem; /* 11px */
   --text-3xs: 0.625rem;  /* 10px */
 
+  --text-3xl: 1.875rem;  /* 30px */
+  --text-4xl: 2.25rem;   /* 36px */
+
   --weight-normal: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
@@ -190,7 +193,7 @@
   --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   --shadow-inset: inset 0 2px 4px rgba(0, 0, 0, 0.3);
   --shadow-glow-cyan: 0 0 24px -4px rgba(20, 184, 166, 0.3);
-  --shadow-glow-violet: 0 0 24px -4px rgba(234, 179, 8, 0.3);
+  --shadow-glow-violet: 0 0 24px -4px rgba(139, 92, 246, 0.3);
 
   /* ── Focus Ring ───────────────────────────────────────────────────── */
   --focus-ring: 0 0 0 2px var(--bg-app), 0 0 0 4px var(--accent-cyan);
@@ -319,7 +322,7 @@ html.light {
   --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.12);
   --shadow-inset: inset 0 2px 4px rgba(0, 0, 0, 0.04);
   --shadow-glow-cyan: 0 0 20px -4px rgba(13, 148, 136, 0.12);
-  --shadow-glow-violet: 0 0 20px -4px rgba(180, 83, 9, 0.12);
+  --shadow-glow-violet: 0 0 20px -4px rgba(139, 92, 246, 0.12);
 
   /* ── Focus Ring ───────────────────────────────────────────────────── */
   --focus-ring: 0 0 0 2px var(--bg-app), 0 0 0 4px var(--accent-cyan);

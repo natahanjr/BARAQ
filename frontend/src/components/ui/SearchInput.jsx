@@ -41,7 +41,7 @@ function SearchInput({ value, onChange, placeholder = "Search...", debounce = 20
         placeholder={placeholder}
         className={[
           "w-full h-8 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--input-bg)] pl-8 pr-7 text-[13px] text-[var(--fg-primary)] placeholder-[var(--input-placeholder)]",
-          "outline-none transition-all focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-[var(--input-border-focus)] focus:ring-1 focus:ring-[var(--input-border-focus)]",
+          "outline-none transition-all focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-[var(--input-border-focus)]",
         ].join(" ")}
       />
       {local && (

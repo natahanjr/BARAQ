@@ -31,6 +31,18 @@ export function ThemeProvider({ children }) {
     root.style.colorScheme = resolved;
   }, [resolved]);
 
+  const setTheme = useCallback((next) => {
+    setPreference(next);
+    try { localStorage.setItem(STORAGE_KEY, next); } catch {}
+  }, []);
+
+  const cycleTheme = useCallback(() => {
+    const order = ["dark", "light", "system"];
+    const idx = order.indexOf(preference);
+    const next = order[(idx + 1) % order.length];
+    setTheme(next);
+  }, [preference, setTheme]);
+
   // Listen for keyboard shortcut theme toggle
   useEffect(() => {
     const handler = () => cycleTheme();
@@ -55,18 +67,6 @@ export function ThemeProvider({ children }) {
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, [preference]);
-
-  const setTheme = useCallback((next) => {
-    setPreference(next);
-    try { localStorage.setItem(STORAGE_KEY, next); } catch {}
-  }, []);
-
-  const cycleTheme = useCallback(() => {
-    const order = ["dark", "light", "system"];
-    const idx = order.indexOf(preference);
-    const next = order[(idx + 1) % order.length];
-    setTheme(next);
-  }, [preference, setTheme]);
 
   const value = useMemo(() => ({
     theme: preference,

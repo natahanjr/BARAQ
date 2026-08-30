@@ -38,17 +38,17 @@ html { font-size: 16px; } /* Base 16px for consistent rem calculations */
   --color-cyan-900: #134e4a;
   --color-cyan-950: #042f2e;
 
-  --color-violet-50: #fefce8;
-  --color-violet-100: #fef9c3;
-  --color-violet-200: #fef08a;
-  --color-violet-300: #fde047;
-  --color-violet-400: #facc15;
-  --color-violet-500: #eab308;
-  --color-violet-600: #ca8a04;
-  --color-violet-700: #a16207;
-  --color-violet-800: #854d0e;
-  --color-violet-900: #713f12;
-  --color-violet-950: #422006;
+  --color-violet-50: #f5f3ff;
+  --color-violet-100: #ede9fe;
+  --color-violet-200: #ddd6fe;
+  --color-violet-300: #c4b5fd;
+  --color-violet-400: #a78bfa;
+  --color-violet-500: #8b5cf6;
+  --color-violet-600: #7c3aed;
+  --color-violet-700: #6d28d9;
+  --color-violet-800: #5b21b6;
+  --color-violet-900: #4c1d95;
+  --color-violet-950: #2e1065;
 
   --color-emerald-50: #ecfdf5;
   --color-emerald-100: #d1fae5;
