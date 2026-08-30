@@ -14,6 +14,7 @@ ignore = [
     "RUF012", # mutable-class-default
     "DTZ001", # datetime-without-tzinfo
     "DTZ005", # datetime-now-without-tzinfo
+    "DTZ007", # naive-datetime-strptime
     "DTZ011", # date-today
     "DTZ901", # datetime-min-max
     "B023",   # function-uses-loop-variable
