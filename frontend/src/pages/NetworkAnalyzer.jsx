@@ -381,6 +381,7 @@ function NodeInspector({ node, connections, onClose, navigate, toast }) {
 
   // Risk calculation: external IPs with many connections to unusual ports = higher risk
   const externalConns = relatedConns.filter((c) => c.remote_ip && classifyIP(c.remote_ip) === "external");
+  const uniqueExternalPeers = new Set(externalConns.map((c) => c.local_ip === node.id ? c.remote_ip : c.local_ip));
   const suspiciousPorts = relatedConns.filter((c) => c.remote_port && [4444, 1337, 31337, 6667, 6666, 8443, 8080].includes(c.remote_port)).length;
   const riskScore = classification === "external"
     ? Math.min(100, 30 + externalConns.length * 2 + suspiciousPorts * 15 + (totalBytes > 10 * 1024 * 1024 ? 20 : 0))
@@ -392,7 +393,16 @@ function NodeInspector({ node, connections, onClose, navigate, toast }) {
       <div className="space-y-5">
         {/* Header */}
         <div>
-          <p className="font-mono text-[15px] font-bold text-[var(--fg-primary)]">{node.label}</p>
+          <div className="flex items-center gap-2">
+            <p className="font-mono text-[15px] font-bold text-[var(--fg-primary)]">{node.label}</p>
+            <button
+              onClick={() => { navigator.clipboard.writeText(node.label); toast({ title: "Copied to clipboard", type: "success" }); }}
+              className="rounded p-1 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--bg-surface-hover)] transition-colors"
+              title="Copy IP"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><rect x="5" y="5" width="8" height="8" rx="1.5" /><path d="M3 11V3.5A1.5 1.5 0 0 1 4.5 2H11" /></svg>
+            </button>
+          </div>
           <div className="mt-1 flex items-center gap-2">
             <Badge severity={node.type === "host" ? "info" : "low"} size="sm">{node.type.toUpperCase()}</Badge>
             <Badge severity={classification === "external" ? "medium" : "info"} size="sm">{classification}</Badge>
@@ -426,7 +436,7 @@ function NodeInspector({ node, connections, onClose, navigate, toast }) {
           </div>
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface-active)] p-3">
             <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">External Peers</p>
-            <p className="mt-0.5 text-lg font-bold text-[var(--fg-primary)]">{externalConns.length}</p>
+            <p className="mt-0.5 text-lg font-bold text-[var(--fg-primary)]">{uniqueExternalPeers.size}</p>
           </div>
         </div>
 
@@ -576,9 +586,14 @@ function ConnectionTable({ connections, onSelect }) {
 
   const sorted = useMemo(() => {
     return [...connections].sort((a, b) => {
-      const aVal = a[sortKey] ?? "";
-      const bVal = b[sortKey] ?? "";
-      const cmp = typeof aVal === "number" ? aVal - bVal : String(aVal).localeCompare(String(bVal));
+      const aVal = a[sortKey];
+      const bVal = b[sortKey];
+      let cmp;
+      if (aVal == null && bVal == null) cmp = 0;
+      else if (aVal == null) cmp = 1;
+      else if (bVal == null) cmp = -1;
+      else if (typeof aVal === "number" && typeof bVal === "number") cmp = aVal - bVal;
+      else cmp = String(aVal).localeCompare(String(bVal));
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [connections, sortKey, sortDir]);
@@ -721,24 +736,58 @@ function ConnectionTable({ connections, onSelect }) {
  * DNS Table
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function DNSTable({ queries }) {
+function DNSTable({ queries, onSelect }) {
+  const [sortKey, setSortKey] = useState("observed_at");
+  const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
-  const totalPages = Math.ceil(queries.length / PAGE_SIZE);
+
+  const sorted = useMemo(() => {
+    return [...queries].sort((a, b) => {
+      const aVal = a[sortKey] ?? "";
+      const bVal = b[sortKey] ?? "";
+      const cmp = typeof aVal === "number" && typeof bVal === "number" ? aVal - bVal : String(aVal).localeCompare(String(bVal));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [queries, sortKey, sortDir]);
+
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+
+  const SortHeader = ({ field, children }) => (
+    <th
+      onClick={() => toggleSort(field)}
+      className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] cursor-pointer select-none hover:text-[var(--fg-secondary)] transition-colors border-b border-[var(--border-subtle)]"
+    >
+      <span className="flex items-center gap-1.5">
+        {children}
+        {sortKey === field && <span className="text-[var(--accent-cyan)] text-[11px]">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+      </span>
+    </th>
+  );
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left border-collapse">
         <thead>
           <tr>
-            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Time</th>
-            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Query</th>
-            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Response</th>
-            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Process</th>
+            <SortHeader field="observed_at">Time</SortHeader>
+            <SortHeader field="query">Query</SortHeader>
+            <SortHeader field="response">Response</SortHeader>
+            <SortHeader field="process">Process</SortHeader>
           </tr>
         </thead>
         <tbody>
-          {queries.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((q) => (
-            <tr key={q.id} className="group border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--bg-surface-hover)] transition-colors duration-150">
+          {sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((q) => (
+            <tr
+              key={q.id}
+              onClick={() => onSelect?.(q)}
+              className="group cursor-pointer border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--bg-surface-hover)] transition-colors duration-150"
+            >
               <td className="px-4 py-3 text-[11px] text-[var(--fg-muted)] tabular-nums">{fmtDate(q.observed_at)}</td>
               <td className="px-4 py-3 font-mono text-[12px] text-[var(--accent-cyan)] font-medium">{q.query || "\u2014"}</td>
               <td className="px-4 py-3 font-mono text-[12px] text-[var(--fg-secondary)]">{q.response || "\u2014"}</td>
@@ -752,16 +801,16 @@ function DNSTable({ queries }) {
           ))}
         </tbody>
       </table>
-      {queries.length === 0 && (
+      {sorted.length === 0 && (
         <div className="py-16 text-center">
           <p className="text-[13px] text-[var(--fg-muted)]">No DNS queries found</p>
           <p className="text-[11px] text-[var(--fg-faint)] mt-1">DNS traffic will appear here once the collector captures queries</p>
         </div>
       )}
-      {queries.length > PAGE_SIZE && (
+      {sorted.length > PAGE_SIZE && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
           <span className="text-[11px] text-[var(--fg-muted)]">
-            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, queries.length)} of {queries.length}
+            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
           </span>
           <div className="flex items-center gap-1">
             <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-2.5 py-1 text-[11px] font-medium text-[var(--fg-secondary)] disabled:opacity-40 hover:bg-[var(--bg-surface-hover)] transition-colors">Prev</button>
@@ -784,30 +833,107 @@ function DNSTable({ queries }) {
  * HTTP Table
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function HTTPTable({ requests }) {
+function HTTPTable({ requests, onSelect }) {
+  const [sortKey, setSortKey] = useState("observed_at");
+  const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(0);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [methodFilter, setMethodFilter] = useState("all");
   const PAGE_SIZE = 50;
-  const totalPages = Math.ceil(requests.length / PAGE_SIZE);
+
+  const filtered = useMemo(() => {
+    return requests.filter((r) => {
+      if (statusFilter !== "all") {
+        const code = Math.floor((r.status_code || 0) / 100);
+        if (String(code) !== statusFilter) return false;
+      }
+      if (methodFilter !== "all" && r.method !== methodFilter) return false;
+      return true;
+    });
+  }, [requests, statusFilter, methodFilter]);
+
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const aVal = a[sortKey] ?? "";
+      const bVal = b[sortKey] ?? "";
+      const cmp = typeof aVal === "number" && typeof bVal === "number" ? aVal - bVal : String(aVal).localeCompare(String(bVal));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [filtered, sortKey, sortDir]);
+
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+
+  const SortHeader = ({ field, children, className = "" }) => (
+    <th
+      onClick={() => toggleSort(field)}
+      className={`px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] cursor-pointer select-none hover:text-[var(--fg-secondary)] transition-colors border-b border-[var(--border-subtle)] ${className}`}
+    >
+      <span className="flex items-center gap-1.5">
+        {children}
+        {sortKey === field && <span className="text-[var(--accent-cyan)] text-[11px]">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+      </span>
+    </th>
+  );
+
   return (
     <div className="overflow-x-auto">
+      {/* Filters */}
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--border-subtle)]">
+        <span className="text-[11px] text-[var(--fg-muted)]">Status:</span>
+        {["all", "2", "3", "4", "5"].map((s) => (
+          <button
+            key={s}
+            onClick={() => { setStatusFilter(s); setPage(0); }}
+            className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+              statusFilter === s ? "bg-[var(--accent-cyan)] text-white" : "text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
+            }`}
+          >
+            {s === "all" ? "All" : `${s}xx`}
+          </button>
+        ))}
+        <span className="ml-3 text-[11px] text-[var(--fg-muted)]">Method:</span>
+        {["all", "GET", "POST", "PUT", "DELETE"].map((m) => (
+          <button
+            key={m}
+            onClick={() => { setMethodFilter(m); setPage(0); }}
+            className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+              methodFilter === m ? "bg-[var(--accent-cyan)] text-white" : "text-[var(--fg-muted)] hover:text-[var(--fg-secondary)]"
+            }`}
+          >
+            {m === "all" ? "All" : m}
+          </button>
+        ))}
+        {(statusFilter !== "all" || methodFilter !== "all") && (
+          <button onClick={() => { setStatusFilter("all"); setMethodFilter("all"); setPage(0); }} className="ml-2 text-[11px] text-[var(--accent-cyan)] hover:underline">Clear</button>
+        )}
+      </div>
       <table className="w-full text-left border-collapse">
         <thead>
           <tr>
-            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Time</th>
-            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Method</th>
-            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Host</th>
-            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Path</th>
-            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Status</th>
-            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Req Size</th>
-            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Res Size</th>
-            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Process</th>
+            <SortHeader field="observed_at">Time</SortHeader>
+            <SortHeader field="method">Method</SortHeader>
+            <SortHeader field="host">Host</SortHeader>
+            <SortHeader field="path">Path</SortHeader>
+            <SortHeader field="status_code">Status</SortHeader>
+            <SortHeader field="request_body_size">Req Size</SortHeader>
+            <SortHeader field="response_body_size">Res Size</SortHeader>
+            <SortHeader field="process">Process</SortHeader>
           </tr>
         </thead>
         <tbody>
-          {requests.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r) => {
+          {sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r) => {
             const statusColor = HTTP_STATUS_COLORS[Math.floor((r.status_code || 0) / 100)] || "var(--fg-muted)";
             return (
-              <tr key={r.id} className="group border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--bg-surface-hover)] transition-colors duration-150">
+              <tr
+                key={r.id}
+                onClick={() => onSelect?.(r)}
+                className="group cursor-pointer border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--bg-surface-hover)] transition-colors duration-150"
+              >
                 <td className="px-4 py-3 text-[11px] text-[var(--fg-muted)] tabular-nums">{fmtDate(r.observed_at)}</td>
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[11px] font-bold" style={{ background: `color-mix(in srgb, ${METHOD_COLORS[r.method] || "var(--fg-muted)"} 12%, transparent)`, color: METHOD_COLORS[r.method] || "var(--fg-muted)" }}>
@@ -839,16 +965,16 @@ function HTTPTable({ requests }) {
           })}
         </tbody>
       </table>
-      {requests.length === 0 && (
+      {sorted.length === 0 && (
         <div className="py-16 text-center">
           <p className="text-[13px] text-[var(--fg-muted)]">No HTTP requests found</p>
           <p className="text-[11px] text-[var(--fg-faint)] mt-1">HTTP traffic will appear here once the collector captures requests</p>
         </div>
       )}
-      {requests.length > PAGE_SIZE && (
+      {sorted.length > PAGE_SIZE && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
           <span className="text-[11px] text-[var(--fg-muted)]">
-            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, requests.length)} of {requests.length}
+            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
           </span>
           <div className="flex items-center gap-1">
             <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-2.5 py-1 text-[11px] font-medium text-[var(--fg-secondary)] disabled:opacity-40 hover:bg-[var(--bg-surface-hover)] transition-colors">Prev</button>
@@ -871,12 +997,19 @@ function HTTPTable({ requests }) {
  * Analytics View
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function AnalyticsView({ stats, connections }) {
+function AnalyticsView({ stats, connections, timeRange }) {
   if (!stats) return <div className="py-12 text-center text-[13px] text-[var(--fg-muted)]">No analytics data available</div>;
+
+  // Filter connections by time range for charts
+  const filteredConnections = useMemo(() => {
+    if (timeRange === "all") return connections;
+    const since = new Date(Date.now() - parseInt(timeRange) * 60 * 60 * 1000);
+    return connections.filter((c) => c.observed_at && new Date(c.observed_at) >= since);
+  }, [connections, timeRange]);
 
   // Protocol distribution for donut
   const protocolMap = {};
-  (connections || []).forEach((c) => {
+  (filteredConnections || []).forEach((c) => {
     const label = PORT_LABELS[c.remote_port] || (c.remote_port ? `:${c.remote_port}` : "other");
     protocolMap[label] = (protocolMap[label] || 0) + 1;
   });
@@ -893,7 +1026,7 @@ function AnalyticsView({ stats, connections }) {
 
   // Time series: bucket connections by hour
   const timeMap = {};
-  (connections || []).forEach((c) => {
+  (filteredConnections || []).forEach((c) => {
     if (!c.observed_at) return;
     const d = new Date(c.observed_at);
     const key = `${d.getHours()}:00`;
@@ -904,7 +1037,7 @@ function AnalyticsView({ stats, connections }) {
 
   // Top talkers by total bytes (remote IP)
   const talkerMap = {};
-  (connections || []).forEach((c) => {
+  (filteredConnections || []).forEach((c) => {
     if (!c.remote_ip) return;
     const key = c.remote_ip;
     if (!talkerMap[key]) talkerMap[key] = { ip: key, sent: 0, recv: 0, count: 0 };
@@ -919,7 +1052,7 @@ function AnalyticsView({ stats, connections }) {
 
   // Per-process bandwidth
   const procMap = {};
-  (connections || []).forEach((c) => {
+  (filteredConnections || []).forEach((c) => {
     const key = c.process || "unknown";
     if (!procMap[key]) procMap[key] = { process: key, sent: 0, recv: 0, count: 0 };
     procMap[key].sent += c.bytes_sent || 0;
@@ -933,7 +1066,7 @@ function AnalyticsView({ stats, connections }) {
 
   // Bandwidth time series (sent vs recv by hour)
   const bwMap = {};
-  (connections || []).forEach((c) => {
+  (filteredConnections || []).forEach((c) => {
     if (!c.observed_at) return;
     const d = new Date(c.observed_at);
     const key = `${d.getHours()}:00`;
@@ -1248,12 +1381,12 @@ function IPInvestigation({ ip, connections, dnsQueries, httpRequests, onClose, n
       )}
       {activeTab === "dns" && (
         <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] overflow-hidden">
-          <DNSTable queries={relatedDns} />
+          <DNSTable queries={relatedDns} onSelect={(q) => onSelectConnection?.({ dns: q })} />
         </div>
       )}
       {activeTab === "http" && (
         <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] overflow-hidden">
-          <HTTPTable requests={relatedHttp} />
+          <HTTPTable requests={relatedHttp} onSelect={(r) => onSelectConnection?.({ http: r })} />
         </div>
       )}
     </div>
@@ -1281,30 +1414,42 @@ export default function NetworkAnalyzer() {
   const [selectedEdge, setSelectedEdge] = useState(null);
   const [live, setLive] = useState(true);
   const [investigateIp, setInvestigateIp] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const alive = useRef(true);
 
   const load = useCallback(async () => {
     try {
       const since = timeRange === "all" ? null
         : new Date(Date.now() - parseInt(timeRange) * 60 * 60 * 1000).toISOString();
-      const [st, net, dns, http] = await Promise.all([
+      const fetches = [
         api.networkStats().catch(() => null),
         api.network(2000, { since, direction: direction === "all" ? undefined : direction }),
-        api.dns(500),
-        api.http(500),
-      ]);
+      ];
+      // Only fetch DNS/HTTP when those tabs are active or on initial load
+      if (tab === "dns" || tab === "analytics" || tab === "topology") {
+        fetches.push(api.dns(500).catch(() => ({ items: [] })));
+      } else {
+        fetches.push(Promise.resolve(null));
+      }
+      if (tab === "http" || tab === "analytics" || tab === "topology") {
+        fetches.push(api.http(500).catch(() => ({ items: [] })));
+      } else {
+        fetches.push(Promise.resolve(null));
+      }
+      const [st, net, dns, http] = await Promise.all(fetches);
       if (!alive.current) return;
       setStats(st);
       setConnections(net.items || []);
-      setDnsQueries(dns.items || []);
-      setHttpRequests(http.items || []);
+      if (dns) setDnsQueries(dns.items || []);
+      if (http) setHttpRequests(http.items || []);
+      setLastUpdated(new Date());
       setError("");
     } catch (err) {
       if (alive.current) setError(err.message);
     } finally {
       if (alive.current) setLoading(false);
     }
-  }, [direction, timeRange]);
+  }, [direction, timeRange, tab]);
 
   useEffect(() => {
     alive.current = true;
@@ -1387,6 +1532,11 @@ export default function NetworkAnalyzer() {
           <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">Understand what is communicating, where, and why.</p>
         </div>
         <div className="flex items-center gap-2">
+          {lastUpdated && (
+            <span className="text-[11px] text-[var(--fg-faint)] tabular-nums">
+              Updated {lastUpdated.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
+            </span>
+          )}
           <button
             onClick={() => setLive(!live)}
             className={`inline-flex items-center gap-1.5 rounded-[var(--radius-lg)] border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
@@ -1489,7 +1639,10 @@ export default function NetworkAnalyzer() {
               <span className="font-semibold text-[var(--fg-primary)]">{filteredDns.length}</span> DNS queries
             </span>
           </div>
-          <DNSTable queries={filteredDns} />
+          <DNSTable queries={filteredDns} onSelect={(q) => {
+            const ip = q.response || q.query?.split(" ").pop();
+            if (ip && classifyIP(ip) !== "unknown") { setInvestigateIp(ip); }
+          }} />
         </div>
       )}
 
@@ -1500,11 +1653,13 @@ export default function NetworkAnalyzer() {
               <span className="font-semibold text-[var(--fg-primary)]">{filteredHttp.length}</span> HTTP requests
             </span>
           </div>
-          <HTTPTable requests={filteredHttp} />
+          <HTTPTable requests={filteredHttp} onSelect={(r) => {
+            if (r.host && classifyIP(r.host) !== "unknown") { setInvestigateIp(r.host); }
+          }} />
         </div>
       )}
 
-      {tab === "analytics" && <AnalyticsView stats={stats} connections={connections} />}
+      {tab === "analytics" && <AnalyticsView stats={stats} connections={connections} timeRange={timeRange} />}
 
       {/* Inspectors */}
       <NodeInspector node={selectedNode} connections={connections} onClose={() => setSelectedNode(null)} navigate={navigate} toast={toast} />
