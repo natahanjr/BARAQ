@@ -175,6 +175,7 @@ export const api = {
   detectorDetail: (id) => request(`/api/detectors/${id}`),
 
   evaluationRun: () => request("/api/evaluation/run?with_ml=true", { method: "POST" }),
+  evaluationFullDB: () => request("/api/evaluation/full-db?use_ml=true", { method: "POST" }),
   evaluationResults: (limit = 50) => request(`/api/evaluation/results?limit=${limit}`),
   evaluationLatest: () => request("/api/evaluation/latest"),
 
