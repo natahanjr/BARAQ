@@ -11,6 +11,7 @@ Flow (see ``_authenticate_impl``):
 3. Read group membership (``memberOf``), map to a role, and return a profile
    that the login endpoint auto-provisions as a local operator account.
 """
+
 from __future__ import annotations
 
 import logging
@@ -85,7 +86,7 @@ def ldap_authenticate(username: str, password: str) -> dict[str, Any] | None:
 
 def _authenticate_impl(username: str, password: str) -> dict[str, Any] | None:
     """The real directory interaction. Extracted so tests can substitute a fake."""
-    from ldap3 import SUBTREE, Connection, Server
+    from ldap3 import SUBTREE, Connection
 
     server = _server(LDAP_URL, LDAP_SEARCH_TIMEOUT)
 

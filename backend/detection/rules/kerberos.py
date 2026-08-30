@@ -9,17 +9,20 @@ the corresponding Windows Security log signals (4768 TGT requests, 4769 TGS
 requests with ticket encryption type, 4662 directory-service replication
 access, 4624 logon events with authentication package).
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
 from backend.database.models import NormalizedEvent
 from backend.detection.rules.base import BaseRule, DetectionResult
 
-_ADMIN_NAME = re.compile(r"(^|[\s_.-])(admin|administrator|sysadmin|root|krbtgt)([\s_.-]|$)", re.IGNORECASE)
+_ADMIN_NAME = re.compile(
+    r"(^|[\s_.-])(admin|administrator|sysadmin|root|krbtgt)([\s_.-]|$)", re.IGNORECASE
+)
 _MACHINE_ACCOUNT = re.compile(r"\$$")
 _SPN = re.compile(r"/")
 _RC4 = "0x17"
@@ -70,7 +73,7 @@ class KerberoastingRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):
@@ -85,7 +88,9 @@ class KerberoastingRule(BaseRule):
                 )
             )
 
-        for event in _events(self.session, since, [4769], self._org_conds(NormalizedEvent)):
+        for event in _events(
+            self.session, since, [4769], self._org_conds(NormalizedEvent)
+        ):
             facts = _facts(event)
             req = facts.get("account_name") or event.user
             service = facts.get("service_name") or ""
@@ -132,7 +137,7 @@ class AsRepRoastingRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):
@@ -147,11 +152,15 @@ class AsRepRoastingRule(BaseRule):
                 )
             )
 
-        for event in _events(self.session, since, [4768], self._org_conds(NormalizedEvent)):
+        for event in _events(
+            self.session, since, [4768], self._org_conds(NormalizedEvent)
+        ):
             facts = _facts(event)
             options = facts.get("ticket_options") or ""
             account = facts.get("target_account_name") or event.user
-            if not any(options.upper().startswith(opt.upper()) for opt in _NO_PREAUTH_OPTIONS):
+            if not any(
+                options.upper().startswith(opt.upper()) for opt in _NO_PREAUTH_OPTIONS
+            ):
                 continue
             findings.append(
                 self._result(
@@ -183,14 +192,13 @@ class DCSyncRule(BaseRule):
     )
 
     _CMDLINE = re.compile(
-        r"\bsecretsdump\b|\bsecretsdump\.py\b|"
-        r"lsadump::dcsync\b|\bdcsync\b",
+        r"\bsecretsdump\b|\bsecretsdump\.py\b|" r"lsadump::dcsync\b|\bdcsync\b",
         re.IGNORECASE,
     )
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):
@@ -205,7 +213,9 @@ class DCSyncRule(BaseRule):
                 )
             )
 
-        for event in _events(self.session, since, [4662], self._org_conds(NormalizedEvent)):
+        for event in _events(
+            self.session, since, [4662], self._org_conds(NormalizedEvent)
+        ):
             facts = _facts(event)
             mask = (facts.get("access_mask") or "").lower()
             account = facts.get("account_name") or event.user
@@ -244,14 +254,13 @@ class GoldenTicketRule(BaseRule):
     )
 
     _CMDLINE = re.compile(
-        r"\brubeus(?:\.exe)?\s+golden\b|"
-        r"kerberos::golden\b|\btgt::krbtgt\b",
+        r"\brubeus(?:\.exe)?\s+golden\b|" r"kerberos::golden\b|\btgt::krbtgt\b",
         re.IGNORECASE,
     )
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):
@@ -266,7 +275,9 @@ class GoldenTicketRule(BaseRule):
                 )
             )
 
-        for event in _events(self.session, since, [4768], self._org_conds(NormalizedEvent)):
+        for event in _events(
+            self.session, since, [4768], self._org_conds(NormalizedEvent)
+        ):
             facts = _facts(event)
             account = (facts.get("target_account_name") or event.user).lower()
             if account != "krbtgt":
@@ -301,14 +312,13 @@ class SilverTicketRule(BaseRule):
     )
 
     _CMDLINE = re.compile(
-        r"\brubeus(?:\.exe)?\s+silver\b|"
-        r"\bkerberos::silver\b",
+        r"\brubeus(?:\.exe)?\s+silver\b|" r"\bkerberos::silver\b",
         re.IGNORECASE,
     )
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):
@@ -323,7 +333,9 @@ class SilverTicketRule(BaseRule):
                 )
             )
 
-        for event in _events(self.session, since, [4769], self._org_conds(NormalizedEvent)):
+        for event in _events(
+            self.session, since, [4769], self._org_conds(NormalizedEvent)
+        ):
             facts = _facts(event)
             req = facts.get("account_name") or event.user
             service = facts.get("service_name") or ""
@@ -370,7 +382,7 @@ class PassTheHashRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):
@@ -385,7 +397,9 @@ class PassTheHashRule(BaseRule):
                 )
             )
 
-        for event in _events(self.session, since, [4624], self._org_conds(NormalizedEvent)):
+        for event in _events(
+            self.session, since, [4624], self._org_conds(NormalizedEvent)
+        ):
             facts = _facts(event)
             if str(facts.get("logon_type") or "") != "3":
                 continue
@@ -426,15 +440,13 @@ class PassTheTicketRule(BaseRule):
     )
 
     _CMDLINE = re.compile(
-        r"kerberos::ptt\b|"
-        r"\brubeus(?:\.exe)?\s+ptt\b|"
-        r"\basktgt\b[^\n]*?/ptt\b",
+        r"kerberos::ptt\b|" r"\brubeus(?:\.exe)?\s+ptt\b|" r"\basktgt\b[^\n]*?/ptt\b",
         re.IGNORECASE,
     )
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):
@@ -449,7 +461,9 @@ class PassTheTicketRule(BaseRule):
                 )
             )
 
-        for event in _events(self.session, since, [4624], self._org_conds(NormalizedEvent)):
+        for event in _events(
+            self.session, since, [4624], self._org_conds(NormalizedEvent)
+        ):
             facts = _facts(event)
             if str(facts.get("logon_type") or "") not in ("9", "10"):
                 continue

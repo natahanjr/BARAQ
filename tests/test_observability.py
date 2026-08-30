@@ -1,4 +1,5 @@
 """Observability (roadmap 5.2): SLO gauges, JSON logging, metrics endpoint."""
+
 from __future__ import annotations
 
 

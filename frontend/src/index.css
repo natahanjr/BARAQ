@@ -7,7 +7,7 @@
  * See the signal. Understand the threat. Take control.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-html { font-size: 15px; }
+html { font-size: 16px; } /* Base 16px for consistent rem calculations */
 
 @custom-variant dark (&:not(html.light *));
 
@@ -419,8 +419,8 @@ body {
   font-family: var(--font-sans);
   background-color: var(--bg-app);
   background-image:
-    radial-gradient(ellipse 70% 45% at 50% -15%, rgba(0, 240, 255, 0.04), transparent 60%),
-    radial-gradient(ellipse 55% 40% at 92% 108%, rgba(123, 97, 255, 0.03), transparent 60%);
+    radial-gradient(ellipse 70% 45% at 50% -15%, var(--accent-cyan-subtle), transparent 60%),
+    radial-gradient(ellipse 55% 40% at 92% 108%, var(--accent-violet-subtle), transparent 60%);
   background-attachment: fixed;
   color: var(--fg-primary);
   -webkit-font-smoothing: antialiased;
@@ -428,19 +428,172 @@ body {
 }
 html.light body {
   background-image:
-    radial-gradient(ellipse 70% 45% at 50% -15%, rgba(14, 116, 144, 0.03), transparent 60%),
-    radial-gradient(ellipse 55% 40% at 92% 108%, rgba(107, 79, 255, 0.02), transparent 60%);
+    radial-gradient(ellipse 70% 45% at 50% -15%, var(--accent-cyan-subtle), transparent 60%),
+    radial-gradient(ellipse 55% 40% at 92% 108%, var(--accent-violet-subtle), transparent 60%);
 }
 
 .font-mono, code, pre { font-family: var(--font-mono); }
 
-:focus-visible {
-  outline: 2px solid var(--border-focus);
-  outline-offset: 1px;
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Typography System
+ * Consistent heading hierarchy, type scale, and font features.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Heading Hierarchy ──────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  color: var(--fg-primary);
+  font-feature-settings: var(--feature-normal);
+  text-wrap: balance; /* Prevent orphaned words in headings */
 }
 
-::selection { background: rgba(0, 240, 255, 0.3); color: #fff; }
-html.light ::selection { color: #0f172a; }
+h1 {
+  font-size: var(--text-3xl);
+  letter-spacing: var(--tracking-tight);
+  font-weight: var(--weight-extrabold);
+}
+
+h2 {
+  font-size: var(--text-2xl);
+  letter-spacing: var(--tracking-tight);
+}
+
+h3 {
+  font-size: var(--text-xl);
+  letter-spacing: var(--tracking-tight);
+}
+
+h4 {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+h5 {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+}
+
+h6 {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+}
+
+/* ── Body Text ─────────────────────────────────────────────────────── */
+p {
+  line-height: var(--leading-relaxed);
+  color: var(--fg-secondary);
+  font-feature-settings: var(--feature-normal);
+}
+
+/* ── Links ─────────────────────────────────────────────────────────── */
+a {
+  color: var(--accent-cyan);
+  text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-in-out);
+}
+a:hover {
+  color: var(--accent-cyan);
+  opacity: 0.85;
+}
+
+/* ── Monospace / Code ──────────────────────────────────────────────── */
+kbd {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  font-feature-settings: var(--feature-tabular);
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  font-feature-settings: var(--feature-tabular);
+}
+
+/* ── Tabular Numbers (for data-heavy UIs) ──────────────────────────── */
+.tabular-nums {
+  font-feature-settings: var(--feature-tabular);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Typography Utility Classes ────────────────────────────────────── */
+.text-display {
+  font-size: var(--text-4xl);
+  font-weight: var(--weight-extrabold);
+  letter-spacing: var(--tracking-tighter);
+  line-height: var(--leading-none);
+}
+
+.text-page-title {
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-extrabold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+
+.text-section-title {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+
+.text-card-title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+}
+
+.text-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  line-height: var(--leading-normal);
+}
+
+.text-mono {
+  font-family: var(--font-mono);
+  font-feature-settings: var(--feature-tabular);
+}
+
+.text-small-caps {
+  font-feature-settings: "smcp" 1, "c2sc" 1;
+  letter-spacing: var(--tracking-wide);
+}
+
+.text-oldstyle {
+  font-feature-settings: var(--feature-oldstyle);
+  font-variant-numeric: oldstyle-nums;
+}
+
+/* ── Font Smoothing ────────────────────────────────────────────────── */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: var(--feature-normal);
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ── Selection ─────────────────────────────────────────────────────── */
+::selection {
+  background: rgba(20, 184, 166, 0.3);
+  color: var(--fg-primary);
+}
+html.light ::selection {
+  background: rgba(13, 148, 136, 0.2);
+  color: var(--fg-primary);
+}
+
+/* ── Focus Visible ─────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
 
 .recharts-cartesian-axis-tick-value {
   font-family: var(--font-mono);
@@ -518,6 +671,18 @@ html.light ::selection { color: #0f172a; }
 .data-table tbody tr:hover { background: var(--bg-surface-hover); }
 .data-table tbody tr:last-child td { border-bottom: none; }
 
+/* ── Custom select styling ─────────────────────────────────────────── */
+select.form-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%235a7482' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px !important;
+}
+html.light select.form-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%23475569' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
 .console-label {
   font-size: 11px;
   font-weight: 600;
@@ -526,22 +691,9 @@ html.light ::selection { color: #0f172a; }
   color: var(--fg-muted);
 }
 
-.neon-text {
-  background: linear-gradient(92deg, var(--fg-primary) 0%, var(--fg-muted) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════
  * Animations
  * ═══════════════════════════════════════════════════════════════════════════ */
-
-@keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(12px) scale(0.995); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-.fade-in { animation: fade-in-up 0.55s cubic-bezier(0.32, 0.72, 0, 1) both; }
 
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
@@ -555,23 +707,6 @@ html.light ::selection { color: #0f172a; }
 }
 .badge-critical { animation: badge-pulse 1.8s ease-in-out infinite; }
 
-.ripple { position: relative; overflow: hidden; }
-.ripple::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(circle at var(--rx, 50%) var(--ry, 50%), rgba(0, 240, 255, 0.35), transparent 55%);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.5s ease;
-}
-.ripple:active::after { opacity: 1; animation: ripple-out 0.55s ease-out forwards; }
-@keyframes ripple-out {
-  from { transform: scale(0.4); }
-  to { transform: scale(2.6); opacity: 0; }
-}
-
 @keyframes shimmer {
   0% { background-position: -400px 0; }
   100% { background-position: 400px 0; }
@@ -583,35 +718,38 @@ html.light ::selection { color: #0f172a; }
   will-change: background-position;
 }
 
-@keyframes bolt-streak {
-  0% { transform: translateX(-40vw) skewX(-18deg); opacity: 0; }
-  12% { opacity: 1; }
-  100% { transform: translateX(140vw) skewX(-18deg); opacity: 0; }
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px) scale(0.995); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
-.bolt-streak {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 18vw;
-  pointer-events: none;
-  z-index: 100;
-  background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.15), rgba(123, 97, 255, 0.25), transparent);
-  filter: blur(1px);
-  animation: bolt-streak 0.5s ease-out forwards;
+.fade-in { animation: fade-in-up 0.55s cubic-bezier(0.32, 0.72, 0, 1) both; }
+
+/* Staggered reveal for child elements */
+.stagger-in > * {
+  opacity: 0;
+  animation: fade-in-up 0.45s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.stagger-in > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-in > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-in > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-in > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-in > *:nth-child(5) { animation-delay: 240ms; }
+.stagger-in > *:nth-child(6) { animation-delay: 300ms; }
+.stagger-in > *:nth-child(7) { animation-delay: 360ms; }
+.stagger-in > *:nth-child(8) { animation-delay: 420ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stagger-in > * {
+    animation: none;
+    opacity: 1;
+  }
 }
 
-@keyframes crit-flash {
-  0% { background-color: var(--severity-critical-muted); }
-  100% { background-color: transparent; }
+@keyframes drawer-in {
+  from { transform: translateY(24px) scale(0.97); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
 }
-.crit-flash { animation: crit-flash 1.1s ease-out forwards; }
-
-@keyframes float-y {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
-}
-.float-y { animation: float-y 3.2s ease-in-out infinite; }
+.drawer-in { animation: drawer-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
 
 @keyframes blink-caret {
   0%, 49% { opacity: 1; }
@@ -624,11 +762,6 @@ html.light ::selection { color: #0f172a; }
   to { transform: translateY(0); opacity: 1; }
 }
 .animate-in { animation: slide-in-from-top-2 0.3s cubic-bezier(0.32, 0.72, 0, 1) both; }
-
-@keyframes list-item-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 
 @keyframes strike-in {
   from { transform: translateY(-28px) scale(0.96); opacity: 0; }
@@ -659,24 +792,6 @@ html.light ::selection { color: #0f172a; }
   to { transform: translateX(24px); opacity: 0; }
 }
 .toast-out { animation: toast-out 0.18s ease-in both; }
-
-@keyframes drawer-in {
-  from { transform: translateY(24px) scale(0.97); opacity: 0; }
-  to { transform: translateY(0) scale(1); opacity: 1; }
-}
-.drawer-in { animation: drawer-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
-
-@keyframes palette-in {
-  from { transform: scale(0.96) translateY(-8px); opacity: 0; }
-  to { transform: scale(1) translateY(0); opacity: 1; }
-}
-.palette-in { animation: palette-in 0.14s ease-out both; }
-
-@keyframes launcher-pulse {
-  0%, 100% { box-shadow: 0 0 18px -4px rgba(0, 240, 255, 0.55); }
-  50% { box-shadow: 0 0 30px -2px rgba(123, 97, 255, 0.75); }
-}
-.launcher-pulse { animation: launcher-pulse 2.4s ease-in-out infinite; will-change: box-shadow; }
 
 /* ── ReactFlow ────────────────────────────────────────────────────────── */
 .entity-node { transition: border-color 0.2s ease, box-shadow 0.2s ease; will-change: transform; }
@@ -716,12 +831,7 @@ html.light ::selection { color: #0f172a; }
   }
 }
 
-/* ── Focus visible ────────────────────────────────────────────────────── */
-:focus-visible {
-  outline: 2px solid var(--accent-cyan);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
+/* ── Focus visible (component-specific) ─────────────────────────────── */
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
@@ -756,6 +866,15 @@ textarea:focus-visible {
   .sidebar-open { overflow: hidden; }
 }
 
+/* ── Small screens: fluid root scaling so dense SOC tables stay legible ── */
+@media (max-width: 640px) {
+  html { font-size: 14px; }
+  .table-responsive table { min-width: 560px; }
+}
+@media (min-width: 1600px) {
+  html { font-size: 16px; }
+}
+
 /* ── Table responsive overflow ─────────────────────────────────────────── */
 .table-responsive {
   overflow-x: auto;
@@ -763,6 +882,50 @@ textarea:focus-visible {
 }
 .table-responsive table {
   min-width: 640px;
+}
+
+/* ── Light theme: map raw palette utilities to token-accurate hues ────────
+   Raw Tailwind palette classes (bg-red-500, text-emerald-300, …) are used
+   across many pages. In light mode they must resolve to the same semantic
+   hues as the design tokens, otherwise dark/light drift apart. */
+html.light {
+  --color-red-500: #dc2626;
+  --color-red-400: #ef4444;
+  --color-red-300: #b91c1c;
+  --color-orange-500: #ea580c;
+  --color-orange-400: #f97316;
+  --color-orange-300: #c2410c;
+  --color-amber-500: #ca8a04;
+  --color-amber-400: #d97706;
+  --color-amber-300: #b45309;
+  --color-yellow-500: #ca8a04;
+  --color-blue-500: #2563eb;
+  --color-blue-400: #3b82f6;
+  --color-blue-300: #1d4ed8;
+  --color-emerald-500: #16a34a;
+  --color-emerald-400: #22c55e;
+  --color-emerald-300: #15803d;
+  --color-green-500: #16a34a;
+  --color-rose-500: #e11d48;
+  --color-rose-400: #f43f5e;
+  --color-rose-300: #be123c;
+  --color-violet-500: #7c3aed;
+  --color-violet-400: #8b5cf6;
+  --color-violet-300: #6d28d9;
+  --color-purple-500: #7c3aed;
+  --color-cyan-500: #0d9488;
+  --color-cyan-400: #14b8a6;
+  --color-cyan-300: #0e7490;
+  --color-sky-500: #0284c7;
+  --color-sky-400: #0ea5e9;
+  --color-sky-300: #0369a1;
+  --color-slate-300: #475569;
+  --color-slate-400: #64748b;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-fuchsia-500: #c026d3;
+  --color-fuchsia-400: #d946ef;
+  --color-fuchsia-300: #a21caf;
 }
 
 /* ── Print styles ─────────────────────────────────────────────────────── */

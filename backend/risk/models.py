@@ -18,9 +18,10 @@ Every child table carries foreign keys (spec 6.71); no destructive deletion
 (spec 6.72); factors reference their alert/group/correlation source rows
 without owning them.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     DateTime,
@@ -39,7 +40,7 @@ from backend.database.models import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class EntityRiskV2(Base):
@@ -72,7 +73,9 @@ class EntityRiskV2(Base):
     trend: Mapped[str] = mapped_column(String(16), default="UNKNOWN")
 
     peak_score: Mapped[float] = mapped_column(Float, default=0.0)
-    peak_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    peak_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -87,8 +90,12 @@ class EntityRiskV2(Base):
     correlation_count: Mapped[int] = mapped_column(Integer, default=0)
 
     risk_model_version: Mapped[str] = mapped_column(String(32), default="1.0.0")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -146,7 +153,9 @@ class EntityRiskV2Event(Base):
         DateTime(timezone=True), nullable=True
     )
     summary: Mapped[str] = mapped_column(Text, default="")
-    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
 
 class EntityRiskV2Factor(Base):
@@ -192,20 +201,22 @@ class EntityRiskV2Factor(Base):
     propagation_from: Mapped[str | None] = mapped_column(String(128), nullable=True)
     relationship_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expired_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class EntityRiskV2Snapshot(Base):
     """Point-in-time score (spec 6.23). Never overwritten, never deleted."""
 
     __tablename__ = "entity_risk_v2_snapshots"
-    __table_args__ = (
-        Index("ix_risk_v2_snap_risk", "risk_id", "captured_at"),
-    )
+    __table_args__ = (Index("ix_risk_v2_snap_risk", "risk_id", "captured_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     risk_id: Mapped[str] = mapped_column(
@@ -220,7 +231,9 @@ class EntityRiskV2Snapshot(Base):
     factor_count: Mapped[int] = mapped_column(Integer, default=0)
     evidence_count: Mapped[int] = mapped_column(Integer, default=0)
     risk_model_version: Mapped[str] = mapped_column(String(32), default="1.0.0")
-    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
 
 class EntityRiskV2AuditEvent(Base):
@@ -242,4 +255,6 @@ class EntityRiskV2AuditEvent(Base):
     old_state: Mapped[str | None] = mapped_column(String(16), nullable=True)
     new_state: Mapped[str | None] = mapped_column(String(16), nullable=True)
     model_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )

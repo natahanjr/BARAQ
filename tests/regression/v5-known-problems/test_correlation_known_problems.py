@@ -4,11 +4,12 @@ Every known-problem scenario is pinned here: behavior groups -> REAL
 correlation engine -> asserted outcome. CORR-020..CORR-025 pin the
 isolation boundary (v1 counters untouched).
 """
+
 from sqlalchemy import text
 
-from backend.aggregation.engine import expire_groups, process_alerts
+from backend.aggregation.engine import process_alerts
 from backend.correlation.engine import correlate, expire_correlations
-
+from tests.aggregation.helpers import fabricate_alerts
 from tests.correlation.helpers import (
     CORR_T0,
     canonical_specs,
@@ -18,7 +19,6 @@ from tests.correlation.helpers import (
     stored_corr_members,
     stored_correlations,
 )
-from tests.aggregation.helpers import fabricate_alerts
 
 
 def _v1_counts(db) -> dict[str, int]:
@@ -32,10 +32,22 @@ def test_corr_001_same_user_same_source_temporal_one_finding(db):
     make_groups(
         db,
         [
-            dict(detector_id="D002", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=3),
-            dict(detector_id="D002", host="host-b", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=1),
+            {
+                "detector_id": "D002",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 3,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-b",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -49,10 +61,22 @@ def test_corr_002_temporal_only_two_relationships(db):
     make_groups(
         db,
         [
-            dict(detector_id="D001", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1133", minutes_ago=2),
-            dict(detector_id="D002", host="host-a", user="bob", source_ip="203.0.113.9",
-                 mitre="", minutes_ago=1),
+            {
+                "detector_id": "D001",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1133",
+                "minutes_ago": 2,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-a",
+                "user": "bob",
+                "source_ip": "203.0.113.9",
+                "mitre": "",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -64,10 +88,22 @@ def test_corr_003_outside_window_separate_findings(db):
     make_groups(
         db,
         [
-            dict(detector_id="D002", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=400),
-            dict(detector_id="D002", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=1),
+            {
+                "detector_id": "D002",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 400,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -79,10 +115,22 @@ def test_corr_004_auth_then_execution_is_temporal_finding(db):
     make_groups(
         db,
         [
-            dict(detector_id="D001", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1133", minutes_ago=4),
-            dict(detector_id="D003", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1059.001", minutes_ago=1),
+            {
+                "detector_id": "D001",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1133",
+                "minutes_ago": 4,
+            },
+            {
+                "detector_id": "D003",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1059.001",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -94,10 +142,22 @@ def test_corr_005_execution_then_credential_is_technique_sequence(db):
     make_groups(
         db,
         [
-            dict(detector_id="D003", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1059.001", minutes_ago=4),
-            dict(detector_id="D002", host="host-b", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=1),
+            {
+                "detector_id": "D003",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1059.001",
+                "minutes_ago": 4,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-b",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -109,10 +169,22 @@ def test_corr_006_external_access_credential_is_entity(db):
     make_groups(
         db,
         [
-            dict(detector_id="D001", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1133", minutes_ago=4),
-            dict(detector_id="D002", host="host-b", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=1),
+            {
+                "detector_id": "D001",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1133",
+                "minutes_ago": 4,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-b",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -124,12 +196,30 @@ def test_corr_007_three_group_progression_is_multi_stage(db):
     make_groups(
         db,
         [
-            dict(detector_id="D001", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1133", minutes_ago=15),
-            dict(detector_id="D002", host="host-b", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=10),
-            dict(detector_id="D003", host="host-c", user="alice", source_ip="203.0.113.5",
-                 mitre="T1059.001", minutes_ago=5),
+            {
+                "detector_id": "D001",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1133",
+                "minutes_ago": 15,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-b",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 10,
+            },
+            {
+                "detector_id": "D003",
+                "host": "host-c",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1059.001",
+                "minutes_ago": 5,
+            },
         ],
         now=CORR_T0,
     )
@@ -143,12 +233,33 @@ def test_corr_008_three_host_chain_is_host_chain(db):
     make_groups(
         db,
         [
-            dict(detector_id="D002", host="10.0.0.1", user="alice", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=30, destination_ip="10.0.0.2"),
-            dict(detector_id="D002", host="10.0.0.2", user="alice", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=20, destination_ip="10.0.0.3"),
-            dict(detector_id="D002", host="10.0.0.3", user="alice", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=10, destination_ip="10.0.0.4"),
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.1",
+                "user": "alice",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 30,
+                "destination_ip": "10.0.0.2",
+            },
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.2",
+                "user": "alice",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 20,
+                "destination_ip": "10.0.0.3",
+            },
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.3",
+                "user": "alice",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 10,
+                "destination_ip": "10.0.0.4",
+            },
         ],
         now=CORR_T0,
     )
@@ -160,12 +271,32 @@ def test_corr_009_lateral_edge_wins_chain_type(db):
     make_groups(
         db,
         [
-            dict(detector_id="D002", host="10.0.0.1", user="alice", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=10, destination_ip="10.0.0.2"),
-            dict(detector_id="D002", host="10.0.0.2", user="alice", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=5, destination_ip="10.0.0.3"),
-            dict(detector_id="D003", host="10.0.0.3", user="alice", source_ip="10.0.0.2",
-                 mitre="T1021.001", minutes_ago=1),
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.1",
+                "user": "alice",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 10,
+                "destination_ip": "10.0.0.2",
+            },
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.2",
+                "user": "alice",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 5,
+                "destination_ip": "10.0.0.3",
+            },
+            {
+                "detector_id": "D003",
+                "host": "10.0.0.3",
+                "user": "alice",
+                "source_ip": "10.0.0.2",
+                "mitre": "T1021.001",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -187,10 +318,22 @@ def test_corr_011_single_pair_minimum_confidence_floor(db):
     make_groups(
         db,
         [
-            dict(detector_id="D002", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=3),
-            dict(detector_id="D002", host="host-b", user="alice", source_ip="203.0.113.9",
-                 mitre="T1110", minutes_ago=1),
+            {
+                "detector_id": "D002",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 3,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-b",
+                "user": "alice",
+                "source_ip": "203.0.113.9",
+                "mitre": "T1110",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -235,8 +378,12 @@ def test_corr_015_no_banned_claims_in_any_finding(db):
     for finding in stored_correlations(db):
         lowered = (finding.title + " " + finding.description).lower()
         for banned in (
-            "confirmed attack", "confirmed compromise", "breach confirmed",
-            "apt confirmed", "host compromised", "proves",
+            "confirmed attack",
+            "confirmed compromise",
+            "breach confirmed",
+            "apt confirmed",
+            "host compromised",
+            "proves",
         ):
             assert banned not in lowered
 
@@ -245,10 +392,22 @@ def test_corr_016_fingerprint_unique_per_live_finding(db):
     make_groups(
         db,
         [
-            dict(detector_id="D002", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=2),
-            dict(detector_id="D002", host="host-b", user="alice", source_ip="203.0.113.5",
-                 mitre="T1110", minutes_ago=1),
+            {
+                "detector_id": "D002",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 2,
+            },
+            {
+                "detector_id": "D002",
+                "host": "host-b",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1110",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -279,8 +438,14 @@ def test_corr_018_closed_finding_does_not_reopen(db):
     make_groups(
         db,
         [
-            dict(detector_id="D002", host="10.0.0.9", user="u-r1", source_ip="198.51.100.9",
-                 mitre="T1110", minutes_ago=0),
+            {
+                "detector_id": "D002",
+                "host": "10.0.0.9",
+                "user": "u-r1",
+                "source_ip": "198.51.100.9",
+                "mitre": "T1110",
+                "minutes_ago": 0,
+            },
         ],
         now=CORR_T0 + timedelta(hours=9),
     )
@@ -293,12 +458,30 @@ def test_corr_019_unrelated_episodes_never_correlate(db):
     make_groups(
         db,
         [
-            dict(detector_id="D001", host="host-a", user="alice", source_ip="203.0.113.5",
-                 mitre="T1133", minutes_ago=3),
-            dict(detector_id="D005", host="backup-host", user="system",
-                 source_ip="203.0.113.9", mitre="T1486", minutes_ago=2),
-            dict(detector_id="D003", host="finance-host", user="bob",
-                 source_ip="203.0.113.7", mitre="T1059.001", minutes_ago=1),
+            {
+                "detector_id": "D001",
+                "host": "host-a",
+                "user": "alice",
+                "source_ip": "203.0.113.5",
+                "mitre": "T1133",
+                "minutes_ago": 3,
+            },
+            {
+                "detector_id": "D005",
+                "host": "backup-host",
+                "user": "system",
+                "source_ip": "203.0.113.9",
+                "mitre": "T1486",
+                "minutes_ago": 2,
+            },
+            {
+                "detector_id": "D003",
+                "host": "finance-host",
+                "user": "bob",
+                "source_ip": "203.0.113.7",
+                "mitre": "T1059.001",
+                "minutes_ago": 1,
+            },
         ],
         now=CORR_T0,
     )
@@ -330,7 +513,7 @@ def test_corr_022_no_playbook_or_soar_execution(db):
 
 
 def test_corr_023_no_ml_in_correlation_path():
-    import backend.correlation.engine as engine
+    from backend.correlation import engine
 
     source = open(engine.__file__, encoding="utf-8").read().lower()
     for forbidden in ("sklearn", "kmeans", "dbscan", "embeddings", "llm", "openai"):
@@ -358,8 +541,14 @@ def test_corr_024_groups_never_modified_by_correlation(db):
 def test_corr_025_scale_30_groups_linear_correlation(db):
     # 30 unrelated groups -> 0 findings; 30 related groups -> 1 finding.
     specs = [
-        dict(detector_id="D002", host=f"10.0.0.{i % 5 + 1}", user="alice",
-             source_ip="198.51.100.9", mitre="T1110", minutes_ago=i * 0.4)
+        {
+            "detector_id": "D002",
+            "host": f"10.0.0.{i % 5 + 1}",
+            "user": "alice",
+            "source_ip": "198.51.100.9",
+            "mitre": "T1110",
+            "minutes_ago": i * 0.4,
+        }
         for i in range(30)
     ]
     make_groups(db, specs, now=CORR_T0)

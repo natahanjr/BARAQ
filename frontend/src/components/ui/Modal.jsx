@@ -1,14 +1,15 @@
 import { memo, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useFocusTrap } from "../../hooks/useFocusTrap.js";
 
 function Modal({ open, onClose, title, children, size = "md", className = "" }) {
   const overlayRef = useRef(null);
   const panelRef = useRef(null);
+  useFocusTrap(panelRef, open);
 
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement;
-    panelRef.current?.focus();
     return () => prev?.focus();
   }, [open]);
 
@@ -50,7 +51,7 @@ function Modal({ open, onClose, title, children, size = "md", className = "" }) 
         ref={panelRef}
         tabIndex={-1}
         className={[
-          "w-full rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-[var(--shadow-xl)] outline-none",
+          "w-full rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 shadow-[var(--shadow-xl)] outline-none",
           "animate-in",
           sizes[size],
           className,

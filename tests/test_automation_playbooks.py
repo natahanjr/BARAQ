@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from backend.automation.playbooks import (
-    ACTION_KEYS,
     find_matching_playbooks,
     matches,
     run_playbook,
@@ -116,7 +115,9 @@ def test_run_playbook_logs_actions(db):
 
 def test_run_playbook_create_incident(db):
     alert = _mk_alert(db)
-    playbook = _mk_playbook(db, name="open_case", actions=[{"action": "create_incident"}])
+    playbook = _mk_playbook(
+        db, name="open_case", actions=[{"action": "create_incident"}]
+    )
     run_playbook(db, playbook, alert)
     db.commit()
     incident = db.query(Incident).filter_by(host="WS-01").first()
@@ -126,7 +127,10 @@ def test_run_playbook_create_incident(db):
     alert2 = _mk_alert(db, rule="brute_force", host="WS-01")
     run_playbook(db, playbook, alert2)
     db.commit()
-    assert db.query(Incident).filter_by(title=f"Playbook incident: {alert.name}").count() == 1
+    assert (
+        db.query(Incident).filter_by(title=f"Playbook incident: {alert.name}").count()
+        == 1
+    )
 
 
 def test_run_playbook_partial_status(db):

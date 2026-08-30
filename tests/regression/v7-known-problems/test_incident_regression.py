@@ -1,24 +1,20 @@
 """Phase 7 incident regression corpus (spec 7.41, 7.25-7.28, 7.42, 7.46-7.47)."""
+
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-import pytest
 from sqlalchemy import func, select
 
 from backend.incidents import engine
 from backend.incidents.models import (
-    IncidentV2AlertLink,
-    IncidentV2BehaviorGroupLink,
-    IncidentV2CorrelationLink,
-    IncidentV2Evidence,
-    IncidentV2RiskLink,
-    IncidentV2Suppression,
     IncidentV2,
+    IncidentV2Evidence,
+    IncidentV2Suppression,
 )
 
-EVAL_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=timezone.utc)
+EVAL_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=UTC)
 
 
 def _group(group_id, hosts, techniques, severity="high", alert_count=10):
@@ -57,7 +53,11 @@ def _finding(finding_id, hosts):
 def test_single_alert_flood_creates_one_incident(db):
     res = engine.create_incident(
         db,
-        groups=[_group("g-reg-001", ["h-reg-001"], ["T1110"], severity="high", alert_count=10)],
+        groups=[
+            _group(
+                "g-reg-001", ["h-reg-001"], ["T1110"], severity="high", alert_count=10
+            )
+        ],
         findings=[],
         policy_id="I003",
         now=EVAL_T0,
@@ -92,7 +92,9 @@ def test_duplicate_incident_prevented(db):
 def test_rdp_false_positive_not_incident(db):
     res = engine.create_incident(
         db,
-        groups=[_group("g-reg-003", ["h-reg-003"], ["T1133"], severity="low", alert_count=1)],
+        groups=[
+            _group("g-reg-003", ["h-reg-003"], ["T1133"], severity="low", alert_count=1)
+        ],
         findings=[],
         now=EVAL_T0,
     )
@@ -102,7 +104,11 @@ def test_rdp_false_positive_not_incident(db):
 def test_powershell_false_positive_not_incident(db):
     res = engine.create_incident(
         db,
-        groups=[_group("g-reg-004", ["h-reg-004"], ["T1059.001"], severity="low", alert_count=1)],
+        groups=[
+            _group(
+                "g-reg-004", ["h-reg-004"], ["T1059.001"], severity="low", alert_count=1
+            )
+        ],
         findings=[],
         now=EVAL_T0,
     )
@@ -112,7 +118,9 @@ def test_powershell_false_positive_not_incident(db):
 def test_normal_login_not_incident(db):
     res = engine.create_incident(
         db,
-        groups=[_group("g-reg-005", ["h-reg-005"], ["T1078"], severity="low", alert_count=1)],
+        groups=[
+            _group("g-reg-005", ["h-reg-005"], ["T1078"], severity="low", alert_count=1)
+        ],
         findings=[],
         now=EVAL_T0,
     )
@@ -124,7 +132,14 @@ def test_high_risk_without_activity_not_incident(db):
         db,
         groups=[],
         findings=[],
-        risks=[{"risk_id": "ER-reg-006", "score": 90.0, "severity": "critical", "entity_id": "h-reg-006"}],
+        risks=[
+            {
+                "risk_id": "ER-reg-006",
+                "score": 90.0,
+                "severity": "critical",
+                "entity_id": "h-reg-006",
+            }
+        ],
         now=EVAL_T0,
     )
     assert res.get("incident_created") is False
@@ -181,12 +196,21 @@ def test_suppression_no_permanent_hide(db):
     )
     db.commit()
     engine.suppress_incident(
-        db, res["incident_id"], "test", "incident", EVAL_T0 + timedelta(days=30), created_by="tester"
+        db,
+        res["incident_id"],
+        "test",
+        "incident",
+        EVAL_T0 + timedelta(days=30),
+        created_by="tester",
     )
     db.commit()
-    sup = db.scalars(select(IncidentV2Suppression).where(IncidentV2Suppression.incident_id == res["incident_id"])).first()
+    sup = db.scalars(
+        select(IncidentV2Suppression).where(
+            IncidentV2Suppression.incident_id == res["incident_id"]
+        )
+    ).first()
     assert sup is not None
-    assert sup.expires_at.replace(tzinfo=timezone.utc) > EVAL_T0
+    assert sup.expires_at.replace(tzinfo=UTC) > EVAL_T0
 
 
 def test_severity_no_inflation(db):
@@ -223,7 +247,9 @@ def test_evidence_not_mutated(db):
     )
     db.commit()
     evidence = db.scalars(
-        select(IncidentV2Evidence).where(IncidentV2Evidence.incident_id == res["incident_id"])
+        select(IncidentV2Evidence).where(
+            IncidentV2Evidence.incident_id == res["incident_id"]
+        )
     ).all()
     assert len(evidence) == 2
 
@@ -242,10 +268,10 @@ def test_incident_idempotency(db):
 
 
 def test_concurrent_same_incident(db):
-    from concurrent.futures import ThreadPoolExecutor
 
     def _ingest(_idx: int):
         from backend.database.connection import SessionLocal
+
         session = SessionLocal()
         try:
             engine.create_incident(
@@ -255,7 +281,7 @@ def test_concurrent_same_incident(db):
                 now=EVAL_T0,
             )
             session.commit()
-        except Exception:  # noqa: BLE001
+        except Exception:
             session.rollback()
         finally:
             session.close()
@@ -292,10 +318,15 @@ def test_sla_priority_mapping(db):
         db,
         groups=[_group("g-reg-016", ["h-reg-016"], ["T1486"])],
         findings=[],
-        risks=[{"risk_id": "ER-reg-016", "score": 85.0, "severity": "critical", "entity_id": "h-reg-016"}],
+        risks=[
+            {
+                "risk_id": "ER-reg-016",
+                "score": 85.0,
+                "severity": "critical",
+                "entity_id": "h-reg-016",
+            }
+        ],
         policy_id="I006",
         now=EVAL_T0,
     )
     assert res["priority"] == "P1"
-
-

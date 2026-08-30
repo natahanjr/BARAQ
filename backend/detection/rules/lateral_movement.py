@@ -5,13 +5,14 @@ Detects lateral movement attempts via:
 - Multiple failed logons from internal IPs to different targets
 - Administrative privilege usage across multiple hosts
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 
-from backend.database.models import NormalizedEvent, NetworkConnection
+from backend.database.models import NetworkConnection, NormalizedEvent
 from backend.detection.rules.base import BaseRule, DetectionResult
 
 
@@ -46,7 +47,7 @@ class LateralMovementRule(BaseRule):
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         window_minutes = self.window_minutes or window_minutes
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         # Pattern 1: Admin share access (SMB port 445 to internal hosts from internal source)
         findings.extend(self._detect_admin_share_access(since))
@@ -66,7 +67,9 @@ class LateralMovementRule(BaseRule):
         stmt = (
             select(
                 NetworkConnection.local_ip,
-                func.count(func.distinct(NetworkConnection.remote_ip)).label("unique_targets"),
+                func.count(func.distinct(NetworkConnection.remote_ip)).label(
+                    "unique_targets"
+                ),
                 func.count(NetworkConnection.id).label("attempts"),
                 func.min(NetworkConnection.observed_at).label("first_attempt"),
             )
@@ -76,7 +79,10 @@ class LateralMovementRule(BaseRule):
                 *self._org_conds(NetworkConnection),
             )
             .group_by(NetworkConnection.local_ip)
-            .having(func.count(func.distinct(NetworkConnection.remote_ip)) >= self.admin_share_threshold)
+            .having(
+                func.count(func.distinct(NetworkConnection.remote_ip))
+                >= self.admin_share_threshold
+            )
         )
 
         for row in self.session.execute(stmt).all():
@@ -105,7 +111,9 @@ class LateralMovementRule(BaseRule):
 
         return findings
 
-    def _detect_multiple_target_failed_logons(self, since: datetime) -> list[DetectionResult]:
+    def _detect_multiple_target_failed_logons(
+        self, since: datetime
+    ) -> list[DetectionResult]:
         """Detect failed logons from one account to multiple targets."""
         findings: list[DetectionResult] = []
 
@@ -123,11 +131,18 @@ class LateralMovementRule(BaseRule):
                 *self._org_conds(NormalizedEvent),
             )
             .group_by(NormalizedEvent.user)
-            .having(func.count(func.distinct(NormalizedEvent.host)) >= self.failed_logon_targets)
+            .having(
+                func.count(func.distinct(NormalizedEvent.host))
+                >= self.failed_logon_targets
+            )
         )
 
         for row in self.session.execute(stmt).all():
-            if not row.user or row.user.lower() in ("system", "local service", "network service"):
+            if not row.user or row.user.lower() in (
+                "system",
+                "local service",
+                "network service",
+            ):
                 continue
 
             evidence = (
@@ -147,7 +162,9 @@ class LateralMovementRule(BaseRule):
 
         return findings
 
-    def _detect_privilege_elevation_spread(self, since: datetime) -> list[DetectionResult]:
+    def _detect_privilege_elevation_spread(
+        self, since: datetime
+    ) -> list[DetectionResult]:
         """Detect privilege escalation events across multiple hosts."""
         findings: list[DetectionResult] = []
 
@@ -207,8 +224,6 @@ class LateralMovementRule(BaseRule):
             if first == 172 and 16 <= second <= 31:
                 return True
             # 192.168.0.0/16
-            if first == 192 and second == 168:
-                return True
-            return False
+            return bool(first == 192 and second == 168)
         except (ValueError, IndexError):
             return False

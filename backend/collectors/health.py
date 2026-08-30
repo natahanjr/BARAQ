@@ -11,12 +11,13 @@ Gives the pipeline three things the roadmap asks for:
 * **Retry with exponential backoff** for transient channel errors (the
   privilege error is persistent and is *not* retried).
 """
+
 from __future__ import annotations
 
 import logging
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger("baraq.collectors.health")
 
@@ -31,7 +32,7 @@ _TRANSIENT_ERRORS = {
     1502,  # ERROR_EVENTLOG_CANT_START
     1503,  # ERROR_LOG_FILE_FULL
     1504,  # ERROR_EVENTLOG_FILE_CHANGED
-    5,     # ERROR_ACCESS_DENIED (may clear after group membership applies)
+    5,  # ERROR_ACCESS_DENIED (may clear after group membership applies)
 }
 
 FIX_HINT = (
@@ -47,13 +48,13 @@ class CollectorHealth:
     def __init__(self):
         self._lock = threading.Lock()
         self._channels: dict[str, dict] = {}
-        self.started_at = datetime.now(timezone.utc).isoformat()
+        self.started_at = datetime.now(UTC).isoformat()
 
     def reset(self) -> None:
         """Clear all per-channel state (tests, post-incident triage)."""
         with self._lock:
             self._channels.clear()
-            self.started_at = datetime.now(timezone.utc).isoformat()
+            self.started_at = datetime.now(UTC).isoformat()
 
     @staticmethod
     def _blank(channel: str) -> dict:
@@ -79,9 +80,11 @@ class CollectorHealth:
             state["records_total"] += records
             state["cycles_total"] += 1
             state["consecutive_failures"] = 0
-            state["last_success_at"] = datetime.now(timezone.utc).isoformat()
+            state["last_success_at"] = datetime.now(UTC).isoformat()
 
-    def record_failure(self, channel: str, error: str, permission_issue: bool = False) -> None:
+    def record_failure(
+        self, channel: str, error: str, permission_issue: bool = False
+    ) -> None:
         if not _enabled():
             return
         with self._lock:
@@ -90,16 +93,17 @@ class CollectorHealth:
             state["failures_total"] += 1
             state["consecutive_failures"] += 1
             state["last_error"] = error[:400]
-            state["last_failure_at"] = datetime.now(timezone.utc).isoformat()
+            state["last_failure_at"] = datetime.now(UTC).isoformat()
             state["permission_issue"] = permission_issue or state["permission_issue"]
 
     def snapshot(self) -> list[dict]:
         with self._lock:
             return [
-                dict(state, **{
-                    "last_success_at": state["last_success_at"],
-                    "last_failure_at": state["last_failure_at"],
-                })
+                dict(
+                    state,
+                    last_success_at=state["last_success_at"],
+                    last_failure_at=state["last_failure_at"],
+                )
                 for state in sorted(self._channels.values(), key=lambda s: s["channel"])
             ]
 
@@ -116,7 +120,7 @@ def _enabled() -> bool:
         from backend.config import COLLECTOR_HEALTH
 
         return COLLECTOR_HEALTH
-    except Exception:  # noqa: BLE001 - config import must never break health
+    except Exception:
         return True
 
 
@@ -132,7 +136,7 @@ def check_channel_access(channel: str) -> tuple[bool, int | None, str]:
         return False, None, "pywin32 not available"
     try:
         handle = win32evtlog.OpenEventLog(None, channel)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         winerror = getattr(exc, "winerror", None) or getattr(exc, "args", (None,))[0]
         if isinstance(winerror, tuple):  # pywin32 wraps (code, func, msg)
             winerror = winerror[0]
@@ -142,7 +146,7 @@ def check_channel_access(channel: str) -> tuple[bool, int | None, str]:
             return False, None, str(exc)
     try:
         win32evtlog.CloseEventLog(handle)
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     return True, 0, "ok"
 
@@ -168,18 +172,23 @@ def check_collector_permissions(channels: list[str]) -> list[dict]:
             logger.error(
                 "Collector permissions: %s NOT readable - missing privilege "
                 "(win32 error 1314). %s",
-                channel, FIX_HINT,
+                channel,
+                FIX_HINT,
             )
         else:
             logger.warning(
                 "Collector permissions: %s NOT readable (%s). %s",
-                channel, detail or winerror, FIX_HINT,
+                channel,
+                detail or winerror,
+                FIX_HINT,
             )
         report.append(status)
     return report
 
 
-def retry_with_backoff(fn, attempts: int = 3, base_delay: float = 1.0, transient_only: bool = True):
+def retry_with_backoff(
+    fn, attempts: int = 3, base_delay: float = 1.0, transient_only: bool = True
+):
     """Call ``fn()`` retrying transient failures with exponential backoff.
 
     Privilege errors (1314) are persistent and raise immediately. Returns the
@@ -190,7 +199,7 @@ def retry_with_backoff(fn, attempts: int = 3, base_delay: float = 1.0, transient
     for attempt in range(attempts):
         try:
             return fn()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             last_exc = exc
             winerror = getattr(exc, "winerror", None)
             if isinstance(winerror, tuple):
@@ -200,7 +209,10 @@ def retry_with_backoff(fn, attempts: int = 3, base_delay: float = 1.0, transient
             if attempt < attempts - 1:
                 logger.debug(
                     "Transient collector error (attempt %d/%d): %s - retrying in %.1fs",
-                    attempt + 1, attempts, exc, delay,
+                    attempt + 1,
+                    attempts,
+                    exc,
+                    delay,
                 )
                 time.sleep(delay)
                 delay *= 2

@@ -9,6 +9,7 @@ Detects PowerShell based on *contextual characteristics*, never on
 
 At least one characteristic is required; two or more raise severity.
 """
+
 from __future__ import annotations
 
 import re
@@ -21,8 +22,12 @@ from backend.detection.registry import Detector
 from backend.telemetry.contract import EVENT
 
 _POWERSHELL_NAMES = {
-    "powershell", "powershell.exe", "powershell_ise", "powershell_ise.exe",
-    "pwsh", "pwsh.exe",
+    "powershell",
+    "powershell.exe",
+    "powershell_ise",
+    "powershell_ise.exe",
+    "pwsh",
+    "pwsh.exe",
 }
 
 _ENCODED_RE = re.compile(r"-enc(oded)?(command)?\b", re.IGNORECASE)
@@ -53,7 +58,9 @@ class SuspiciousPowerShellDetector(Detector):
     enabled = True
     supported_event_types = ("process",)
 
-    def evaluate(self, event: EVENT, context: DetectionContext | None = None) -> DETECTION | None:
+    def evaluate(
+        self, event: EVENT, context: DetectionContext | None = None
+    ) -> DETECTION | None:
         proc = event.process or {}
         name = str(proc.get("name") or event.facts.get("process_name") or "").lower()
         if name not in _POWERSHELL_NAMES:
@@ -76,11 +83,29 @@ class SuspiciousPowerShellDetector(Detector):
 
         characteristics: list[tuple[str, str, str]] = []
         if _ENCODED_RE.search(command_line) or _ENCODED_B64_RE.search(command_line):
-            characteristics.append(("encoded_command", "true", "Encoded/obfuscated command detected in command line"))
+            characteristics.append(
+                (
+                    "encoded_command",
+                    "true",
+                    "Encoded/obfuscated command detected in command line",
+                )
+            )
         if _DOWNLOAD_RE.search(command_line):
-            characteristics.append(("script_download", "true", "PowerShell download/execute pattern in command line"))
+            characteristics.append(
+                (
+                    "script_download",
+                    "true",
+                    "PowerShell download/execute pattern in command line",
+                )
+            )
         if _UNUSUAL_LOCATION_RE.search(path) or _HIDDEN_WINDOW_RE.search(command_line):
-            characteristics.append(("unusual_location", path or command_line[:80], "Execution from unusual location / hidden window"))
+            characteristics.append(
+                (
+                    "unusual_location",
+                    path or command_line[:80],
+                    "Execution from unusual location / hidden window",
+                )
+            )
 
         if not characteristics:
             return None

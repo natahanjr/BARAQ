@@ -5,11 +5,10 @@ detector mapping in config, not from MITRE alone (4.26). Grouping is
 identity-based (host + user + source + family) and never cross-host or
 cross-user by default (4.36/4.37) - those relationships belong to Phase 5.
 """
+
 from __future__ import annotations
 
-from typing import Protocol
-
-import backend.config as config
+from backend import config
 from backend.aggregation.contract import BEHAVIOR_FAMILIES
 
 from .fingerprint import GroupableAlert, group_fingerprint

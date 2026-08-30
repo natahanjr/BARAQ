@@ -1,9 +1,10 @@
 """Collector base classes."""
+
 from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger("baraq.collectors")
 
@@ -24,4 +25,4 @@ class BaseCollector(ABC):
         return True
 
     def _stamp(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()

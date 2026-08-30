@@ -40,12 +40,15 @@ function Topbar({ activeAlerts, criticalAlerts, openIncidents, onOpenShortcuts, 
     const el = clockRef.current;
     if (!el) return;
     const tick = () => {
-      el.textContent = new Date().toLocaleTimeString("en-US", {
+      const now = new Date();
+      const time = now.toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
         hour12: false,
       });
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone?.split("/").pop()?.replace("_/", " ") || "";
+      el.textContent = tz ? `${time} ${tz}` : time;
     };
     tick();
     const id = setInterval(tick, 1000);
@@ -75,7 +78,7 @@ function Topbar({ activeAlerts, criticalAlerts, openIncidents, onOpenShortcuts, 
           <span ref={clockRef} className="mr-2 font-mono text-[12px] text-[var(--fg-muted)] tabular-nums" aria-label="Current time" />
 
           {/* Connection indicator */}
-          <div className="flex items-center gap-1.5 rounded-lg px-2 py-1" aria-label="Connection status: live">
+          <div className="flex items-center gap-1.5 rounded-xl px-2 py-1" aria-label="Connection status: live">
             <StatusDot status="online" size="xs" />
             <span className="text-[11px] font-medium text-[var(--fg-muted)]">LIVE</span>
           </div>
@@ -83,7 +86,7 @@ function Topbar({ activeAlerts, criticalAlerts, openIncidents, onOpenShortcuts, 
           {/* Command palette trigger */}
           <button
             onClick={onOpenCommandPalette}
-            className="hidden items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 py-1 text-[11px] text-[var(--fg-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--fg-secondary)] sm:flex"
+            className="hidden items-center gap-1.5 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 px-2 py-1 text-[11px] text-[var(--fg-muted)] hover:border-[var(--border-strong)] hover:text-[var(--fg-secondary)] sm:flex"
             title="Command palette (Ctrl+K)"
             aria-label="Open command palette"
           >
@@ -91,7 +94,7 @@ function Topbar({ activeAlerts, criticalAlerts, openIncidents, onOpenShortcuts, 
           </button>
 
           {/* Notifications */}
-          <button className="relative rounded-lg p-1.5 text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-secondary)]" aria-label={`Notifications${activeAlerts > 0 ? ` (${activeAlerts} active)` : ""}`}>
+          <button className="relative rounded-lg p-1.5 text-[var(--fg-muted)] transition-all hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-secondary)]" aria-label={`Notifications${activeAlerts > 0 ? ` (${activeAlerts} active)` : ""}`}>
             <BellIcon className="h-4 w-4" />
             {(activeAlerts > 0 || criticalAlerts > 0) && (
               <span className="absolute -right-0.5 -top-0.5" aria-hidden="true">
@@ -103,7 +106,7 @@ function Topbar({ activeAlerts, criticalAlerts, openIncidents, onOpenShortcuts, 
           {/* Theme toggle */}
           <button
             onClick={cycleTheme}
-            className="rounded-lg p-1.5 text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-secondary)]"
+            className="rounded-lg p-1.5 text-[var(--fg-muted)] transition-all hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-secondary)]"
             aria-label={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme`}
             title={`Theme: ${resolvedTheme}`}
           >

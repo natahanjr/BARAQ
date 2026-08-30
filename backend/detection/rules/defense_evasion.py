@@ -5,10 +5,11 @@ AMSI / Defender bypass (T1562.001) and rogue root-certificate installation
 All three are command-line / script-block detections over 4688 process
 creation, 4104 PowerShell script blocks and process snapshots.
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from backend.detection.rules.base import BaseRule, DetectionResult
 
@@ -40,7 +41,7 @@ class SafeBootTamperingRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):
                 continue
@@ -83,7 +84,7 @@ class AmsiBypassRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):
                 continue
@@ -128,7 +129,7 @@ class CertificateSpoofingRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not self._CMDLINE.search(cmdline):
                 continue

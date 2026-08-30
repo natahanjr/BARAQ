@@ -1,7 +1,8 @@
 """Phase 5 correlation test helpers."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -14,13 +15,14 @@ from backend.correlation.models import (
     CorrelationFindingRecord,
     CorrelationMember,
 )
-
 from tests.aggregation.helpers import fabricate_alerts
 
-CORR_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=timezone.utc)
+CORR_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=UTC)
 
 
-def make_groups(db, specs: list[dict], now: datetime | None = None) -> list[BehaviorGroupRecord]:
+def make_groups(
+    db, specs: list[dict], now: datetime | None = None
+) -> list[BehaviorGroupRecord]:
     """Fabricate distinct alerts, aggregate them, return the groups."""
     alerts = fabricate_alerts(db, specs)
     return process_alerts(db, alerts, now=now or CORR_T0)
@@ -28,14 +30,14 @@ def make_groups(db, specs: list[dict], now: datetime | None = None) -> list[Beha
 
 def stored_correlations(db) -> list[CorrelationFindingRecord]:
     return list(
-        db.scalars(select(CorrelationFindingRecord).order_by(CorrelationFindingRecord.id)).all()
+        db.scalars(
+            select(CorrelationFindingRecord).order_by(CorrelationFindingRecord.id)
+        ).all()
     )
 
 
 def stored_corr_edges(db) -> list[CorrelationEdge]:
-    return list(
-        db.scalars(select(CorrelationEdge).order_by(CorrelationEdge.id)).all()
-    )
+    return list(db.scalars(select(CorrelationEdge).order_by(CorrelationEdge.id)).all())
 
 
 def stored_corr_members(db) -> list[CorrelationMember]:
@@ -52,7 +54,9 @@ def stored_corr_evidence(db) -> list[CorrelationEvidence]:
 
 def stored_corr_audit(db) -> list[CorrelationAuditEvent]:
     return list(
-        db.scalars(select(CorrelationAuditEvent).order_by(CorrelationAuditEvent.id)).all()
+        db.scalars(
+            select(CorrelationAuditEvent).order_by(CorrelationAuditEvent.id)
+        ).all()
     )
 
 
@@ -72,31 +76,73 @@ def canonical_specs() -> list[dict]:
     type LATERAL_MOVEMENT; highest severity never escalated above the
     member maximum; never an incident, never SOAR.
     """
-    brute_force = dict(
-        detector_id="D002", user="u-r1", source_ip="198.51.100.9",
-        mitre="T1110", title="External RDP brute force", severity="high",
-    )
-    logon = dict(
-        detector_id="D001", user="u-r1", source_ip="198.51.100.9",
-        mitre="T1133", title="Successful logon from external source", severity="medium",
-    )
-    lateral = dict(
-        detector_id="D003", user="u-r1", source_ip="10.0.0.6", host="10.0.0.7",
-        mitre="T1021.001", title="RDP session to internal host", severity="high",
-    )
+    brute_force = {
+        "detector_id": "D002",
+        "user": "u-r1",
+        "source_ip": "198.51.100.9",
+        "mitre": "T1110",
+        "title": "External RDP brute force",
+        "severity": "high",
+    }
+    logon = {
+        "detector_id": "D001",
+        "user": "u-r1",
+        "source_ip": "198.51.100.9",
+        "mitre": "T1133",
+        "title": "Successful logon from external source",
+        "severity": "medium",
+    }
+    lateral = {
+        "detector_id": "D003",
+        "user": "u-r1",
+        "source_ip": "10.0.0.6",
+        "host": "10.0.0.7",
+        "mitre": "T1021.001",
+        "title": "RDP session to internal host",
+        "severity": "high",
+    }
     execution = [
-        dict(detector_id="D003", user="u-r1", source_ip="10.0.0.6", host="10.0.0.7",
-             mitre="T1059.001", title="Suspicious PowerShell", severity="high"),
-        dict(detector_id="D004", user="u-r1", source_ip="10.0.0.6", host="10.0.0.7",
-             mitre="T1047", title="WMI execution", severity="high"),
+        {
+            "detector_id": "D003",
+            "user": "u-r1",
+            "source_ip": "10.0.0.6",
+            "host": "10.0.0.7",
+            "mitre": "T1059.001",
+            "title": "Suspicious PowerShell",
+            "severity": "high",
+        },
+        {
+            "detector_id": "D004",
+            "user": "u-r1",
+            "source_ip": "10.0.0.6",
+            "host": "10.0.0.7",
+            "mitre": "T1047",
+            "title": "WMI execution",
+            "severity": "high",
+        },
     ]
 
     specs: list[dict] = []
     chain = [
-        (10.0 / 60, 10.0 / 60, dict(host="10.0.0.4", destination_ip="10.0.0.5"), brute_force),
-        (0.0 / 60, 0.0 / 60, dict(host="10.0.0.5", destination_ip="10.0.0.6"), brute_force),
-        (0.0 / 60, 0.0 / 60, dict(host="10.0.0.6", destination_ip="10.0.0.8"), brute_force),
-        (0.0 / 60, 0.0 / 60, dict(host="10.0.0.8", destination_ip="10.0.0.7"), logon),
+        (
+            10.0 / 60,
+            10.0 / 60,
+            {"host": "10.0.0.4", "destination_ip": "10.0.0.5"},
+            brute_force,
+        ),
+        (
+            0.0 / 60,
+            0.0 / 60,
+            {"host": "10.0.0.5", "destination_ip": "10.0.0.6"},
+            brute_force,
+        ),
+        (
+            0.0 / 60,
+            0.0 / 60,
+            {"host": "10.0.0.6", "destination_ip": "10.0.0.8"},
+            brute_force,
+        ),
+        (0.0 / 60, 0.0 / 60, {"host": "10.0.0.8", "destination_ip": "10.0.0.7"}, logon),
     ]
     base = 14.0
     for minutes_ago, _step, overrides, template in chain:

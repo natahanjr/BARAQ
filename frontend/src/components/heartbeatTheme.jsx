@@ -137,7 +137,7 @@ export function LiveBadge({ status = "LIVE" }) {
   return (
     <div className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 backdrop-blur-sm">
       <span className="h-2 w-2 animate-pulse rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)]" />
-      <span className="text-[10px] font-bold tracking-widest text-red-300">{status}</span>
+      <span className="text-[11px] font-bold tracking-widest text-red-300">{status}</span>
     </div>
   );
 }

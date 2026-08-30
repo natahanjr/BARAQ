@@ -1,8 +1,8 @@
 """Test multi-user auth: login/logout, session tokens, user management, audit."""
+
 from __future__ import annotations
 
 import pytest
-
 from fastapi.testclient import TestClient
 
 
@@ -24,12 +24,14 @@ def _ensure_bootstrap_admin():
     db = SessionLocal()
     try:
         if not db.query(User).filter(User.username == "admin").first():
-            db.add(User(
-                username="admin",
-                password_hash=hash_password("baraqadmin"),
-                role="admin",
-                is_active=True,
-            ))
+            db.add(
+                User(
+                    username="admin",
+                    password_hash=hash_password("baraqadmin"),
+                    role="admin",
+                    is_active=True,
+                )
+            )
             db.commit()
     finally:
         db.close()
@@ -107,7 +109,12 @@ def test_admin_creates_analyst_user(client):
     created = client.post(
         "/api/auth/users",
         headers=_bearer_headers(token),
-        json={"username": "soc2", "password": "hunter2hunter2", "role": "analyst", "full_name": "SOC Analyst 2"},
+        json={
+            "username": "soc2",
+            "password": "hunter2hunter2",
+            "role": "analyst",
+            "full_name": "SOC Analyst 2",
+        },
     )
     assert created.status_code == 200
     assert created.json()["role"] == "analyst"
@@ -158,7 +165,11 @@ def test_admin_deletes_user(client):
     user = client.post(
         "/api/auth/users",
         headers=_bearer_headers(token),
-        json={"username": "soc_delete", "password": "hunter2hunter2", "role": "analyst"},
+        json={
+            "username": "soc_delete",
+            "password": "hunter2hunter2",
+            "role": "analyst",
+        },
     ).json()
     deleted = client.delete(
         f"/api/auth/users/{user['id']}", headers=_bearer_headers(token)
@@ -178,19 +189,27 @@ def test_delete_user_requires_admin(client):
         json={"username": "soc_ast", "password": "hunter2hunter2", "role": "analyst"},
     ).json()
     analyst = _login(client, "soc_ast", "hunter2hunter2").json()["token"]
-    assert client.delete(
-        f"/api/auth/users/{user['id']}", headers=_bearer_headers(analyst)
-    ).status_code == 403
-    still_there = client.get("/api/auth/users", headers=_bearer_headers(token)).json()["items"]
+    assert (
+        client.delete(
+            f"/api/auth/users/{user['id']}", headers=_bearer_headers(analyst)
+        ).status_code
+        == 403
+    )
+    still_there = client.get("/api/auth/users", headers=_bearer_headers(token)).json()[
+        "items"
+    ]
     assert any(u["username"] == "soc_ast" for u in still_there)
 
 
 def test_cannot_delete_own_account(client):
     token = _login(client, "admin", "baraqadmin").json()["token"]
     me = client.get("/api/auth/me", headers=_bearer_headers(token)).json()["user"]
-    assert client.delete(
-        f"/api/auth/users/{me['id']}", headers=_bearer_headers(token)
-    ).status_code == 400
+    assert (
+        client.delete(
+            f"/api/auth/users/{me['id']}", headers=_bearer_headers(token)
+        ).status_code
+        == 400
+    )
 
 
 def test_delete_records_audit_entry(client):
@@ -201,20 +220,26 @@ def test_delete_records_audit_entry(client):
         json={"username": "soc_audit", "password": "hunter2hunter2", "role": "analyst"},
     ).json()
     client.delete(f"/api/auth/users/{user['id']}", headers=_bearer_headers(token))
-    audit = client.get("/api/auth/audit", headers=_bearer_headers(token)).json()["items"]
+    audit = client.get("/api/auth/audit", headers=_bearer_headers(token)).json()[
+        "items"
+    ]
     assert any(e["action"] == "user.delete" for e in audit)
 
 
 def test_clear_audit_empties_trail_and_logs_itself(client):
     token = _login(client, "admin", "baraqadmin").json()["token"]
-    before = client.get("/api/auth/audit", headers=_bearer_headers(token)).json()["items"]
+    before = client.get("/api/auth/audit", headers=_bearer_headers(token)).json()[
+        "items"
+    ]
     assert before
     cleared = client.post("/api/auth/audit/clear", headers=_bearer_headers(token))
     assert cleared.status_code == 200
     body = cleared.json()
     assert body["cleared"] >= len(before)
     assert body["report"]  # forced report was generated before erasing
-    remaining = client.get("/api/auth/audit", headers=_bearer_headers(token)).json()["items"]
+    remaining = client.get("/api/auth/audit", headers=_bearer_headers(token)).json()[
+        "items"
+    ]
     assert len(remaining) == 1
     assert remaining[0]["action"] == "audit.clear"
 
@@ -227,9 +252,12 @@ def test_clear_audit_requires_admin(client):
         json={"username": "soc_clear", "password": "hunter2hunter2", "role": "analyst"},
     )
     analyst = _login(client, "soc_clear", "hunter2hunter2").json()["token"]
-    assert client.post(
-        "/api/auth/audit/clear", headers=_bearer_headers(analyst)
-    ).status_code == 403
+    assert (
+        client.post(
+            "/api/auth/audit/clear", headers=_bearer_headers(analyst)
+        ).status_code
+        == 403
+    )
 
 
 def test_clear_audit_writes_report_file(client):

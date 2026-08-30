@@ -1,4 +1,5 @@
 """Convert the documentation markdown files into a single PDF via reportlab."""
+
 from __future__ import annotations
 
 import re
@@ -64,7 +65,12 @@ def add_table(flow, lines: list[str]) -> None:
         ("LEADING", (0, 0), (-1, -1), 9),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f1f5f9")]),
+        (
+            "ROWBACKGROUNDS",
+            (0, 1),
+            (-1, -1),
+            [colors.white, colors.HexColor("#f1f5f9")],
+        ),
         ("TOPPADDING", (0, 0), (-1, -1), 2.5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
     ]
@@ -75,12 +81,32 @@ def add_table(flow, lines: list[str]) -> None:
 
 def parse_md(text: str):
     styles = getSampleStyleSheet()
-    h1 = ParagraphStyle("H1", parent=styles["Heading1"], textColor=ACCENT, fontSize=18, spaceAfter=10)
-    h2 = ParagraphStyle("H2", parent=styles["Heading2"], textColor=ACCENT, fontSize=14, spaceBefore=14, spaceAfter=6)
-    h3 = ParagraphStyle("H3", parent=styles["Heading3"], textColor=colors.HexColor("#0f172a"), fontSize=11.5, spaceBefore=10, spaceAfter=4)
-    body = ParagraphStyle("Body", parent=styles["BodyText"], fontSize=9.5, leading=13.5, spaceAfter=6)
+    h1 = ParagraphStyle(
+        "H1", parent=styles["Heading1"], textColor=ACCENT, fontSize=18, spaceAfter=10
+    )
+    h2 = ParagraphStyle(
+        "H2",
+        parent=styles["Heading2"],
+        textColor=ACCENT,
+        fontSize=14,
+        spaceBefore=14,
+        spaceAfter=6,
+    )
+    h3 = ParagraphStyle(
+        "H3",
+        parent=styles["Heading3"],
+        textColor=colors.HexColor("#0f172a"),
+        fontSize=11.5,
+        spaceBefore=10,
+        spaceAfter=4,
+    )
+    body = ParagraphStyle(
+        "Body", parent=styles["BodyText"], fontSize=9.5, leading=13.5, spaceAfter=6
+    )
     bullet = ParagraphStyle("Bullet", parent=body, leftIndent=14, spaceAfter=2)
-    title = ParagraphStyle("Title", parent=styles["Title"], fontSize=22, textColor=ACCENT, spaceAfter=4)
+    title = ParagraphStyle(
+        "Title", parent=styles["Title"], fontSize=22, textColor=ACCENT, spaceAfter=4
+    )
 
     flow: list = []
     in_code = False
@@ -96,9 +122,15 @@ def parse_md(text: str):
             code = Preformatted(
                 "\n".join(code_lines),
                 ParagraphStyle(
-                    "Code", fontName="Courier", fontSize=7.5, leading=9.5,
-                    backColor=CODE_BG, textColor=CODE_FG,
-                    borderPadding=6, spaceBefore=4, spaceAfter=8,
+                    "Code",
+                    fontName="Courier",
+                    fontSize=7.5,
+                    leading=9.5,
+                    backColor=CODE_BG,
+                    textColor=CODE_FG,
+                    borderPadding=6,
+                    spaceBefore=4,
+                    spaceAfter=8,
                 ),
             )
             flow.append(code)
@@ -147,10 +179,15 @@ def parse_md(text: str):
             while i < len(lines) and re.match(r"^\s*[-*] ", lines[i].strip()):
                 items.append(strip_inline(lines[i].strip()[2:].strip()))
                 i += 1
-            flow.append(ListFlowable(
-                [ListItem(Paragraph(it, bullet), leftIndent=12) for it in items],
-                bulletType="bullet", start="circle", bulletFontSize=6, leftIndent=16,
-            ))
+            flow.append(
+                ListFlowable(
+                    [ListItem(Paragraph(it, bullet), leftIndent=12) for it in items],
+                    bulletType="bullet",
+                    start="circle",
+                    bulletFontSize=6,
+                    leftIndent=16,
+                )
+            )
             flow.append(Spacer(1, 3))
             continue
         else:
@@ -164,20 +201,35 @@ def parse_md(text: str):
 
 def build() -> None:
     doc = SimpleDocTemplate(
-        str(OUT), pagesize=A4,
-        leftMargin=2 * cm, rightMargin=2 * cm, topMargin=2 * cm, bottomMargin=2 * cm,
+        str(OUT),
+        pagesize=A4,
+        leftMargin=2 * cm,
+        rightMargin=2 * cm,
+        topMargin=2 * cm,
+        bottomMargin=2 * cm,
         title="BARAQ Documentation",
         author="BARAQ",
     )
-    cover_style = ParagraphStyle("Cover", fontSize=13, leading=18, alignment=1, spaceAfter=12)
-    flow = [Paragraph("BARAQ", ParagraphStyle("C", fontSize=30, alignment=1, textColor=ACCENT)),
-            Paragraph("Documentation Package", cover_style),
-            Spacer(1, 10)]
+    cover_style = ParagraphStyle(
+        "Cover", fontSize=13, leading=18, alignment=1, spaceAfter=12
+    )
+    flow = [
+        Paragraph(
+            "BARAQ", ParagraphStyle("C", fontSize=30, alignment=1, textColor=ACCENT)
+        ),
+        Paragraph("Documentation Package", cover_style),
+        Spacer(1, 10),
+    ]
 
     for fname, label in FILES:
         text = (DOCS / fname).read_text(encoding="utf-8")
         flow.append(PageBreak())
-        flow.append(Paragraph(label, ParagraphStyle("Part", fontSize=16, textColor=ACCENT, spaceAfter=8)))
+        flow.append(
+            Paragraph(
+                label,
+                ParagraphStyle("Part", fontSize=16, textColor=ACCENT, spaceAfter=8),
+            )
+        )
         flow.append(Spacer(1, 4))
         flow += parse_md(text)
 

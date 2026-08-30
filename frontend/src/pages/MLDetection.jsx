@@ -117,7 +117,7 @@ function MLDetection() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">Machine Learning</p>
-          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">ML Detection</h1>
+          <h1 className="mt-1 text-page-title text-[var(--fg-primary)]">ML Detection</h1>
           <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">Model status, anomaly feed, and training pipeline</p>
         </div>
         <div className="flex items-center gap-2">
@@ -186,7 +186,7 @@ function MLDetection() {
         {statCards.map((s) => (
           <div
             key={s.label}
-            className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 transition-all duration-300 hover:border-[var(--border-strong)] hover:shadow-lg"
+            className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-300 p-5 hover:border-[var(--border-strong)] hover:shadow-lg"
           >
             <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-40" style={{ background: s.color }} />
             <div className="relative flex items-start justify-between">
@@ -223,7 +223,7 @@ function MLDetection() {
               <button
                 key={model.id}
                 onClick={() => setSelectedModel(model)}
-                className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6 text-left transition-all duration-300 hover:border-[var(--border-strong)] hover:shadow-xl hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/30"
+                className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-300 p-6 text-left hover:border-[var(--border-strong)] hover:shadow-xl hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/30"
               >
                 {/* Ambient glow */}
                 <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-gradient-to-br opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-30" style={{ background: `linear-gradient(135deg, ${stateColor}, transparent)` }} />
@@ -240,7 +240,7 @@ function MLDetection() {
                         <p className="text-[11px] text-[var(--fg-muted)]">v{model.version} {"\u00B7"} {model.type}</p>
                       </div>
                     </div>
-                    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ background: `${stateColor}14`, color: stateColor }}>
+                    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: `${stateColor}14`, color: stateColor }}>
                       <span className="h-1.5 w-1.5 rounded-full" style={{ background: stateColor }} />
                       {model.state}
                     </span>
@@ -282,7 +282,7 @@ function MLDetection() {
           <button onClick={() => setSelectedModel(null)} className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--accent-cyan)] hover:underline">
             <span className="text-[15px]">{"\u2190"}</span> Back to models
           </button>
-          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
             {/* Header */}
             <div className="flex items-start gap-4">
               {(() => {
@@ -332,7 +332,7 @@ function MLDetection() {
                   }}
                 />
               </div>
-              <div className="mt-2 flex justify-between text-[10px] text-[var(--fg-muted)]">
+              <div className="mt-2 flex justify-between text-[11px] text-[var(--fg-muted)]">
                 <span>0%</span><span>50%</span><span>100%</span>
               </div>
             </div>
@@ -354,7 +354,7 @@ function MLDetection() {
 
       {/* ── Anomaly Feed ─────────────────────────────────── */}
       {tab === "anomalies" && (
-        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] overflow-hidden">
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 overflow-hidden">
           {/* Scan header */}
           <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-4">
             <div>
@@ -378,7 +378,7 @@ function MLDetection() {
                     { label: "Events Scored", value: anomalies.scored, color: "var(--accent-cyan)", icon: "\uD83D\uDCCA" },
                     { label: "Anomalies Flagged", value: anomalies.flagged, color: "var(--severity-high)", icon: "\u26A0\uFE0F" },
                   ].map((s) => (
-                    <div key={s.label} className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-5 text-center transition-colors hover:border-[var(--border-default)]">
+                    <div key={s.label} className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-5 text-center transition-all hover:border-[var(--border-default)]">
                       <span className="text-[20px]">{s.icon}</span>
                       <p className="mt-2 text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">{s.label}</p>
                       <p className="mt-1 text-[22px] font-bold tabular-nums" style={{ color: s.color, fontFeatureSettings: '"tnum"' }}>{s.value}</p>
@@ -429,7 +429,7 @@ function MLDetection() {
       {tab === "training" && (
         <div className="space-y-4">
           {/* Auto-training status */}
-          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--status-healthy)] to-[var(--accent-cyan)] text-white">
                 <span className="text-[18px]">{"\u26A1"}</span>
@@ -441,24 +441,24 @@ function MLDetection() {
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
-                <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Status</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Status</p>
                 <p className="mt-1 text-[13px] font-semibold" style={{ color: autoTrainEnabled ? "var(--status-healthy)" : "var(--severity-medium)" }}>
                   {training ? "Retraining..." : autoTrainEnabled ? "Active" : "Paused"}
                 </p>
               </div>
               <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
-                <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Last Trained</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Last Trained</p>
                 <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{lastTrained || "Never"}</p>
               </div>
               <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
-                <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Scheduler</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Scheduler</p>
                 <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">Every ~60s</p>
               </div>
             </div>
           </div>
 
           {/* Manual Retrain */}
-          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-[15px] font-semibold text-[var(--fg-primary)]">Manual Retraining</h2>
@@ -494,7 +494,7 @@ function MLDetection() {
           </div>
 
           {/* Feature Importance */}
-          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
             <h2 className="text-[15px] font-semibold text-[var(--fg-primary)]">Feature Importance</h2>
             <p className="mt-0.5 text-[12px] text-[var(--fg-muted)]">Top contributing signals to model decisions</p>
             <div className="mt-5 space-y-4">

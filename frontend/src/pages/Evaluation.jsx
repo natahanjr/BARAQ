@@ -82,7 +82,7 @@ export default function Evaluation() {
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6">
+      <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-[24px] font-bold tracking-[-0.03em] text-white">
@@ -103,7 +103,7 @@ export default function Evaluation() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
         <p className="text-xs leading-relaxed text-slate-400">
           Runs the 5 attack scenarios plus a normal baseline through the full detection pipeline in
           an isolated temporary database — never touches production data.
@@ -114,7 +114,7 @@ export default function Evaluation() {
 
       {!latest && !error && <Loading label="Loading evaluation results" />}
       {latest && runs.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025] py-16 text-center">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 py-16 text-center">
           <span className="text-4xl">🧪</span>
           <h3 className="mt-4 text-sm font-semibold text-white">No evaluation run yet</h3>
           <p className="mt-1 text-[13px] text-slate-400">
@@ -149,7 +149,7 @@ export default function Evaluation() {
               ].map(([label, value, color]) => (
                 <div
                   key={label}
-                  className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-5 text-center"
+                  className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-5 text-center"
                 >
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500/70">
                     {label}
@@ -160,7 +160,7 @@ export default function Evaluation() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400">
               <span className="h-1 w-1 rounded-full bg-cyan-400" />
               Per-Scenario Results
@@ -168,7 +168,7 @@ export default function Evaluation() {
             <div className="overflow-x-auto">
               <table className="data-table w-full">
                 <thead>
-                  <tr className="border-b border-white/[0.06] text-[10px] uppercase tracking-[0.08em] text-slate-500/70">
+                  <tr className="border-b border-white/[0.06] text-[11px] uppercase tracking-[0.08em] text-slate-500/70">
                     <th className="px-4 py-3 text-left">Scenario</th>
                     <th className="px-4 py-3 text-left">Samples</th>
                     <th className="px-4 py-3 text-left">TP</th>
@@ -184,7 +184,7 @@ export default function Evaluation() {
                 </thead>
                 <tbody>
                   {runs.map((r) => (
-                    <tr key={r.id} className="border-b border-white/[0.04] transition-colors hover:bg-white/[0.02]">
+                    <tr key={r.id} className="border-b border-white/[0.04] transition-all hover:bg-white/[0.02]">
                       <td className="px-4 py-2.5 text-xs font-medium text-slate-300">
                         {SCENARIO_LABELS[r.scenario] || r.scenario}
                       </td>
@@ -206,7 +206,7 @@ export default function Evaluation() {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
               <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400">
                 <span className="h-1 w-1 rounded-full bg-cyan-400" />
                 Per-scenario precision & recall
@@ -236,7 +236,7 @@ export default function Evaluation() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
               <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400">
                 <span className="h-1 w-1 rounded-full bg-cyan-400" />
                 Detection time per scenario
@@ -262,7 +262,7 @@ export default function Evaluation() {
           </div>
 
           {history && history.items.length > 0 && (
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
               <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400">
                 <span className="h-1 w-1 rounded-full bg-cyan-400" />
                 Run history (last {history.items.length})

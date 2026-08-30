@@ -9,10 +9,12 @@
   ``opentelemetry`` SDK is installed. Without either, it is a no-op - the
   platform never hard-depends on OTel.
 """
+
 from __future__ import annotations
 
 import logging
 import time
+from datetime import UTC
 
 from sqlalchemy import func, select
 
@@ -48,21 +50,22 @@ def _slo_freshness(session) -> tuple[float, float]:
     Fresh events are those whose ``timestamp`` is at most 24 h behind the
     newest event in the database. A database with no events scores 0.0.
     """
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from backend.database.models import NormalizedEvent
 
     newest = session.scalar(select(func.max(NormalizedEvent.timestamp)))
     if not newest:
         return 0.0, 0.0
-    lag = max(0.0, (datetime.now(timezone.utc) - newest).total_seconds() / 3600.0)
+    lag = max(0.0, (datetime.now(UTC) - newest).total_seconds() / 3600.0)
     cutoff = newest - timedelta(hours=24)
     fresh = int(
         session.scalar(
             select(func.count(NormalizedEvent.id)).where(
                 NormalizedEvent.timestamp >= cutoff
             )
-        ) or 0
+        )
+        or 0
     )
     total = int(session.scalar(select(func.count(NormalizedEvent.id))) or 0)
     return (fresh / total if total else 0.0), lag
@@ -74,15 +77,14 @@ def _slo_alert_volume(session, hours: int) -> float:
     Burn is measured as the share of alerts still open - a high burn means
     the analyst queue is backing up. Returns 1.0 when no alerts exist.
     """
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from backend.database.models import Alert
 
-    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    since = datetime.now(UTC) - timedelta(hours=hours)
     total = int(
-        session.scalar(
-            select(func.count(Alert.id)).where(Alert.created_at >= since)
-        ) or 0
+        session.scalar(select(func.count(Alert.id)).where(Alert.created_at >= since))
+        or 0
     )
     if total == 0:
         return 1.0
@@ -91,7 +93,8 @@ def _slo_alert_volume(session, hours: int) -> float:
             select(func.count(Alert.id)).where(
                 Alert.created_at >= since, Alert.status == "open"
             )
-        ) or 0
+        )
+        or 0
     )
     return 1.0 - (open_alerts / total)
 
@@ -146,8 +149,12 @@ def setup_observability() -> bool:
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[import-not-found]
             OTLPSpanExporter,
         )
-        from opentelemetry.sdk.resources import Resource  # type: ignore[import-not-found]
-        from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-not-found]
+        from opentelemetry.sdk.resources import (
+            Resource,  # type: ignore[import-not-found]
+        )
+        from opentelemetry.sdk.trace import (
+            TracerProvider,  # type: ignore[import-not-found]
+        )
         from opentelemetry.sdk.trace.export import (  # type: ignore[import-not-found]
             BatchSpanProcessor,
         )
@@ -162,6 +169,8 @@ def setup_observability() -> bool:
         logger.info("OpenTelemetry traces enabled -> %s", OTEL_ENDPOINT)
         _otel_started = True
         return True
-    except Exception as exc:  # noqa: BLE001 - optional feature, never fatal
-        logger.warning("OpenTelemetry disabled (%s); install opentelemetry-* to enable", exc)
+    except Exception as exc:
+        logger.warning(
+            "OpenTelemetry disabled (%s); install opentelemetry-* to enable", exc
+        )
         return False

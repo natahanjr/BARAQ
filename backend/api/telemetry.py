@@ -7,13 +7,14 @@ Read/write happens against the v2 telemetry table only. In production the
 ingest endpoint is read-only-fails (the v2 pipeline is not live yet) - see
 config ``TELEMETRY_V2_ENABLED``.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-import backend.config as config
+from backend import config
 from backend.database.connection import get_db
 from backend.security import require_auth
 from backend.telemetry.ingestion.pipeline import ingest
@@ -32,6 +33,7 @@ def __getattr__(name: str):
     if name == "TELEMETRY_V2_ENABLED":
         return config.TELEMETRY_V2_ENABLED
     raise AttributeError(name)
+
 
 router = APIRouter(
     prefix="/api/v2/telemetry",

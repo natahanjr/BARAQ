@@ -40,6 +40,7 @@ Usage:
 The script is read-only: it never writes config; it only prints the
 recommended thresholds so the operator can set them (env or config).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -48,7 +49,7 @@ import json
 import os
 import random
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -59,14 +60,14 @@ os.environ.setdefault(
 )
 os.environ.setdefault("BARAQ_SKIP_SECRET_GEN", "1")
 
-from sqlalchemy import create_engine  # noqa: E402
-from sqlalchemy.orm import sessionmaker  # noqa: E402
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-from backend.config import DATABASE_URL  # noqa: E402
-from backend.database.connection import normalize_database_url  # noqa: E402
-from backend.database.models import Base  # noqa: E402
-from backend.detection.rules_engine import build_rules  # noqa: E402
-from backend.evaluation.holdout import _randomize_records  # noqa: E402
+from backend.config import DATABASE_URL
+from backend.database.connection import normalize_database_url
+from backend.database.models import Base
+from backend.detection.rules_engine import build_rules
+from backend.evaluation.holdout import _randomize_records
 
 #: scenario -> rule id expected to fire (the labelled attack corpus).
 EXPECTED_RULE = {
@@ -142,7 +143,7 @@ def _anchored_at_now(records: list[dict]) -> list[dict]:
             newest = dt
     if newest is None:
         return records
-    offset = (datetime.now(timezone.utc) - newest).total_seconds() - 2
+    offset = (datetime.now(UTC) - newest).total_seconds() - 2
     if offset <= 0:
         return records
     shifted = []
@@ -179,7 +180,9 @@ def _new_session():
     base_url = make_url(normalize_database_url(DATABASE_URL))
     db_name = f"baraq_scratch_{uuid.uuid4().hex[:12]}"
 
-    admin = create_engine(base_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    admin = create_engine(
+        base_url.set(database="postgres"), isolation_level="AUTOCOMMIT"
+    )
     try:
         with admin.connect() as conn:
             conn.execute(sa_text(f'CREATE DATABASE "{db_name}"'))
@@ -199,25 +202,31 @@ def _drop_scratch() -> None:
     from sqlalchemy.engine import make_url
 
     base_url = make_url(normalize_database_url(DATABASE_URL))
-    admin = create_engine(base_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    admin = create_engine(
+        base_url.set(database="postgres"), isolation_level="AUTOCOMMIT"
+    )
     try:
         while _SCRATCH:
             session, engine, db_name = _SCRATCH.pop()
             try:
                 session.close()
                 engine.dispose()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
             try:
                 with admin.connect() as conn:
-                    conn.execute(sa_text(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)'))
-            except Exception:  # noqa: BLE001
+                    conn.execute(
+                        sa_text(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)')
+                    )
+            except Exception:
                 pass
     finally:
         admin.dispose()
 
 
-def _build_attack_sessions(seed: int, variants: int, corpus_path: str | None) -> list[list[dict]]:
+def _build_attack_sessions(
+    seed: int, variants: int, corpus_path: str | None
+) -> list[list[dict]]:
     """One independent record list per randomized attack-corpus variant."""
     from tests import fixtures
 
@@ -226,7 +235,12 @@ def _build_attack_sessions(seed: int, variants: int, corpus_path: str | None) ->
             records = [json.loads(line) for line in fh if line.strip()]
         base = records
     else:
-        base = [rec for name in EXPECTED_RULE if hasattr(fixtures, name) for rec in getattr(fixtures, name)()]
+        base = [
+            rec
+            for name in EXPECTED_RULE
+            if hasattr(fixtures, name)
+            for rec in getattr(fixtures, name)()
+        ]
 
     variants = max(1, variants)
     sessions: list[list[dict]] = []
@@ -260,7 +274,7 @@ def _evaluate(session, rules) -> set[str]:
     for rule in rules:
         try:
             findings.extend(rule.evaluate(10))
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
     return {f.rule for f in findings}
 
@@ -358,11 +372,17 @@ def _bayesian_search(keys, grids, attack_sessions, variants, budget, seed):
         x = []
         for key, value in zip(keys, combo):
             levels = grids[key]
-            x.append(0.0 if len(levels) < 2 else levels.index(value) / (len(levels) - 1))
+            x.append(
+                0.0 if len(levels) < 2 else levels.index(value) / (len(levels) - 1)
+            )
         return x
 
     rng = random.Random(seed)
-    corners = [c for c in combos if all(v in (grids[k][0], grids[k][-1]) for k, v in zip(keys, c))]
+    corners = [
+        c
+        for c in combos
+        if all(v in (grids[k][0], grids[k][-1]) for k, v in zip(keys, c))
+    ]
     rng.shuffle(corners)
     # Initialization covers grid corners only; anything beyond stays for
     # surrogate-guided evaluations, otherwise the GP never gets to pick.
@@ -418,16 +438,33 @@ def _bayesian_search(keys, grids, attack_sessions, variants, budget, seed):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--variants", type=int, default=3, help="randomized attack-corpus variants (1 = no randomization)")
-    parser.add_argument("--seed", type=int, default=20260806, help="RNG seed for attack randomization")
-    parser.add_argument("--corpus", type=str, default="", help="external labeled attack corpus (JSONL)")
-    parser.add_argument("--bayesian", type=int, default=0,
-                        help="use GP expected-improvement search over the joint grid with this many evaluations (default: exhaustive grid)")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--variants",
+        type=int,
+        default=3,
+        help="randomized attack-corpus variants (1 = no randomization)",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=20260806, help="RNG seed for attack randomization"
+    )
+    parser.add_argument(
+        "--corpus", type=str, default="", help="external labeled attack corpus (JSONL)"
+    )
+    parser.add_argument(
+        "--bayesian",
+        type=int,
+        default=0,
+        help="use GP expected-improvement search over the joint grid with this many evaluations (default: exhaustive grid)",
+    )
     args = parser.parse_args()
 
     try:
-        attack_sessions = _build_attack_sessions(args.seed, args.variants, args.corpus or None)
+        attack_sessions = _build_attack_sessions(
+            args.seed, args.variants, args.corpus or None
+        )
         _sweep(args, attack_sessions)
     finally:
         _drop_scratch()
@@ -436,22 +473,34 @@ def main() -> int:
 
 def _sweep(args, attack_sessions: list[list[dict]]) -> None:
     keys = [f"{rule}__{param}" for rule, params in GRID.items() for param in params]
-    grids = {f"{rule}__{param}": vals for rule, params in GRID.items() for param, vals in params.items()}
+    grids = {
+        f"{rule}__{param}": vals
+        for rule, params in GRID.items()
+        for param, vals in params.items()
+    }
     combos = _lattice(keys, grids)
 
     variants = len(attack_sessions)
     best = None
     best_zero_fp = None
-    print(f"attack variants: {variants} (seed {args.seed}); benign FP corpus: {', '.join(BENIGN_BUILDERS)}")
+    print(
+        f"attack variants: {variants} (seed {args.seed}); benign FP corpus: {', '.join(BENIGN_BUILDERS)}"
+    )
     if args.bayesian > 0:
-        print(f"Bayesian tuning: GP expected-improvement, budget {args.bayesian} of {len(combos)} joint-grid combinations")
+        print(
+            f"Bayesian tuning: GP expected-improvement, budget {args.bayesian} of {len(combos)} joint-grid combinations"
+        )
         best, best_zero_fp, used, total = _bayesian_search(
             keys, grids, attack_sessions, variants, args.bayesian, args.seed
         )
-        print(f"\nEvaluated {used} of {total} joint-grid combinations "
-              f"({100.0 * used / max(total, 1):.1f}% of the exhaustive lattice).")
+        print(
+            f"\nEvaluated {used} of {total} joint-grid combinations "
+            f"({100.0 * used / max(total, 1):.1f}% of the exhaustive lattice)."
+        )
     else:
-        print(f"{'combination':80s} {'TP':>3} {'FP':>3} {'FN':>3} {'P':>5} {'R':>5} {'F1':>5}")
+        print(
+            f"{'combination':80s} {'TP':>3} {'FP':>3} {'FN':>3} {'P':>5} {'R':>5} {'F1':>5}"
+        )
         for combo in combos:
             overrides = _combo_overrides(keys, combo)
             # Fresh benign session per combo: anchored timestamps keep the FP
@@ -461,7 +510,9 @@ def _sweep(args, attack_sessions: list[list[dict]]) -> None:
             benign_session.close()
             precision, recall, f1 = _metrics(tp, fp, fn, variants)
             label = " ".join(f"{k.split('__')[1]}={v}" for k, v in zip(keys, combo))
-            print(f"{label:80s} {tp:3d} {fp:3d} {fn:3d} {precision:5.2f} {recall:5.2f} {f1:5.2f}")
+            print(
+                f"{label:80s} {tp:3d} {fp:3d} {fn:3d} {precision:5.2f} {recall:5.2f} {f1:5.2f}"
+            )
             best, best_zero_fp = _track(combo, tp, fp, fn, variants, best, best_zero_fp)
 
     def _render(combo) -> dict[str, dict]:
@@ -482,7 +533,6 @@ def _sweep(args, attack_sessions: list[list[dict]]) -> None:
         print("\nNo combination achieved zero false positives on the benign corpus.")
 
     print("\nPer-rule sweeps (each rule tuned independently, others at defaults):")
-    recommended: dict[str, dict] = {}
     for rule, params in PER_RULE_GRID.items():
         rkeys = [f"{rule}__{p}" for p in params]
         rgrids = {f"{rule}__{p}": vals for p, vals in params.items()}
@@ -496,7 +546,11 @@ def _sweep(args, attack_sessions: list[list[dict]]) -> None:
             benign_session.close()
             precision = tp / (tp + fp * variants) if (tp + fp * variants) else 0.0
             recall = tp / (tp + fn) if (tp + fn) else 0.0
-            f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+            f1 = (
+                2 * precision * recall / (precision + recall)
+                if precision + recall
+                else 0.0
+            )
             label = " ".join(f"{p}={v}" for p, v in zip(rkeys, combo))
             print(f"  [{rule}] {label:60s} TP {tp:2d} FP {fp} FN {fn:2d} F1 {f1:.2f}")
             if rule_best is None or f1 > rule_best[0]:
@@ -505,10 +559,14 @@ def _sweep(args, attack_sessions: list[list[dict]]) -> None:
                 rule_best_zero = (combo, recall)
         if rule_best:
             f1s, combo = rule_best
-            print(f"  -> best {rule} F1 ({f1s:.4f}): {_combo_overrides(rkeys, combo)[rule]}")
+            print(
+                f"  -> best {rule} F1 ({f1s:.4f}): {_combo_overrides(rkeys, combo)[rule]}"
+            )
         if rule_best_zero:
             combo, recall = rule_best_zero
-            print(f"  -> best {rule} recall at zero FP ({recall:.4f}): {_combo_overrides(rkeys, combo)[rule]}")
+            print(
+                f"  -> best {rule} recall at zero FP ({recall:.4f}): {_combo_overrides(rkeys, combo)[rule]}"
+            )
 
 
 if __name__ == "__main__":

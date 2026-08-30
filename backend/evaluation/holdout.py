@@ -29,11 +29,12 @@ DB is never touched):
   positive when it is linked to an alert (rules), when ``ml_score > 0.5``
   (ML), or either (hybrid).
 """
+
 from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -41,7 +42,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from backend.config import DATABASE_URL
 from backend.database.connection import normalize_database_url
 from backend.database.models import (
-    Alert,
     AlertEventLink,
     Base,
     EvaluationRun,
@@ -95,7 +95,12 @@ SCENARIO_RULE = {
 }
 
 #: Connection-record scenarios: detection is scenario-level (rule fired).
-CONNECTION_SCENARIOS = {"port_scan", "lateral_movement", "ml_network_exfil", "ml_lateral_c2"}
+CONNECTION_SCENARIOS = {
+    "port_scan",
+    "lateral_movement",
+    "ml_network_exfil",
+    "ml_lateral_c2",
+}
 
 #: Root-cause guidance for hold-out scenarios missed by every detection layer.
 FN_GUIDANCE = {
@@ -133,15 +138,19 @@ def _fn_debug_report(runs: list[dict]) -> list[dict]:
             cause = "rule-missed"
         else:
             cause = "both-layers-missed"
-        out.append({
-            "scenario": r["scenario"],
-            "mitre_rule": r["rule"],
-            "rule_tp": r["rule_tp"],
-            "ml_tp": r["ml_tp"],
-            "hybrid_tp": r["hybrid_tp"],
-            "root_cause": cause,
-            "remediation": FN_GUIDANCE.get(r["rule"], "add a dedicated detection rule"),
-        })
+        out.append(
+            {
+                "scenario": r["scenario"],
+                "mitre_rule": r["rule"],
+                "rule_tp": r["rule_tp"],
+                "ml_tp": r["ml_tp"],
+                "hybrid_tp": r["hybrid_tp"],
+                "root_cause": cause,
+                "remediation": FN_GUIDANCE.get(
+                    r["rule"], "add a dedicated detection rule"
+                ),
+            }
+        )
     return out
 
 
@@ -159,7 +168,9 @@ def _empty_session() -> tuple[Session, object, str]:
     base_url = make_url(normalize_database_url(DATABASE_URL))
     db_name = f"baraq_scratch_{uuid.uuid4().hex[:12]}"
 
-    admin = create_engine(base_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    admin = create_engine(
+        base_url.set(database="postgres"), isolation_level="AUTOCOMMIT"
+    )
     try:
         with admin.connect() as conn:
             conn.execute(sa_text(f'CREATE DATABASE "{db_name}"'))
@@ -176,7 +187,7 @@ def _cleanup(session: Session, engine, path: str) -> None:
     try:
         session.close()
         engine.dispose()
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     if not path:
         return
@@ -189,20 +200,25 @@ def _drop_scratch_postgres(db_name: str) -> None:
 
     try:
         base = make_url(normalize_database_url(DATABASE_URL))
-        admin = create_engine(base.set(database="postgres"), isolation_level="AUTOCOMMIT")
+        admin = create_engine(
+            base.set(database="postgres"), isolation_level="AUTOCOMMIT"
+        )
         try:
             with admin.connect() as conn:
-                conn.execute(sa_text(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)'))
+                conn.execute(
+                    sa_text(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)')
+                )
         finally:
             admin.dispose()
         logger.info("Dropped scratch hold-out database %s", db_name)
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning("Could not drop scratch hold-out database %s", db_name)
 
 
 def _fixture_records(scenario: str) -> list[dict]:
     """Deterministic raw records for a scenario (test fixtures, not a simulator)."""
     from tests import fixtures
+
     mapping = {
         "brute_force": fixtures.brute_force,
         "powershell": fixtures.suspicious_powershell,
@@ -264,7 +280,9 @@ def _randomize_records(records: list[dict], rng) -> list[dict]:
                 dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
                 # Keep the jitter inside the tightest rule window (port-scan
                 # detection uses 120 s), so randomized runs stay detectable.
-                r["timestamp"] = (dt + timedelta(seconds=rng.randint(-8, 8))).isoformat()
+                r["timestamp"] = (
+                    dt + timedelta(seconds=rng.randint(-8, 8))
+                ).isoformat()
             except ValueError:
                 pass
         # Address noise only on attributes that do NOT form rule grouping keys:
@@ -287,7 +305,7 @@ def _real_telemetry() -> list[dict]:
 
     try:
         return CollectorManager().collect()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Real telemetry collection failed: %s", exc)
         return []
 
@@ -312,11 +330,16 @@ def _persist(db: Session, records: list[dict]) -> tuple[list[int], list[int], in
         source = record.get("source")
         if source == "network":
             conn = NetworkConnection(
-                pid=record.get("pid", 0), process=record.get("process", ""),
-                local_ip=record.get("local_ip", ""), local_port=record.get("local_port", 0),
-                remote_ip=record.get("remote_ip", ""), remote_port=record.get("remote_port", 0),
-                state=record.get("state", ""), is_listening=record.get("is_listening", False),
-                bytes_sent=record.get("bytes_sent", 0), bytes_recv=record.get("bytes_recv", 0),
+                pid=record.get("pid", 0),
+                process=record.get("process", ""),
+                local_ip=record.get("local_ip", ""),
+                local_port=record.get("local_port", 0),
+                remote_ip=record.get("remote_ip", ""),
+                remote_port=record.get("remote_port", 0),
+                state=record.get("state", ""),
+                is_listening=record.get("is_listening", False),
+                bytes_sent=record.get("bytes_sent", 0),
+                bytes_recv=record.get("bytes_recv", 0),
                 duration_seconds=record.get("duration_seconds", 0.0),
                 observed_at=Normalizer._safe_ts(record.get("timestamp")),
             )
@@ -324,53 +347,80 @@ def _persist(db: Session, records: list[dict]) -> tuple[list[int], list[int], in
             db.flush()
             conn_ids.append(conn.id)
         elif source == "process":
-            db.add(ProcessRecord(
-                pid=record["pid"], ppid=record.get("ppid", 0),
-                name=record.get("name", ""), path=record.get("path", ""),
-                command_line=(record.get("raw") or {}).get("cmdline", ""),
-                parent_name="", user=record.get("user", ""),
-                is_new=record.get("is_new", False),
-                observed_at=Normalizer._safe_ts(record.get("timestamp")),
-            ))
+            db.add(
+                ProcessRecord(
+                    pid=record["pid"],
+                    ppid=record.get("ppid", 0),
+                    name=record.get("name", ""),
+                    path=record.get("path", ""),
+                    command_line=(record.get("raw") or {}).get("cmdline", ""),
+                    parent_name="",
+                    user=record.get("user", ""),
+                    is_new=record.get("is_new", False),
+                    observed_at=Normalizer._safe_ts(record.get("timestamp")),
+                )
+            )
         elif source == "dns":
-            db.add(DnsQuery(
-                process=record.get("process", ""), pid=record.get("pid", 0),
-                query=record.get("query", ""), response=record.get("response", ""),
-                response_size=record.get("response_size", 0),
-                observed_at=Normalizer._safe_ts(record.get("timestamp")),
-            ))
+            db.add(
+                DnsQuery(
+                    process=record.get("process", ""),
+                    pid=record.get("pid", 0),
+                    query=record.get("query", ""),
+                    response=record.get("response", ""),
+                    response_size=record.get("response_size", 0),
+                    observed_at=Normalizer._safe_ts(record.get("timestamp")),
+                )
+            )
         elif source == "http":
-            db.add(HttpRequest(
-                process=record.get("process", ""), pid=record.get("pid", 0),
-                method=record.get("method", "GET"), url=record.get("url", ""),
-                host=record.get("host", ""), status_code=record.get("status_code", 0),
-                request_body_size=record.get("request_body_size", 0),
-                response_body_size=record.get("response_body_size", 0),
-                observed_at=Normalizer._safe_ts(record.get("timestamp")),
-            ))
+            db.add(
+                HttpRequest(
+                    process=record.get("process", ""),
+                    pid=record.get("pid", 0),
+                    method=record.get("method", "GET"),
+                    url=record.get("url", ""),
+                    host=record.get("host", ""),
+                    status_code=record.get("status_code", 0),
+                    request_body_size=record.get("request_body_size", 0),
+                    response_body_size=record.get("response_body_size", 0),
+                    observed_at=Normalizer._safe_ts(record.get("timestamp")),
+                )
+            )
         elif source == "email":
-            db.add(EmailMessage(
-                sender=record.get("sender", ""), recipient=record.get("recipient", ""),
-                subject=record.get("subject", ""), body=record.get("body", ""),
-                attachment_types=record.get("attachment_types", ""),
-                ip_address=record.get("ip_address", ""),
-                received_at=Normalizer._safe_ts(record.get("timestamp")),
-            ))
+            db.add(
+                EmailMessage(
+                    sender=record.get("sender", ""),
+                    recipient=record.get("recipient", ""),
+                    subject=record.get("subject", ""),
+                    body=record.get("body", ""),
+                    attachment_types=record.get("attachment_types", ""),
+                    ip_address=record.get("ip_address", ""),
+                    received_at=Normalizer._safe_ts(record.get("timestamp")),
+                )
+            )
         elif source == "usb":
-            db.add(UsbDevice(
-                device_name=record.get("device_name", ""), device_id=record.get("device_id", ""),
-                vendor=record.get("vendor", ""), serial=record.get("serial", ""),
-                inserted_at=Normalizer._safe_ts(record.get("timestamp")),
-            ))
+            db.add(
+                UsbDevice(
+                    device_name=record.get("device_name", ""),
+                    device_id=record.get("device_id", ""),
+                    vendor=record.get("vendor", ""),
+                    serial=record.get("serial", ""),
+                    inserted_at=Normalizer._safe_ts(record.get("timestamp")),
+                )
+            )
         elif source == "malware":
-            db.add(FileScan(
-                file_path=record.get("file_path", ""), file_name=record.get("file_name", ""),
-                sha256=record.get("sha256", ""), md5=record.get("md5", ""),
-                size=record.get("size", 0), signed=record.get("signed", False),
-                is_malicious=record.get("is_malicious", False),
-                signature_name=record.get("signature_name", ""),
-                scanned_at=Normalizer._safe_ts(record.get("timestamp")),
-            ))
+            db.add(
+                FileScan(
+                    file_path=record.get("file_path", ""),
+                    file_name=record.get("file_name", ""),
+                    sha256=record.get("sha256", ""),
+                    md5=record.get("md5", ""),
+                    size=record.get("size", 0),
+                    signed=record.get("signed", False),
+                    is_malicious=record.get("is_malicious", False),
+                    signature_name=record.get("signature_name", ""),
+                    scanned_at=Normalizer._safe_ts(record.get("timestamp")),
+                )
+            )
         else:
             event = NormalizedEvent(**normalizer.normalize(record))
             db.add(event)
@@ -457,7 +507,7 @@ def _latency_summary(latencies: list[float]) -> dict:
     n = len(ordered)
 
     def percentile(p: float) -> float:
-        idx = min(n - 1, max(0, int(round(p * (n - 1)))))
+        idx = min(n - 1, max(0, round(p * (n - 1))))
         return round(ordered[idx], 2)
 
     return {
@@ -492,12 +542,14 @@ def _ml_scores(db: Session, event_ids: list[int], detector) -> dict[int, float]:
         behavior = "process" if int(event.event_id) in PROCESS_EVENTS else "login"
         try:
             scores[event_id] = detector.score_event_for_behavior(behavior, features)
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
     return scores
 
 
-def _network_ml_scores(db: Session, detector, conn_ids: list[int] | None = None) -> dict[str, float]:
+def _network_ml_scores(
+    db: Session, detector, conn_ids: list[int] | None = None
+) -> dict[str, float]:
     """Per-remote-IP anomaly scores for the network stream.
 
     Aggregates connections (optionally restricted to ``conn_ids``) the same
@@ -506,17 +558,19 @@ def _network_ml_scores(db: Session, detector, conn_ids: list[int] | None = None)
     """
     from sqlalchemy import func
 
-    if detector is None or not detector.is_ready or "network" not in getattr(detector, "models", {}):
+    if (
+        detector is None
+        or not detector.is_ready
+        or "network" not in getattr(detector, "models", {})
+    ):
         return {}
-    query = (
-        select(
-            NetworkConnection.remote_ip,
-            func.count(NetworkConnection.id),
-            func.count(func.distinct(NetworkConnection.remote_port)),
-            func.sum(NetworkConnection.bytes_sent),
-            func.sum(NetworkConnection.bytes_recv),
-            func.avg(NetworkConnection.duration_seconds),
-        )
+    query = select(
+        NetworkConnection.remote_ip,
+        func.count(NetworkConnection.id),
+        func.count(func.distinct(NetworkConnection.remote_port)),
+        func.sum(NetworkConnection.bytes_sent),
+        func.sum(NetworkConnection.bytes_recv),
+        func.avg(NetworkConnection.duration_seconds),
     )
     if conn_ids:
         query = query.where(NetworkConnection.id.in_(conn_ids))
@@ -526,11 +580,13 @@ def _network_ml_scores(db: Session, detector, conn_ids: list[int] | None = None)
         try:
             scores[remote_ip or "unknown"] = detector.score_network_connection(
                 remote_ip or "unknown",
-                int(count), int(distinct_ports),
-                int(bytes_sent or 0), int(bytes_recv or 0),
+                int(count),
+                int(distinct_ports),
+                int(bytes_sent or 0),
+                int(bytes_recv or 0),
                 float(duration or 0.0),
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
     return scores
 
@@ -542,7 +598,7 @@ def _train_detector(train_db: Session):
     detector = MLAnomalyDetector()
     try:
         result = detector.train(train_db, hours=24, persist=False)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Hold-out ML training failed: %s", exc)
         return None
     if not result.get("trained"):
@@ -597,13 +653,18 @@ def _detection_stats(
     if scenario in CONNECTION_SCENARIOS:
         ml_tp = len(
             [
-                ip for ip in (conn_ips or [])
+                ip
+                for ip in (conn_ips or [])
                 if (network_ml or {}).get(ip, 0.0) > network_threshold
             ]
         )
     else:
         ml_tp = len(
-            [e for e in event_ids if ml_scores.get(e, 0.0) > (ml_thresholds or {}).get(e, 0.5)]
+            [
+                e
+                for e in event_ids
+                if ml_scores.get(e, 0.0) > (ml_thresholds or {}).get(e, 0.5)
+            ]
         )
 
     # Hybrid: either layer catches the scenario. For aggregate (connection)
@@ -611,13 +672,15 @@ def _detection_stats(
     # remote-IP bucket is flagged and the rule did not fire.
     if scenario in CONNECTION_SCENARIOS:
         ml_caught = any(
-            (network_ml or {}).get(ip, 0.0) > network_threshold for ip in (conn_ips or [])
+            (network_ml or {}).get(ip, 0.0) > network_threshold
+            for ip in (conn_ips or [])
         )
         hybrid_tp = n_positives if (rule_fired or ml_caught) else 0
     else:
         event_union = len(
             [
-                e for e in event_ids
+                e
+                for e in event_ids
                 if e in linked_event_ids
                 or ml_scores.get(e, 0.0) > (ml_thresholds or {}).get(e, 0.5)
             ]
@@ -654,7 +717,7 @@ def run_holdout_evaluation(
             import random
 
             rng = random.Random(seed)
-        except Exception:  # noqa: BLE001
+        except Exception:
             rng = None
             randomize = False
 
@@ -674,11 +737,17 @@ def run_holdout_evaluation(
 
         # ---- Phase B: test split ------------------------------------------
         # Negative class: real host telemetry (true negatives).
-        baseline_records = _real_telemetry() if use_real_baseline else fixtures.benign_baseline(60)
-        baseline_event_ids, baseline_conn_ids, n_baseline = _persist(test_db, baseline_records)
+        baseline_records = (
+            _real_telemetry() if use_real_baseline else fixtures.benign_baseline(60)
+        )
+        baseline_event_ids, baseline_conn_ids, n_baseline = _persist(
+            test_db, baseline_records
+        )
         logger.info(
             "Hold-out: baseline = %d real telemetry records (%d events, %d conns)",
-            len(baseline_records), len(baseline_event_ids), len(baseline_conn_ids),
+            len(baseline_records),
+            len(baseline_event_ids),
+            len(baseline_conn_ids),
         )
 
         # Positive class: hold-out (unseen) attack scenarios.
@@ -691,10 +760,13 @@ def run_holdout_evaluation(
             if rng is not None:
                 records = _randomize_records(records, rng)
             event_ids, conn_ids, total = _persist(test_db, records)
-            conn_ips = sorted({
-                r["remote_ip"] for r in records
-                if r.get("source") == "network" and r.get("remote_ip")
-            })
+            conn_ips = sorted(
+                {
+                    r["remote_ip"]
+                    for r in records
+                    if r.get("source") == "network" and r.get("remote_ip")
+                }
+            )
             per_scenario[scenario] = {
                 "event_ids": event_ids,
                 "conn_ids": conn_ids,
@@ -722,7 +794,8 @@ def run_holdout_evaluation(
             }
             ml_fp = len(
                 [
-                    e for e in baseline_event_ids
+                    e
+                    for e in baseline_event_ids
                     if _ml_scores(test_db, [e], detector).get(e, 0.0)
                     > _ml_threshold_for(detector, e)
                 ]
@@ -730,7 +803,9 @@ def run_holdout_evaluation(
             network_ml = _network_ml_scores(test_db, detector)
             network_threshold = float((detector.thresholds or {}).get("network", 0.5))
             baseline_net = _network_ml_scores(test_db, detector, baseline_conn_ids)
-            ml_fp += len([ip for ip, s in baseline_net.items() if s > network_threshold])
+            ml_fp += len(
+                [ip for ip, s in baseline_net.items() if s > network_threshold]
+            )
 
         # ---- Per-scenario + overall metrics --------------------------------
         runs: list[dict] = []
@@ -741,33 +816,43 @@ def run_holdout_evaluation(
             info = per_scenario[scenario]
             stats = _detection_stats(
                 info["n_positives"],
-                detection["fired_rules"], detection["linked_event_ids"],
-                ml_scores, scenario,
-                info["event_ids"], info["conn_ids"],
+                detection["fired_rules"],
+                detection["linked_event_ids"],
+                ml_scores,
+                scenario,
+                info["event_ids"],
+                info["conn_ids"],
                 ml_thresholds,
-                network_ml, info["conn_ips"], network_threshold,
+                network_ml,
+                info["conn_ips"],
+                network_threshold,
             )
             rule_tp += stats["rule_tp"]
             ml_tp += stats["ml_tp"]
             hybrid_tp += stats["hybrid_tp"]
-            runs.append({
-                "scenario": scenario,
-                "rule": SCENARIO_RULE.get(scenario),
-                "n_positives": stats["n_positives"],
-                "rule_detected": stats["rule_detected"],
-                "rule_tp": stats["rule_tp"],
-                "ml_tp": stats["ml_tp"],
-                "hybrid_tp": stats["hybrid_tp"],
-            })
+            runs.append(
+                {
+                    "scenario": scenario,
+                    "rule": SCENARIO_RULE.get(scenario),
+                    "n_positives": stats["n_positives"],
+                    "rule_detected": stats["rule_detected"],
+                    "rule_tp": stats["rule_tp"],
+                    "ml_tp": stats["ml_tp"],
+                    "hybrid_tp": stats["hybrid_tp"],
+                }
+            )
             if info["event_ids"] or info["conn_ips"]:
                 ml_scoped.append(scenario)
                 ml_scoped_attack_units += (
-                    len(info["conn_ips"]) if scenario in CONNECTION_SCENARIOS
+                    len(info["conn_ips"])
+                    if scenario in CONNECTION_SCENARIOS
                     else len(info["event_ids"])
                 )
 
         # Rule-layer FPs: real-baseline events linked to alerts.
-        rule_fp = len([e for e in baseline_event_ids if e in detection["linked_event_ids"]])
+        rule_fp = len(
+            [e for e in baseline_event_ids if e in detection["linked_event_ids"]]
+        )
 
         # ML-layer metrics are computed over the population the ML streams can
         # actually score (login/process events + remote-IP network buckets),
@@ -775,32 +860,47 @@ def run_holdout_evaluation(
         # the ML recall an *honest* number for the attack types it models.
         baseline_net_units = 0
         if detector is not None:
-            baseline_net_units = len(_network_ml_scores(test_db, detector, baseline_conn_ids))
+            baseline_net_units = len(
+                _network_ml_scores(test_db, detector, baseline_conn_ids)
+            )
         baseline_ml_units = max(1, len(baseline_event_ids) + baseline_net_units)
         ml_pos = ml_scoped_attack_units
         ml_tn = max(0, baseline_ml_units - ml_fp)
         ml_fn = max(0, ml_pos - ml_tp)
 
-        rule_metrics = _metrics(rule_tp, rule_fp, max(0, n_baseline - rule_fp), n_positives - rule_tp)
-        ml_metrics = _metrics(ml_tp, ml_fp, ml_tn, ml_fn) if detector is not None else None
+        rule_metrics = _metrics(
+            rule_tp, rule_fp, max(0, n_baseline - rule_fp), n_positives - rule_tp
+        )
+        ml_metrics = (
+            _metrics(ml_tp, ml_fp, ml_tn, ml_fn) if detector is not None else None
+        )
         hybrid_metrics = _metrics(
-            hybrid_tp, rule_fp + ml_fp,
-            max(0, n_baseline - rule_fp - ml_fp), n_positives - hybrid_tp,
+            hybrid_tp,
+            rule_fp + ml_fp,
+            max(0, n_baseline - rule_fp - ml_fp),
+            n_positives - hybrid_tp,
         )
 
         result = {
             "methodology": {
                 "training_split": TRAIN_SCENARIOS,
                 "holdout_split": HOLDOUT_SCENARIOS,
-                "negative_class": "real-host-telemetry" if use_real_baseline else "synthetic-baseline",
+                "negative_class": (
+                    "real-host-telemetry" if use_real_baseline else "synthetic-baseline"
+                ),
                 "train_test_separation": "ML trained only on training split; test set never seen",
                 "ml_scope": "ML drawn from login/process events + network IP buckets",
                 "ml_scoped_scenarios": ml_scoped,
                 "n_baseline_records": n_baseline,
-                "randomization": "seeded-domain-randomization" if randomize else "deterministic",
+                "randomization": (
+                    "seeded-domain-randomization" if randomize else "deterministic"
+                ),
                 "randomization_seed": seed if randomize else None,
             },
-            "rule_layer": {**rule_metrics, "detection_time_ms": round(detection["elapsed_ms"], 2)},
+            "rule_layer": {
+                **rule_metrics,
+                "detection_time_ms": round(detection["elapsed_ms"], 2),
+            },
             "ml_layer": ml_metrics if detector is not None else None,
             "hybrid_layer": hybrid_metrics,
             "per_scenario": runs,
@@ -809,30 +909,37 @@ def run_holdout_evaluation(
         }
 
         # ---- Persist to production DB (history) -----------------------------
-        for layer, metrics in (("rule", rule_metrics), ("ml", ml_metrics), ("hybrid", hybrid_metrics)):
+        for layer, metrics in (
+            ("rule", rule_metrics),
+            ("ml", ml_metrics),
+            ("hybrid", hybrid_metrics),
+        ):
             if metrics is None:
                 continue
-            db.add(EvaluationRun(
-                scenario=f"holdout:{layer}",
-                total_samples=metrics["total_samples"],
-                attack_samples=n_positives,
-                baseline_samples=n_baseline,
-                true_positives=metrics["true_positives"],
-                false_positives=metrics["false_positives"],
-                true_negatives=metrics["true_negatives"],
-                false_negatives=metrics["false_negatives"],
-                accuracy=metrics["accuracy"],
-                precision=metrics["precision"],
-                recall=metrics["recall"],
-                f1_score=metrics["f1_score"],
-                false_positive_rate=metrics["false_positive_rate"],
-                detection_time_ms=rule_metrics.get("detection_time_ms", 0.0),
-            ))
+            db.add(
+                EvaluationRun(
+                    scenario=f"holdout:{layer}",
+                    total_samples=metrics["total_samples"],
+                    attack_samples=n_positives,
+                    baseline_samples=n_baseline,
+                    true_positives=metrics["true_positives"],
+                    false_positives=metrics["false_positives"],
+                    true_negatives=metrics["true_negatives"],
+                    false_negatives=metrics["false_negatives"],
+                    accuracy=metrics["accuracy"],
+                    precision=metrics["precision"],
+                    recall=metrics["recall"],
+                    f1_score=metrics["f1_score"],
+                    false_positive_rate=metrics["false_positive_rate"],
+                    detection_time_ms=rule_metrics.get("detection_time_ms", 0.0),
+                )
+            )
         db.commit()
 
         logger.info(
             "Hold-out evaluation: rule acc=%.3f recall=%.3f | ml acc=%.3f recall=%.3f",
-            rule_metrics["accuracy"], rule_metrics["recall"],
+            rule_metrics["accuracy"],
+            rule_metrics["recall"],
             ml_metrics["accuracy"] if detector is not None else 0.0,
             ml_metrics["recall"] if detector is not None else 0.0,
         )

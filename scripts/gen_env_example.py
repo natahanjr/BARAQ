@@ -2,14 +2,16 @@
 default and doc comment. Run from repo root:
     python scripts/gen_env_example.py > .env.example
 """
+
 import re
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 _SEP_RE = re.compile(r"#\s*-{3,}")
 
-VAR_RE = re.compile(r'(?:os\.environ\.get|_secret)\("(BARAQ_[A-Z0-9_]+)"(?:\s*,\s*(.*?))?\)')
+VAR_RE = re.compile(
+    r'(?:os\.environ\.get|_secret)\("(BARAQ_[A-Z0-9_]+)"(?:\s*,\s*(.*?))?\)'
+)
 NAME_RE = re.compile(r'"?(BARAQ_[A-Z0-9_]+)"?')
 
 
@@ -17,9 +19,7 @@ def _is_header(text: str) -> bool:
     stripped = text.lstrip("#").strip()
     if not stripped:
         return True
-    if len(stripped) < 60 and not stripped.endswith((".", ":", ";", ")", '"')):
-        return True
-    return False
+    return bool(len(stripped) < 60 and not stripped.endswith((".", ":", ";", ")", '"')))
 
 
 def collect(path: Path) -> dict[str, tuple[str, str]]:
@@ -39,7 +39,7 @@ def collect(path: Path) -> dict[str, tuple[str, str]]:
                 default = default.rstrip(")").strip()
             else:
                 default = ""
-            if default and (default.startswith('"') or default.startswith("'")):
+            if default and (default.startswith(('"', "'"))):
                 default = default[1:-1] if len(default) >= 2 else ""
             if default and not re.fullmatch(r"[0-9A-Za-z_\-./: %=]+", default):
                 default = ""
@@ -48,22 +48,22 @@ def collect(path: Path) -> dict[str, tuple[str, str]]:
             # name (and maybe default) on the following lines.
             m2 = NAME_RE.search(line)
             if not m2:
-                window = "\n".join(lines[i:i + 3])
+                window = "\n".join(lines[i : i + 3])
                 m2 = NAME_RE.search(window)
             if not m2:
                 continue
             name = m2.group(1)
             default = ""
-            window = "\n".join(lines[i:i + 4])
+            window = "\n".join(lines[i : i + 4])
             md = re.search(r'"BARAQ_[A-Z0-9_]+"\s*,\s*(.+?)\)', window)
             if md:
                 default = md.group(1).strip()
-                if default.startswith('"') or default.startswith("'"):
+                if default.startswith(('"', "'")):
                     default = default[1:-1] if len(default) >= 2 else ""
                 if default and not re.fullmatch(r"[0-9A-Za-z_\-./: %=]+", default):
                     default = ""
         comment: list[str] = []
-        for prev in lines[max(0, i - 8):i]:
+        for prev in lines[max(0, i - 8) : i]:
             t = prev.strip()
             if not t.startswith("#"):
                 break

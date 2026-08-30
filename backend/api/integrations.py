@@ -1,4 +1,5 @@
 """Ticketing integrations API (roadmap 6.3)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -30,6 +31,13 @@ def dispatch(alert_id: int, request: Request, db: Session = Depends(get_db)):
     if not alert:
         raise HTTPException(404, "Alert not found")
     result = dispatch_alert(db, alert)
-    log_action(db, actor_name(request), "integration.dispatch", "alert", str(alert_id),
-               str(result.get("results", [])), client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "integration.dispatch",
+        "alert",
+        str(alert_id),
+        str(result.get("results", [])),
+        client_ip(request),
+    )
     return {"alert_id": alert_id, **result}

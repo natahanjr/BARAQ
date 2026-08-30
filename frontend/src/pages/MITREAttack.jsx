@@ -81,14 +81,14 @@ function MITREAttack() {
       {/* Header */}
       <header>
         <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">Threat Framework</p>
-        <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">MITRE ATT&CK</h1>
+        <h1 className="mt-1 text-page-title text-[var(--fg-primary)]">MITRE ATT&CK</h1>
         <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">Interactive attack technique matrix and coverage analysis</p>
       </header>
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {statCards.map((s) => (
-          <div key={s.label} className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 transition-all duration-300 hover:border-[var(--border-strong)] hover:shadow-lg">
+          <div key={s.label} className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-300 p-5 hover:border-[var(--border-strong)] hover:shadow-lg">
             <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-40" style={{ background: s.color }} />
             <div className="relative flex items-start justify-between">
               <div>
@@ -111,7 +111,7 @@ function MITREAttack() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search techniques..."
-            className="w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] py-2.5 pl-9 pr-3 text-[13px] text-[var(--fg-primary)] placeholder:text-[var(--fg-faint)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
+            className="w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 py-2.5 pl-9 pr-3 text-[13px] text-[var(--fg-primary)] placeholder:text-[var(--fg-faint)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -142,7 +142,7 @@ function MITREAttack() {
 
       {/* ── Matrix View ──────────────────────────────────── */}
       {view === "matrix" && (
-        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-5">
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-5">
           <div className="overflow-x-auto">
             <div className="grid grid-cols-4 gap-3 sm:grid-cols-6 lg:grid-cols-12 min-w-[640px]">
               {TACTICS.map((tactic) => {
@@ -151,7 +151,7 @@ function MITREAttack() {
                 return (
                   <div key={tactic.id} className="group/tac space-y-1.5">
                     <div className="text-center">
-                      <p className="text-[8px] font-bold uppercase tracking-wider leading-tight" style={{ color: has ? tactic.color : "var(--fg-faint)" }}>{tactic.name}</p>
+                      <p className="text-[12px] font-bold uppercase tracking-wider leading-tight" style={{ color: has ? tactic.color : "var(--fg-faint)" }}>{tactic.name}</p>
                     </div>
                     <div
                       className={`rounded-[var(--radius-lg)] p-2.5 min-h-[72px] transition-all duration-200 cursor-pointer ${has ? "border border-white/[0.06] hover:shadow-lg" : "border border-[var(--border-subtle)] bg-[var(--bg-inset)]"}`}
@@ -185,16 +185,16 @@ function MITREAttack() {
 
       {/* ── Table View ───────────────────────────────────── */}
       {view === "table" && (
-        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] overflow-hidden">
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)]">
-                  <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Technique</th>
-                  <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Tactic</th>
-                  <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Detected</th>
-                  <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">False Pos.</th>
-                  <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Confidence</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Technique</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Tactic</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Detected</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">False Pos.</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Confidence</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)]">
@@ -231,7 +231,7 @@ function MITREAttack() {
 
       {/* ── Technique Detail Panel ───────────────────────── */}
       {selectedTechnique && (
-        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-cyan-muted)]">
@@ -251,7 +251,7 @@ function MITREAttack() {
               { label: "Confidence", value: `${selectedTechnique.confidence}%`, color: selectedTechnique.confidence >= 90 ? "var(--status-healthy)" : "var(--severity-medium)" },
             ].map((s) => (
               <div key={s.label} className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">{s.label}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">{s.label}</p>
                 <p className="mt-1 text-[22px] font-bold tabular-nums" style={{ color: s.color, fontFeatureSettings: '"tnum"' }}>{s.value}</p>
               </div>
             ))}

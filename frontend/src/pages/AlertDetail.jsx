@@ -165,17 +165,17 @@ export default function AlertDetail() {
     <div className="space-y-6 pb-16">
       {/* Breadcrumb */}
       <div className="flex flex-wrap items-center gap-3 text-[13px]">
-        <Link to="/alerts" className="font-medium text-cyan-400 transition-colors hover:text-cyan-300">
+        <Link to="/alerts" className="font-medium text-cyan-400 transition-all hover:text-cyan-300">
           &larr; All alerts
         </Link>
         <span className="text-slate-600">/</span>
-        <Link to={`/investigation?alert=${alert.id}`} className="font-medium text-slate-400 transition-colors hover:text-cyan-300">
+        <Link to={`/investigation?alert=${alert.id}`} className="font-medium text-slate-400 transition-all hover:text-cyan-300">
           Deep-dive investigation &rarr;
         </Link>
       </div>
 
       {/* Header */}
-      <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6">
+      <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
@@ -212,7 +212,7 @@ export default function AlertDetail() {
         {/* Main content */}
         <div className="space-y-6 lg:col-span-2">
           {/* Description + Evidence */}
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <SectionLabel>Description</SectionLabel>
             <p className="text-[13px] leading-relaxed text-slate-300">{alert.description}</p>
 
@@ -234,7 +234,7 @@ export default function AlertDetail() {
           </div>
 
           {/* Analyst Verdict */}
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <SectionLabel>Analyst Verdict</SectionLabel>
             <p className="mb-4 text-[12px] leading-relaxed text-slate-400/80">
               Is this detection real, noise, or expected behaviour? Verdicts feed the ML feedback loop.
@@ -263,7 +263,7 @@ export default function AlertDetail() {
               value={verdictNote}
               onChange={(e) => setVerdictNote(e.target.value)}
               placeholder="Why? (optional)"
-              className="mt-3 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-2.5 text-[12px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
+              className="mt-3 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-2.5 text-[12px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
             />
             <label className="mt-3 flex cursor-pointer items-center gap-2.5 text-[12px] text-slate-400">
               <input type="checkbox" checked={verdictSuppress} onChange={(e) => setVerdictSuppress(e.target.checked)} className="h-[14px] w-[14px] rounded-[3px] accent-cyan-500" />
@@ -278,7 +278,7 @@ export default function AlertDetail() {
           </div>
 
           {/* Evidence Events */}
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <div className="mb-5 flex items-center justify-between">
               <SectionLabel>Events ({alert.events?.length || 0})</SectionLabel>
               {alert.event_count && (
@@ -328,13 +328,13 @@ export default function AlertDetail() {
           </div>
 
           {/* ML Explanation */}
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <div className="mb-4 flex items-center justify-between">
               <SectionLabel>ML Explanation</SectionLabel>
               <div className="flex items-center gap-2">
                 {explainError && <span className="text-xs text-amber-400">{explainError}</span>}
                 <button type="button" onClick={loadExplain} disabled={explainLoading}
-                  className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-slate-300 transition-all hover:bg-white/[0.06] disabled:opacity-50">
+                  className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-slate-300 transition-all hover:bg-white/[0.06] disabled:opacity-50">
                   {explainLoading ? "Computing..." : "\u21BB Recompute"}
                 </button>
               </div>
@@ -384,7 +384,7 @@ export default function AlertDetail() {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Alert Details */}
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <SectionLabel>Alert Details</SectionLabel>
             <div className="space-y-0">
               <InfoRow label="Rule" value={alert.rule} />
@@ -437,7 +437,7 @@ export default function AlertDetail() {
 
           {/* SOAR Actions */}
           {isAdmin() && (
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
               <SectionLabel>SOAR Actions</SectionLabel>
               <div className="grid grid-cols-1 gap-2">
                 {soarButtons.map((b) => (
@@ -452,7 +452,7 @@ export default function AlertDetail() {
           )}
 
           {/* Automation Runs */}
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <SectionLabel>Automation Runs</SectionLabel>
             {soarRuns === null ? (
               <Loading label="Loading playbook history" />
@@ -488,11 +488,11 @@ export default function AlertDetail() {
           </div>
 
           {/* Threat Intelligence */}
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <div className="mb-4 flex items-center justify-between">
               <SectionLabel>Threat Intelligence</SectionLabel>
               <button type="button" onClick={() => loadIntel(true)} disabled={intelLoading}
-                className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-slate-300 transition-all hover:bg-white/[0.06] disabled:opacity-50">
+                className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-slate-300 transition-all hover:bg-white/[0.06] disabled:opacity-50">
                 {intelLoading ? "Checking..." : "\u21BB Refresh"}
               </button>
             </div>
@@ -515,10 +515,10 @@ export default function AlertDetail() {
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {intel.actors.map((act) => (
                         <span key={act.name} title={act.items?.join(", ")}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/20 bg-white/[0.02] px-2.5 py-1 text-xs font-semibold text-rose-300">
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/20 bg-white/[0.02] px-2.5 py-1 text-xs font-semibold text-rose-300">
                           <span className={`h-[5px] w-[5px] rounded-full ${intelDot[act.category] || intelDot.unknown}`} />
                           {act.name}
-                          <span className="font-mono text-[9px] text-slate-500">{act.risk_score}</span>
+                          <span className="font-mono text-[11px] text-slate-500">{act.risk_score}</span>
                         </span>
                       ))}
                     </div>
@@ -551,7 +551,7 @@ export default function AlertDetail() {
                             {it.sources?.length > 0 && <span className="text-xs text-slate-500/60">{it.sources.join(" \u00B7 ")}</span>}
                             {it.category !== "malicious" && (
                               <button type="button" onClick={() => markMalicious(it.indicator)} disabled={marking === it.indicator}
-                                className={`ml-auto rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all ${it.category === "suspicious" ? "border-rose-500/30 text-rose-400 hover:bg-rose-500/10" : "border-white/[0.08] text-slate-400 hover:bg-white/[0.04]"} disabled:opacity-50`}>
+                                className={`ml-auto rounded-xl border px-2.5 py-1 text-xs font-semibold transition-all ${it.category === "suspicious" ? "border-rose-500/30 text-rose-400 hover:bg-rose-500/10" : "border-white/[0.08] text-slate-400 hover:bg-white/[0.04]"} disabled:opacity-50`}>
                                 {marking === it.indicator ? "Marking..." : "Mark malicious"}
                               </button>
                             )}
@@ -570,7 +570,7 @@ export default function AlertDetail() {
           </div>
 
           {/* Status Management */}
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <SectionLabel>Status Management</SectionLabel>
             {isAdmin() && (
               <button type="button" onClick={fixAlert} disabled={saving || alert.status === "closed"}
@@ -591,11 +591,11 @@ export default function AlertDetail() {
           </div>
 
           {/* Analyst Notes */}
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <SectionLabel>Analyst Notes</SectionLabel>
             <form onSubmit={submitNote} className="space-y-3">
               <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add investigation notes..." rows={3}
-                className="w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10" />
+                className="w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10" />
               <button type="submit" disabled={saving || !note.trim()}
                 className="w-full rounded-xl border border-cyan-500/25 bg-cyan-500/[0.08] px-4 py-2.5 text-[13px] font-semibold text-cyan-400 transition-all hover:bg-cyan-500/[0.15] hover:shadow-[0_0_20px_-4px_rgba(0,240,255,0.2)] disabled:opacity-50">
                 {saving ? "Saving..." : "Add Note"}
@@ -604,7 +604,7 @@ export default function AlertDetail() {
           </div>
 
           {alert.notes && alert.notes.length > 0 && (
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
               <SectionLabel>Notes ({alert.notes.length})</SectionLabel>
               <div className="space-y-2">
                 {alert.notes.map((n) => (

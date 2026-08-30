@@ -8,11 +8,11 @@ deployments load on day 1 until their first real retrain.
 Usage:
     venv\\Scripts\\python tools\\build_bootstrap_model.py [--seed 42]
 """
+
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 

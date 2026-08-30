@@ -26,7 +26,7 @@ export function Tabs({ tabs, active, onChange, className = "" }) {
         >
           {tab.label}
           {tab.count !== undefined && (
-            <span className="ml-1.5 text-[10px] text-[var(--fg-muted)]">({tab.count})</span>
+            <span className="ml-1.5 text-[11px] text-[var(--fg-muted)]">({tab.count})</span>
           )}
         </button>
       ))}

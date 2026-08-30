@@ -1,7 +1,8 @@
 """Phase 6 risk test helpers."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -12,7 +13,7 @@ from backend.risk.models import (
     EntityRiskV2Snapshot,
 )
 
-RISK_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=timezone.utc)
+RISK_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=UTC)
 
 
 def group_evidence(
@@ -99,9 +100,7 @@ def finding_evidence(
 
 
 def stored_risks(db) -> list[EntityRiskV2]:
-    return list(
-        db.scalars(select(EntityRiskV2).order_by(EntityRiskV2.id)).all()
-    )
+    return list(db.scalars(select(EntityRiskV2).order_by(EntityRiskV2.id)).all())
 
 
 def stored_factors(db) -> list[EntityRiskV2Factor]:
@@ -118,5 +117,7 @@ def stored_snapshots(db) -> list[EntityRiskV2Snapshot]:
 
 def stored_audit(db) -> list[EntityRiskV2AuditEvent]:
     return list(
-        db.scalars(select(EntityRiskV2AuditEvent).order_by(EntityRiskV2AuditEvent.id)).all()
+        db.scalars(
+            select(EntityRiskV2AuditEvent).order_by(EntityRiskV2AuditEvent.id)
+        ).all()
     )

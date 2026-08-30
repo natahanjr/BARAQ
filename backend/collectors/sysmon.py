@@ -14,11 +14,12 @@ shapes:
 So when Sysmon (or pywin32) is not installed the collector degrades
 gracefully and returns no records, exactly like the event log collector.
 """
+
 from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.collectors.base import BaseCollector
 from backend.collectors.health import (
@@ -43,9 +44,14 @@ def is_sysmon_available() -> bool:
     """
     if not HAS_PYWIN32:
         return False
-    channel = SYSMON_CHANNELS[0] if SYSMON_CHANNELS else "Microsoft-Windows-Sysmon/Operational"
+    channel = (
+        SYSMON_CHANNELS[0]
+        if SYSMON_CHANNELS
+        else "Microsoft-Windows-Sysmon/Operational"
+    )
     readable, _winerror, _detail = check_channel_access(channel)
     return readable
+
 
 try:
     import win32evtlog
@@ -91,15 +97,15 @@ class SysmonCollector(BaseCollector):
     #: Sysmon event IDs this collector cares about.
     #: Expanded in Phase 3 to cover 18 of 28+ Sysmon event types.
     EVENT_IDS = {
-        1,   # Process Create
-        2,   # File creation time changed (timestomping)
-        3,   # Network Connect
-        4,   # Sysmon service state changed
-        5,   # Process Terminated
-        6,   # Driver Loaded (kernel driver loading)
-        7,   # Image loaded (DLL side-loading, search order hijacking)
-        8,   # CreateRemoteThread (process injection)
-        9,   # RawAccessRead (direct disk access)
+        1,  # Process Create
+        2,  # File creation time changed (timestomping)
+        3,  # Network Connect
+        4,  # Sysmon service state changed
+        5,  # Process Terminated
+        6,  # Driver Loaded (kernel driver loading)
+        7,  # Image loaded (DLL side-loading, search order hijacking)
+        8,  # CreateRemoteThread (process injection)
+        9,  # RawAccessRead (direct disk access)
         10,  # Process Access (LSASS / credential access)
         11,  # File Create (binary drop)
         12,  # Registry Object Add/Delete (registry persistence)
@@ -132,14 +138,16 @@ class SysmonCollector(BaseCollector):
             return []
         ts = event.TimeGenerated
         timestamp = (
-            datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+            datetime.fromtimestamp(ts, tz=UTC).isoformat()
             if isinstance(ts, float)
             else ts.isoformat()
         )
         message = ""
         try:
-            message = win32evtlogutil.SafeFormatMessage(event) or win32evtlogutil.FormatMessage(event)
-        except Exception:  # noqa: BLE001
+            message = win32evtlogutil.SafeFormatMessage(
+                event
+            ) or win32evtlogutil.FormatMessage(event)
+        except Exception:
             message = ""
 
         if event_id == 1:  # Process Create -> process tree
@@ -147,24 +155,26 @@ class SysmonCollector(BaseCollector):
             cmdline = _match(message, "command_line")
             if not image:
                 return []
-            return [{
-                "source": "process",
-                "pid": event.EventID and _pid_from_message(message, event),
-                "ppid": _ppid_from_message(message),
-                "name": image.rsplit("\\", 1)[-1],
-                "path": image,
-                "cmdline": cmdline,
-                "parent_name": _match(message, "parent_image").rsplit("\\", 1)[-1],
-                "user": _match(message, "user"),
-                "is_new": True,
-                "timestamp": timestamp,
-                "raw": {
+            return [
+                {
+                    "source": "process",
+                    "pid": event.EventID and _pid_from_message(message, event),
+                    "ppid": _ppid_from_message(message),
+                    "name": image.rsplit("\\", 1)[-1],
+                    "path": image,
                     "cmdline": cmdline,
-                    "parent_image": _match(message, "parent_image"),
-                    "process_guid": _match(message, "process_guid"),
-                    "parent_process_guid": _match(message, "parent_process_guid"),
-                },
-            }]
+                    "parent_name": _match(message, "parent_image").rsplit("\\", 1)[-1],
+                    "user": _match(message, "user"),
+                    "is_new": True,
+                    "timestamp": timestamp,
+                    "raw": {
+                        "cmdline": cmdline,
+                        "parent_image": _match(message, "parent_image"),
+                        "process_guid": _match(message, "process_guid"),
+                        "parent_process_guid": _match(message, "parent_process_guid"),
+                    },
+                }
+            ]
 
         if event_id == 3:  # Network Connect -> network source
             dest_ip = _match(message, "dest_ip")
@@ -172,44 +182,53 @@ class SysmonCollector(BaseCollector):
                 return []
             state = "connected"
             if _match(message, "dest_port"):
-                state += f"/{_match(message, 'protocol')}" if _match(message, "protocol") else ""
-            return [{
-                "source": "network",
-                "pid": _pid_from_message(message, event),
-                "process": _match(message, "image").rsplit("\\", 1)[-1] or "unknown",
-                "local_ip": _match(message, "source_ip"),
-                "local_port": int(_match(message, "source_port") or 0),
-                "remote_ip": dest_ip,
-                "remote_port": int(_match(message, "dest_port") or 0),
-                "state": state,
-                "is_listening": False,
-                "bytes_sent": 0,
-                "bytes_recv": 0,
-                "duration_seconds": 0.0,
-                "timestamp": timestamp,
-            }]
+                state += (
+                    f"/{_match(message, 'protocol')}"
+                    if _match(message, "protocol")
+                    else ""
+                )
+            return [
+                {
+                    "source": "network",
+                    "pid": _pid_from_message(message, event),
+                    "process": _match(message, "image").rsplit("\\", 1)[-1]
+                    or "unknown",
+                    "local_ip": _match(message, "source_ip"),
+                    "local_port": int(_match(message, "source_port") or 0),
+                    "remote_ip": dest_ip,
+                    "remote_port": int(_match(message, "dest_port") or 0),
+                    "state": state,
+                    "is_listening": False,
+                    "bytes_sent": 0,
+                    "bytes_recv": 0,
+                    "duration_seconds": 0.0,
+                    "timestamp": timestamp,
+                }
+            ]
 
         if event_id == 10:  # Process Access -> credential-access signal (Event 10)
             target_image = _match(message, "target_image")
             if not target_image:
                 return []
             image = _match(message, "image")
-            return [{
-                "source": "eventlog",
-                "channel": "Sysmon",
-                "event_id": 10,
-                "timestamp": timestamp,
-                "user": _match(message, "user") or "-",
-                "message": f"Process accessed: {target_image} by {image} (GrantedAccess: {_match(message, 'granted_access')})",
-                "raw": {
-                    "computer": event.ComputerName,
-                    "record_number": event.RecordNumber,
-                    "sysmon_event_id": 10,
-                    "image": image,
-                    "target_image": target_image,
-                    "granted_access": _match(message, "granted_access") or "0x0",
-                },
-            }]
+            return [
+                {
+                    "source": "eventlog",
+                    "channel": "Sysmon",
+                    "event_id": 10,
+                    "timestamp": timestamp,
+                    "user": _match(message, "user") or "-",
+                    "message": f"Process accessed: {target_image} by {image} (GrantedAccess: {_match(message, 'granted_access')})",
+                    "raw": {
+                        "computer": event.ComputerName,
+                        "record_number": event.RecordNumber,
+                        "sysmon_event_id": 10,
+                        "image": image,
+                        "target_image": target_image,
+                        "granted_access": _match(message, "granted_access") or "0x0",
+                    },
+                }
+            ]
 
         if event_id == 13:  # Registry Value Set -> persistence signal (Event 13)
             target_object = _match(message, "target_object")
@@ -218,50 +237,54 @@ class SysmonCollector(BaseCollector):
             image = _match(message, "image")
             event_type = _match(message, "event_type") or "SetValue"
             details = _match(message, "details")
-            return [{
-                "source": "eventlog",
-                "channel": "Sysmon",
-                "event_id": 13,
-                "timestamp": timestamp,
-                "user": _match(message, "user") or "-",
-                "message": (
-                    f"Registry value {event_type}: {target_object} = "
-                    f"{details or '<deleted>'} by {image}"
-                ),
-                "raw": {
-                    "computer": event.ComputerName,
-                    "record_number": event.RecordNumber,
-                    "sysmon_event_id": 13,
-                    "image": image,
-                    "target_object": target_object,
-                    "event_type": event_type,
-                    "details": details or "",
-                },
-            }]
+            return [
+                {
+                    "source": "eventlog",
+                    "channel": "Sysmon",
+                    "event_id": 13,
+                    "timestamp": timestamp,
+                    "user": _match(message, "user") or "-",
+                    "message": (
+                        f"Registry value {event_type}: {target_object} = "
+                        f"{details or '<deleted>'} by {image}"
+                    ),
+                    "raw": {
+                        "computer": event.ComputerName,
+                        "record_number": event.RecordNumber,
+                        "sysmon_event_id": 13,
+                        "image": image,
+                        "target_object": target_object,
+                        "event_type": event_type,
+                        "details": details or "",
+                    },
+                }
+            ]
 
         # File events (11 create / 23 delete) -> normalized events so the
         # data-staging rule and normalizer risk model can reason over them.
         target = _match(message, "target_filename")
         if not target:
             return []
-        return [{
-            "source": "eventlog",
-            "channel": "Sysmon",
-            "event_id": event_id,
-            "timestamp": timestamp,
-            "user": _match(message, "user") or "-",
-            "message": f"File {'created' if event_id == 11 else 'deleted'}: {target}",
-            "raw": {
-                "computer": event.ComputerName,
-                "record_number": event.RecordNumber,
-                "sysmon": {
-                    "event_id": event_id,
-                    "file_path": target,
-                    "hashes": _match(message, "hashes"),
-                    "image": _match(message, "image"),
+        return [
+            {
+                "source": "eventlog",
+                "channel": "Sysmon",
+                "event_id": event_id,
+                "timestamp": timestamp,
+                "user": _match(message, "user") or "-",
+                "message": f"File {'created' if event_id == 11 else 'deleted'}: {target}",
+                "raw": {
+                    "computer": event.ComputerName,
+                    "record_number": event.RecordNumber,
+                    "sysmon": {
+                        "event_id": event_id,
+                        "file_path": target,
+                        "hashes": _match(message, "hashes"),
+                        "image": _match(message, "image"),
+                    },
                 },
-            },
-        }]
+            }
+        ]
 
     # ------------------------------------------------------------------
     def collect(self) -> list[dict]:
@@ -275,7 +298,7 @@ class SysmonCollector(BaseCollector):
                 channel_records = self._collect_channel(channel)
                 records.extend(channel_records)
                 registry.record_success(channel, len(channel_records))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 winerror = getattr(exc, "winerror", None)
                 if isinstance(winerror, tuple):
                     winerror = winerror[0]
@@ -287,20 +310,33 @@ class SysmonCollector(BaseCollector):
                         channel,
                     )
                 else:
-                    self.logger.warning("Sysmon channel %s read failed: %s", channel, exc)
-                registry.record_failure(channel, str(exc), permission_issue=winerror == PRIVILEGE_NOT_HELD)
+                    self.logger.warning(
+                        "Sysmon channel %s read failed: %s", channel, exc
+                    )
+                registry.record_failure(
+                    channel, str(exc), permission_issue=winerror == PRIVILEGE_NOT_HELD
+                )
         return records
 
     def _collect_channel(self, channel: str) -> list[dict]:
-        flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+        flags = (
+            win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+        )
         handle = win32evtlog.OpenEventLog(None, channel)
         out: list[dict] = []
         try:
             seek = getattr(win32evtlog, "SeekEventLog", None)
-            if INCREMENTAL_COLLECTION and seek is not None and channel in self._last_read:
+            if (
+                INCREMENTAL_COLLECTION
+                and seek is not None
+                and channel in self._last_read
+            ):
                 seek(
-                    handle, self._last_read[channel], 0,
-                    win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEEK_READ,
+                    handle,
+                    self._last_read[channel],
+                    0,
+                    win32evtlog.EVENTLOG_BACKWARDS_READ
+                    | win32evtlog.EVENTLOG_SEEK_READ,
                 )
             events = retry_with_backoff(
                 lambda: win32evtlog.ReadEventLog(handle, flags, 0),
@@ -323,7 +359,9 @@ def _pid_from_message(message: str, event) -> int:
     if m:
         return int(m.group(1))
     try:
-        return int(event.StringInserts[2]) if getattr(event, "StringInserts", None) else 0
+        return (
+            int(event.StringInserts[2]) if getattr(event, "StringInserts", None) else 0
+        )
     except (TypeError, ValueError, IndexError):
         return 0
 

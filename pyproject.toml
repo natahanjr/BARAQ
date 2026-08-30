@@ -1,0 +1,47 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+ignore = [
+    "B008",   # FastAPI Depends()
+    "BLE001", # blind-except
+    "S110",   # try-except-pass
+    "S112",   # try-except-continue
+    "PLW1510",# subprocess-run-without-check
+    "PLW0603",# global-statement
+    "PLW0602",# global-variable-not-assigned
+    "RUF012", # mutable-class-default
+    "DTZ001", # datetime-without-tzinfo
+    "DTZ005", # datetime-now-without-tzinfo
+    "DTZ011", # date-today
+    "DTZ901", # datetime-min-max
+    "B023",   # function-uses-loop-variable
+    "B017",   # assert-raises-exception
+    "SIM101", # duplicate-isinstance-call
+    "SIM102", # collapsible-if
+    "SIM115", # open-file-with-context-handler
+    "FURB162",# fromisoformat-replace-z
+    "TRY004", # type-check-without-type-error
+    "TRY401", # verbose-log-message
+    "UP031",  # printf-string-formatting
+    "PLC0206",# dict-index-missing-items
+    "PLC3002",# unnecessary-direct-lambda-call
+    "G201",   # logging-exc-info
+    "PERF402",# manual-list-copy
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S106"]
+
+[tool.mypy]
+ignore_missing_imports = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+warn_return_any = false
+warn_unused_configs = false
+exclude = [
+    "alembic/",
+    "tools/",
+    "tests/",
+]

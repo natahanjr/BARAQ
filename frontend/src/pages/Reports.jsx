@@ -76,7 +76,7 @@ function Reports() {
           </CardHeader>
           <CardContent className="space-y-5">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)] mb-3">Report Type</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)] mb-3">Report Type</p>
               <div className="space-y-2">
                 {REPORT_TYPES.map((rt) => (
                   <button
@@ -97,7 +97,7 @@ function Reports() {
             </div>
 
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)] mb-2">Format</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)] mb-2">Format</p>
               <div className="grid grid-cols-2 gap-2">
                 {FORMATS.map((f) => (
                   <button
@@ -169,7 +169,7 @@ function Reports() {
                           href={url}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-md)] border border-[var(--accent-cyan)]/20 bg-[var(--accent-cyan)]/[0.06] px-3 py-1.5 text-[11px] font-semibold text-[var(--accent-cyan)] transition-colors hover:bg-[var(--accent-cyan)]/[0.12]"
+                          className="inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-md)] border border-[var(--accent-cyan)]/20 bg-[var(--accent-cyan)]/[0.06] px-3 py-1.5 text-[11px] font-semibold text-[var(--accent-cyan)] transition-all hover:bg-[var(--accent-cyan)]/[0.12]"
                         >
                           <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
                           Open

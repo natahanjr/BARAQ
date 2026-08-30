@@ -7,9 +7,10 @@ Covers the SOC contract for telemetry:
 * enrichment: fail-open, never raises, never writes
 * boundary: ingestion never creates alerts / incidents / risk rows
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -27,7 +28,7 @@ from backend.telemetry.normalization.base import (
     normalize,
 )
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 
 
 def _raw(**overrides):
@@ -224,10 +225,12 @@ def test_generic_normalizer_supports():
 
 def test_ingest_refuses_production_db_name(monkeypatch, db):
     """Phase 0.7: the pipeline must refuse the production DB by name."""
-    import backend.config as config
+    from backend import config
     from backend.telemetry.ingestion import pipeline
 
-    monkeypatch.setattr(config, "DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel")
+    monkeypatch.setattr(
+        config, "DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel"
+    )
     with pytest.raises(RuntimeError, match="production database"):
         pipeline.ingest(db, [_raw()])
 
@@ -235,12 +238,14 @@ def test_ingest_refuses_production_db_name(monkeypatch, db):
 def test_config_gate_disables_v2_on_production_db_name(monkeypatch):
     """Phase 0.7: config must disable the v2 flag on the production DB even
     when BARAQ_ENV is unset (development default) and the flag is set."""
-    import backend.config as config
+    from backend import config
     from backend.api import telemetry as telemetry_api
 
     monkeypatch.setenv("BARAQ_TELEMETRY_V2", "1")
     monkeypatch.setenv("BARAQ_ENV", "development")
-    monkeypatch.setattr(config, "DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel")
+    monkeypatch.setattr(
+        config, "DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel"
+    )
     monkeypatch.setattr(config, "TELEMETRY_V2_ENABLED", False)
     # The API module holds an import-time copy of the flag: mirror the
     # patched config value so the guard surface reflects this test state.

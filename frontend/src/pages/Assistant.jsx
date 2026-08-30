@@ -29,7 +29,7 @@ function EntityAnalyst() {
   };
 
   return (
-    <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+    <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">
@@ -49,7 +49,7 @@ function EntityAnalyst() {
         <select
           value={kind}
           onChange={(e) => setKind(e.target.value)}
-          className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2.5 text-[12px] text-[var(--fg-primary)] outline-none transition-all focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
+          className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-2.5 text-[12px] text-[var(--fg-primary)] outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
         >
           {ENTITY_KINDS.map((k) => (
             <option key={k} value={k}>
@@ -62,7 +62,7 @@ function EntityAnalyst() {
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && run()}
           placeholder="IP, host, user, domain, hash…"
-          className="min-w-0 flex-1 rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2.5 text-[12px] text-[var(--fg-primary)] placeholder-[var(--fg-faint)] outline-none transition-all focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
+          className="min-w-0 flex-1 rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-2.5 text-[12px] text-[var(--fg-primary)] placeholder-[var(--fg-faint)] outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
         />
         <button
           type="button"
@@ -100,14 +100,14 @@ export default function Assistant() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">SECTION</p>
-          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">AI Security Assistant</h1>
+          <h1 className="mt-1 text-page-title text-[var(--fg-primary)]">AI Security Assistant</h1>
           <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">Local threat intelligence engine — ask about alerts and entities</p>
         </div>
       </header>
 
       <EntityAnalyst />
 
-      <div className="flex h-[540px] flex-col rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+      <div className="flex h-[540px] flex-col rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
         <div className="border-b border-[var(--border-default)] pb-3">
           <p className="text-sm font-medium text-[var(--fg-secondary)]">Conversation</p>
         </div>

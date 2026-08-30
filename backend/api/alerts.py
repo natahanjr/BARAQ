@@ -1,8 +1,10 @@
 """Alerts API endpoints."""
+
 from __future__ import annotations
 
 import logging
 import re
+from datetime import UTC
 from enum import Enum
 from typing import Literal
 
@@ -16,7 +18,7 @@ from backend.database.connection import get_db
 from backend.database.models import Alert, AlertAction, AlertEventLink, AnalystNote
 from backend.detection.workflow import can_transition, is_valid_state, next_states
 from backend.reports.generator import generate_report
-from backend.security import actor_name, tenant_scope, require_admin, require_auth
+from backend.security import actor_name, require_admin, require_auth, tenant_scope
 
 logger = logging.getLogger("baraq.api.alerts")
 
@@ -111,9 +113,7 @@ def list_alerts(
         tokens = [s.strip().lower() for s in severity.split(",") if s.strip()]
         invalid = [t for t in tokens if t not in _valid]
         if invalid:
-            raise HTTPException(
-                422, f"invalid severity value(s): {', '.join(invalid)}"
-            )
+            raise HTTPException(422, f"invalid severity value(s): {', '.join(invalid)}")
         if tokens:
             stmt = stmt.where(Alert.severity.in_(tokens))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
@@ -122,7 +122,12 @@ def list_alerts(
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()
-    return {"total": total, "page": page, "page_size": page_size, "items": [a.to_dict() for a in rows]}
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [a.to_dict() for a in rows],
+    }
 
 
 @router.get("/clusters")
@@ -176,7 +181,11 @@ def feedback_stats(request: Request, db: Session = Depends(get_db)):
     verdicts = db.scalars(select(AlertVerdict)).all()
     alerts = {a.id: a for a in db.scalars(select(Alert)).all()}
     if scope:
-        verdicts = [v for v in verdicts if alerts.get(v.alert_id) and alerts[v.alert_id].org == scope]
+        verdicts = [
+            v
+            for v in verdicts
+            if alerts.get(v.alert_id) and alerts[v.alert_id].org == scope
+        ]
         filtered_ids = {v.alert_id for v in verdicts}
         alerts = {a_id: a for a_id, a in alerts.items() if a_id in filtered_ids}
 
@@ -184,7 +193,9 @@ def feedback_stats(request: Request, db: Session = Depends(get_db)):
     for v in verdicts:
         alert = alerts.get(v.alert_id)
         rule = alert.rule if alert else "?"
-        entry = by_rule.setdefault(rule, {"rule": rule, "true_positive": 0, "false_positive": 0, "total": 0})
+        entry = by_rule.setdefault(
+            rule, {"rule": rule, "true_positive": 0, "false_positive": 0, "total": 0}
+        )
         entry["total"] += 1
         if v.verdict == "true_positive":
             entry["true_positive"] += 1
@@ -192,7 +203,9 @@ def feedback_stats(request: Request, db: Session = Depends(get_db)):
             entry["false_positive"] += 1
     for entry in by_rule.values():
         labelled = entry["true_positive"] + entry["false_positive"]
-        entry["precision"] = round(entry["true_positive"] / labelled, 3) if labelled else None
+        entry["precision"] = (
+            round(entry["true_positive"] / labelled, 3) if labelled else None
+        )
 
     suppressed_q = select(SuppressionRule.rule).distinct()
     if scope:
@@ -223,7 +236,10 @@ def feedback_stats(request: Request, db: Session = Depends(get_db)):
 class VerdictCreate(BaseModel):
     verdict: Literal["true_positive", "false_positive", "expected_behavior"]
     note: str = Field(default="", max_length=1000)
-    suppress: bool = Field(default=False, description="Create a scoped suppression rule (expected_behavior only)")
+    suppress: bool = Field(
+        default=False,
+        description="Create a scoped suppression rule (expected_behavior only)",
+    )
 
 
 @router.post("/{alert_id}/verdict")
@@ -239,7 +255,7 @@ def submit_verdict(
     (rule + host + user) so the workflow stops alerting. All verdicts feed
     the ML feedback weights via the detector's feedback loop.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from backend.database.models import AlertVerdict
     from backend.detection.suppression import create as create_suppression
@@ -255,7 +271,7 @@ def submit_verdict(
         existing.verdict = body.verdict
         existing.note = body.note
         existing.created_by = actor
-        existing.created_at = datetime.now(timezone.utc)
+        existing.created_at = datetime.now(UTC)
         verdict = existing
     else:
         verdict = AlertVerdict(
@@ -271,10 +287,13 @@ def submit_verdict(
         if body.suppress:
             user = _evidence_user(alert)
             create_suppression(
-                db, rule=alert.rule, host=alert.host or "*",
+                db,
+                rule=alert.rule,
+                host=alert.host or "*",
                 user=user if user else "*",
                 reason=f"Analyst verdict: expected behavior - {body.note[:200]}",
-                created_by=actor, org=alert.org or "",
+                created_by=actor,
+                org=alert.org or "",
             )
 
     # Feed the ML feedback loop: false_positive and expected_behavior dampen
@@ -285,7 +304,7 @@ def submit_verdict(
             "true_positive" if body.verdict == "true_positive" else "false_positive",
             behavior,
         )
-    except Exception:  # noqa: BLE001 - feedback must never break the verdict
+    except Exception:
         logger.debug("ML feedback skipped for alert #%s", alert_id, exc_info=True)
 
     # Verdict-driven auto-suppression: repeated FP verdicts on the same
@@ -298,12 +317,19 @@ def submit_verdict(
             from backend.detection.auto_suppress import maybe_auto_suppress
 
             auto = maybe_auto_suppress(db, alert, actor=actor, org=alert.org or "")
-        except Exception:  # noqa: BLE001 - must never break the verdict path
+        except Exception:
             logger.debug("auto-suppress skipped for alert #%s", alert_id, exc_info=True)
 
     db.commit()
-    log_action(db, actor, "alert.verdict", "alert", str(alert_id),
-               f"{body.verdict}: {body.note[:200]}", client_ip(request))
+    log_action(
+        db,
+        actor,
+        "alert.verdict",
+        "alert",
+        str(alert_id),
+        f"{body.verdict}: {body.note[:200]}",
+        client_ip(request),
+    )
     result = verdict.to_dict()
     if auto:
         result["auto_suppression"] = auto
@@ -353,12 +379,24 @@ def create_suppression_rule(
 
     scope = tenant_scope(request)
     rule = create_suppression(
-        db, rule=body.rule, host=body.host, user=body.user,
-        reason=body.reason, created_by=actor_name(request),
-        org=scope or "", expires_hours=body.expires_hours,
+        db,
+        rule=body.rule,
+        host=body.host,
+        user=body.user,
+        reason=body.reason,
+        created_by=actor_name(request),
+        org=scope or "",
+        expires_hours=body.expires_hours,
     )
-    log_action(db, actor_name(request), "suppression.create", "suppression",
-               str(rule.id), f"{body.rule} {body.host}/{body.user}", client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "suppression.create",
+        "suppression",
+        str(rule.id),
+        f"{body.rule} {body.host}/{body.user}",
+        client_ip(request),
+    )
     return rule.to_dict()
 
 
@@ -373,8 +411,15 @@ def delete_suppression_rule(
     scope = tenant_scope(request)
     if not delete_suppression(db, rule_id, org=scope or ""):
         raise HTTPException(404, "Suppression rule not found")
-    log_action(db, actor_name(request), "suppression.delete", "suppression",
-               str(rule_id), "", client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "suppression.delete",
+        "suppression",
+        str(rule_id),
+        "",
+        client_ip(request),
+    )
     return {"deleted": rule_id}
 
 
@@ -400,19 +445,23 @@ def alert_groups(request: Request, db: Session = Depends(get_db)):
     items = []
     for (rule, host, user), rows in groups.items():
         rows_sorted = sorted(rows, key=lambda a: a.created_at)
-        items.append({
-            "rule": rule,
-            "host": host,
-            "user": user,
-            "count": len(rows),
-            "trigger_count": sum(a.trigger_count or 1 for a in rows),
-            "severity": max(rows_sorted, key=lambda a: _SEV_ORDER.get(a.severity, 0)).severity,
-            "max_severity_index": max(_SEV_ORDER.get(a.severity, 0) for a in rows),
-            "first_seen": rows_sorted[0].created_at.isoformat(),
-            "last_seen": rows_sorted[-1].created_at.isoformat(),
-            "alert_ids": [a.id for a in rows_sorted[-5:]],
-            "sample_names": sorted({a.name for a in rows}),
-        })
+        items.append(
+            {
+                "rule": rule,
+                "host": host,
+                "user": user,
+                "count": len(rows),
+                "trigger_count": sum(a.trigger_count or 1 for a in rows),
+                "severity": max(
+                    rows_sorted, key=lambda a: _SEV_ORDER.get(a.severity, 0)
+                ).severity,
+                "max_severity_index": max(_SEV_ORDER.get(a.severity, 0) for a in rows),
+                "first_seen": rows_sorted[0].created_at.isoformat(),
+                "last_seen": rows_sorted[-1].created_at.isoformat(),
+                "alert_ids": [a.id for a in rows_sorted[-5:]],
+                "sample_names": sorted({a.name for a in rows}),
+            }
+        )
     items.sort(key=lambda g: (-g["count"], -g["max_severity_index"]))
     return {"items": items, "groups": len(items), "alerts_grouped": len(alerts)}
 
@@ -427,7 +476,9 @@ def get_alert(alert_id: int, request: Request, db: Session = Depends(get_db)):
 
 
 @router.patch("/{alert_id}/status")
-def update_status(alert_id: int, body: StatusUpdate, request: Request, db: Session = Depends(get_db)):
+def update_status(
+    alert_id: int, body: StatusUpdate, request: Request, db: Session = Depends(get_db)
+):
     alert = _scoped_alert(request, alert_id, db)
     target = body.status.value
     if target == "in_progress":  # legacy alias -> canonical state
@@ -445,19 +496,35 @@ def update_status(alert_id: int, body: StatusUpdate, request: Request, db: Sessi
     if body.note:
         db.add(AnalystNote(alert_id=alert_id, note=body.note))
     db.commit()
-    log_action(db, actor_name(request), "alert.status", "alert", str(alert_id),
-               f"{previous} -> {target}", client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "alert.status",
+        "alert",
+        str(alert_id),
+        f"{previous} -> {target}",
+        client_ip(request),
+    )
     return alert.to_dict()
 
 
 @router.post("/{alert_id}/notes")
-def add_note(alert_id: int, body: NoteCreate, request: Request, db: Session = Depends(get_db)):
-    alert = _scoped_alert(request, alert_id, db)
+def add_note(
+    alert_id: int, body: NoteCreate, request: Request, db: Session = Depends(get_db)
+):
+    _scoped_alert(request, alert_id, db)
     note = AnalystNote(alert_id=alert_id, note=body.note)
     db.add(note)
     db.commit()
-    log_action(db, actor_name(request), "alert.note", "alert", str(alert_id),
-               body.note[:200], client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "alert.note",
+        "alert",
+        str(alert_id),
+        body.note[:200],
+        client_ip(request),
+    )
     return {"id": note.id, "note": note.note, "created_at": note.created_at.isoformat()}
 
 
@@ -485,7 +552,9 @@ def _basename(path_or_name: str) -> str:
 def _evidence_user(alert: Alert) -> str:
     """Best-effort user extraction from alert evidence + linked events."""
     scope = _evidence_scope(alert)
-    m = re.search(r"\b(?:user|user_name|user_id|account)\s*[:=]\s*([A-Za-z0-9_.\\-]+)", scope)
+    m = re.search(
+        r"\b(?:user|user_name|user_id|account)\s*[:=]\s*([A-Za-z0-9_.\\-]+)", scope
+    )
     return m.group(1) if m else ""
 
 
@@ -550,7 +619,10 @@ def _execute_action(action: str, target: str) -> tuple[str, str]:
         return "success", f"Alert escalated for '{target}'."
     if action == "block_ip":
         if not target:
-            return "success", "No source IP present in the alert evidence - nothing to block."
+            return (
+                "success",
+                "No source IP present in the alert evidence - nothing to block.",
+            )
         # Safe-by-default stub. Replace with a firewall/EDR API call.
         return "success", f"Blocked source IP {target} (firewall rule applied)."
     if action == "quarantine":
@@ -560,16 +632,24 @@ def _execute_action(action: str, target: str) -> tuple[str, str]:
             return "failed", "No process identified in the alert evidence to terminate."
         return "success", f"Terminated process '{target}'."
     if action == "isolate":
-        return "success", f"Isolated endpoint '{target or 'host'}' (network containment applied)."
+        return (
+            "success",
+            f"Isolated endpoint '{target or 'host'}' (network containment applied).",
+        )
     if action == "disable_account":
         if not target:
-            return "success", "No account identified in the alert evidence - nothing to disable."
+            return (
+                "success",
+                "No account identified in the alert evidence - nothing to disable.",
+            )
         return "success", f"Disabled account '{target}' and forced MFA re-enrolment."
     return "failed", "Unknown action."
 
 
 @router.post("/{alert_id}/actions", dependencies=[Depends(require_admin)])
-def take_action(alert_id: int, body: ActionRequest, request: Request, db: Session = Depends(get_db)):
+def take_action(
+    alert_id: int, body: ActionRequest, request: Request, db: Session = Depends(get_db)
+):
     alert = _scoped_alert(request, alert_id, db)
     action = body.action.value
 
@@ -596,8 +676,15 @@ def take_action(alert_id: int, body: ActionRequest, request: Request, db: Sessio
             alert.status = "closed"
     db.commit()
     shown = target if target else detail
-    log_action(db, actor_name(request), "alert.action", "alert", str(alert_id),
-               f"{action} -> {status} ({shown})", client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "alert.action",
+        "alert",
+        str(alert_id),
+        f"{action} -> {status} ({shown})",
+        client_ip(request),
+    )
     logger.info("Alert #%s action '%s' -> %s: %s", alert_id, action, status, detail)
     return action_row.to_dict()
 
@@ -681,8 +768,15 @@ def clear_alerts(request: Request, db: Session = Depends(get_db)):
     for alert in open_alerts:
         db.delete(alert)
     db.commit()
-    log_action(db, actor_name(request), "alerts.clear", "alert", ",".join(map(str, alert_ids)),
-               f"deleted {len(open_alerts)} alert(s); report={report['file_path']}", client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "alerts.clear",
+        "alert",
+        ",".join(map(str, alert_ids)),
+        f"deleted {len(open_alerts)} alert(s); report={report['file_path']}",
+        client_ip(request),
+    )
     logger.info(
         "Cleared %d open alert(s) (deleted, evidence purged); forced report generated: %s",
         len(open_alerts),

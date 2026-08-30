@@ -1,4 +1,5 @@
 """Base detection rule contract."""
+
 from __future__ import annotations
 
 import logging
@@ -15,16 +16,16 @@ class DetectionResult:
     """Outcome of one rule evaluation."""
 
     __slots__ = (
-        "rule",
-        "name",
-        "description",
-        "severity",
         "confidence",
-        "evidence",
-        "event_ids",
-        "mitre_id",
-        "recommendation",
         "correlation_id",
+        "description",
+        "event_ids",
+        "evidence",
+        "mitre_id",
+        "name",
+        "recommendation",
+        "rule",
+        "severity",
     )
 
     def __init__(
@@ -100,7 +101,9 @@ class BaseRule(ABC):
         return (model.org == self.org,)
 
     @abstractmethod
-    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
+    def evaluate(
+        self, window_minutes: int, since_id: int | None = None
+    ) -> list[DetectionResult]:
         """Evaluate the rule against events in the DB and return findings.
 
         ``since_id`` (optional) is the incremental-detection cursor: rules
@@ -110,7 +113,9 @@ class BaseRule(ABC):
         passes it to rules that declare the parameter.
         """
 
-    def _result(self, evidence: str, event_ids: list[int], **overrides) -> DetectionResult:
+    def _result(
+        self, evidence: str, event_ids: list[int], **overrides
+    ) -> DetectionResult:
         return DetectionResult(
             rule=overrides.get("rule", self.rule_id),
             name=overrides.get("name", self.name),

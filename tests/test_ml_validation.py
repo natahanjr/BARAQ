@@ -1,11 +1,14 @@
 """ML anomaly detection validation and ablation studies."""
+
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from datetime import datetime, timedelta, timezone
+
+from backend.analyzers.normalizer import Normalizer
 from backend.database.models import NetworkConnection, NormalizedEvent
 from backend.ml.anomaly import MLAnomalyDetector, _behavior_of, event_feature_vector
-from backend.analyzers.normalizer import Normalizer
 from tests.fixtures import (
     benign_baseline,
     brute_force,
@@ -42,9 +45,9 @@ def frozen_ml_clock(monkeypatch):
     ``backend.ml.anomaly.datetime`` with a frozen subclass makes the training
     window, model boundary and drift accounting fully reproducible.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    reference = datetime(2026, 6, 15, 10, 0, 0, tzinfo=timezone.utc)
+    reference = datetime(2026, 6, 15, 10, 0, 0, tzinfo=UTC)
 
     class _FrozenClock(datetime):
         @classmethod
@@ -78,7 +81,7 @@ class TestMLAnomalyDetector:
                     "source_ip": 192168001010,
                     "is_locked": False,
                 }
-            }
+            },
         }
         features = event_feature_vector(record)
         assert features is not None
@@ -179,6 +182,7 @@ class TestMLAnomalyDetector:
 # COMPARATIVE ANALYSIS: Hybrid vs Rule-only vs ML-only Detection
 # =====================================================================
 
+
 class TestDetectionMethodComparison:
     """Comparative analysis of detection methods."""
 
@@ -193,7 +197,6 @@ class TestDetectionMethodComparison:
 
     def test_ml_only_detection_sensitivity(self, ml_session, frozen_ml_clock):
         """Test ML-only detection on attack vs baseline."""
-        from datetime import datetime, timezone
 
         # Model features include time-of-day; training on "now"-stamped
         # fixtures makes this test depend on the wall clock (the absolute
@@ -210,7 +213,9 @@ class TestDetectionMethodComparison:
         def _spread(records, start_hours, step_minutes):
             """Stamp records at ``DAY_START + start_hours + i*step``."""
             for i, r in enumerate(records):
-                stamp = DAY_START + timedelta(hours=start_hours, minutes=i * step_minutes)
+                stamp = DAY_START + timedelta(
+                    hours=start_hours, minutes=i * step_minutes
+                )
                 r["timestamp"] = stamp.isoformat()
 
         baseline = benign_baseline(60)
@@ -270,7 +275,9 @@ class TestDetectionMethodComparison:
         findings = rule.evaluate(10)
 
         # Rule-only should have zero false positives on baseline
-        assert len(findings) == 0, "Rule-based detection should not flag baseline activity"
+        assert (
+            len(findings) == 0
+        ), "Rule-based detection should not flag baseline activity"
 
     def test_hybrid_scoring_reduces_false_positives(self, ml_session):
         """Test that hybrid scoring helps reduce false positives."""
@@ -281,10 +288,7 @@ class TestDetectionMethodComparison:
         ml_scores = [0.2, 0.15, 0.25]  # Low anomaly
 
         hybrid = compute_hybrid_score(
-            rule_score=rule_score,
-            ml_scores=ml_scores,
-            ml_weight=0.4,
-            rule_weight=0.6
+            rule_score=rule_score, ml_scores=ml_scores, ml_weight=0.4, rule_weight=0.6
         )
 
         # Hybrid should lower the score when ML disagrees
@@ -326,6 +330,7 @@ class TestDetectionMethodComparison:
 # ABLATION STUDIES
 # =====================================================================
 
+
 class TestAblationStudies:
     """Ablation studies testing impact of individual components."""
 
@@ -349,7 +354,9 @@ class TestAblationStudies:
         assert hybrid_rule_only == 60  # Pure rule score
         assert hybrid_ml_only != hybrid_rule_only
         assert hybrid_full != hybrid_rule_only
-        assert abs(hybrid_full - hybrid_rule_only) < abs(hybrid_ml_only - hybrid_rule_only)
+        assert abs(hybrid_full - hybrid_rule_only) < abs(
+            hybrid_ml_only - hybrid_rule_only
+        )
 
     def test_rule_threshold_impact(self, ml_session):
         """Test impact of rule threshold tuning."""
@@ -373,18 +380,24 @@ class TestAblationStudies:
 
     def test_correlation_window_impact(self, ml_session):
         """Test impact of detection window size."""
-        from backend.detection.rules.network_recon import NetworkReconRule
         from backend.database.models import NetworkConnection
+        from backend.detection.rules.network_recon import NetworkReconRule
 
         # Add port scan events spread over time
         for i in range(30):
-            ml_session.add(NetworkConnection(
-                pid=4422, process="nmap.exe",
-                local_ip="192.168.99.66", local_port=40000 + i,
-                remote_ip="10.0.0.4", remote_port=1 + (i * 137) % 65535,
-                state="SYN_SENT", is_listening=False,
-                observed_at=Normalizer._safe_ts("2026-08-04T10:00:00Z"),
-            ))
+            ml_session.add(
+                NetworkConnection(
+                    pid=4422,
+                    process="nmap.exe",
+                    local_ip="192.168.99.66",
+                    local_port=40000 + i,
+                    remote_ip="10.0.0.4",
+                    remote_port=1 + (i * 137) % 65535,
+                    state="SYN_SENT",
+                    is_listening=False,
+                    observed_at=Normalizer._safe_ts("2026-08-04T10:00:00Z"),
+                )
+            )
         ml_session.commit()
 
         # Short window (60 seconds)
@@ -403,6 +416,7 @@ class TestAblationStudies:
 # V3 BEHAVIORAL LAYERS: labeled ground truth, per-stream supervision,
 # threshold tuning in deployed score space, drift guard
 # =====================================================================
+
 
 class TestMLv3BehavioralLayers:
     """Supervised per-stream classifiers with deployed-space tuning + drift."""
@@ -463,7 +477,9 @@ class TestMLv3BehavioralLayers:
         ml_session.commit()
 
         flagged = 0
-        for r in ml_masquerade_process() + [r for r in ml_c2_beacon() if r.get("source") == "eventlog"]:
+        for r in ml_masquerade_process() + [
+            r for r in ml_c2_beacon() if r.get("source") == "eventlog"
+        ]:
             normalized = Normalizer().normalize(r)
             features = event_feature_vector(normalized)
             if not features:
@@ -482,7 +498,9 @@ class TestMLv3BehavioralLayers:
 
         baseline = benign_baseline(60)
         for i, r in enumerate(baseline):
-            r["timestamp"] = (DAY_START + timedelta(hours=0, minutes=i * 24)).isoformat()
+            r["timestamp"] = (
+                DAY_START + timedelta(hours=0, minutes=i * 24)
+            ).isoformat()
             ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
         ml_session.commit()
 
@@ -494,7 +512,9 @@ class TestMLv3BehavioralLayers:
         detector.thresholds["process"] = 0.25
         trained_at = datetime.fromisoformat(detector.trained_at)
 
-        feed = [r for r in benign_baseline(200) if r.get("event_id") in (4688, 4104)][:50]
+        feed = [r for r in benign_baseline(200) if r.get("event_id") in (4688, 4104)][
+            :50
+        ]
         for i, r in enumerate(feed):
             r["timestamp"] = (trained_at + timedelta(seconds=2 + i)).isoformat()
             ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
@@ -510,32 +530,48 @@ class TestMLv3BehavioralLayers:
         """Network stream labels come from per-remote-IP attack attribution."""
         from datetime import timedelta
 
-        detector = MLAnomalyDetector()
+        MLAnomalyDetector()
 
         for r in benign_baseline(60):
             ml_session.add(NormalizedEvent(**Normalizer().normalize(r)))
         for c in ml_network_exfil():
-            ml_session.add(NetworkConnection(
-                pid=c.get("pid", 0), process=c.get("process", ""),
-                local_ip=c.get("local_ip", ""), local_port=c.get("local_port", 0),
-                remote_ip=c.get("remote_ip", ""), remote_port=c.get("remote_port", 0),
-                state=c.get("state", ""), is_listening=c.get("is_listening", False),
-                bytes_sent=c.get("bytes_sent", 0), bytes_recv=c.get("bytes_recv", 0),
-                duration_seconds=c.get("duration_seconds", 0.0),
-                observed_at=Normalizer._safe_ts(c.get("timestamp")),
-            ))
+            ml_session.add(
+                NetworkConnection(
+                    pid=c.get("pid", 0),
+                    process=c.get("process", ""),
+                    local_ip=c.get("local_ip", ""),
+                    local_port=c.get("local_port", 0),
+                    remote_ip=c.get("remote_ip", ""),
+                    remote_port=c.get("remote_port", 0),
+                    state=c.get("state", ""),
+                    is_listening=c.get("is_listening", False),
+                    bytes_sent=c.get("bytes_sent", 0),
+                    bytes_recv=c.get("bytes_recv", 0),
+                    duration_seconds=c.get("duration_seconds", 0.0),
+                    observed_at=Normalizer._safe_ts(c.get("timestamp")),
+                )
+            )
         # Benign flows to a normal external host (labels 0).
         for i in range(3):
-            ml_session.add(NetworkConnection(
-                pid=100, process="svchost.exe", local_ip="192.168.1.20",
-                local_port=53000 + i, remote_ip="8.8.8.8", remote_port=53,
-                state="ESTABLISHED", is_listening=False,
-                bytes_sent=2000, bytes_recv=4000, duration_seconds=1.5,
-                observed_at=datetime.now(timezone.utc),
-            ))
+            ml_session.add(
+                NetworkConnection(
+                    pid=100,
+                    process="svchost.exe",
+                    local_ip="192.168.1.20",
+                    local_port=53000 + i,
+                    remote_ip="8.8.8.8",
+                    remote_port=53,
+                    state="ESTABLISHED",
+                    is_listening=False,
+                    bytes_sent=2000,
+                    bytes_recv=4000,
+                    duration_seconds=1.5,
+                    observed_at=datetime.now(UTC),
+                )
+            )
         ml_session.commit()
 
-        since = datetime.now(timezone.utc) - timedelta(hours=24)
+        since = datetime.now(UTC) - timedelta(hours=24)
         _, network_y, _ = MLAnomalyDetector._labeled_network_samples(ml_session, since)
         assert sum(1 for v in network_y if v) >= 1, "no attack-labeled network IPs"
         assert sum(1 for v in network_y if not v) >= 1, "no benign network IPs"
@@ -544,6 +580,7 @@ class TestMLv3BehavioralLayers:
 # =====================================================================
 # CROSS-VALIDATION AND ROBUSTNESS TESTS
 # =====================================================================
+
 
 class TestMLCrossValidation:
     """Cross-validation and robustness testing."""
@@ -608,4 +645,3 @@ class TestMLCrossValidation:
         # Should handle gracefully
         assert result["status"] in ["insufficient-data", "ok"]
         assert "trained" in result
-

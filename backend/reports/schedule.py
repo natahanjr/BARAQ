@@ -6,18 +6,27 @@ Schedules live in the ``report_schedules`` table (managed via the API in
 ``baraq.scheduled_report``). Email delivery reuses the ``BARAQ_SMTP_*``
 settings; reports are generated synchronously and shipped as attachments.
 """
+
 from __future__ import annotations
 
 import logging
 import smtplib
 import ssl
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.config import SMTP_FROM, SMTP_HOST, SMTP_PASSWORD, SMTP_PORT, SMTP_STARTTLS, SMTP_TO, SMTP_USERNAME
+from backend.config import (
+    SMTP_FROM,
+    SMTP_HOST,
+    SMTP_PASSWORD,
+    SMTP_PORT,
+    SMTP_STARTTLS,
+    SMTP_TO,
+    SMTP_USERNAME,
+)
 from backend.database.models import ReportSchedule
 from backend.reports.generator import generate_report
 
@@ -69,23 +78,27 @@ def _is_due(schedule: ReportSchedule, now: datetime) -> bool:
             return False
         if schedule.last_run_at:
             day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            if schedule.last_run_at.astimezone(timezone.utc) >= day_start.astimezone(timezone.utc):
+            if schedule.last_run_at.astimezone(UTC) >= day_start.astimezone(UTC):
                 return False
         return True
     if schedule.every_hours <= 0:
         return False
     if schedule.last_run_at is None:
         return True
-    return now - schedule.last_run_at.astimezone(timezone.utc) >= timedelta(hours=schedule.every_hours)
+    return now - schedule.last_run_at.astimezone(UTC) >= timedelta(
+        hours=schedule.every_hours
+    )
 
 
 def run_schedule(db: Session, schedule: ReportSchedule, email: bool = True) -> dict:
     """Generate one schedule's report (and optionally email it)."""
     result = generate_report(db, schedule.report_type, schedule.fmt)
-    schedule.last_run_at = datetime.now(timezone.utc)
+    schedule.last_run_at = datetime.now(UTC)
     schedule.runs_total += 1
     schedule.last_error = ""
-    recipients = [r for r in (schedule.email_to or SMTP_TO or "").split(",") if r.strip()]
+    recipients = [
+        r for r in (schedule.email_to or SMTP_TO or "").split(",") if r.strip()
+    ]
     emailed = False
     if email and recipients:
         emailed = email_report(
@@ -99,21 +112,20 @@ def run_schedule(db: Session, schedule: ReportSchedule, email: bool = True) -> d
 
 def run_due_schedules(db: Session) -> dict:
     """Run every due schedule; never lets one failure stop the rest."""
-    now = datetime.now(timezone.utc)
-    due = [
-        s for s in db.scalars(select(ReportSchedule)).all()
-        if _is_due(s, now)
-    ]
+    now = datetime.now(UTC)
+    due = [s for s in db.scalars(select(ReportSchedule)).all() if _is_due(s, now)]
     results: list[dict] = []
     for schedule in due:
         try:
             result = run_schedule(db, schedule)
             results.append({"name": schedule.name, "status": "ok", **result})
             logger.info("Scheduled report %s generated", schedule.name)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             db.rollback()
             schedule.last_error = str(exc)[:400]
             db.commit()
-            results.append({"name": schedule.name, "status": "error", "error": str(exc)})
+            results.append(
+                {"name": schedule.name, "status": "error", "error": str(exc)}
+            )
             logger.warning("Scheduled report %s failed: %s", schedule.name, exc)
     return {"due": len(due), "results": results}

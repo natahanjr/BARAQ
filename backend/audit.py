@@ -5,11 +5,12 @@ so editing or deleting any historical row breaks the chain. ``verify_chain``
 recomputes the whole chain and reports any breakage. Optionally each entry is
 also forwarded to a remote SIEM/syslog (see ``backend.logging_config``).
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import Request
 from sqlalchemy import func, select
@@ -43,7 +44,7 @@ def log_action(
     """Persist an audit entry chained to the previous one. Never raises - the
     audit trail must not break the primary operation."""
     try:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         prev_hash = _GENESIS_HASH
         last = db.scalar(select(AuditLog).order_by(AuditLog.id.desc()).limit(1))
         if last is not None:
@@ -67,23 +68,25 @@ def log_action(
         try:
             from backend.logging_config import audit_syslog
 
-            audit_syslog({
-                "event": "audit",
-                "id": entry.id,
-                "actor": entry.actor,
-                "action": entry.action,
-                "entity_type": entry.entity_type,
-                "entity_id": entry.entity_id,
-                "detail": entry.detail,
-                "ip": entry.ip,
-                "created_at": now.isoformat(),
-                "hash": entry.hash,
-                "prev_hash": prev_hash,
-            })
-        except Exception:  # noqa: BLE001 - SIEM forwarding must not break writes
+            audit_syslog(
+                {
+                    "event": "audit",
+                    "id": entry.id,
+                    "actor": entry.actor,
+                    "action": entry.action,
+                    "entity_type": entry.entity_type,
+                    "entity_id": entry.entity_id,
+                    "detail": entry.detail,
+                    "ip": entry.ip,
+                    "created_at": now.isoformat(),
+                    "hash": entry.hash,
+                    "prev_hash": prev_hash,
+                }
+            )
+        except Exception:
             pass
         return entry
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Audit log write failed: %s", exc)
         db.rollback()
         return None

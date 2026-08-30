@@ -18,6 +18,7 @@ host over a trusted channel, start it, and the host appears in
 **System -> Connected Endpoints** tagged with the org after its first cycle.
 Restart the BARAQ service after setup so the new keys load.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,9 +29,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from backend.config import APP_DIR  # noqa: E402
-from backend.vault import SecretVault, get_vault_path  # noqa: E402
-from scripts import provision_agent as prov  # noqa: E402
+from backend.config import APP_DIR
+from backend.vault import SecretVault, get_vault_path
+from scripts import provision_agent as prov
 
 MANIFEST_DIR = APP_DIR / "agent_configs"
 
@@ -46,8 +47,15 @@ def _agent_cmd(server: str, key: str, interval: int, tls_cert: str) -> str:
     return f'python scripts/agent.py --server {server} --key "{key}" --interval {interval}{ca}'
 
 
-def provision_org(vault: SecretVault, org: str, server: str, hosts: list[str],
-                  org_name: str = "", tls_cert: str = "", interval: int = 15) -> Path:
+def provision_org(
+    vault: SecretVault,
+    org: str,
+    server: str,
+    hosts: list[str],
+    org_name: str = "",
+    tls_cert: str = "",
+    interval: int = 15,
+) -> Path:
     """Register every host of one university; returns the manifest path."""
     tls_cert = _resolve_tls_cert(server, tls_cert)
     MANIFEST_DIR.mkdir(exist_ok=True)
@@ -60,8 +68,9 @@ def provision_org(vault: SecretVault, org: str, server: str, hosts: list[str],
         "hosts": {},
     }
     for agent_id in hosts:
-        key, cfg = prov.provision_host(vault, agent_id, server, org=org,
-                                       tls_cert=tls_cert, interval=interval)
+        key, cfg = prov.provision_host(
+            vault, agent_id, server, org=org, tls_cert=tls_cert, interval=interval
+        )
         manifest["hosts"][agent_id] = {
             "key": key,
             "config": cfg.name,
@@ -106,8 +115,15 @@ def _vault() -> SecretVault:
 
 def cmd_setup(args: argparse.Namespace) -> int:
     hosts = [h for h in (h.strip() for h in args.hosts.split(",")) if h]
-    manifest = provision_org(_vault(), args.org, args.server, hosts,
-                             args.org_name, args.tls_cert, args.interval)
+    manifest = provision_org(
+        _vault(),
+        args.org,
+        args.server,
+        hosts,
+        args.org_name,
+        args.tls_cert,
+        args.interval,
+    )
     data = json.loads(manifest.read_text(encoding="utf-8"))
     print(f"university '{args.org}' -> {len(hosts)} host(s) provisioned")
     print(f"  org display : {data['org_name']}")
@@ -141,14 +157,19 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     setup = sub.add_parser("setup", help="provision all hosts of one university")
     setup.add_argument("org", help="stable org id, e.g. univ-a")
-    setup.add_argument("server",
-                       help="central server URL, e.g. https://soc.example.com:8443")
+    setup.add_argument(
+        "server", help="central server URL, e.g. https://soc.example.com:8443"
+    )
     setup.add_argument("--org-name", default="", help="display name of the university")
-    setup.add_argument("--hosts", required=True,
-                       help="comma-separated agent ids of the campus hosts")
-    setup.add_argument("--tls-cert", default="",
-                       help="PEM cert of the central server "
-                            "(defaults to certs\\baraq.crt for https servers)")
+    setup.add_argument(
+        "--hosts", required=True, help="comma-separated agent ids of the campus hosts"
+    )
+    setup.add_argument(
+        "--tls-cert",
+        default="",
+        help="PEM cert of the central server "
+        "(defaults to certs\\baraq.crt for https servers)",
+    )
     setup.add_argument("--interval", type=int, default=15)
     setup.set_defaults(func=cmd_setup)
     sub.add_parser("list", help="list orgs and their hosts").set_defaults(func=cmd_list)

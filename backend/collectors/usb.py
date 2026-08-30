@@ -7,6 +7,7 @@ normalizes them into ``UsbDevice`` records.
 When pywin32 is not available the collector degrades gracefully and
 returns no records (pure-live: no simulation fallback).
 """
+
 from __future__ import annotations
 
 import logging

@@ -1,5 +1,8 @@
 """Test normalizer + detection rules against deterministic fixture records."""
+
 from __future__ import annotations
+
+from datetime import UTC
 
 import pytest
 
@@ -10,33 +13,30 @@ from tests.fixtures import (
     admin_tampering,
     benign_baseline,
     benign_process,
+    bits_download,
     brute_force,
+    credential_store_theft,
     data_staging,
     hidden_artifact,
-    http_exfil,
     http_volume,
+    lateral_movement,
     log_clear,
     logon_failure,
-    lateral_movement,
     lolbin_usage,
     masquerading_process,
     persistence,
-    phishing_email,
     port_scan,
     privilege_escalation,
+    ransomware_impact,
+    recovery_inhibit,
     schtasks_create,
+    shortcut_persistence,
     suspicious_powershell,
     sysmon_benign_registry,
     sysmon_lsass_benign,
     sysmon_lsass_dump,
     sysmon_runkey,
-    usb_device,
     wmi_subscription,
-    bits_download,
-    credential_store_theft,
-    ransomware_impact,
-    recovery_inhibit,
-    shortcut_persistence,
 )
 
 
@@ -67,12 +67,17 @@ def test_normalizer_extracts_account_from_message():
 def test_normalizer_flags_truncated_process_name():
     """A process path cut short (no executable suffix) is flagged, and the
     missing structured copy marks the process data incomplete."""
-    out = Normalizer().normalize({
-        "source": "eventlog", "channel": "Security", "event_id": 4688,
-        "timestamp": "2026-08-14T10:00:00+00:00", "user": "u",
-        "message": "New Process Name:\tC:\\Windows\\Sys",
-        "raw": {"record_number": 1, "structured_fetch_failed": True},
-    })
+    out = Normalizer().normalize(
+        {
+            "source": "eventlog",
+            "channel": "Security",
+            "event_id": 4688,
+            "timestamp": "2026-08-14T10:00:00+00:00",
+            "user": "u",
+            "message": "New Process Name:\tC:\\Windows\\Sys",
+            "raw": {"record_number": 1, "structured_fetch_failed": True},
+        }
+    )
     assert out["data_integrity"] == "truncated"
     truncated = out["raw_json"]["data_integrity"]["truncated_fields"]
     assert "new_process" in truncated
@@ -81,24 +86,33 @@ def test_normalizer_flags_truncated_process_name():
 
 def test_normalizer_flags_bare_drive_letter_process():
     """'New Process Name:\tC' is the SafeFormatMessage truncation signature."""
-    out = Normalizer().normalize({
-        "source": "eventlog", "channel": "Security", "event_id": 4688,
-        "timestamp": "2026-08-14T10:00:00+00:00", "user": "u",
-        "message": "New Process Name:\tC",
-        "raw": {"record_number": 2},
-    })
+    out = Normalizer().normalize(
+        {
+            "source": "eventlog",
+            "channel": "Security",
+            "event_id": 4688,
+            "timestamp": "2026-08-14T10:00:00+00:00",
+            "user": "u",
+            "message": "New Process Name:\tC",
+            "raw": {"record_number": 2},
+        }
+    )
     truncated = out["raw_json"]["data_integrity"]["truncated_fields"]
     assert "new_process" in truncated
 
 
 def test_normalizer_flags_message_cap():
     """Messages over the length cap are flagged as lossy."""
-    out = Normalizer().normalize({
-        "source": "agent", "event_id": 4625,
-        "timestamp": "2026-08-14T10:00:00+00:00", "user": "u",
-        "message": "x" * 9000,
-        "raw": {"record_number": 3},
-    })
+    out = Normalizer().normalize(
+        {
+            "source": "agent",
+            "event_id": 4625,
+            "timestamp": "2026-08-14T10:00:00+00:00",
+            "user": "u",
+            "message": "x" * 9000,
+            "raw": {"record_number": 3},
+        }
+    )
     truncated = out["raw_json"]["data_integrity"]["truncated_fields"]
     assert "message" in truncated
 
@@ -106,16 +120,21 @@ def test_normalizer_flags_message_cap():
 def test_normalizer_complete_structured_data_is_not_flagged():
     """A full structured process record stays 'complete' even when the
     message copy would be truncated."""
-    out = Normalizer().normalize({
-        "source": "eventlog", "channel": "Security", "event_id": 4688,
-        "timestamp": "2026-08-14T10:00:00+00:00", "user": "u",
-        "message": "New Process Name:\tC:\\Windows\\Sys",
-        "raw": {
-            "record_number": 4,
-            "NewProcessName": r"C:\Windows\System32\cmd.exe",
-            "CommandLine": r"C:\Windows\System32\cmd.exe /c whoami",
-        },
-    })
+    out = Normalizer().normalize(
+        {
+            "source": "eventlog",
+            "channel": "Security",
+            "event_id": 4688,
+            "timestamp": "2026-08-14T10:00:00+00:00",
+            "user": "u",
+            "message": "New Process Name:\tC:\\Windows\\Sys",
+            "raw": {
+                "record_number": 4,
+                "NewProcessName": r"C:\Windows\System32\cmd.exe",
+                "CommandLine": r"C:\Windows\System32\cmd.exe /c whoami",
+            },
+        }
+    )
     assert out["data_integrity"] == "complete"
     assert out["raw_json"]["data_integrity"]["complete"] is True
 
@@ -145,8 +164,7 @@ def test_brute_force_distributed_spray(db):
     from backend.detection.rules.brute_force import BruteForceRule
 
     records = [
-        logon_failure(user="victim", source_ip=f"203.0.113.{i}")
-        for i in range(1, 8)
+        logon_failure(user="victim", source_ip=f"203.0.113.{i}") for i in range(1, 8)
     ]
     add_normalized(db, records)
     findings = BruteForceRule(db, threshold=5).evaluate(10)
@@ -205,13 +223,19 @@ def test_port_scan_detection(db):
     from backend.detection.rules.network_recon import NetworkReconRule
 
     for r in port_scan(ports=30):
-        db.add(NetworkConnection(
-            pid=r["pid"], process=r["process"], local_ip=r["local_ip"],
-            local_port=r["local_port"], remote_ip=r["remote_ip"],
-            remote_port=r["remote_port"], state=r["state"],
-            is_listening=r["is_listening"],
-            observed_at=Normalizer._safe_ts(r["timestamp"]),
-        ))
+        db.add(
+            NetworkConnection(
+                pid=r["pid"],
+                process=r["process"],
+                local_ip=r["local_ip"],
+                local_port=r["local_port"],
+                remote_ip=r["remote_ip"],
+                remote_port=r["remote_port"],
+                state=r["state"],
+                is_listening=r["is_listening"],
+                observed_at=Normalizer._safe_ts(r["timestamp"]),
+            )
+        )
     db.commit()
     findings = NetworkReconRule(db, distinct_ports=20, window_seconds=120).evaluate(10)
     assert len(findings) == 1
@@ -231,13 +255,19 @@ def test_lateral_movement_smb_detection(db):
     from backend.detection.rules.lateral_movement import LateralMovementRule
 
     for r in lateral_movement():
-        db.add(NetworkConnection(
-            pid=r["pid"], process=r["process"], local_ip=r["local_ip"],
-            local_port=r["local_port"], remote_ip=r["remote_ip"],
-            remote_port=r["remote_port"], state=r["state"],
-            is_listening=r["is_listening"],
-            observed_at=Normalizer._safe_ts(r["timestamp"]),
-        ))
+        db.add(
+            NetworkConnection(
+                pid=r["pid"],
+                process=r["process"],
+                local_ip=r["local_ip"],
+                local_port=r["local_port"],
+                remote_ip=r["remote_ip"],
+                remote_port=r["remote_port"],
+                state=r["state"],
+                is_listening=r["is_listening"],
+                observed_at=Normalizer._safe_ts(r["timestamp"]),
+            )
+        )
     db.commit()
     findings = LateralMovementRule(db, admin_share_threshold=3).evaluate(10)
     assert len(findings) > 0
@@ -254,16 +284,23 @@ def test_data_staging_archive_tool_detection(db):
 
 
 def test_malware_file_rule(db):
+    from datetime import datetime
+
     from backend.database.models import FileScan
     from backend.detection.rules.malware_file import MalwareFileRule
-    from datetime import datetime, timezone
 
-    db.add(FileScan(
-        file_path="C:\\Users\\Public\\beacon.exe", file_name="beacon.exe",
-        sha256="275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f",
-        size=12345, signed=False, is_malicious=True, signature_name="known-bad-sample",
-        scanned_at=datetime.now(timezone.utc),
-    ))
+    db.add(
+        FileScan(
+            file_path="C:\\Users\\Public\\beacon.exe",
+            file_name="beacon.exe",
+            sha256="275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f",
+            size=12345,
+            signed=False,
+            is_malicious=True,
+            signature_name="known-bad-sample",
+            scanned_at=datetime.now(UTC),
+        )
+    )
     db.commit()
     findings = MalwareFileRule(db).evaluate(10)
     assert len(findings) == 1
@@ -271,17 +308,22 @@ def test_malware_file_rule(db):
 
 
 def test_email_phishing_rule(db):
+    from datetime import datetime
+
     from backend.database.models import EmailMessage
     from backend.detection.rules.email_phishing import EmailPhishingRule
-    from datetime import datetime, timezone
 
-    db.add(EmailMessage(
-        sender="noreply@accounts-update.tk", recipient="alice@corp.local",
-        subject="URGENT: verify your account password now",
-        body="Click https://evil.tk/login to verify. Attachment: invoice.exe",
-        attachment_types=".exe", ip_address="203.0.113.7",
-        received_at=datetime.now(timezone.utc),
-    ))
+    db.add(
+        EmailMessage(
+            sender="noreply@accounts-update.tk",
+            recipient="alice@corp.local",
+            subject="URGENT: verify your account password now",
+            body="Click https://evil.tk/login to verify. Attachment: invoice.exe",
+            attachment_types=".exe",
+            ip_address="203.0.113.7",
+            received_at=datetime.now(UTC),
+        )
+    )
     db.commit()
     findings = EmailPhishingRule(db, threshold=2.0).evaluate(10)
     assert len(findings) == 1
@@ -289,14 +331,20 @@ def test_email_phishing_rule(db):
 
 
 def test_usb_device_rule(db):
+    from datetime import datetime
+
     from backend.database.models import UsbDevice
     from backend.detection.rules.usb import UsbDeviceRule
-    from datetime import datetime, timezone
 
-    db.add(UsbDevice(
-        device_name="Kingston DataTraveler", device_id="USB\\VID_0951&PID_1666",
-        vendor="Kingston", serial="07018AC27C", inserted_at=datetime.now(timezone.utc),
-    ))
+    db.add(
+        UsbDevice(
+            device_name="Kingston DataTraveler",
+            device_id="USB\\VID_0951&PID_1666",
+            vendor="Kingston",
+            serial="07018AC27C",
+            inserted_at=datetime.now(UTC),
+        )
+    )
     db.commit()
     findings = UsbDeviceRule(db).evaluate(10)
     assert len(findings) == 1
@@ -304,20 +352,35 @@ def test_usb_device_rule(db):
 
 
 def test_dns_http_exfil_rule(db):
+    from datetime import datetime
+
     from backend.database.models import DnsQuery, HttpRequest
     from backend.detection.rules.dns_http import DnsHttpExfilRule
-    from datetime import datetime, timezone
 
     for q in dns_exfil_for_db():
-        db.add(DnsQuery(
-            process="svchost.exe", pid=500, query=q, response="8.8.4.4",
-            response_size=600, observed_at=datetime.now(timezone.utc),
-        ))
-    db.add(HttpRequest(
-        process="powershell.exe", pid=1234, method="POST", url="https://evil.xyz/upload",
-        host="evil.xyz", status_code=200, request_body_size=2_000_000,
-        response_body_size=5_000_000, observed_at=datetime.now(timezone.utc),
-    ))
+        db.add(
+            DnsQuery(
+                process="svchost.exe",
+                pid=500,
+                query=q,
+                response="8.8.4.4",
+                response_size=600,
+                observed_at=datetime.now(UTC),
+            )
+        )
+    db.add(
+        HttpRequest(
+            process="powershell.exe",
+            pid=1234,
+            method="POST",
+            url="https://evil.xyz/upload",
+            host="evil.xyz",
+            status_code=200,
+            request_body_size=2_000_000,
+            response_body_size=5_000_000,
+            observed_at=datetime.now(UTC),
+        )
+    )
     db.commit()
     findings = DnsHttpExfilRule(db).evaluate(10)
     assert len(findings) >= 1
@@ -329,21 +392,29 @@ def dns_exfil_for_db():
 
 
 def test_kill_chain_correlation(db):
+    from datetime import datetime
+
     from backend.database.models import Alert
     from backend.detection.rules.correlation import KillChainCorrelationRule
-    from datetime import datetime, timezone
 
     for name, rule in (
         ("Brute Force Attack", "brute_force"),
         ("Persistence Mechanism Installed", "persistence"),
         ("Suspicious Privilege Escalation", "privilege_escalation"),
     ):
-        db.add(Alert(
-            name=name, rule=rule, status="open", severity="high", mitre_id="T1110",
-            mitre_name="Brute Force", mitre_tactic="Credential Access",
-            evidence="Brute force detected for account 'administrator' from 192.168.99.77.",
-            created_at=datetime.now(timezone.utc),
-        ))
+        db.add(
+            Alert(
+                name=name,
+                rule=rule,
+                status="open",
+                severity="high",
+                mitre_id="T1110",
+                mitre_name="Brute Force",
+                mitre_tactic="Credential Access",
+                evidence="Brute force detected for account 'administrator' from 192.168.99.77.",
+                created_at=datetime.now(UTC),
+            )
+        )
     db.commit()
     findings = KillChainCorrelationRule(db, threshold=2).evaluate(10)
     assert len(findings) == 1
@@ -353,23 +424,31 @@ def test_kill_chain_correlation(db):
 def test_kill_chain_timing_composition(db):
     """Timing-composed correlation: stages arriving in canonical order with
     an exfiltration terminal stage score a coherent critical chain."""
+    from datetime import datetime, timedelta
+
     from backend.database.models import Alert
     from backend.detection.rules.correlation import KillChainCorrelationRule
-    from datetime import datetime, timezone, timedelta
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for name, rule, offset in (
         ("Network Service Discovery", "network_recon", 45),
         ("Brute Force Attack", "brute_force", 30),
         ("Data Staging", "data_staging", 12),
         ("Data Exfiltration", "dns_http_exfil", 3),
     ):
-        db.add(Alert(
-            name=name, rule=rule, status="open", severity="high", mitre_id="T1046",
-            mitre_name="Discovery", mitre_tactic="Discovery",
-            evidence="Brute force detected for account 'administrator' from 192.168.99.77.",
-            created_at=now - timedelta(minutes=offset),
-        ))
+        db.add(
+            Alert(
+                name=name,
+                rule=rule,
+                status="open",
+                severity="high",
+                mitre_id="T1046",
+                mitre_name="Discovery",
+                mitre_tactic="Discovery",
+                evidence="Brute force detected for account 'administrator' from 192.168.99.77.",
+                created_at=now - timedelta(minutes=offset),
+            )
+        )
     db.commit()
     findings = KillChainCorrelationRule(db, threshold=2).evaluate(10)
     assert len(findings) == 1
@@ -383,20 +462,29 @@ def test_kill_chain_timing_reversed_sequence(db):
     """Scrambled stage arrival (exfiltration before discovery) still fires
     on stage count but must report the ordering deviation and a softer
     confidence than a coherent chain."""
+    from datetime import datetime, timedelta
+
     from backend.database.models import Alert
     from backend.detection.rules.correlation import KillChainCorrelationRule
-    from datetime import datetime, timezone, timedelta
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for name, rule, offset in (
         ("Data Exfiltration", "dns_http_exfil", 3),
         ("Network Service Discovery", "network_recon", 12),
     ):
-        db.add(Alert(
-            name=name, rule=rule, status="open", severity="high", mitre_id="T1048",
-            mitre_name="Exfiltration", mitre_tactic="Exfiltration",
-            evidence="from 192.168.99.77.", created_at=now - timedelta(minutes=offset),
-        ))
+        db.add(
+            Alert(
+                name=name,
+                rule=rule,
+                status="open",
+                severity="high",
+                mitre_id="T1048",
+                mitre_name="Exfiltration",
+                mitre_tactic="Exfiltration",
+                evidence="from 192.168.99.77.",
+                created_at=now - timedelta(minutes=offset),
+            )
+        )
     db.commit()
     findings = KillChainCorrelationRule(db, threshold=2, window_minutes=60).evaluate(10)
     assert len(findings) == 1
@@ -408,27 +496,45 @@ def test_kill_chain_covers_expanded_rule_families(db):
     """The kill-chain stage map must classify every native + expanded rule
     family so correlated alerts from the 52-rule expansion still build
     coherent chains instead of falling into 'Other'."""
+    from datetime import datetime
+
     from backend.database.models import Alert
-    from backend.detection.rules.correlation import KILL_CHAIN_STAGES, KillChainCorrelationRule
-    from datetime import datetime, timezone
+    from backend.detection.rules.correlation import (
+        KILL_CHAIN_STAGES,
+        KillChainCorrelationRule,
+    )
 
     families = [
-        "spearphishing_attachment", "wmi_execution", "startup_folder",
-        "uac_bypass", "disable_defender", "lsass_dump", "account_discovery",
-        "rdp_lateral", "archive_collection", "encrypted_channel",
+        "spearphishing_attachment",
+        "wmi_execution",
+        "startup_folder",
+        "uac_bypass",
+        "disable_defender",
+        "lsass_dump",
+        "account_discovery",
+        "rdp_lateral",
+        "archive_collection",
+        "encrypted_channel",
     ]
     for rule in families:
         assert rule in KILL_CHAIN_STAGES, f"{rule} missing from stage map"
         assert KILL_CHAIN_STAGES[rule] != "Other"
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for rule in families:
-        db.add(Alert(
-            name=f"Expanded {rule}", rule=rule, status="open", severity="high",
-            mitre_id="T1071", mitre_name="Expanded", mitre_tactic="Expanded",
-            evidence="Brute force detected for account 'administrator' from 192.168.99.77.",
-            created_at=now,
-        ))
+        db.add(
+            Alert(
+                name=f"Expanded {rule}",
+                rule=rule,
+                status="open",
+                severity="high",
+                mitre_id="T1071",
+                mitre_name="Expanded",
+                mitre_tactic="Expanded",
+                evidence="Brute force detected for account 'administrator' from 192.168.99.77.",
+                created_at=now,
+            )
+        )
     db.commit()
     findings = KillChainCorrelationRule(db, threshold=2).evaluate(10)
     assert findings, "expanded families must produce a correlated chain"
@@ -509,11 +615,17 @@ def test_hidden_artifacts_uvicorn_module_syntax_not_flagged(db):
 
     def _proc(name, cmdline, pid):
         return {
-            "source": "process", "pid": pid, "ppid": 900, "name": name,
+            "source": "process",
+            "pid": pid,
+            "ppid": 900,
+            "name": name,
             "path": f"C:\\Windows\\System32\\{name}",
-            "cmdline": cmdline, "raw": {"cmdline": cmdline},
-            "parent_name": "explorer.exe", "user": "HAARAPHEL\\Haaraphel",
-            "is_new": True, "timestamp": "2026-08-07T21:00:00Z",
+            "cmdline": cmdline,
+            "raw": {"cmdline": cmdline},
+            "parent_name": "explorer.exe",
+            "user": "HAARAPHEL\\Haaraphel",
+            "is_new": True,
+            "timestamp": "2026-08-07T21:00:00Z",
         }
 
     add_normalized(
@@ -648,7 +760,6 @@ def test_new_rules_no_false_positives_on_benign(db):
 
 def _seed_org_events(db, org: str, attempts: int = 12) -> None:
     from backend.analyzers.normalizer import Normalizer
-    from backend.database.models import NormalizedEvent
 
     normalizer = Normalizer()
     for record in brute_force(attempts=attempts):
@@ -688,7 +799,6 @@ def test_rule_engine_isolates_orgs_and_admin_sees_all(db):
     """Full engine run: findings from one org never leak into another org's."""
     from sqlalchemy import select
 
-    from backend.database.models import NormalizedEvent
     from backend.detection.rules_engine import RulesEngine
 
     _seed_org_events(db, "univ-a")
@@ -703,7 +813,9 @@ def test_rule_engine_isolates_orgs_and_admin_sees_all(db):
     assert ids_a.isdisjoint(ids_b)
 
     all_ids = set(
-        db.scalars(select(NormalizedEvent.id).where(NormalizedEvent.org == "univ-a")).all()
+        db.scalars(
+            select(NormalizedEvent.id).where(NormalizedEvent.org == "univ-a")
+        ).all()
     )
     assert ids_a <= all_ids
 

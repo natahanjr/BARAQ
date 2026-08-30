@@ -1,7 +1,8 @@
 """Phase 3 alerting test helpers."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 
@@ -15,7 +16,7 @@ from backend.alerting.models import (
 from backend.detection.contract import DETECTION, make_detection_id
 from backend.detection.evidence import Evidence
 
-T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=UTC)
 
 
 def dt(minutes_ago: float = 0.0) -> datetime:
@@ -94,7 +95,9 @@ def stored_feedback(db) -> list[AlertFeedback]:
 def stored_suppressions(db) -> list[AlertSuppressionRule]:
     from sqlalchemy import select
 
-    return list(db.scalars(select(AlertSuppressionRule).order_by(AlertSuppressionRule.id)).all())
+    return list(
+        db.scalars(select(AlertSuppressionRule).order_by(AlertSuppressionRule.id)).all()
+    )
 
 
 def v1_counts(db) -> dict[str, int]:

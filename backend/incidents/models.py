@@ -1,8 +1,8 @@
 """Phase 7 incident models (spec 7.1, 7.12-7.14, 7.18, 7.20, 7.21, 7.32-7.34, 7.38, 7.42, 7.45)."""
+
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -17,13 +17,10 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database.models import Base
 from backend.incidents.contract import (
-    AUDIT_ACTIONS,
-    EVIDENCE_SOURCE_TYPES,
-    GRAPH_RELATIONSHIP_TYPES,
     INCIDENT_PRIORITIES,
     INCIDENT_SEVERITIES,
     INCIDENT_STATES,
@@ -31,7 +28,7 @@ from backend.incidents.contract import (
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class IncidentV2(Base):
@@ -49,10 +46,14 @@ class IncidentV2(Base):
         Enum(*INCIDENT_PRIORITIES, name="incident_priority"), default="P3", index=True
     )
     severity: Mapped[str] = mapped_column(
-        Enum(*INCIDENT_SEVERITIES, name="incident_severity"), default="medium", index=True
+        Enum(*INCIDENT_SEVERITIES, name="incident_severity"),
+        default="medium",
+        index=True,
     )
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
-    confidence_factors: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    confidence_factors: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
     first_seen: Mapped[datetime] = mapped_column(DateTime, index=True)
     last_seen: Mapped[datetime] = mapped_column(DateTime, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, index=True)
@@ -80,34 +81,38 @@ class IncidentV2(Base):
 
     suppression_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     suppression_scope: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    suppression_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    suppression_created_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    suppression_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    suppression_created_by: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
 
-    alerts: Mapped[list["IncidentV2AlertLink"]] = relationship(
+    alerts: Mapped[list[IncidentV2AlertLink]] = relationship(
         back_populates="incident", cascade="all, delete-orphan", passive_deletes=True
     )
-    groups: Mapped[list["IncidentV2BehaviorGroupLink"]] = relationship(
+    groups: Mapped[list[IncidentV2BehaviorGroupLink]] = relationship(
         back_populates="incident", cascade="all, delete-orphan", passive_deletes=True
     )
-    correlations: Mapped[list["IncidentV2CorrelationLink"]] = relationship(
+    correlations: Mapped[list[IncidentV2CorrelationLink]] = relationship(
         back_populates="incident", cascade="all, delete-orphan", passive_deletes=True
     )
-    risks: Mapped[list["IncidentV2RiskLink"]] = relationship(
+    risks: Mapped[list[IncidentV2RiskLink]] = relationship(
         back_populates="incident", cascade="all, delete-orphan", passive_deletes=True
     )
-    evidence: Mapped[list["IncidentV2Evidence"]] = relationship(
+    evidence: Mapped[list[IncidentV2Evidence]] = relationship(
         back_populates="incident", cascade="all, delete-orphan", passive_deletes=True
     )
-    audit: Mapped[list["IncidentV2AuditEvent"]] = relationship(
+    audit: Mapped[list[IncidentV2AuditEvent]] = relationship(
         back_populates="incident", cascade="all, delete-orphan", passive_deletes=True
     )
-    notes: Mapped[list["IncidentV2Note"]] = relationship(
+    notes: Mapped[list[IncidentV2Note]] = relationship(
         back_populates="incident", cascade="all, delete-orphan", passive_deletes=True
     )
-    feedback: Mapped[list["IncidentV2Feedback"]] = relationship(
+    feedback: Mapped[list[IncidentV2Feedback]] = relationship(
         back_populates="incident", cascade="all, delete-orphan", passive_deletes=True
     )
-    graph_edges: Mapped[list["IncidentV2GraphEdge"]] = relationship(
+    graph_edges: Mapped[list[IncidentV2GraphEdge]] = relationship(
         back_populates="incident", cascade="all, delete-orphan", passive_deletes=True
     )
 
@@ -151,7 +156,11 @@ class IncidentV2(Base):
             "updated_by": self.updated_by,
             "suppression_reason": self.suppression_reason,
             "suppression_scope": self.suppression_scope,
-            "suppression_expires_at": self.suppression_expires_at.isoformat() if self.suppression_expires_at else None,
+            "suppression_expires_at": (
+                self.suppression_expires_at.isoformat()
+                if self.suppression_expires_at
+                else None
+            ),
             "suppression_created_by": self.suppression_created_by,
         }
 
@@ -164,10 +173,14 @@ class IncidentV2AlertLink(Base):
         ForeignKey("incidents_v2.incident_id", ondelete="CASCADE"), index=True
     )
     alert_id: Mapped[str] = mapped_column(String(64), index=True)
-    membership_reason: Mapped[str] = mapped_column(String(255), default="alert evidence")
+    membership_reason: Mapped[str] = mapped_column(
+        String(255), default="alert evidence"
+    )
     added_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    incident: Mapped["IncidentV2"] = relationship(back_populates="alerts")
-    __table_args__ = (UniqueConstraint("incident_id", "alert_id", name="uq_incident_v2_alert"),)
+    incident: Mapped[IncidentV2] = relationship(back_populates="alerts")
+    __table_args__ = (
+        UniqueConstraint("incident_id", "alert_id", name="uq_incident_v2_alert"),
+    )
 
 
 class IncidentV2BehaviorGroupLink(Base):
@@ -178,10 +191,16 @@ class IncidentV2BehaviorGroupLink(Base):
         ForeignKey("incidents_v2.incident_id", ondelete="CASCADE"), index=True
     )
     behavior_group_id: Mapped[str] = mapped_column(String(64), index=True)
-    membership_reason: Mapped[str] = mapped_column(String(255), default="behavior group evidence")
+    membership_reason: Mapped[str] = mapped_column(
+        String(255), default="behavior group evidence"
+    )
     added_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    incident: Mapped["IncidentV2"] = relationship(back_populates="groups")
-    __table_args__ = (UniqueConstraint("incident_id", "behavior_group_id", name="uq_incident_v2_group"),)
+    incident: Mapped[IncidentV2] = relationship(back_populates="groups")
+    __table_args__ = (
+        UniqueConstraint(
+            "incident_id", "behavior_group_id", name="uq_incident_v2_group"
+        ),
+    )
 
 
 class IncidentV2CorrelationLink(Base):
@@ -192,10 +211,16 @@ class IncidentV2CorrelationLink(Base):
         ForeignKey("incidents_v2.incident_id", ondelete="CASCADE"), index=True
     )
     correlation_finding_id: Mapped[str] = mapped_column(String(64), index=True)
-    membership_reason: Mapped[str] = mapped_column(String(255), default="correlation finding")
+    membership_reason: Mapped[str] = mapped_column(
+        String(255), default="correlation finding"
+    )
     added_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    incident: Mapped["IncidentV2"] = relationship(back_populates="correlations")
-    __table_args__ = (UniqueConstraint("incident_id", "correlation_finding_id", name="uq_incident_v2_correlation"),)
+    incident: Mapped[IncidentV2] = relationship(back_populates="correlations")
+    __table_args__ = (
+        UniqueConstraint(
+            "incident_id", "correlation_finding_id", name="uq_incident_v2_correlation"
+        ),
+    )
 
 
 class IncidentV2RiskLink(Base):
@@ -206,10 +231,14 @@ class IncidentV2RiskLink(Base):
         ForeignKey("incidents_v2.incident_id", ondelete="CASCADE"), index=True
     )
     risk_id: Mapped[str] = mapped_column(String(32), index=True)
-    membership_reason: Mapped[str] = mapped_column(String(255), default="entity risk context")
+    membership_reason: Mapped[str] = mapped_column(
+        String(255), default="entity risk context"
+    )
     added_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    incident: Mapped["IncidentV2"] = relationship(back_populates="risks")
-    __table_args__ = (UniqueConstraint("incident_id", "risk_id", name="uq_incident_v2_risk"),)
+    incident: Mapped[IncidentV2] = relationship(back_populates="risks")
+    __table_args__ = (
+        UniqueConstraint("incident_id", "risk_id", name="uq_incident_v2_risk"),
+    )
 
 
 class IncidentV2Evidence(Base):
@@ -226,9 +255,11 @@ class IncidentV2Evidence(Base):
     reason: Mapped[str] = mapped_column(Text)
     observed_at: Mapped[datetime] = mapped_column(DateTime, index=True)
     added_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    incident: Mapped["IncidentV2"] = relationship(back_populates="evidence")
+    incident: Mapped[IncidentV2] = relationship(back_populates="evidence")
     __table_args__ = (
-        Index("ix_incident_v2_evidence_source", "incident_id", "source_type", "source_id"),
+        Index(
+            "ix_incident_v2_evidence_source", "incident_id", "source_type", "source_id"
+        ),
     )
 
 
@@ -245,7 +276,7 @@ class IncidentV2AuditEvent(Base):
     new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
-    incident: Mapped["IncidentV2"] = relationship(back_populates="audit")
+    incident: Mapped[IncidentV2] = relationship(back_populates="audit")
     __table_args__ = (Index("ix_incident_v2_audit_action", "incident_id", "action"),)
 
 
@@ -260,7 +291,7 @@ class IncidentV2Note(Base):
     content: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    incident: Mapped["IncidentV2"] = relationship(back_populates="notes")
+    incident: Mapped[IncidentV2] = relationship(back_populates="notes")
 
 
 class IncidentV2Feedback(Base):
@@ -274,8 +305,10 @@ class IncidentV2Feedback(Base):
     feedback_type: Mapped[str] = mapped_column(String(32), index=True)
     reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    incident: Mapped["IncidentV2"] = relationship(back_populates="feedback")
-    __table_args__ = (Index("ix_incident_v2_feedback_type", "incident_id", "feedback_type"),)
+    incident: Mapped[IncidentV2] = relationship(back_populates="feedback")
+    __table_args__ = (
+        Index("ix_incident_v2_feedback_type", "incident_id", "feedback_type"),
+    )
 
 
 class IncidentV2GraphEdge(Base):
@@ -291,8 +324,10 @@ class IncidentV2GraphEdge(Base):
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     evidence: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    incident: Mapped["IncidentV2"] = relationship(back_populates="graph_edges")
-    __table_args__ = (Index("ix_incident_v2_graph_rel", "incident_id", "relationship_type"),)
+    incident: Mapped[IncidentV2] = relationship(back_populates="graph_edges")
+    __table_args__ = (
+        Index("ix_incident_v2_graph_rel", "incident_id", "relationship_type"),
+    )
 
 
 class IncidentV2Suppression(Base):
@@ -300,10 +335,14 @@ class IncidentV2Suppression(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     incident_id: Mapped[str | None] = mapped_column(
-        String(32), ForeignKey("incidents_v2.incident_id", ondelete="SET NULL"),
-        nullable=True, index=True
+        String(32),
+        ForeignKey("incidents_v2.incident_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
-    fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    fingerprint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     reason: Mapped[str] = mapped_column(String(255))
     scope: Mapped[str] = mapped_column(String(64))
     expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)

@@ -2,7 +2,7 @@ import { AgentIcon } from "../components/icons.jsx";
 
 function Step({ n, title, children }) {
   return (
-    <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+    <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
       <div className="flex items-start gap-3">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-cyan)]/10 text-[12px] font-bold text-[var(--accent-cyan)] ring-1 ring-[var(--accent-cyan)]/20">
           {n}
@@ -42,7 +42,7 @@ export default function AgentSetup() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">SETUP</p>
-          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">Agent Setup</h1>
+          <h1 className="mt-1 text-page-title text-[var(--fg-primary)]">Agent Setup</h1>
           <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">Deploy BARAQ agents to remote endpoints</p>
         </div>
         <span className="inline-flex items-center gap-2 rounded-xl border border-[var(--accent-cyan)]/20 bg-[var(--accent-cyan)]/[0.06] px-3.5 py-2 text-[12px] text-[var(--accent-cyan)]">

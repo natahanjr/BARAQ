@@ -1,4 +1,5 @@
 """Migrations CI: the baseline must bootstrap a fresh database end-to-end."""
+
 import os
 import subprocess
 import sys
@@ -39,13 +40,18 @@ def scratch_db():
 def test_migrations_baseline_bootstraps_fresh_postgres(scratch_db):
     url, _name = scratch_db
     env = dict(os.environ)  # keep SystemRoot etc. or winsock breaks (WinError 10106)
-    env.update({
-        "BARAQ_DATABASE_URL": url,
-        "BARAQ_SKIP_SECRET_GEN": "1",
-    })
+    env.update(
+        {
+            "BARAQ_DATABASE_URL": url,
+            "BARAQ_SKIP_SECRET_GEN": "1",
+        }
+    )
     run = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "migrate_db.py")],
-        capture_output=True, text=True, check=False, env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
         cwd=ROOT,
     )
     assert run.returncode == 0, run.stderr[-1500:]
@@ -56,8 +62,14 @@ def test_migrations_baseline_bootstraps_fresh_postgres(scratch_db):
     finally:
         engine.dispose()
     for expected in (
-        "users", "alerts", "events", "entity_nodes", "entity_edges",
-        "threat_intel_records", "audit_log", "alembic_version",
+        "users",
+        "alerts",
+        "events",
+        "entity_nodes",
+        "entity_edges",
+        "threat_intel_records",
+        "audit_log",
+        "alembic_version",
     ):
         assert expected in tables, f"missing table after upgrade: {expected}"
 

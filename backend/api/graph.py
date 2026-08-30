@@ -13,6 +13,7 @@ Endpoints (all provider-agnostic through :class:`GraphStore`):
 Entity kinds: ``user | device | process | ip | domain | file | technique |
 threat_actor``.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -21,9 +22,8 @@ from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
 from backend.database.models import (
-    AlertEventLink,
     Alert,
-    EntityEdge,
+    AlertEventLink,
     NormalizedEvent,
 )
 from backend.graph import get_graph_store, sync_graph
@@ -37,8 +37,15 @@ router = APIRouter(
 
 #: valid kinds for path/query validation + UI colouring
 VALID_KINDS = {
-    "user", "device", "host", "process", "ip", "domain",
-    "file", "technique", "threat_actor",
+    "user",
+    "device",
+    "host",
+    "process",
+    "ip",
+    "domain",
+    "file",
+    "technique",
+    "threat_actor",
 }
 
 
@@ -86,7 +93,9 @@ def entity_graph(
     store = get_graph_store()
     kind = _normalize_kind(center_kind) if center_kind else None
     if (center_kind is None) != (center_name is None):
-        raise HTTPException(400, "center_kind and center_name must be provided together")
+        raise HTTPException(
+            400, "center_kind and center_name must be provided together"
+        )
     return store.graph(db, center_kind=kind, center_name=center_name, depth=depth)
 
 
@@ -110,7 +119,6 @@ def entity_detail(
     # recent linked alerts (via evidence events carrying this entity)
     alerts: list[dict] = []
     try:
-        from sqlalchemy import or_
 
         if kind in ("user", "host"):
             col = NormalizedEvent.user if kind == "user" else NormalizedEvent.host
@@ -123,7 +131,7 @@ def entity_detail(
                 .limit(10)
             ).all()
             alerts = [a.to_dict() for a in arows]
-    except Exception:  # noqa: BLE001 - profile must degrade gracefully
+    except Exception:
         import logging
 
         logging.getLogger("baraq.graph").exception("Alert lookup failed")
@@ -141,7 +149,7 @@ def entity_sync(db: Session = Depends(get_db)):
     store = get_graph_store()
     try:
         return sync_graph(db, store)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         import logging
 
         logging.getLogger("baraq.graph").exception("Graph sync failed")

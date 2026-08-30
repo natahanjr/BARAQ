@@ -1,13 +1,13 @@
 """Phase 7 incident evidence handling (spec 7.12, 7.13, 7.42)."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
 from backend.incidents.contract import EVIDENCE_SOURCE_TYPES
-from backend.incidents.models import IncidentV2Evidence, IncidentV2
+from backend.incidents.models import IncidentV2, IncidentV2Evidence
 
 
 def add_evidence(
@@ -35,7 +35,7 @@ def add_evidence(
         field=field,
         value=value,
         reason=reason,
-        observed_at=observed_at or datetime.now(timezone.utc).replace(tzinfo=None),
+        observed_at=observed_at or datetime.now(UTC).replace(tzinfo=None),
     )
     db.add(row)
     db.flush()
@@ -50,5 +50,3 @@ def get_evidence(db, incident_id: str) -> list[IncidentV2Evidence]:
             .order_by(IncidentV2Evidence.observed_at)
         ).all()
     )
-
-

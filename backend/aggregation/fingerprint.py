@@ -14,6 +14,7 @@ Exact serialization (documented in docs/phase4/GROUPING_POLICY.md):
 
 Never a random UUID as the grouping key - the UUID-free guarantee is tested.
 """
+
 from __future__ import annotations
 
 import hashlib

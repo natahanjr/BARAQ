@@ -1,23 +1,17 @@
 """Phase 7 incident eligibility engine (spec 7.3, 7.23, 7.24, 7.28, 7.46)."""
+
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
-from backend.incidents.contract import (
-    EVIDENCE_SOURCE_TYPES,
-    INCIDENT_SEVERITIES,
-    INCIDENT_STATES,
-)
 from backend.incidents.models import (
+    IncidentV2,
     IncidentV2AlertLink,
     IncidentV2BehaviorGroupLink,
     IncidentV2CorrelationLink,
-    IncidentV2Evidence,
     IncidentV2RiskLink,
-    IncidentV2,
 )
 from backend.incidents.registry import evaluate_policy
 
@@ -26,11 +20,16 @@ def _load_related(db, incident_id: str) -> dict[str, Any]:
     alerts = [
         {"alert_id": row.alert_id, "membership_reason": row.membership_reason}
         for row in db.scalars(
-            select(IncidentV2AlertLink).where(IncidentV2AlertLink.incident_id == incident_id)
+            select(IncidentV2AlertLink).where(
+                IncidentV2AlertLink.incident_id == incident_id
+            )
         ).all()
     ]
     groups = [
-        {"behavior_group_id": row.behavior_group_id, "membership_reason": row.membership_reason}
+        {
+            "behavior_group_id": row.behavior_group_id,
+            "membership_reason": row.membership_reason,
+        }
         for row in db.scalars(
             select(IncidentV2BehaviorGroupLink).where(
                 IncidentV2BehaviorGroupLink.incident_id == incident_id
@@ -38,7 +37,10 @@ def _load_related(db, incident_id: str) -> dict[str, Any]:
         ).all()
     ]
     correlations = [
-        {"correlation_finding_id": row.correlation_finding_id, "membership_reason": row.membership_reason}
+        {
+            "correlation_finding_id": row.correlation_finding_id,
+            "membership_reason": row.membership_reason,
+        }
         for row in db.scalars(
             select(IncidentV2CorrelationLink).where(
                 IncidentV2CorrelationLink.incident_id == incident_id
@@ -82,5 +84,3 @@ def check_eligibility(db, incident_id: str, policy_id: str) -> dict:
         "source_type": result.source_type,
         "source_id": result.source_id,
     }
-
-

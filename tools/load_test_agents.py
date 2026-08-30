@@ -22,19 +22,19 @@ Start the server under test with, e.g.:
     $env:BARAQ_INGEST_ASYNC_DETECT="1"
     venv\\Scripts\\python -m uvicorn backend.main:app --host 127.0.0.1 --port 8010
 """
+
 from __future__ import annotations
 
 import argparse
 import concurrent.futures
 import json
 import random
-import statistics
 import sys
 import threading
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -50,13 +50,21 @@ REPORT_DIR = ROOT / "reports"
 BENIGN_EVENT_IDS = [4624, 4624, 4688, 4688, 5156, 5156, 5156, 6005, 7036, 800, 100, 1]
 USERS = ["alice", "bob", "carol", "dave", "erin", "frank", "grace", "heidi"]
 PROCESSES = [
-    "chrome.exe", "explorer.exe", "svchost.exe", "msedge.exe", "python.exe",
-    "Teams.exe", "Spotify.exe", "winword.exe", "powershell.exe", "cmd.exe",
+    "chrome.exe",
+    "explorer.exe",
+    "svchost.exe",
+    "msedge.exe",
+    "python.exe",
+    "Teams.exe",
+    "Spotify.exe",
+    "winword.exe",
+    "powershell.exe",
+    "cmd.exe",
 ]
 
 
 def _ts() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _benign_record(i: int) -> dict:
@@ -64,24 +72,39 @@ def _benign_record(i: int) -> dict:
     user = USERS[i % len(USERS)]
     if eid == 4688:
         return {
-            "source": "eventlog", "channel": "Security", "event_id": 4688,
-            "timestamp": _ts(), "user": user,
+            "source": "eventlog",
+            "channel": "Security",
+            "event_id": 4688,
+            "timestamp": _ts(),
+            "user": user,
             "message": f"A new process has been created. New Process Name: {PROCESSES[i % len(PROCESSES)]}.",
-            "raw": {"process_name": PROCESSES[i % len(PROCESSES)], "pid": 1000 + i % 30000},
+            "raw": {
+                "process_name": PROCESSES[i % len(PROCESSES)],
+                "pid": 1000 + i % 30000,
+            },
         }
     if eid == 5156:
         return {
-            "source": "network", "pid": 1000 + i % 30000,
+            "source": "network",
+            "pid": 1000 + i % 30000,
             "process": PROCESSES[i % len(PROCESSES)],
-            "local_ip": "192.168.10.%d" % (10 + i % 200), "local_port": 50000 + i % 1000,
-            "remote_ip": "203.0.113.%d" % (i % 240), "remote_port": 443,
-            "state": "established", "is_listening": False,
-            "bytes_sent": 0, "bytes_recv": 0, "duration_seconds": 1,
+            "local_ip": "192.168.10.%d" % (10 + i % 200),
+            "local_port": 50000 + i % 1000,
+            "remote_ip": "203.0.113.%d" % (i % 240),
+            "remote_port": 443,
+            "state": "established",
+            "is_listening": False,
+            "bytes_sent": 0,
+            "bytes_recv": 0,
+            "duration_seconds": 1,
             "timestamp": _ts(),
         }
     return {
-        "source": "eventlog", "channel": "Security", "event_id": eid,
-        "timestamp": _ts(), "user": user,
+        "source": "eventlog",
+        "channel": "Security",
+        "event_id": eid,
+        "timestamp": _ts(),
+        "user": user,
         "message": f"Event {eid} from {user} on host telemetry (benign baseline).",
         "raw": {"i": i},
     }
@@ -95,17 +118,30 @@ def _attack_record(kind: str, i: int) -> dict:
             "source": "powershell",
             "channel": "Microsoft-Windows-PowerShell/Operational",
             "event_id": 4104,
-            "timestamp": _ts(), "user": USERS[i % len(USERS)],
+            "timestamp": _ts(),
+            "user": USERS[i % len(USERS)],
             "message": f"Creating Scriptblock text (1 of 1): {payload}",
-            "raw": {"script_block": payload, "command_line": payload,
-                    "has_encoded": True, "has_download": True, "has_hidden": True},
+            "raw": {
+                "script_block": payload,
+                "command_line": payload,
+                "has_encoded": True,
+                "has_download": True,
+                "has_hidden": True,
+            },
         }
     return {
-        "source": "eventlog", "channel": "Security", "event_id": 4625,
-        "timestamp": _ts(), "user": "administrator",
+        "source": "eventlog",
+        "channel": "Security",
+        "event_id": 4625,
+        "timestamp": _ts(),
+        "user": "administrator",
         "message": "An account failed to log on. Account Name: administrator. "
-                   "Source Network Address: 198.51.100.42. Logon Type: 3.",
-        "raw": {"logon_type": 3, "source_ip": "198.51.100.42", "sub_status": "0xC000006A"},
+        "Source Network Address: 198.51.100.42. Logon Type: 3.",
+        "raw": {
+            "logon_type": 3,
+            "source_ip": "198.51.100.42",
+            "sub_status": "0xC000006A",
+        },
     }
 
 
@@ -113,12 +149,15 @@ def _attack_record(kind: str, i: int) -> dict:
 # HTTP client
 # ---------------------------------------------------------------------------
 
+
 class IngestClient:
     def __init__(self, server: str, timeout: float = 30.0):
         self.server = server.rstrip("/")
         self.timeout = timeout
 
-    def post_ingest(self, agent_key: str, records: list[dict], host: str) -> tuple[float, dict]:
+    def post_ingest(
+        self, agent_key: str, records: list[dict], host: str
+    ) -> tuple[float, dict]:
         body = json.dumps({"records": records, "host": host}).encode()
         req = urllib.request.Request(
             self.server + "/api/ingest",
@@ -132,8 +171,11 @@ class IngestClient:
                 data = json.loads(resp.read())
             return time.perf_counter() - start, data
         except urllib.error.HTTPError as exc:
-            return time.perf_counter() - start, {"error": exc.code, "detail": exc.read()[:200].decode(errors="replace")}
-        except Exception as exc:  # noqa: BLE001
+            return time.perf_counter() - start, {
+                "error": exc.code,
+                "detail": exc.read()[:200].decode(errors="replace"),
+            }
+        except Exception as exc:
             return time.perf_counter() - start, {"error": str(exc)}
 
     def get_json(self, path: str, headers: dict | None = None) -> dict:
@@ -146,9 +188,16 @@ class IngestClient:
 # Load driver
 # ---------------------------------------------------------------------------
 
+
 class LoadDriver:
-    def __init__(self, client: IngestClient, keys: dict[str, str], batch_size: int,
-                 attack_rate: float, rng: random.Random):
+    def __init__(
+        self,
+        client: IngestClient,
+        keys: dict[str, str],
+        batch_size: int,
+        attack_rate: float,
+        rng: random.Random,
+    ):
         self.client = client
         self.keys = keys
         self.key_list = list(keys.items())
@@ -166,12 +215,18 @@ class LoadDriver:
         self.start_time = time.perf_counter()
         self.end_time = float("inf")
 
-    def _batch(self, agent_key: str, agent_id: str, counter: int) -> tuple[str, list[dict]]:
+    def _batch(
+        self, agent_key: str, agent_id: str, counter: int
+    ) -> tuple[str, list[dict]]:
         records = []
         for i in range(self.batch_size):
             r = self.rng.random()
             if r < self.attack_rate:
-                records.append(_attack_record("powershell" if counter % 2 else "brute", counter * 1000 + i))
+                records.append(
+                    _attack_record(
+                        "powershell" if counter % 2 else "brute", counter * 1000 + i
+                    )
+                )
             else:
                 records.append(_benign_record(counter * 1000 + i))
         return agent_id, records
@@ -179,16 +234,24 @@ class LoadDriver:
     def work(self, worker_id: int):
         counter = 0
         while time.perf_counter() < self.end_time:
-            agent_key, agent_id = self.key_list[(worker_id * 7919 + counter) % len(self.key_list)]
+            agent_key, agent_id = self.key_list[
+                (worker_id * 7919 + counter) % len(self.key_list)
+            ]
             aid, records = self._batch(agent_key, agent_id, counter)
-            is_attack = any(rec.get("source") in ("powershell",) or rec.get("event_id") == 4625
-                            for rec in records)
+            is_attack = any(
+                rec.get("source") in ("powershell",) or rec.get("event_id") == 4625
+                for rec in records
+            )
             if is_attack:
                 self.attack_records += sum(
-                    1 for rec in records
-                    if rec.get("event_id") in (4104, 4625) or rec.get("source") == "powershell"
+                    1
+                    for rec in records
+                    if rec.get("event_id") in (4104, 4625)
+                    or rec.get("source") == "powershell"
                 )
-            latency, result = self.client.post_ingest(agent_key, records, f"load-host-{aid[-4:]}")
+            latency, result = self.client.post_ingest(
+                agent_key, records, f"load-host-{aid[-4:]}"
+            )
             with self.lock:
                 self.latencies.append(latency)
                 self.records_sent += len(records)
@@ -205,13 +268,14 @@ class LoadDriver:
 def run_load(args) -> dict:
     keys = json.loads(KEYS_FILE.read_text(encoding="utf-8"))
     client = IngestClient(args.server)
-    driver = LoadDriver(client, keys, args.batch_size, args.attack_rate,
-                        random.Random(args.seed))
+    driver = LoadDriver(
+        client, keys, args.batch_size, args.attack_rate, random.Random(args.seed)
+    )
 
     # Warm-up: a single probe batch to verify auth + pipeline before the storm.
     probe_key = next(iter(keys))
     probe_host = keys[probe_key]
-    latency, result = client.post_ingest(probe_key, _benign_record(1) * 2, probe_host)
+    _latency, result = client.post_ingest(probe_key, _benign_record(1) * 2, probe_host)
     if "error" in result:
         raise SystemExit(f"Probe ingest failed - is the server running? {result}")
 
@@ -247,7 +311,7 @@ def run_load(args) -> dict:
             "p99": round(pct(99), 1),
             "max": round(max(driver.latencies) * 1000, 1),
         },
-        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": datetime.now(UTC).isoformat(),
     }
     return report
 
@@ -265,7 +329,7 @@ def settle_and_report(client: IngestClient, report: dict, settle_s: float) -> di
     while time.perf_counter() < deadline:
         try:
             alerts = client.get_json("/api/alerts?limit=200", admin_headers)
-        except Exception:  # noqa: BLE001
+        except Exception:
             time.sleep(2)
             continue
         for item in alerts.get("items", []):
@@ -275,7 +339,7 @@ def settle_and_report(client: IngestClient, report: dict, settle_s: float) -> di
                     first_alert_seen = time.perf_counter()
         try:
             status = client.get_json("/api/system/status", admin_headers)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
         if seen == alert_names:
             break
@@ -286,7 +350,11 @@ def settle_and_report(client: IngestClient, report: dict, settle_s: float) -> di
         "total_open": summary.get("active_alerts", 0),
         "expected_attack_rules": sorted(alert_names),
         "detected_rules": sorted(seen),
-        "detection_lag_s": round(first_alert_seen - attack_window_start, 1) if first_alert_seen else None,
+        "detection_lag_s": (
+            round(first_alert_seen - attack_window_start, 1)
+            if first_alert_seen
+            else None
+        ),
         "total_events_in_db": summary.get("total_events", 0),
     }
     return report
@@ -295,7 +363,7 @@ def settle_and_report(client: IngestClient, report: dict, settle_s: float) -> di
 def gen_keys(count: int, seed: int) -> None:
     """Deterministic key map: short keys (Windows env-var size limit) mapped
     to numbered agent ids, e.g. ``l0001 -> a1``."""
-    rng = random.Random(seed)
+    random.Random(seed)
     keys = {}
     for i in range(1, count + 1):
         keys[f"l{i:04d}"] = f"a{i}"
@@ -305,16 +373,25 @@ def gen_keys(count: int, seed: int) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--server", default="http://127.0.0.1:8010")
     parser.add_argument("--agents", type=int, default=1000)
-    parser.add_argument("--duration", type=int, default=120, help="ingest phase seconds")
-    parser.add_argument("--settle", type=int, default=90, help="detection-lag phase seconds")
+    parser.add_argument(
+        "--duration", type=int, default=120, help="ingest phase seconds"
+    )
+    parser.add_argument(
+        "--settle", type=int, default=90, help="detection-lag phase seconds"
+    )
     parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--concurrency", type=int, default=128)
-    parser.add_argument("--attack-rate", type=float, default=0.004,
-                        help="fraction of attack records in the mix")
+    parser.add_argument(
+        "--attack-rate",
+        type=float,
+        default=0.004,
+        help="fraction of attack records in the mix",
+    )
     parser.add_argument("--seed", type=int, default=1337)
     parser.add_argument("--gen-keys-only", action="store_true")
     args = parser.parse_args(argv)
@@ -333,7 +410,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report["alerts_after_settle"], indent=2))
 
     REPORT_DIR.mkdir(exist_ok=True)
-    path = REPORT_DIR / f"load_test_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
+    path = REPORT_DIR / f"load_test_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.json"
     path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"report -> {path}")
     return 0

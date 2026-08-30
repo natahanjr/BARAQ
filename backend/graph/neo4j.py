@@ -6,11 +6,18 @@ interface as the Postgres backend so the API, extractor and UI are
 provider-agnostic. Falls back to Postgres when the driver is missing or the
 server is unreachable (see ``backend.graph`` factory).
 """
+
 from __future__ import annotations
 
 import logging
 
-from backend.config import GRAPH_MAX_NODES, NEO4J_DATABASE, NEO4J_PASSWORD, NEO4J_URI, NEO4J_USER
+from backend.config import (
+    GRAPH_MAX_NODES,
+    NEO4J_DATABASE,
+    NEO4J_PASSWORD,
+    NEO4J_URI,
+    NEO4J_USER,
+)
 from backend.graph.base import GraphProviderUnavailable, GraphStore
 
 logger = logging.getLogger("baraq.graph")
@@ -35,7 +42,7 @@ class Neo4jStore(GraphStore):
         # eager connectivity check so a bad server fails fast at boot
         try:
             self._driver.verify_connectivity()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._driver.close()
             self._driver = None
             raise GraphProviderUnavailable(f"Neo4j unreachable: {exc}") from exc
@@ -60,11 +67,20 @@ class Neo4jStore(GraphStore):
 
     def status(self, db) -> dict:
         if not self._driver:
-            return {"provider": self.name, "nodes": 0, "edges": 0, "error": "unavailable"}
+            return {
+                "provider": self.name,
+                "nodes": 0,
+                "edges": 0,
+                "error": "unavailable",
+            }
         try:
-            nodes = self._run("MATCH (n) RETURN count(n) AS c")[0].get("c", 0) if self._run("MATCH (n) RETURN count(n) AS c") else 0
+            nodes = (
+                self._run("MATCH (n) RETURN count(n) AS c")[0].get("c", 0)
+                if self._run("MATCH (n) RETURN count(n) AS c")
+                else 0
+            )
             edges = self._run("MATCH ()-[r]->() RETURN count(r) AS c")[0].get("c", 0)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             return {"provider": self.name, "nodes": 0, "edges": 0, "error": str(exc)}
         return {"provider": self.name, "nodes": nodes, "edges": edges}
 
@@ -97,8 +113,10 @@ class Neo4jStore(GraphStore):
                 "ON CREATE SET r.weight = 1 "
                 "ON MATCH SET r.weight = r.weight + 1",
                 {
-                    "sk": e.get("src_kind"), "sn": e.get("src_name"),
-                    "dk": e.get("dst_kind"), "dn": e.get("dst_name"),
+                    "sk": e.get("src_kind"),
+                    "sn": e.get("src_name"),
+                    "dk": e.get("dst_kind"),
+                    "dn": e.get("dst_name"),
                     "rel": e.get("rel"),
                     "weight": int(e.get("weight", 1)),
                 },
@@ -120,27 +138,40 @@ class Neo4jStore(GraphStore):
             "properties": {},
         }
 
-    def list_entities(self, db, kind=None, limit=100, offset=0, min_risk=0.0, search=None):
+    def list_entities(
+        self, db, kind=None, limit=100, offset=0, min_risk=0.0, search=None
+    ):
         q = "MATCH (n:Entity)"
         p: dict = {}
         if kind:
-            q += " WHERE n.kind = $kind"; p["kind"] = kind
+            q += " WHERE n.kind = $kind"
+            p["kind"] = kind
         if min_risk > 0:
-            q += " AND n.risk_score >= $min_risk" if kind else " WHERE n.risk_score >= $min_risk"
+            q += (
+                " AND n.risk_score >= $min_risk"
+                if kind
+                else " WHERE n.risk_score >= $min_risk"
+            )
             p["min_risk"] = min_risk
         q += " RETURN n ORDER BY n.risk_score DESC LIMIT $limit"
         p["limit"] = limit
         rows = self._run(q, p)
         return [
-            {"kind": r["n"].get("kind"), "name": r["n"].get("name"),
-             "risk_score": r["n"].get("risk_score", 0.0),
-             "risk_level": r["n"].get("risk_level", "LOW")}
+            {
+                "kind": r["n"].get("kind"),
+                "name": r["n"].get("name"),
+                "risk_score": r["n"].get("risk_score", 0.0),
+                "risk_level": r["n"].get("risk_level", "LOW"),
+            }
             for r in rows
         ]
 
     def graph(self, db, center_kind=None, center_name=None, depth=1, limit=None):
         if not center_kind or not center_name:
-            return {"nodes": self.list_entities(db, limit=limit or GRAPH_MAX_NODES), "edges": []}
+            return {
+                "nodes": self.list_entities(db, limit=limit or GRAPH_MAX_NODES),
+                "edges": [],
+            }
         rows = self._run(
             "MATCH (c:Entity {kind: $k, name: $n})-[r*1..$d]-(x:Entity) "
             "UNWIND r AS rr "
@@ -153,11 +184,24 @@ class Neo4jStore(GraphStore):
             a, b = r.get("a"), r.get("b")
             node_keys.add((a.get("kind"), a.get("name")))
             node_keys.add((b.get("kind"), b.get("name")))
-            edges.append({"source": {"kind": a.get("kind"), "name": a.get("name")},
-                         "rel": r.get("rel"), "target": {"kind": b.get("kind"), "name": b.get("name")}})
-        return {"nodes": [self.get_entity(db, k, n) for k, n in node_keys], "edges": edges}
+            edges.append(
+                {
+                    "source": {"kind": a.get("kind"), "name": a.get("name")},
+                    "rel": r.get("rel"),
+                    "target": {"kind": b.get("kind"), "name": b.get("name")},
+                }
+            )
+        return {
+            "nodes": [self.get_entity(db, k, n) for k, n in node_keys],
+            "edges": edges,
+        }
 
     def stats(self, db) -> dict:
         s = self.status(db)
-        return {"provider": self.name, "total_entities": s.get("nodes", 0),
-                "total_edges": s.get("edges", 0), "by_kind": {}, "top_risk": []}
+        return {
+            "provider": self.name,
+            "total_entities": s.get("nodes", 0),
+            "total_edges": s.get("edges", 0),
+            "by_kind": {},
+            "top_risk": [],
+        }

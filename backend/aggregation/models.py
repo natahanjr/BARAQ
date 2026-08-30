@@ -15,9 +15,10 @@ Tables:
     behavior_group_evidence     - evidence preserved from member alerts
     behavior_group_audit_events - every state-changing operation
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     DateTime,
@@ -37,7 +38,7 @@ from backend.database.models import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class BehaviorGroupRecord(Base):
@@ -60,9 +61,7 @@ class BehaviorGroupRecord(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     #: Public id, e.g. BG-000001. Independent of the fingerprint.
-    behavior_group_id: Mapped[str] = mapped_column(
-        String(32), unique=True, index=True
-    )
+    behavior_group_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     #: Deterministic grouping key (spec 4.7). Uniqueness is partial: only one
     #: LIVE group may hold a fingerprint at a time - closed groups release it
     #: so the next matching episode creates a NEW group (spec 4.16).
@@ -93,9 +92,15 @@ class BehaviorGroupRecord(Base):
     #: Strongest member severity - never escalated by aggregation (spec 4.28).
     highest_severity: Mapped[str] = mapped_column(String(16), index=True, default="low")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -150,7 +155,9 @@ class BehaviorGroupMember(Base):
     membership_reason: Mapped[str] = mapped_column(Text, default="")
     #: Grouping score 0.0-1.0 (spec 4.18) - never a risk score.
     membership_score: Mapped[float] = mapped_column(Float, default=0.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
 
 class BehaviorGroupEvidence(Base):
@@ -176,7 +183,9 @@ class BehaviorGroupEvidence(Base):
     field: Mapped[str] = mapped_column(String(128), default="")
     value: Mapped[str] = mapped_column(Text, default="")
     reason: Mapped[str] = mapped_column(String(256), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
 
 class BehaviorGroupAuditEvent(Base):
@@ -193,4 +202,6 @@ class BehaviorGroupAuditEvent(Base):
     action: Mapped[str] = mapped_column(String(32), index=True)
     actor: Mapped[str] = mapped_column(String(128), default="system")
     details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )

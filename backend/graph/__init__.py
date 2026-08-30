@@ -12,16 +12,19 @@ Typical uses::
     results = sync_graph(db, store)
     store.graph(db, center_kind="user", center_name="admin")
 """
+
 from __future__ import annotations
 
 import logging
 
+from backend.graph.base import GraphStore as GraphStore
+
 logger = logging.getLogger("baraq.graph")
 
-_store: "GraphStore | None" = None
+_store: GraphStore | None = None
 
 
-def get_graph_store() -> "GraphStore":
+def get_graph_store() -> GraphStore:
     """Return the configured graph store (singleton, lazily initialised).
 
     Provider resolution: ``BARAQ_GRAPH_PROVIDER`` in
@@ -61,4 +64,4 @@ def get_graph_store() -> "GraphStore":
     return _store
 
 
-from backend.graph.extract import ingest_batch, sync_graph  # noqa: E402,F401
+from backend.graph.extract import ingest_batch, sync_graph  # noqa: F401

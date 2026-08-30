@@ -20,11 +20,12 @@ The predict function used here is exactly the deployed scorer
 (``MLAnomalyDetector.score_event_for_behavior``) so attributions reflect the
 live model, the rank-CDF blending and the per-stream thresholds.
 """
+
 from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 from sqlalchemy import select
@@ -49,7 +50,7 @@ except ImportError:  # pragma: no cover
     HAS_SHAP = False
 
 try:
-    from lime.lime_tabular import LimeTabularExplainer  # type: ignore
+    from lime.lime_tabular import LimeTabularExplainer  # noqa: F401  # type: ignore
 
     HAS_LIME = True
 except ImportError:  # pragma: no cover
@@ -200,7 +201,7 @@ def _run_budgeted(fn) -> object | None:
     def worker() -> None:
         try:
             box["result"] = fn()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("explainer attempt raised: %s", exc)
         finally:
             box["done"] = True
@@ -217,7 +218,9 @@ def _run_budgeted(fn) -> object | None:
     return box["result"]
 
 
-def _background_samples(session, behavior: str, limit: int = _MAX_BACKGROUND) -> list[list[float]]:
+def _background_samples(
+    session, behavior: str, limit: int = _MAX_BACKGROUND
+) -> list[list[float]]:
     """Recent real feature vectors from the same behavior stream.
 
     These act as the explainer's baselines, so an attribution is meaningful
@@ -225,7 +228,7 @@ def _background_samples(session, behavior: str, limit: int = _MAX_BACKGROUND) ->
     grid. Falls back to the full event table when the recent window is too
     thin (fewer than 6 vectors).
     """
-    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    since = datetime.now(UTC) - timedelta(hours=24)
     if behavior == "network":
         rows = session.scalars(
             select(NetworkConnection).where(NetworkConnection.observed_at >= since)
@@ -233,20 +236,28 @@ def _background_samples(session, behavior: str, limit: int = _MAX_BACKGROUND) ->
         vectors: list[list[float]] = []
         for r in rows:
             try:
-                code = 1.0 if (r.remote_ip or "").startswith(("203.0.113.", "198.51.100.", "45.")) else 0.0
+                code = (
+                    1.0
+                    if (r.remote_ip or "").startswith(
+                        ("203.0.113.", "198.51.100.", "45.")
+                    )
+                    else 0.0
+                )
                 sent_mb = (r.bytes_sent or 0) / 1_000_000.0
                 hours = (r.duration_seconds or 0.0) / 3600.0
-                vectors.append([
-                    code,
-                    float((r.remote_port or 0) + 1),
-                    float((r.remote_port or 0) % 7 + 1),
-                    sent_mb,
-                    (r.bytes_recv or 0) / 1_000_000.0,
-                    hours,
-                    sent_mb / max(hours, 0.01),
-                    1.0,
-                    float((r.observed_at.hour if r.observed_at else 0)) / 24.0,
-                ])
+                vectors.append(
+                    [
+                        code,
+                        float((r.remote_port or 0) + 1),
+                        float((r.remote_port or 0) % 7 + 1),
+                        sent_mb,
+                        (r.bytes_recv or 0) / 1_000_000.0,
+                        hours,
+                        sent_mb / max(hours, 0.01),
+                        1.0,
+                        float(r.observed_at.hour if r.observed_at else 0) / 24.0,
+                    ]
+                )
             except (AttributeError, TypeError, ValueError):
                 pass
             if len(vectors) >= limit:
@@ -302,7 +313,7 @@ def _predict_batch(behavior: str, X) -> np.ndarray:
     try:
         proba = classifier.predict_proba(arr)
         p = proba[:, 1] if proba.shape[1] > 1 else np.zeros(len(arr))
-    except Exception:  # noqa: BLE001
+    except Exception:
         p = np.zeros(len(arr))
     return np.clip(0.6 * ranks + 0.4 * p, 0.0, 1.0)
 
@@ -312,7 +323,9 @@ def _predict(behavior: str, features: list[float]) -> np.ndarray:
     return _predict_batch(behavior, np.asarray([features], dtype=float))
 
 
-def _lime(behavior: str, features: list[float], background: list[list[float]]) -> list[tuple[int, float]] | None:
+def _lime(
+    behavior: str, features: list[float], background: list[list[float]]
+) -> list[tuple[int, float]] | None:
     try:
         from lime.lime_tabular import LimeTabularExplainer as _Lime
 
@@ -331,12 +344,14 @@ def _lime(behavior: str, features: list[float], background: list[list[float]]) -
             num_samples=_LIME_SAMPLES,
         )
         return explanation.as_list()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.debug("LIME failed: %s", exc)
         return None
 
 
-def _shap(behavior: str, features: list[float], background: list[list[float]]) -> dict[str, list[tuple[int, float]]] | None:
+def _shap(
+    behavior: str, features: list[float], background: list[list[float]]
+) -> dict[str, list[tuple[int, float]]] | None:
     """Shapley values via KernelExplainer on the deployed score."""
     try:
         bg = np.asarray(background[-_SHAP_BACKGROUND:], dtype=float)
@@ -353,10 +368,12 @@ def _shap(behavior: str, features: list[float], background: list[list[float]]) -
         arr = np.asarray(values[0]) if isinstance(values, list) else np.asarray(values)
         flat = arr.reshape(-1).tolist()
         return {
-            "attribution": [(i, float(flat[i])) for i in range(min(len(flat), len(features)))],
+            "attribution": [
+                (i, float(flat[i])) for i in range(min(len(flat), len(features)))
+            ],
             "method": "shap",
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.debug("SHAP failed: %s", exc)
         return None
 
@@ -382,7 +399,9 @@ def _permutation(behavior: str, features: list[float]) -> dict:
     return {"attribution": attribution, "method": "permutation"}
 
 
-def _compute_attribution(behavior: str, features: list[float], background: list[list[float]]) -> dict:
+def _compute_attribution(
+    behavior: str, features: list[float], background: list[list[float]]
+) -> dict:
     """Pick the best explainer for the deployment, under a hard budget.
 
     Order: SHAP (fast, exact Shapley values) -> LIME (surrogate weights) ->
@@ -414,7 +433,10 @@ def explain_event(event, session=None, use_cache: bool = True) -> dict:
         behavior = _behavior_of(int(event.event_id))
         features = event_feature_vector(event)
         if not features:
-            return {"explainable": False, "reason": "No ML feature vector (behavior stream unknown)"}
+            return {
+                "explainable": False,
+                "reason": "No ML feature vector (behavior stream unknown)",
+            }
 
         cache_key = f"{behavior}:" + ",".join(str(round(f, 5)) for f in features)
         if use_cache:
@@ -430,7 +452,9 @@ def explain_event(event, session=None, use_cache: bool = True) -> dict:
         background = _background_samples(session, behavior)
         result = _compute_attribution(behavior, features, background)
 
-        attribution = sorted(result["attribution"], key=lambda t: abs(t[1]), reverse=True)
+        attribution = sorted(
+            result["attribution"], key=lambda t: abs(t[1]), reverse=True
+        )
         features_ui = []
         for idx, contrib in attribution:
             if idx >= len(FEATURE_NAMES[behavior]):
@@ -439,11 +463,17 @@ def explain_event(event, session=None, use_cache: bool = True) -> dict:
             if name == "event_id":
                 continue
             value = features[idx]
-            features_ui.append({
-                "name": name,
-                "value": round(float(value), 4) if isinstance(value, (int, float)) else value,
-                "contribution": round(float(contrib), 4),
-            })
+            features_ui.append(
+                {
+                    "name": name,
+                    "value": (
+                        round(float(value), 4)
+                        if isinstance(value, (int, float))
+                        else value
+                    ),
+                    "contribution": round(float(contrib), 4),
+                }
+            )
 
         result["behavior"] = behavior
         result["score"] = round(float(score), 4)
@@ -469,13 +499,15 @@ def explain_alert(db, alert) -> list[dict]:
     for link in sorted(alert.events, key=lambda l: l.event_id)[:5]:
         try:
             explanation = explain_event(link.event, session=db, use_cache=True)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("explain_alert skipped event %s: %s", link.event_id, exc)
             continue
         explanation["event"] = {
             "_event_id": link.event.event_id,
             "message": (link.event.message or "")[:200],
-            "timestamp": link.event.timestamp.isoformat() if link.event.timestamp else None,
+            "timestamp": (
+                link.event.timestamp.isoformat() if link.event.timestamp else None
+            ),
             "ml_score": link.event.ml_score,
         }
         out.append(explanation)
@@ -495,7 +527,10 @@ def explain_features(
     behavior = behavior or (_behavior_of(int(event_id)) if event_id else "login")
     detector = get_detector()
     if behavior not in detector.models:
-        return {"explainable": False, "reason": f"No trained model for '{behavior}' stream"}
+        return {
+            "explainable": False,
+            "reason": f"No trained model for '{behavior}' stream",
+        }
     score = detector.score_event_for_behavior(behavior, features)
     threshold = detector.thresholds.get(behavior, 0.5)
     background = _background_samples(session, behavior)
@@ -509,11 +544,15 @@ def explain_features(
         if name == "event_id":
             continue
         value = features[idx] if idx < len(features) else None
-        features_ui.append({
-            "name": name,
-            "value": round(float(value), 4) if isinstance(value, (int, float)) else value,
-            "contribution": round(float(contrib), 4),
-        })
+        features_ui.append(
+            {
+                "name": name,
+                "value": (
+                    round(float(value), 4) if isinstance(value, (int, float)) else value
+                ),
+                "contribution": round(float(contrib), 4),
+            }
+        )
     return {
         "explainable": True,
         "method": result["method"],

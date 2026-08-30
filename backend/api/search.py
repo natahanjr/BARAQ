@@ -8,8 +8,6 @@ Query examples:
 
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -24,10 +22,10 @@ router = APIRouter(prefix="/api/search", tags=["Search"])
 
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="search string")
-    earliest: Optional[str] = Field(None, description="-24h, -7d or ISO timestamp")
-    latest: Optional[str] = Field(None, description="-1h, now or ISO timestamp")
+    earliest: str | None = Field(None, description="-24h, -7d or ISO timestamp")
+    latest: str | None = Field(None, description="-1h, now or ISO timestamp")
     limit: int = Field(500, ge=1, le=10000)
-    include_demo: Optional[int] = Field(
+    include_demo: int | None = Field(
         0,
         ge=0,
         le=1,
@@ -80,13 +78,37 @@ async def run_search(
 async def search_suggest(q: str = Query("", max_length=200)):
     """Field / pipe autocomplete hints for the search bar."""
     fields = [
-        "source", "category", "user", "host", "event_id", "severity",
-        "risk", "risk_score", "rule", "status", "name", "mitre_id",
-        "mitre_tactic", "detection_method", "is_anomaly", "org",
-        "demo", "correlation_id",
+        "source",
+        "category",
+        "user",
+        "host",
+        "event_id",
+        "severity",
+        "risk",
+        "risk_score",
+        "rule",
+        "status",
+        "name",
+        "mitre_id",
+        "mitre_tactic",
+        "detection_method",
+        "is_anomaly",
+        "org",
+        "demo",
+        "correlation_id",
     ]
-    pipes = ["stats count by", "timechart span=1h count by", "transaction by host",
-             "top 10", "rare 10", "table", "fields", "sort -", "where", "limit"]
+    pipes = [
+        "stats count by",
+        "timechart span=1h count by",
+        "transaction by host",
+        "top 10",
+        "rare 10",
+        "table",
+        "fields",
+        "sort -",
+        "where",
+        "limit",
+    ]
     token = q.strip().lower()
     suggestions = []
     for f in fields:

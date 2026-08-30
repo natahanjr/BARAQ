@@ -1,13 +1,13 @@
 """Phase 7 incident metrics tests (spec 7.36, 7.37, 7.49)."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.incidents import engine
 from backend.incidents.metrics import incident_metrics
-from backend.incidents.contract import INCIDENT_STATES
 
-EVAL_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=timezone.utc)
+EVAL_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=UTC)
 
 
 def _group(group_id, hosts, techniques, severity="high", alert_count=10):
@@ -76,5 +76,3 @@ def test_metrics_no_fake_accuracy(db):
     assert "accuracy" not in metrics
     assert "precision" not in metrics
     assert "recall" not in metrics
-
-

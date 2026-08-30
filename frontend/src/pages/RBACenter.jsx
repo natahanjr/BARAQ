@@ -144,7 +144,7 @@ export default function RBACenter() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">Security</p>
-          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">Entity Risk Center</h1>
+          <h1 className="mt-1 text-page-title text-[var(--fg-primary)]">Entity Risk Center</h1>
           <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">Risk-Based Alerting: accumulated risk per user, host and IP with exponential decay over time.</p>
         </div>
         <div className="flex gap-2">
@@ -168,10 +168,10 @@ export default function RBACenter() {
       {error && <ErrorBanner message={error} onDismiss={() => setError("")} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-[var(--fg-primary)]">Risk Leaderboard</h3>
-            <div className="flex gap-1 rounded-lg border border-[var(--border-default)] p-0.5">
+            <div className="flex gap-1 rounded-xl border border-[var(--border-default)] p-0.5">
               {Object.entries(KIND_LABELS).map(([key, label]) => (
                 <button
                   key={key}
@@ -238,7 +238,7 @@ export default function RBACenter() {
           )}
         </div>
 
-        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
           <h3 className="mb-4 text-lg font-semibold text-[var(--fg-primary)]">
             {selected ? `${KIND_LABELS[selected.entity_kind]}: ${selected.entity_name}` : "Entity Timeline"}
           </h3>
@@ -285,7 +285,7 @@ export default function RBACenter() {
                 <p className="text-sm text-[var(--fg-muted)]">No timeline events yet.</p>
               )}
               {selected.contributions?.length > 0 && (
-                <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] p-3">
+                <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 p-3">
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
                     Recent contributions
                   </h4>
@@ -309,7 +309,7 @@ export default function RBACenter() {
       </div>
 
       {isAdmin() && tuningDraft && (
-        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold text-[var(--fg-primary)]">Risk Tuning</h3>
@@ -427,7 +427,7 @@ export default function RBACenter() {
         </div>
       )}
 
-      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
         <h3 className="mb-3 text-lg font-semibold text-[var(--fg-primary)]">Declarative Correlation Rules</h3>
         {rules === null ? (
           <Loading />
@@ -441,7 +441,7 @@ export default function RBACenter() {
             {rules.rules.map((r) => (
               <div
                 key={r.name}
-                className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] p-4"
+                className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 p-4"
               >
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <span className="font-mono text-sm font-semibold text-[var(--fg-primary)]">
@@ -454,7 +454,7 @@ export default function RBACenter() {
                   {r.stages.map((s) => (
                     <span
                       key={s.label}
-                      className="rounded border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 py-0.5 text-[11px] text-[var(--fg-secondary)]"
+                      className="rounded border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 px-2 py-0.5 text-[11px] text-[var(--fg-secondary)]"
                     >
                       {s.label}
                     </span>

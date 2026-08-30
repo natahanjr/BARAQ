@@ -34,7 +34,7 @@ const severityConfig = {
 };
 
 const sizeConfig = {
-  sm: "px-1.5 py-0. text-[10px] gap-1",
+  sm: "px-1.5 py-0. text-[11px] gap-1",
   md: "px-2 py-0.5 text-[11px] gap-1.5",
   lg: "px-2.5 py-1 text-xs gap-1.5",
 };
@@ -64,7 +64,7 @@ export function CountBadge({ count, critical = false, className = "" }) {
   return (
     <span
       className={[
-        "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold tabular-nums leading-none",
+        "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[11px] font-bold tabular-nums leading-none",
         critical
           ? "bg-[var(--severity-critical-muted)] text-[var(--severity-critical)]"
           : "bg-[var(--bg-surface-active)] text-[var(--fg-muted)]",

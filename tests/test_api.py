@@ -1,8 +1,8 @@
 """Test the FastAPI application routes with TestClient."""
+
 from __future__ import annotations
 
 import pytest
-
 from fastapi.testclient import TestClient
 
 
@@ -62,13 +62,19 @@ def test_alert_detail_and_status(client):
     resp = client.get(f"/api/alerts/{alert_id}")
     assert resp.status_code == 200
     assert resp.json()["mitre_id"]
-    update = client.patch(f"/api/alerts/{alert_id}/status", json={"status": "in_progress"})
+    update = client.patch(
+        f"/api/alerts/{alert_id}/status", json={"status": "in_progress"}
+    )
     assert update.json()["status"] == "investigating"
-    resolved = client.patch(f"/api/alerts/{alert_id}/status", json={"status": "resolved"})
+    resolved = client.patch(
+        f"/api/alerts/{alert_id}/status", json={"status": "resolved"}
+    )
     assert resolved.json()["status"] == "resolved"
     closed = client.patch(f"/api/alerts/{alert_id}/status", json={"status": "closed"})
     assert closed.json()["status"] == "closed"
-    bad = client.patch(f"/api/alerts/{alert_id}/status", json={"status": "investigating"})
+    bad = client.patch(
+        f"/api/alerts/{alert_id}/status", json={"status": "investigating"}
+    )
     assert bad.status_code == 409  # closed -> investigating is an illegal transition
 
 
@@ -91,7 +97,9 @@ def test_assistant_chat(client):
 
 def test_reports_endpoint(client):
     seed(client)
-    resp = client.post("/api/reports/generate", json={"report_type": "executive", "format": "json"})
+    resp = client.post(
+        "/api/reports/generate", json={"report_type": "executive", "format": "json"}
+    )
     assert resp.status_code == 200
     assert resp.json()["format"] == "json"
     listing = client.get("/api/reports/list")

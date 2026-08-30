@@ -1,7 +1,8 @@
 """Phase 4 aggregation test helpers."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select, text
 
@@ -13,17 +14,18 @@ from backend.aggregation.models import (
 )
 from backend.alerting.engine import process_detection
 from backend.alerting.models import AlertRecord
+from tests.alerting.helpers import detection
 
-from tests.alerting.helpers import T0, detection
-
-GROUP_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=timezone.utc)
+GROUP_T0 = datetime(2026, 8, 18, 10, 0, 0, tzinfo=UTC)
 
 
 def dt(minutes_ago: float = 0.0) -> datetime:
     return GROUP_T0 - timedelta(minutes=minutes_ago)
 
 
-def make_alerts(db, specs: list[dict], now: datetime | None = None) -> list[AlertRecord]:
+def make_alerts(
+    db, specs: list[dict], now: datetime | None = None
+) -> list[AlertRecord]:
     """Seed v2 alerts through the Phase 3 pipeline, then return them."""
     if now is None:
         now = GROUP_T0

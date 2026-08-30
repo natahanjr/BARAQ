@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { api } from "../../api.js";
 import { ErrorBanner } from "../Feedback.jsx";
-import { Badge, MetricCard, RiskGauge, Card, CardHeader, CardTitle, CardContent } from "../ui/index.js";
+import { Badge, MetricCard, RiskGauge, Card, CardHeader, CardTitle, CardContent, PageHeader } from "../ui/index.js";
 
 const REFRESH_MS = 30000;
 
@@ -105,7 +105,7 @@ function ScoreRing({ value }) {
           {value}
         </span>
         <span
-          className="mt-1.5 text-[10px] font-bold uppercase tracking-[var(--tracking-widest)]"
+          className="mt-1.5 text-[11px] font-bold uppercase tracking-[var(--tracking-widest)]"
           style={{ color }}
         >
           {label}
@@ -132,7 +132,7 @@ function SeverityBar({ counts }) {
       </div>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
         {order.filter((k) => (counts?.[k] || 0) > 0).map((k) => (
-          <span key={k} className="flex items-center gap-1.5 text-[10px] text-[var(--fg-muted)]">
+          <span key={k} className="flex items-center gap-1.5 text-[11px] text-[var(--fg-muted)]">
             <span className={`h-1.5 w-1.5 rounded-full ${SEV_DOT[k]}`} />
             {k} · {counts[k]}
           </span>
@@ -148,7 +148,7 @@ function AlertRow({ alert }) {
   return (
     <Link
       to={`/alerts/${alert.id}`}
-      className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-[var(--bg-surface-hover)]"
+      className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all hover:bg-[var(--bg-surface-hover)]"
     >
       <span className={`h-2 w-2 shrink-0 rounded-full ${SEV_DOT[alert.severity] || SEV_DOT.info}`} />
       <div className="min-w-0 flex-1">
@@ -277,32 +277,28 @@ export default function AppleDashboard() {
   const score = summary?.security_score ?? 0;
 
   return (
-    <div className="space-y-6 pb-10 pt-1">
+    <div className="stagger-in space-y-6 pb-10 pt-1">
       {/* ── Header ────────────────────────────────────────────── */}
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">
-            {greeting()}
-          </p>
-          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">
-            Command Center
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
-          {updated && (
-            <span className="text-[11px] text-[var(--fg-muted)]">
-              Last evaluated {timeAgo(updated.toISOString())}
+      <PageHeader
+        label={greeting()}
+        title="Command Center"
+        actions={
+          <div className="flex items-center gap-3">
+            {updated && (
+              <span className="text-[11px] text-[var(--fg-muted)]">
+                Last evaluated {timeAgo(updated.toISOString())}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-2 rounded-full border border-[var(--status-healthy-muted)] bg-[var(--status-healthy-muted)] px-3 py-1">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="pulse-dot absolute inline-flex h-full w-full rounded-full bg-[var(--status-healthy)] opacity-40" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--status-healthy)]" />
+              </span>
+              <span className="text-[11px] font-semibold text-[var(--status-healthy)]">Live</span>
             </span>
-          )}
-          <span className="inline-flex items-center gap-2 rounded-full border border-[var(--status-healthy-muted)] bg-[var(--status-healthy-muted)] px-3 py-1">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="pulse-dot absolute inline-flex h-full w-full rounded-full bg-[var(--status-healthy)] opacity-40" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--status-healthy)]" />
-            </span>
-            <span className="text-[11px] font-semibold text-[var(--status-healthy)]">Live</span>
-          </span>
-        </div>
-      </header>
+          </div>
+        }
+      />
 
       {/* ── Hero: Security Posture ───────────────────────────── */}
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -318,13 +314,13 @@ export default function AppleDashboard() {
             <MetricCard label="Events" value={summary?.total_events ?? 0} icon={EventsSvg} accent="cyan" trendLabel="Total events processed" />
           </Link>
           <Link to="/alerts?status=open">
-            <MetricCard label="Active Alerts" value={summary?.active_alerts ?? 0} icon={AlertsSvg} accent={(summary?.active_alerts ?? 0) > 0 ? "orange" : "green"} trendLabel="Requiring attention" />
+            <MetricCard label="Active Alerts" value={summary?.active_alerts ?? 0} icon={AlertsSvg} accent={(summary?.active_alerts ?? 0) > 0 ? "orange" : "green"} trendLabel="Requiring attention" zeroLabel="All clear" />
           </Link>
           <Link to="/alerts?severity=critical,high">
-            <MetricCard label="Critical" value={summary?.critical_threats ?? 0} icon={CriticalSvg} accent={(summary?.critical_threats ?? 0) > 0 ? "red" : "green"} trendLabel="Immediate response needed" />
+            <MetricCard label="Critical" value={summary?.critical_threats ?? 0} icon={CriticalSvg} accent={(summary?.critical_threats ?? 0) > 0 ? "red" : "green"} trendLabel="Immediate response needed" zeroLabel="No critical threats" />
           </Link>
           <Link to="/telemetry?anomaly=true">
-            <MetricCard label="Anomalies" value={summary?.anomalies_detected ?? 0} icon={AnomaliesSvg} accent={(summary?.anomalies_detected ?? 0) > 0 ? "violet" : "green"} trendLabel="ML-detected anomalies" />
+            <MetricCard label="Anomalies" value={summary?.anomalies_detected ?? 0} icon={AnomaliesSvg} accent={(summary?.anomalies_detected ?? 0) > 0 ? "violet" : "green"} trendLabel="ML-detected anomalies" zeroLabel="No anomalies detected" />
           </Link>
         </div>
       </section>
@@ -346,7 +342,7 @@ export default function AppleDashboard() {
               />
               <div className="relative">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">
+                  <p className="text-label text-[var(--fg-muted)]">
                     {item.label}
                   </p>
                   <span className="text-[14px] opacity-40" style={{ color: sevColor }}>{item.icon}</span>
@@ -396,7 +392,7 @@ export default function AppleDashboard() {
                   ["Samples", Number(ml.samples ?? 0).toLocaleString()],
                 ].map(([k, v]) => (
                   <div key={k}>
-                    <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">{k}</p>
+                    <p className="text-label text-[var(--fg-muted)]">{k}</p>
                     <p className="mt-1 text-[14px] font-semibold text-[var(--fg-primary)]">{v}</p>
                   </div>
                 ))}
@@ -422,7 +418,7 @@ export default function AppleDashboard() {
       <Card>
         <CardHeader>
           <CardTitle>Recent Alerts</CardTitle>
-          <Link to="/alerts" className="text-[12px] font-semibold text-[var(--accent-cyan)] transition-colors hover:opacity-80">
+          <Link to="/alerts" className="text-[12px] font-semibold text-[var(--accent-cyan)] transition-all hover:opacity-80">
             View all{data.totalAlerts ? ` (${data.totalAlerts})` : ""} →
           </Link>
         </CardHeader>

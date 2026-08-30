@@ -9,6 +9,7 @@ issuer/audience/expiry/nonce check is enforced â€” nothing is accepted on
 trust. Uses only stdlib + the already-required ``cryptography`` package, so no
 extra runtime dependency is introduced.
 """
+
 from __future__ import annotations
 
 import base64
@@ -80,7 +81,7 @@ def _http_json(url: str, timeout: int = 10) -> dict:
     try:
         with urllib.request.urlopen(url, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
-    except Exception as exc:  # noqa: BLE001 - network / JSON / TLS failures
+    except Exception as exc:
         raise OIDCError(f"cannot reach provider endpoint {url}: {exc}") from exc
 
 
@@ -90,9 +91,7 @@ def discovery_document(issuer: str | None = None) -> dict:
     if not issuer:
         raise OIDCError("OIDC issuer not configured")
     if issuer not in _cached_docs:
-        _cached_docs[issuer] = _http_json(
-            f"{issuer}/.well-known/openid-configuration"
-        )
+        _cached_docs[issuer] = _http_json(f"{issuer}/.well-known/openid-configuration")
     return _cached_docs[issuer]
 
 
@@ -112,8 +111,9 @@ def make_nonce() -> str:
     return secrets.token_urlsafe(24)
 
 
-def build_authorization_url(state: str, nonce: str, code_challenge: str,
-                            base_url: str) -> str:
+def build_authorization_url(
+    state: str, nonce: str, code_challenge: str, base_url: str
+) -> str:
     doc = discovery_document()
     endpoint = doc.get("authorization_endpoint")
     if not endpoint:
@@ -143,14 +143,16 @@ def exchange_code(code: str, code_verifier: str, base_url: str) -> dict[str, Any
     endpoint = doc.get("token_endpoint")
     if not endpoint:
         raise OIDCError("provider has no token_endpoint")
-    form = urllib.parse.urlencode({
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": redirect_url(base_url),
-        "client_id": OIDC_CLIENT_ID,
-        "client_secret": OIDC_CLIENT_SECRET,
-        "code_verifier": code_verifier,
-    }).encode("ascii")
+    form = urllib.parse.urlencode(
+        {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_url(base_url),
+            "client_id": OIDC_CLIENT_ID,
+            "client_secret": OIDC_CLIENT_SECRET,
+            "code_verifier": code_verifier,
+        }
+    ).encode("ascii")
     try:
         with urllib.request.urlopen(
             urllib.request.Request(
@@ -161,7 +163,7 @@ def exchange_code(code: str, code_verifier: str, base_url: str) -> dict[str, Any
             timeout=10,
         ) as resp:
             return json.loads(resp.read().decode("utf-8"))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise OIDCError(f"token exchange failed: {exc}") from exc
 
 
@@ -177,7 +179,7 @@ def _jwt_parts(token: str) -> tuple[dict[str, Any], dict[str, Any]]:
     try:
         header = json.loads(_b64url_decode(parts[0]).decode("utf-8"))
         claims = json.loads(_b64url_decode(parts[1]).decode("utf-8"))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise OIDCError(f"id_token not valid JSON: {exc}") from exc
     return header, claims
 
@@ -209,7 +211,9 @@ def _verify_signature(token: str, public_key) -> None:
     signature = _b64url_decode(parts[2])
     try:
         if alg == "RS256":
-            public_key.verify(signature, signing_input, padding.PKCS1v15(), hashes.SHA256())
+            public_key.verify(
+                signature, signing_input, padding.PKCS1v15(), hashes.SHA256()
+            )
         elif alg == "ES256":
             public_key.verify(signature, signing_input, ec.ECDSA(hashes.SHA256()))
         else:
@@ -234,8 +238,9 @@ def _jwk_for_kid(doc: dict, kid: str):
     raise OIDCError(f"no JWKS key matches kid={kid!r}")
 
 
-def validate_id_token(token: str, nonce: str, issuer: str | None = None,
-                      client_id: str | None = None) -> dict[str, Any]:
+def validate_id_token(
+    token: str, nonce: str, issuer: str | None = None, client_id: str | None = None
+) -> dict[str, Any]:
     """Cryptographically and claim-wise validate an id_token.
 
     Enforced: signature (JWKS), ``iss``, ``aud``, ``exp``/``iat``/``nbf``
@@ -279,9 +284,7 @@ def validate_id_token(token: str, nonce: str, issuer: str | None = None,
 def profile_from_claims(claims: dict[str, Any]) -> dict[str, Any]:
     """Map validated OIDC claims onto a BARAQ operator profile."""
     username = (
-        claims.get("preferred_username")
-        or claims.get("sub")
-        or claims.get("email")
+        claims.get("preferred_username") or claims.get("sub") or claims.get("email")
     )
     if not username:
         raise OIDCError("id_token carries no usable username claim")
@@ -290,12 +293,15 @@ def profile_from_claims(claims: dict[str, Any]) -> dict[str, Any]:
     groups = claims.get(OIDC_GROUP_CLAIM, [])
     if isinstance(groups, str):
         groups = [groups]
-    role = "admin" if any(
-        str(group).lower() == admin.lower()
-        or admin.lower() in str(group).lower()
-        for admin in LDAP_ADMIN_GROUPS
-        for group in groups
-    ) else "analyst"
+    role = (
+        "admin"
+        if any(
+            str(group).lower() == admin.lower() or admin.lower() in str(group).lower()
+            for admin in LDAP_ADMIN_GROUPS
+            for group in groups
+        )
+        else "analyst"
+    )
     return {
         "username": username,
         "full_name": str(full_name),

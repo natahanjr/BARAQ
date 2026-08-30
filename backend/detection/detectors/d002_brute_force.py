@@ -9,6 +9,7 @@ Deterministic rules:
   * escalation       : 30+ failures, or 20+ failures + a successful logon
   * fires on the failure event that crosses a threshold multiple
 """
+
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -37,7 +38,9 @@ class BruteForceDetector(Detector):
     enabled = True
     supported_event_types = ("authentication",)
 
-    def evaluate(self, event: EVENT, context: DetectionContext | None = None) -> DETECTION | None:
+    def evaluate(
+        self, event: EVENT, context: DetectionContext | None = None
+    ) -> DETECTION | None:
         if event.action != "logon_failed":
             return None
 
@@ -58,14 +61,18 @@ class BruteForceDetector(Detector):
             {
                 ip
                 for e in success_events
-                for ip in [first_ip(
-                    (e.network or {}).get("src_ip"),
-                    (e.facts or {}).get("source_ip"),
-                )]
+                for ip in [
+                    first_ip(
+                        (e.network or {}).get("src_ip"),
+                        (e.facts or {}).get("source_ip"),
+                    )
+                ]
                 if ip
             }
         )
-        if (ip := first_ip((event.network or {}).get("src_ip"), event.facts.get("source_ip"))):
+        if ip := first_ip(
+            (event.network or {}).get("src_ip"), event.facts.get("source_ip")
+        ):
             src_ips.append(ip)
         src_ips = sorted(set(src_ips))
 
@@ -74,15 +81,27 @@ class BruteForceDetector(Detector):
             confidence += 0.08
 
         evidence = [
-            ev("failed_logons", count, f"within {WINDOW_MINUTES} minutes (threshold {FAILURE_THRESHOLD})"),
+            ev(
+                "failed_logons",
+                count,
+                f"within {WINDOW_MINUTES} minutes (threshold {FAILURE_THRESHOLD})",
+            ),
             ev("window_minutes", WINDOW_MINUTES, "defined evaluation window"),
             ev("host", event.host, "Target endpoint"),
             ev("user", event.user, "Target account"),
         ]
         if src_ips:
-            evidence.append(ev("source_ips", ",".join(src_ips[:5]), "Source addresses observed"))
+            evidence.append(
+                ev("source_ips", ",".join(src_ips[:5]), "Source addresses observed")
+            )
         if success:
-            evidence.append(ev("successful_logon", len(success_events), "Successful login within window - escalation"))
+            evidence.append(
+                ev(
+                    "successful_logon",
+                    len(success_events),
+                    "Successful login within window - escalation",
+                )
+            )
 
         event_ids = tuple(e.fingerprint for e in success_events) + (
             event.fingerprint(),
@@ -125,22 +144,28 @@ class BruteForceDetector(Detector):
         if context is None:
             return 0, []
         failures = context.events_in_window(
-            event.timestamp, WINDOW_MINUTES,
-            host=event.host, user=event.user, action="logon_failed",
+            event.timestamp,
+            WINDOW_MINUTES,
+            host=event.host,
+            user=event.user,
+            action="logon_failed",
         )
         successes = context.events_in_window(
-            event.timestamp, WINDOW_MINUTES,
-            host=event.host, user=event.user, action="logon",
+            event.timestamp,
+            WINDOW_MINUTES,
+            host=event.host,
+            user=event.user,
+            action="logon",
         )
         return len(failures), successes
 
     @staticmethod
     def _stored(event: EVENT, context: DetectionContext | None) -> bool:
-        if context is None or context._db is None:  # noqa: SLF001 - internal probe
+        if context is None or context._db is None:
             return False
         from backend.telemetry.models import TelemetryEvent
 
-        hit = context._db.scalars(  # noqa: SLF001
+        hit = context._db.scalars(
             select(TelemetryEvent.fingerprint).where(
                 TelemetryEvent.fingerprint == event.fingerprint()
             )

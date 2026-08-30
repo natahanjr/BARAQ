@@ -3,11 +3,10 @@
 Five related detections (different rules/techniques, same entity + window)
 must fold into ONE incident; unrelated campaigns stay separate.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from backend.database.models import (
     Alert,
@@ -26,10 +25,17 @@ def _maybe_create_incident(db, alert: Alert, org: str = "univ-a"):
     return _maybe_create_incident_helper(AlertingService(db), alert, org)
 
 
-def _mk_alert(db, rule: str, user: str, host: str = "web-01",
-              mitre: str = "T1059", severity: str = "high",
-              risk_level: str = "HIGH", org: str = "univ-a",
-              evidence: str = "") -> Alert:
+def _mk_alert(
+    db,
+    rule: str,
+    user: str,
+    host: str = "web-01",
+    mitre: str = "T1059",
+    severity: str = "high",
+    risk_level: str = "HIGH",
+    org: str = "univ-a",
+    evidence: str = "",
+) -> Alert:
     alert = Alert(
         name=f"{rule} {user}",
         description=f"{rule} detection",
@@ -50,8 +56,14 @@ def _mk_alert(db, rule: str, user: str, host: str = "web-01",
     return alert
 
 
-def _mk_event(db, event_id: int, user: str, host: str = "web-01",
-              facts: dict | None = None, ts: str = "2026-08-16T10:00:00") -> NormalizedEvent:
+def _mk_event(
+    db,
+    event_id: int,
+    user: str,
+    host: str = "web-01",
+    facts: dict | None = None,
+    ts: str = "2026-08-16T10:00:00",
+) -> NormalizedEvent:
     ev = NormalizedEvent(
         event_id=event_id,
         timestamp=datetime.fromisoformat(ts),
@@ -73,8 +85,9 @@ def _link(db, alert: Alert, event: NormalizedEvent):
     db.flush()
 
 
-def _mk_incident(db, alert: Alert, host: str = "web-01", opened_at=None,
-                 org: str = "univ-a") -> Incident:
+def _mk_incident(
+    db, alert: Alert, host: str = "web-01", opened_at=None, org: str = "univ-a"
+) -> Incident:
     from backend.investigation.dedup import correlation_key
 
     incident = Incident(
@@ -90,7 +103,7 @@ def _mk_incident(db, alert: Alert, host: str = "web-01", opened_at=None,
         risk_level="HIGH",
         confidence=0.8,
         correlation_key=correlation_key(db, alert),
-        opened_at=opened_at or datetime.now(timezone.utc),
+        opened_at=opened_at or datetime.now(UTC),
     )
     db.add(incident)
     db.flush()
@@ -102,6 +115,7 @@ def _mk_incident(db, alert: Alert, host: str = "web-01", opened_at=None,
 # ---------------------------------------------------------------------------
 # group key
 # ---------------------------------------------------------------------------
+
 
 def test_group_key_ignores_technique_and_rule(db):
     a1 = _mk_alert(db, "python_execution", "alice", mitre="T1059.006")
@@ -124,6 +138,7 @@ def test_group_key_differs_across_entities(db):
 # grouping lookup
 # ---------------------------------------------------------------------------
 
+
 def test_same_host_same_user_groups(db):
     ev = _mk_event(db, 4688, "alice")
     a1 = _mk_alert(db, "python_execution", "alice")
@@ -136,8 +151,15 @@ def test_same_host_same_user_groups(db):
 
 
 def test_same_host_same_root_process_groups(db):
-    facts = {"NewProcessId": "100", "ParentProcessId": "50", "NewProcessName": "C:\\tools\\python.exe"}
-    parent = {"NewProcessId": "50", "NewProcessName": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"}
+    facts = {
+        "NewProcessId": "100",
+        "ParentProcessId": "50",
+        "NewProcessName": "C:\\tools\\python.exe",
+    }
+    parent = {
+        "NewProcessId": "50",
+        "NewProcessName": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    }
     ev = _mk_event(db, 4688, "alice", facts=facts)
     db.add(_mk_event(db, 4688, "alice", facts=parent))
     db.flush()
@@ -166,7 +188,7 @@ def test_different_host_never_groups(db):
 
 def test_stale_incident_not_reused(db):
     a1 = _mk_alert(db, "python_execution", "alice")
-    incident = _mk_incident(db, a1, opened_at=datetime.now(timezone.utc) - timedelta(hours=3))
+    _mk_incident(db, a1, opened_at=datetime.now(UTC) - timedelta(hours=3))
 
     a2 = _mk_alert(db, "suspicious_powershell", "alice")
     found = find_group_incident(db, a2, org="univ-a")
@@ -187,6 +209,7 @@ def test_resolved_incident_not_reused(db):
 # ---------------------------------------------------------------------------
 # end-to-end: five related detections -> one incident
 # ---------------------------------------------------------------------------
+
 
 def test_five_related_alerts_fold_into_one_incident(db):
     ev = _mk_event(db, 4688, "alice")
@@ -221,8 +244,13 @@ def test_low_risk_alert_stays_alert_only(db):
 
 def test_dev_workflow_alert_no_incident(db):
     ev = _mk_event(db, 4688, "alice")
-    a1 = _mk_alert(db, "python_execution", "alice", risk_level="HIGH",
-                   evidence="user 'alice' on web-01\nContext:\n  context verdict: strong developer-workflow context")
+    a1 = _mk_alert(
+        db,
+        "python_execution",
+        "alice",
+        risk_level="HIGH",
+        evidence="user 'alice' on web-01\nContext:\n  context verdict: strong developer-workflow context",
+    )
     _link(db, a1, ev)
     _maybe_create_incident(db, a1)
     db.commit()

@@ -1,9 +1,16 @@
 """Phase 4 evidence tests (spec 4.23, 4.24)."""
-from backend.aggregation.engine import process_alerts
-from backend.aggregation.evidence import aggregate_observables, evidence_rows, merge_observables
-from backend.alerting.engine import process_detection
 
-from tests.aggregation.helpers import GROUP_T0, make_alerts, stored_group_evidence, stored_groups
+from backend.aggregation.engine import process_alerts
+from backend.aggregation.evidence import (
+    merge_observables,
+)
+from backend.alerting.engine import process_detection
+from tests.aggregation.helpers import (
+    GROUP_T0,
+    make_alerts,
+    stored_group_evidence,
+    stored_groups,
+)
 from tests.alerting.helpers import detection
 
 
@@ -11,8 +18,8 @@ def test_evidence_preserved_from_member_alerts(db):
     alerts = make_alerts(
         db,
         [
-            dict(minutes_ago=2.0),
-            dict(detector_id="D002", mitre="T1110", minutes_ago=1.0),
+            {"minutes_ago": 2.0},
+            {"detector_id": "D002", "mitre": "T1110", "minutes_ago": 1.0},
         ],
     )
     process_alerts(db, alerts, now=GROUP_T0)
@@ -26,7 +33,7 @@ def test_evidence_preserved_from_member_alerts(db):
 
 
 def test_evidence_never_reduced_to_multiple_alerts(db):
-    alerts = make_alerts(db, [dict(minutes_ago=1.0)])
+    alerts = make_alerts(db, [{"minutes_ago": 1.0}])
     process_alerts(db, alerts, now=GROUP_T0)
     rows = stored_group_evidence(db)
     assert rows
@@ -38,9 +45,20 @@ def test_observables_aggregated_unique(db):
     alerts = make_alerts(
         db,
         [
-            dict(host="ml-host", user="ml-online-user", source_ip="185.100.1.5", minutes_ago=2.0),
-            dict(detector_id="D002", mitre="T1110", host="ml-host",
-                 user="ml-online-user", source_ip="185.100.1.5", minutes_ago=1.0),
+            {
+                "host": "ml-host",
+                "user": "ml-online-user",
+                "source_ip": "185.100.1.5",
+                "minutes_ago": 2.0,
+            },
+            {
+                "detector_id": "D002",
+                "mitre": "T1110",
+                "host": "ml-host",
+                "user": "ml-online-user",
+                "source_ip": "185.100.1.5",
+                "minutes_ago": 1.0,
+            },
         ],
     )
     process_alerts(db, alerts, now=GROUP_T0)
@@ -51,8 +69,13 @@ def test_observables_aggregated_unique(db):
     assert obs["source_ips"] == ["185.100.1.5"]
     assert obs["destination_ips"] == []
     assert set(obs.keys()) >= {
-        "hosts", "users", "source_ips", "destination_ips",
-        "processes", "file_paths", "domains",
+        "hosts",
+        "users",
+        "source_ips",
+        "destination_ips",
+        "processes",
+        "file_paths",
+        "domains",
     }
 
 

@@ -12,8 +12,6 @@ from backend.audit import client_ip, log_action
 from backend.config import DATASET_DIR
 from backend.database.connection import get_db
 from backend.database.models import DatasetExportFile
-from backend.security import actor_name, require_admin, require_auth
-
 from backend.dataset import (
     export_detail,
     export_now,
@@ -26,6 +24,7 @@ from backend.dataset import (
     status,
     update_config,
 )
+from backend.security import actor_name, require_admin, require_auth
 
 router = APIRouter(
     prefix="/api/telemetry/dataset",
@@ -71,8 +70,13 @@ def dataset_manifest(db: Session = Depends(get_db)):
 def dataset_start(request: Request, db: Session = Depends(get_db)):
     result = start(db)
     log_action(
-        db, actor_name(request), "dataset.start", "dataset_collection",
-        str(result.get("collection_id", "")), str(result), client_ip(request),
+        db,
+        actor_name(request),
+        "dataset.start",
+        "dataset_collection",
+        str(result.get("collection_id", "")),
+        str(result),
+        client_ip(request),
     )
     return result
 
@@ -81,8 +85,13 @@ def dataset_start(request: Request, db: Session = Depends(get_db)):
 def dataset_pause(request: Request, db: Session = Depends(get_db)):
     result = pause(db)
     log_action(
-        db, actor_name(request), "dataset.pause", "dataset_collection",
-        str(result.get("collection_id", "")), str(result), client_ip(request),
+        db,
+        actor_name(request),
+        "dataset.pause",
+        "dataset_collection",
+        str(result.get("collection_id", "")),
+        str(result),
+        client_ip(request),
     )
     return result
 
@@ -91,8 +100,13 @@ def dataset_pause(request: Request, db: Session = Depends(get_db)):
 def dataset_resume(request: Request, db: Session = Depends(get_db)):
     result = resume(db)
     log_action(
-        db, actor_name(request), "dataset.resume", "dataset_collection",
-        str(result.get("collection_id", "")), str(result), client_ip(request),
+        db,
+        actor_name(request),
+        "dataset.resume",
+        "dataset_collection",
+        str(result.get("collection_id", "")),
+        str(result),
+        client_ip(request),
     )
     return result
 
@@ -102,8 +116,13 @@ def dataset_export(request: Request, db: Session = Depends(get_db)):
     """Manual export (runs in a background thread, ingestion unaffected)."""
     result = export_now(db)
     log_action(
-        db, actor_name(request), "dataset.export", "dataset_collection",
-        str(result.get("collection_id", "")), str(result), client_ip(request),
+        db,
+        actor_name(request),
+        "dataset.export",
+        "dataset_collection",
+        str(result.get("collection_id", "")),
+        str(result),
+        client_ip(request),
     )
     return result
 
@@ -112,8 +131,13 @@ def dataset_export(request: Request, db: Session = Depends(get_db)):
 def dataset_config(body: dict, request: Request, db: Session = Depends(get_db)):
     result = update_config(db, body)
     log_action(
-        db, actor_name(request), "dataset.config", "dataset_collection",
-        str(result.get("collection", {}).get("id", "")), str(result), client_ip(request),
+        db,
+        actor_name(request),
+        "dataset.config",
+        "dataset_collection",
+        str(result.get("collection", {}).get("id", "")),
+        str(result),
+        client_ip(request),
     )
     return result
 
@@ -138,7 +162,11 @@ def dataset_download(file_id: int, db: Session = Depends(get_db)):
 @router.get("/download", dependencies=[Depends(require_admin)])
 def dataset_download_latest(db: Session = Depends(get_db)):
     """Download the most recent CSV part."""
-    row = db.query(DatasetExportFile).order_by(DatasetExportFile.part_number.desc()).first()
+    row = (
+        db.query(DatasetExportFile)
+        .order_by(DatasetExportFile.part_number.desc())
+        .first()
+    )
     if row is None:
         raise HTTPException(404, "No CSV files yet")
     path = os.path.join(DATASET_DIR, row.filename)

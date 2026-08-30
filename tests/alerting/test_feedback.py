@@ -1,19 +1,25 @@
 """Alert feedback tests (spec 3.14, 3.15, 3.34)."""
+
 from __future__ import annotations
 
 import pytest
 
 from backend.alerting.feedback import for_alert, stats, submit
-
 from tests.alerting.helpers import stored_feedback
 
 
 def test_feedback_types_accepted(db):
     for kind in (
-        "TRUE_POSITIVE", "FALSE_POSITIVE", "BENIGN", "DUPLICATE",
-        "EXPECTED_ACTIVITY", "UNKNOWN",
+        "TRUE_POSITIVE",
+        "FALSE_POSITIVE",
+        "BENIGN",
+        "DUPLICATE",
+        "EXPECTED_ACTIVITY",
+        "UNKNOWN",
     ):
-        submit(db, "ALR-000001", kind, analyst="analyst@example", comment=f"note {kind}")
+        submit(
+            db, "ALR-000001", kind, analyst="analyst@example", comment=f"note {kind}"
+        )
     db.commit()
     rows = stored_feedback(db)
     assert len(rows) == 6

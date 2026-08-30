@@ -11,6 +11,7 @@ and is as close as possible to a pure function. Detectors must never:
 Versioning from day one: a detector bump (``version``) means detection
 behavior changed; the version travels with every detection.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -32,7 +33,9 @@ class Detector(ABC):
     supported_event_types: tuple[str, ...] = ()
 
     @abstractmethod
-    def evaluate(self, event: EVENT, context: DetectionContext | None = None) -> DETECTION | None:
+    def evaluate(
+        self, event: EVENT, context: DetectionContext | None = None
+    ) -> DETECTION | None:
         """Evaluate one canonical EVENT; return a DETECTION or None.
 
         Deterministic: same event + same context -> same output.
@@ -40,7 +43,10 @@ class Detector(ABC):
         raise NotImplementedError
 
     def supports(self, event: EVENT) -> bool:
-        return not self.supported_event_types or event.event_type in self.supported_event_types
+        return (
+            not self.supported_event_types
+            or event.event_type in self.supported_event_types
+        )
 
     def describe(self) -> dict:
         return {
@@ -78,9 +84,15 @@ def build_default_registry() -> Registry:
     """Registry with the Phase 2 initial detector set (D001-D005)."""
     from backend.detection.detectors.d001_external_rdp import ExternalRDPDetector
     from backend.detection.detectors.d002_brute_force import BruteForceDetector
-    from backend.detection.detectors.d003_suspicious_powershell import SuspiciousPowerShellDetector
-    from backend.detection.detectors.d004_python_writable_path import PythonWritablePathDetector
-    from backend.detection.detectors.d005_ransomware_behavior import RansomwareBehaviorDetector
+    from backend.detection.detectors.d003_suspicious_powershell import (
+        SuspiciousPowerShellDetector,
+    )
+    from backend.detection.detectors.d004_python_writable_path import (
+        PythonWritablePathDetector,
+    )
+    from backend.detection.detectors.d005_ransomware_behavior import (
+        RansomwareBehaviorDetector,
+    )
 
     registry = Registry()
     for detector in (

@@ -1,4 +1,5 @@
 """Tests for TOTP 2FA: secret/code primitives and the login MFA flow."""
+
 from __future__ import annotations
 
 import time
@@ -12,7 +13,6 @@ from backend.totp import (
     provisioning_uri,
     verify_code,
 )
-
 
 # ---------------------------------------------------------------------------
 # TOTP primitives
@@ -79,12 +79,14 @@ def _bootstrap_admin():
     db = SessionLocal()
     try:
         if not db.query(User).filter(User.username == "admin").first():
-            db.add(User(
-                username="admin",
-                password_hash=hash_password("baraqadmin"),
-                role="admin",
-                is_active=True,
-            ))
+            db.add(
+                User(
+                    username="admin",
+                    password_hash=hash_password("baraqadmin"),
+                    role="admin",
+                    is_active=True,
+                )
+            )
             db.commit()
     finally:
         db.close()
@@ -135,7 +137,7 @@ def test_login_without_2fa_returns_token(client):
     resp = _admin_login(client)
     assert resp.status_code == 200
     data = resp.json()
-    assert "token" in data and data["token"]
+    assert data.get("token")
     assert data["user"]["totp_enabled"] is False
 
 
@@ -151,12 +153,16 @@ def test_mfa_enabled_login_requires_challenge_then_code(client):
     assert "token" not in data or not data["token"]
 
     # Wrong code is rejected.
-    bad = client.post("/api/auth/mfa/verify", json={"challenge": data["challenge"], "code": "000000"})
+    bad = client.post(
+        "/api/auth/mfa/verify", json={"challenge": data["challenge"], "code": "000000"}
+    )
     assert bad.status_code == 401
 
     # Correct code exchanges the challenge for a real session token.
     code = current_code(_secret_of("admin"))
-    ok = client.post("/api/auth/mfa/verify", json={"challenge": data["challenge"], "code": code})
+    ok = client.post(
+        "/api/auth/mfa/verify", json={"challenge": data["challenge"], "code": code}
+    )
     assert ok.status_code == 200
     assert ok.json()["token"]
     assert ok.json()["user"]["totp_enabled"] is True
@@ -171,11 +177,15 @@ def test_2fa_verify_does_not_accept_full_session_token(client):
 
     # A full session token is NOT a valid challenge (no "mfa" claim).
     code = current_code(_secret_of("admin"))
-    bad = client.post("/api/auth/mfa/verify", json={"challenge": session_token, "code": code})
+    bad = client.post(
+        "/api/auth/mfa/verify", json={"challenge": session_token, "code": code}
+    )
     assert bad.status_code == 401
 
     # An expired/bogus challenge is likewise rejected.
-    bogus = client.post("/api/auth/mfa/verify", json={"challenge": "bogus.token", "code": code})
+    bogus = client.post(
+        "/api/auth/mfa/verify", json={"challenge": "bogus.token", "code": code}
+    )
     assert bogus.status_code == 401
 
 
@@ -185,16 +195,21 @@ def test_2fa_verify_works_on_fresh_session_without_api_key(client):
     for /api/auth/mfa/verify in backend/main.py: the step happens BEFORE
     any session token exists, so it must not require X-API-Key."""
     from backend.main import app
+
     with TestClient(app) as fresh:
         _enable_2fa(fresh)  # login + setup + confirm round-trip in the fresh jar
         fresh.cookies.clear()  # simulate a brand-new browser: no session cookie
-        login = fresh.post("/api/auth/login", json={"username": "admin", "password": "baraqadmin"})
+        login = fresh.post(
+            "/api/auth/login", json={"username": "admin", "password": "baraqadmin"}
+        )
         data = login.json()
         assert data["mfa_required"] is True and data["challenge"]
         # This request carries no session cookie and no API key — the
         # middleware must let it through (like /api/auth/login).
         code = current_code(_secret_of("admin"))
-        ok = fresh.post("/api/auth/mfa/verify", json={"challenge": data["challenge"], "code": code})
+        ok = fresh.post(
+            "/api/auth/mfa/verify", json={"challenge": data["challenge"], "code": code}
+        )
         assert ok.status_code == 200, ok.text
         assert ok.json()["token"]
 

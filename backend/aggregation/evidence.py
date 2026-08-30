@@ -6,6 +6,7 @@ as unique sets per category (hosts, users, source_ips, destination_ips,
 processes, file_paths, domains), and the original alert-level observables
 are never lost (they stay on the member alerts and their evidence rows).
 """
+
 from __future__ import annotations
 
 from typing import Protocol
@@ -101,5 +102,7 @@ def merge_observables(existing: dict | None, new: dict | None) -> dict:
     merged: dict[str, set] = {}
     for source in (existing or {}, new or {}):
         for key, values in source.items():
-            merged.setdefault(key, set()).update(values if isinstance(values, list) else [])
+            merged.setdefault(key, set()).update(
+                values if isinstance(values, list) else []
+            )
     return {key: sorted(values) for key, values in merged.items()}

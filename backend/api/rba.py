@@ -4,17 +4,16 @@ Exposes the entity risk store: the leaderboard of entities with
 accumulated risk, per-entity risk timelines (every delta that moved the
 score), and the declarative correlation rules loaded from YAML.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
-from backend.database.models import EntityRisk
 from backend.detection.correlation_engine import load_correlation_rules
 from backend.detection.tuning import get_tuning, set_tuning
 from backend.risk.entity_risk import EntityRiskManager
@@ -85,7 +84,7 @@ def rba_entity_profile(
 
 
 @router.get("/rules")
-def rba_correlation_rules(db: Session = Depends(get_db)):  # noqa: ARG001
+def rba_correlation_rules(db: Session = Depends(get_db)):
     """Declarative correlation rules currently loaded from YAML."""
     specs = load_correlation_rules()
     return {

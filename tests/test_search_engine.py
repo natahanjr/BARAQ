@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.database.models import Alert, NormalizedEvent
 from backend.search.engine import SearchError, execute_search, parse_query
-
 from tests.fixtures import full_suite
 
 
@@ -109,14 +107,18 @@ def test_rare_pipe(db):
 
 def test_table_pipe(db):
     _seed_events(db, "brute_force")
-    res = execute_search(db, "event_id=4625 | table user, host | limit 5", earliest="-30d")
+    res = execute_search(
+        db, "event_id=4625 | table user, host | limit 5", earliest="-30d"
+    )
     assert res.columns == ["user", "host"]
     assert len(res.rows) <= 5
 
 
 def test_fields_drop(db):
     _seed_events(db, "brute_force")
-    res = execute_search(db, "event_id=4625 | fields -message, -org | limit 3", earliest="-30d")
+    res = execute_search(
+        db, "event_id=4625 | fields -message, -org | limit 3", earliest="-30d"
+    )
     assert "message" not in res.columns
     assert "org" not in res.columns
     assert "user" in res.columns
@@ -216,7 +218,9 @@ def test_timechart_invalid_span(db):
 
 def test_transaction_groups_session(db):
     _seed_events(db, "brute_force")
-    res = execute_search(db, "event_id=4625 | transaction by host maxspan=30m", earliest="-30d")
+    res = execute_search(
+        db, "event_id=4625 | transaction by host maxspan=30m", earliest="-30d"
+    )
     assert res.columns == ["_time", "duration", "count", "host"]
     assert res.total >= 1
     assert all(r[2] >= 1 for r in res.rows)

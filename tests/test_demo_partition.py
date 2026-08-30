@@ -11,9 +11,10 @@ tables to the matching partition. These tests lock in the behaviour that:
 * demo alerting/RBA state never merges into production state,
 * the outer partition flag survives nested detection runs.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -35,7 +36,7 @@ def _process(db, command_line: str, demo: bool) -> None:
             parent_name="",
             user="alice",
             is_new=False,
-            observed_at=datetime.now(timezone.utc),
+            observed_at=datetime.now(UTC),
             org="",
             demo=demo,
         )
@@ -52,7 +53,7 @@ def _python_record(command_line: str) -> dict:
         "path": "C:\\Users\\t\\AppData\\Local\\Temp\\python.exe",
         "raw": {"cmdline": command_line},
         "user": "alice",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
@@ -118,7 +119,9 @@ def test_production_and_demo_detection_do_not_merge(db):
 def test_escalate_production_run_ignores_demo_entities(db):
     from tests.test_entity_risk import _mk_alert
 
-    alert = _mk_alert(db, host="WS-DEMO", risk_score=90.0, evidence="User 'demo' from 10.9.9.9")
+    alert = _mk_alert(
+        db, host="WS-DEMO", risk_score=90.0, evidence="User 'demo' from 10.9.9.9"
+    )
     alert.demo = True
     db.commit()
     EntityRiskManager(db).apply_alert(alert)

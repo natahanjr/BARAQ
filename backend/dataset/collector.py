@@ -13,7 +13,7 @@ telemetry ingestion itself, so normal SOC operations are unaffected.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import bindparam, func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -27,7 +27,6 @@ from backend.database.models import (
     DatasetCollection,
     DatasetEvent,
     EntityRisk,
-    Incident,
     IncidentAlertLink,
     NormalizedEvent,
 )
@@ -38,7 +37,9 @@ from .normalize import to_dataset_row
 log = logging.getLogger("dataset.collector")
 
 
-def active_collection(session: Session, create_if_missing: bool = True) -> DatasetCollection | None:
+def active_collection(
+    session: Session, create_if_missing: bool = True
+) -> DatasetCollection | None:
     """The current (active or paused) collection; creates the default one."""
     from backend.config import (
         DATASET_ANONYMIZE,
@@ -51,12 +52,16 @@ def active_collection(session: Session, create_if_missing: bool = True) -> Datas
         DATASET_TARGET_EVENTS,
     )
 
-    coll = session.execute(
-        select(DatasetCollection)
-        .where(DatasetCollection.status.in_(["active", "paused"]))
-        .order_by(DatasetCollection.id.desc())
-        .limit(1)
-    ).scalars().first()
+    coll = (
+        session.execute(
+            select(DatasetCollection)
+            .where(DatasetCollection.status.in_(["active", "paused"]))
+            .order_by(DatasetCollection.id.desc())
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
     if coll is not None:
         return coll
     if not create_if_missing or not DATASET_ENABLED:
@@ -75,7 +80,9 @@ def active_collection(session: Session, create_if_missing: bool = True) -> Datas
     )
     session.add(coll)
     session.flush()
-    log.info("Dataset collection '%s' created (target=%d)", coll.name, coll.target_events)
+    log.info(
+        "Dataset collection '%s' created (target=%d)", coll.name, coll.target_events
+    )
     return coll
 
 
@@ -88,36 +95,46 @@ def _last_source_event_id(session: Session, collection_id: int) -> int:
     return int(row or 0)
 
 
-def _resolve_labels(
-    session: Session, event_ids: list[int]
-) -> dict[int, dict]:
+def _resolve_labels(session: Session, event_ids: list[int]) -> dict[int, dict]:
     """Batch-resolve alert/incident/verdict metadata for a set of events."""
     if not event_ids:
         return {}
     labels: dict[int, dict] = {}
-    links = session.execute(
-        select(AlertEventLink).where(AlertEventLink.event_id.in_(event_ids)).limit(5000)
-    ).scalars().all()
+    links = (
+        session.execute(
+            select(AlertEventLink)
+            .where(AlertEventLink.event_id.in_(event_ids))
+            .limit(5000)
+        )
+        .scalars()
+        .all()
+    )
     alert_ids = [l.alert_id for l in links]
     if not alert_ids:
         return labels
 
     alerts = {
         a.id: a
-        for a in session.execute(
-            select(Alert).where(Alert.id.in_(alert_ids))
-        ).scalars().all()
+        for a in session.execute(select(Alert).where(Alert.id.in_(alert_ids)))
+        .scalars()
+        .all()
     }
     verdicts = {
         v.alert_id: v.verdict
         for v in session.execute(
             select(AlertVerdict).where(AlertVerdict.alert_id.in_(alert_ids))
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     }
     incident_map: dict[int, int] = {}
-    inc_links = session.execute(
-        select(IncidentAlertLink).where(IncidentAlertLink.alert_id.in_(alert_ids))
-    ).scalars().all()
+    inc_links = (
+        session.execute(
+            select(IncidentAlertLink).where(IncidentAlertLink.alert_id.in_(alert_ids))
+        )
+        .scalars()
+        .all()
+    )
     for il in inc_links:
         incident_map.setdefault(il.alert_id, il.incident_id)
 
@@ -163,7 +180,9 @@ def _resolve_entity_risk(session: Session, names: set[str]) -> dict[str, float]:
     return best
 
 
-def sweep(session: Session, limit: int | None = None, collection_id: int | None = None) -> dict:
+def sweep(
+    session: Session, limit: int | None = None, collection_id: int | None = None
+) -> dict:
     """Collect the next batch of uncollected telemetry events.
 
     Returns counts ``{collected, deduplicated, total, target_reached}``.
@@ -181,7 +200,13 @@ def sweep(session: Session, limit: int | None = None, collection_id: int | None 
     if coll is None:
         coll = active_collection(session, create_if_missing=True)
     if coll is None:
-        return {"collected": 0, "deduplicated": 0, "total": 0, "target_reached": False, "collection_id": None}
+        return {
+            "collected": 0,
+            "deduplicated": 0,
+            "total": 0,
+            "target_reached": False,
+            "collection_id": None,
+        }
     if coll.status != "active":
         return {
             "collected": 0,
@@ -193,64 +218,93 @@ def sweep(session: Session, limit: int | None = None, collection_id: int | None 
 
     if coll.total_events >= coll.target_events:
         coll.status = "complete"
-        coll.completed_at = coll.completed_at or datetime.now(timezone.utc)
+        coll.completed_at = coll.completed_at or datetime.now(UTC)
         session.commit()
-        return {"collected": 0, "deduplicated": 0, "total": coll.total_events, "target_reached": True, "collection_id": coll.id}
+        return {
+            "collected": 0,
+            "deduplicated": 0,
+            "total": coll.total_events,
+            "target_reached": True,
+            "collection_id": coll.id,
+        }
 
     cursor = _last_source_event_id(session, coll.id)
-    events = session.execute(
-        select(NormalizedEvent)
-        .where(NormalizedEvent.id > cursor, NormalizedEvent.demo == False)  # noqa: E712
-        .order_by(NormalizedEvent.id.asc())
-        .limit(limit)
-    ).scalars().all()
+    events = (
+        session.execute(
+            select(NormalizedEvent)
+            .where(NormalizedEvent.id > cursor, NormalizedEvent.demo == False)
+            .order_by(NormalizedEvent.id.asc())
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
     if not events:
-        return {"collected": 0, "deduplicated": 0, "total": coll.total_events, "target_reached": False, "collection_id": coll.id}
+        return {
+            "collected": 0,
+            "deduplicated": 0,
+            "total": coll.total_events,
+            "target_reached": False,
+            "collection_id": coll.id,
+        }
 
     anonymizer = Pseudonymizer(coll.id, coll.anonymize)
     labels = _resolve_labels(session, [e.id for e in events])
     names = {e.user for e in events if e.user} | {e.host for e in events if e.host}
     risk_map = _resolve_entity_risk(session, names)
 
-    stmt = insert(DatasetEvent).values(
-        collection_id=coll.id,
-        event_fingerprint=bindparam("event_fingerprint"),
-        source_event_id=bindparam("source_event_id"),
-        timestamp=bindparam("timestamp"),
-        event_type=bindparam("event_type"),
-        event_source=bindparam("event_source"),
-        payload_normalized=bindparam("payload_normalized"),
-        exported=False,
-    ).on_conflict_do_nothing(
-        index_elements=["collection_id", "event_fingerprint"]
+    stmt = (
+        insert(DatasetEvent)
+        .values(
+            collection_id=coll.id,
+            event_fingerprint=bindparam("event_fingerprint"),
+            source_event_id=bindparam("source_event_id"),
+            timestamp=bindparam("timestamp"),
+            event_type=bindparam("event_type"),
+            event_source=bindparam("event_source"),
+            payload_normalized=bindparam("payload_normalized"),
+            exported=False,
+        )
+        .on_conflict_do_nothing(index_elements=["collection_id", "event_fingerprint"])
     )
 
     values = []
     for ev in events:
         fingerprint, row = to_dataset_row(
-            ev, labels, risk_map, anonymizer, coll.include_labels,
+            ev,
+            labels,
+            risk_map,
+            anonymizer,
+            coll.include_labels,
             DATASET_COLLECTOR_VERSION,
         )
-        values.append({
-            "event_fingerprint": fingerprint,
-            "source_event_id": ev.id,
-            "timestamp": ev.timestamp,
-            "event_type": row["event_type"],
-            "event_source": row["event_source"],
-            "payload_normalized": row["_payload"],
-        })
+        values.append(
+            {
+                "event_fingerprint": fingerprint,
+                "source_event_id": ev.id,
+                "timestamp": ev.timestamp,
+                "event_type": row["event_type"],
+                "event_source": row["event_source"],
+                "payload_normalized": row["_payload"],
+            }
+        )
     if values:
         session.execute(stmt, values)
 
     pre_total = coll.total_events
-    total = session.execute(
-        select(func.count(DatasetEvent.id)).where(DatasetEvent.collection_id == coll.id)
-    ).scalar() or 0
+    total = (
+        session.execute(
+            select(func.count(DatasetEvent.id)).where(
+                DatasetEvent.collection_id == coll.id
+            )
+        ).scalar()
+        or 0
+    )
     coll.total_events = int(total)
-    coll.updated_at = datetime.now(timezone.utc)
+    coll.updated_at = datetime.now(UTC)
     if int(total) >= coll.target_events:
         coll.status = "complete"
-        coll.completed_at = coll.completed_at or datetime.now(timezone.utc)
+        coll.completed_at = coll.completed_at or datetime.now(UTC)
     session.commit()
 
     inserted = max(0, int(total) - pre_total)

@@ -4,9 +4,10 @@ The tree must rebuild parent/child lineage from 4688 events (raw facts carry
 ProcessId=parent / NewProcessId=child), mark the alert's seed process, and be
 reachable through a standalone endpoint (alert-scoped or host-scoped).
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
@@ -16,11 +17,12 @@ from backend.main import app
 from tests.conftest import run_simulation
 
 
-def _mk_4688(db, pid, ppid, name, cmd="", host="ws01", user="alice",
-             minutes_ago=5, org="univ-a") -> NormalizedEvent:
+def _mk_4688(
+    db, pid, ppid, name, cmd="", host="ws01", user="alice", minutes_ago=5, org="univ-a"
+) -> NormalizedEvent:
     ev = NormalizedEvent(
         event_id=4688,
-        timestamp=datetime.now(timezone.utc) - timedelta(minutes=minutes_ago),
+        timestamp=datetime.now(UTC) - timedelta(minutes=minutes_ago),
         category="Process",
         user=user,
         host=host,
@@ -68,7 +70,9 @@ def _client():
 
 class TestTreeBuilder:
     def test_chain_root_to_seed(self, db):
-        child = _mk_4688(db, 1000, 900, "python.exe", cmd="python payload.py", minutes_ago=1)
+        child = _mk_4688(
+            db, 1000, 900, "python.exe", cmd="python payload.py", minutes_ago=1
+        )
         _mk_4688(db, 900, 500, "explorer.exe", minutes_ago=2)
         _mk_4688(db, 500, None, "services.exe", minutes_ago=3)
         db.commit()
@@ -79,20 +83,28 @@ class TestTreeBuilder:
         chain = [n["name"] for n in tree["chain"]]
         assert chain[0] == "services.exe"
         assert chain[-1] == "python.exe"
-        assert all(n["verified"] for n in tree["chain"][1:])  # every edge below root verified
+        assert all(
+            n["verified"] for n in tree["chain"][1:]
+        )  # every edge below root verified
 
     def test_snapshot_fallback_adds_nodes(self, db):
         from backend.database.models import ProcessRecord
 
         child = _mk_4688(db, 2000, 1900, "malware.exe", minutes_ago=1)
-        db.add(ProcessRecord(
-            pid=1900, ppid=0, name="powershell.exe",
-            path=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
-            command_line="powershell.exe -enc ABC", parent_name="",
-            user="alice", is_new=True,
-            observed_at=datetime.now(timezone.utc) - timedelta(minutes=2),
-            org="univ-a",
-        ))
+        db.add(
+            ProcessRecord(
+                pid=1900,
+                ppid=0,
+                name="powershell.exe",
+                path=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+                command_line="powershell.exe -enc ABC",
+                parent_name="",
+                user="alice",
+                is_new=True,
+                observed_at=datetime.now(UTC) - timedelta(minutes=2),
+                org="univ-a",
+            )
+        )
         db.commit()
 
         tree = build_process_tree(db, [child], org="univ-a")
@@ -115,11 +127,15 @@ class TestStandaloneEndpoint:
 
     def test_unknown_alert_404(self):
         with _client() as client:
-            resp = client.get("/api/investigation/process-tree", params={"alert_id": 99999})
+            resp = client.get(
+                "/api/investigation/process-tree", params={"alert_id": 99999}
+            )
             assert resp.status_code == 404
 
     def test_by_alert_builds_tree(self, db):
-        ev = _mk_4688(db, 1000, 900, "python.exe", cmd="python payload.py", minutes_ago=1)
+        ev = _mk_4688(
+            db, 1000, 900, "python.exe", cmd="python payload.py", minutes_ago=1
+        )
         _mk_4688(db, 900, None, "explorer.exe", minutes_ago=2)
         db.commit()
         alert = _mk_alert(db, evidence_pid=1000)
@@ -155,10 +171,12 @@ class TestStandaloneEndpoint:
         run_simulation(db, scenario="brute_force")
         alert = db.query(Alert).order_by(Alert.id.asc()).first()
         assert alert is not None
-        db.add(AlertEventLink(
-            alert_id=alert.id,
-            event_id=_mk_4688(db, 1000, 900, "python.exe", minutes_ago=1).id,
-        ))
+        db.add(
+            AlertEventLink(
+                alert_id=alert.id,
+                event_id=_mk_4688(db, 1000, 900, "python.exe", minutes_ago=1).id,
+            )
+        )
         db.commit()
 
         with _client() as client:

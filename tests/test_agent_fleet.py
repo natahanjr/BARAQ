@@ -1,5 +1,8 @@
 ﻿"""Agent fleet (roadmap 3.4): health, tags/grouping, overview, auto-update."""
+
 from __future__ import annotations
+
+from datetime import UTC
 
 from fastapi.testclient import TestClient
 
@@ -40,7 +43,7 @@ def test_ingest_records_fleet_metadata():
 
 
 def test_stale_agent_flagged():
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from sqlalchemy import update
 
@@ -51,9 +54,9 @@ def test_stale_agent_flagged():
         _register_agent(client)
         with SessionLocal() as db:
             db.execute(
-                update(Endpoint).where(Endpoint.agent_id == "agent-dev").values(
-                    last_seen=datetime.now(timezone.utc) - timedelta(minutes=10)
-                )
+                update(Endpoint)
+                .where(Endpoint.agent_id == "agent-dev")
+                .values(last_seen=datetime.now(UTC) - timedelta(minutes=10))
             )
             db.commit()
         rows = client.get("/api/endpoints").json()["items"]
@@ -94,8 +97,11 @@ def test_update_command_lifecycle():
         cmd = created.json()
         assert cmd["action"] == "update_agent"
 
-        ep = next(r for r in client.get("/api/endpoints").json()["items"]
-                  if r["agent_id"] == "agent-dev")
+        ep = next(
+            r
+            for r in client.get("/api/endpoints").json()["items"]
+            if r["agent_id"] == "agent-dev"
+        )
         assert ep["update_status"] == "pending"
 
         pending = client.get(
@@ -110,8 +116,11 @@ def test_update_command_lifecycle():
         )
         assert reported.status_code == 200, reported.text
 
-        ep = next(r for r in client.get("/api/endpoints").json()["items"]
-                  if r["agent_id"] == "agent-dev")
+        ep = next(
+            r
+            for r in client.get("/api/endpoints").json()["items"]
+            if r["agent_id"] == "agent-dev"
+        )
         assert ep["update_status"] == "current"
 
 
@@ -127,8 +136,11 @@ def test_failed_command_increments_errors():
             headers={"X-Agent-Key": "baraq-agent-dev"},
             json={"status": "failed", "detail": "netsh error"},
         )
-        ep = next(r for r in client.get("/api/endpoints").json()["items"]
-                  if r["agent_id"] == "agent-dev")
+        ep = next(
+            r
+            for r in client.get("/api/endpoints").json()["items"]
+            if r["agent_id"] == "agent-dev"
+        )
         assert ep["errors_total"] >= 1
 
 
@@ -138,4 +150,3 @@ def test_tags_requires_admin():
     with TestClient(_app, headers={"X-API-Key": "baraq-dev-analyst"}) as bare:
         r = bare.post("/api/endpoints/agent-dev/tags", json={"tags": "x"})
         assert r.status_code == 403
-

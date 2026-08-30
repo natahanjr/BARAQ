@@ -135,7 +135,15 @@ function EventsPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Telemetry</p>
+          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-white">Event Stream</h1>
+          <p className="mt-0.5 text-[13px] text-slate-400">Search and filter normalized security events</p>
+        </div>
+      </header>
+
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-5">
           <input
             value={eventId}
@@ -144,7 +152,7 @@ function EventsPanel() {
               setPage(1);
             }}
             placeholder="Event ID (4625, 4688...)"
-            className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
+            className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
           />
           <input
             value={user}
@@ -153,7 +161,7 @@ function EventsPanel() {
               setPage(1);
             }}
             placeholder="Username"
-            className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
+            className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
           />
           <select
             value={category}
@@ -161,7 +169,7 @@ function EventsPanel() {
               setCategory(e.target.value);
               setPage(1);
             }}
-            className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
+            className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
             aria-label="Filter by category"
           >
             <option value="">All Categories</option>
@@ -177,7 +185,7 @@ function EventsPanel() {
               setAnomaly(e.target.value);
               setPage(1);
             }}
-            className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
+            className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 placeholder-slate-500 outline-none transition-all focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
             aria-label="Filter by anomaly status"
           >
             <option value="">All Events</option>
@@ -201,7 +209,7 @@ function EventsPanel() {
       {!data && !error && <Loading label="Loading events" />}
 
       {data && data.items.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025] py-16">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 py-16">
           <div className="text-4xl">📝</div>
           <h3 className="mt-4 text-[15px] font-semibold text-white">No events found</h3>
           <p className="mt-1 text-[13px] text-slate-400">
@@ -211,7 +219,7 @@ function EventsPanel() {
       )}
 
       {data && data.items.length > 0 && (
-        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
           <div className="space-y-2">
             {data.items.map((event) => (
               <EventRow key={event.id} event={event} />
@@ -221,7 +229,7 @@ function EventsPanel() {
       )}
 
       {totalPages > 1 && (
-        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
           <Pagination page={page} totalPages={totalPages} onChange={setPage} />
         </div>
       )}
@@ -314,7 +322,7 @@ const ProcessRow = memo(function ProcessRow({ process }) {
         )}
       </div>
       {showNote && (
-        <div className="mt-3 space-y-2 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.08] px-3 py-2.5 text-xs leading-relaxed">
+        <div className="mt-3 space-y-2 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.08] px-3 py-2.5 text-xs leading-relaxed">
           {processNote(process).map(({ title, text }) => (
             <p key={title}>
               <span className="font-semibold uppercase tracking-wider text-cyan-300">
@@ -526,7 +534,7 @@ const NetworkRow = memo(function NetworkRow({ connection }) {
         </span>
       </div>
       {showNote && (
-        <div className="mt-3 space-y-2 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.08] px-3 py-2.5 text-xs leading-relaxed">
+        <div className="mt-3 space-y-2 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.08] px-3 py-2.5 text-xs leading-relaxed">
           {connectionNote(connection).map(({ title, text }) => (
             <p key={title}>
               <span className="font-semibold uppercase tracking-wider text-cyan-300">
@@ -600,7 +608,7 @@ function DatasetCollectorPanel() {
 
   if (!data) {
     return (
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
         <Loading label="Loading dataset collector" />
       </div>
     );
@@ -626,7 +634,7 @@ function DatasetCollectorPanel() {
       )}
 
       {!data.enabled ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025] py-16">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 py-16">
           <div className="text-4xl">🗄</div>
           <h3 className="mt-4 text-[15px] font-semibold text-white">Dataset collector disabled</h3>
           <p className="mt-1 text-[13px] text-slate-400">
@@ -635,7 +643,7 @@ function DatasetCollectorPanel() {
         </div>
       ) : (
         <>
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-white">{coll.name}</p>
@@ -738,7 +746,7 @@ function DatasetCollectorPanel() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <p className="text-sm font-semibold text-white">Dataset settings</p>
             <form onSubmit={saveConfig} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block text-xs">
@@ -748,7 +756,7 @@ function DatasetCollectorPanel() {
                 <input
                   name="name"
                   defaultValue={coll.name}
-                  className="mt-1 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
+                  className="mt-1 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 outline-none transition-all focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
                 />
               </label>
               <label className="block text-xs">
@@ -760,7 +768,7 @@ function DatasetCollectorPanel() {
                   type="number"
                   min="1"
                   defaultValue={coll.target_events}
-                  className="mt-1 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
+                  className="mt-1 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 outline-none transition-all focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
                 />
               </label>
               <label className="block text-xs">
@@ -772,7 +780,7 @@ function DatasetCollectorPanel() {
                   type="number"
                   min="1"
                   defaultValue={coll.events_per_file}
-                  className="mt-1 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
+                  className="mt-1 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 outline-none transition-all focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
                 />
               </label>
               <label className="block text-xs">
@@ -784,7 +792,7 @@ function DatasetCollectorPanel() {
                   type="number"
                   min="1"
                   defaultValue={coll.export_interval_hours}
-                  className="mt-1 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
+                  className="mt-1 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] text-slate-200 outline-none transition-all focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10"
                 />
               </label>
               <label className="flex items-center gap-2 text-xs text-slate-300">
@@ -818,7 +826,7 @@ function DatasetCollectorPanel() {
           </div>
 
           {stats && (
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
               <p className="text-sm font-semibold text-white">Composition</p>
               <div className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-3 lg:grid-cols-5">
                 <div className="rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06]">
@@ -881,7 +889,7 @@ function DatasetCollectorPanel() {
             </div>
           )}
 
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <p className="text-sm font-semibold text-white">Export history</p>
             {!exportsList || exportsList.items.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12">
@@ -1026,12 +1034,12 @@ export default function Telemetry() {
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6">
+      <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
         <h1 className="text-[24px] font-bold tracking-[-0.03em] text-white">Telemetry</h1>
         <p className="mt-1 text-[13px] text-slate-400">Real-time processes, network connections and security events</p>
       </div>
 
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => setTab("processes")} className={tabClass(tab === "processes")}>
             Running Processes ({processes.length})
@@ -1068,7 +1076,7 @@ export default function Telemetry() {
         <>
           {loading && <Loading label="Loading telemetry" />}
           {!loading && tab === "processes" && (
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
               {processes.length > 0 ? (
                 <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
                   {processes.map((process) => (
@@ -1086,7 +1094,7 @@ export default function Telemetry() {
           )}
 
           {!loading && tab === "network" && (
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
               {network.length > 0 ? (
                 <div className="space-y-2">
                   {network.map((conn) => (

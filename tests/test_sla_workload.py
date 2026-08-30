@@ -4,20 +4,27 @@ First response is measured with a ``responded_at`` clock (set when the case
 leaves "open" or an owner is assigned, never overwritten), and the workload
 endpoint reports per-owner and per-severity SLA posture from the backend.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
-from backend.api.incidents import SLA_MINUTES
-from backend.database.models import AuditLog, Incident
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
+from backend.api.incidents import SLA_MINUTES
+from backend.database.models import AuditLog, Incident
 from backend.main import app
 
 
-def _mk_incident(db, title="SLA case", severity="critical", status="open",
-                 owner="", minutes_ago=0, org="univ-a") -> Incident:
+def _mk_incident(
+    db,
+    title="SLA case",
+    severity="critical",
+    status="open",
+    owner="",
+    minutes_ago=0,
+    org="univ-a",
+) -> Incident:
     incident = Incident(
         title=title,
         description="test",
@@ -30,10 +37,10 @@ def _mk_incident(db, title="SLA case", severity="critical", status="open",
         mitre_name="Credential Access",
         risk_score=80.0,
         risk_level="CRITICAL",
-        opened_at=datetime.now(timezone.utc),
+        opened_at=datetime.now(UTC),
     )
     if minutes_ago:
-        incident.opened_at = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
+        incident.opened_at = datetime.now(UTC) - timedelta(minutes=minutes_ago)
     incident.created_at = incident.opened_at
     db.add(incident)
     db.flush()
@@ -58,7 +65,7 @@ class TestRespondedAt:
 
     def test_responded_at_never_overwritten(self, db):
         inc = _mk_incident(db, status="investigating")
-        first = datetime.now(timezone.utc) - timedelta(hours=2)
+        first = datetime.now(UTC) - timedelta(hours=2)
         inc.responded_at = first
         db.commit()
         with _client() as client:
@@ -70,9 +77,7 @@ class TestRespondedAt:
         inc = _mk_incident(db)
         db.commit()
         with _client() as client:
-            r = client.patch(
-                f"/api/incidents/{inc.id}", json={"owner": "analyst-1"}
-            )
+            r = client.patch(f"/api/incidents/{inc.id}", json={"owner": "analyst-1"})
         assert r.status_code == 200
         assert r.json()["responded_at"] is not None
 
@@ -80,9 +85,7 @@ class TestRespondedAt:
         inc = _mk_incident(db)
         db.commit()
         with _client() as client:
-            r = client.patch(
-                f"/api/incidents/{inc.id}", json={"severity": "high"}
-            )
+            r = client.patch(f"/api/incidents/{inc.id}", json={"severity": "high"})
         assert r.status_code == 200
         assert r.json()["responded_at"] is None
 
@@ -144,11 +147,13 @@ class TestWorkloadEndpoint:
         inc = _mk_incident(db, status="open")
         db.commit()
         with _client() as client:
-            client.patch(
-                f"/api/incidents/{inc.id}", json={"status": "contained"}
+            client.patch(f"/api/incidents/{inc.id}", json={"status": "contained"})
+        entries = (
+            db.query(AuditLog)
+            .filter(
+                AuditLog.action == "incident.update",
+                AuditLog.detail.contains("responded_at"),
             )
-        entries = db.query(AuditLog).filter(
-            AuditLog.action == "incident.update",
-            AuditLog.detail.contains("responded_at"),
-        ).all()
+            .all()
+        )
         assert len(entries) >= 1

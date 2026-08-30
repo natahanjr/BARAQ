@@ -1,8 +1,8 @@
 """Reports API endpoints."""
+
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -55,14 +55,23 @@ def generate(body: ReportRequest, request: Request, db: Session = Depends(get_db
         result = generate_report(db, body.report_type.value, body.format.value)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    log_action(db, actor_name(request), "report.generate", "report", result.get("file_path", ""),
-               f"{body.report_type.value} / {body.format.value}", client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "report.generate",
+        "report",
+        result.get("file_path", ""),
+        f"{body.report_type.value} / {body.format.value}",
+        client_ip(request),
+    )
     return result
 
 
 @router.get("/list")
 def list_reports(limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
-    rows = db.scalars(select(ReportRecord).order_by(ReportRecord.created_at.desc()).limit(limit)).all()
+    rows = db.scalars(
+        select(ReportRecord).order_by(ReportRecord.created_at.desc()).limit(limit)
+    ).all()
     return {"items": [r.to_dict() for r in rows]}
 
 
@@ -77,7 +86,9 @@ def list_schedules(db: Session = Depends(get_db)):
 
 
 @router.post("/schedules", dependencies=[Depends(require_admin)])
-def create_schedule(body: ScheduleRequest, request: Request, db: Session = Depends(get_db)):
+def create_schedule(
+    body: ScheduleRequest, request: Request, db: Session = Depends(get_db)
+):
     if body.every_hours < 1 and body.hour_of_day < 0:
         raise HTTPException(422, "every_hours >= 1 or hour_of_day >= 0 is required")
     row = ReportSchedule(
@@ -92,13 +103,22 @@ def create_schedule(body: ScheduleRequest, request: Request, db: Session = Depen
     db.add(row)
     db.commit()
     db.refresh(row)
-    log_action(db, actor_name(request), "report.schedule.create", "report_schedule", str(row.id),
-               f"{body.name} ({body.report_type.value}/{body.format.value})", client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "report.schedule.create",
+        "report_schedule",
+        str(row.id),
+        f"{body.name} ({body.report_type.value}/{body.format.value})",
+        client_ip(request),
+    )
     return row.to_dict()
 
 
 @router.patch("/schedules/{schedule_id}", dependencies=[Depends(require_admin)])
-def update_schedule(schedule_id: int, body: ScheduleRequest, db: Session = Depends(get_db)):
+def update_schedule(
+    schedule_id: int, body: ScheduleRequest, db: Session = Depends(get_db)
+):
     row = db.get(ReportSchedule, schedule_id)
     if not row:
         raise HTTPException(404, "Schedule not found")
@@ -123,8 +143,15 @@ def delete_schedule(schedule_id: int, request: Request, db: Session = Depends(ge
         raise HTTPException(404, "Schedule not found")
     db.delete(row)
     db.commit()
-    log_action(db, actor_name(request), "report.schedule.delete", "report_schedule", str(schedule_id),
-               row.name, client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "report.schedule.delete",
+        "report_schedule",
+        str(schedule_id),
+        row.name,
+        client_ip(request),
+    )
     return {"deleted": schedule_id}
 
 
@@ -138,8 +165,15 @@ def run_schedule_now(schedule_id: int, request: Request, db: Session = Depends(g
         raise HTTPException(404, "Schedule not found")
     try:
         result = run_schedule(db, row)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(500, f"Report generation failed: {exc}") from exc
-    log_action(db, actor_name(request), "report.schedule.run", "report_schedule", str(schedule_id),
-               row.name, client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "report.schedule.run",
+        "report_schedule",
+        str(schedule_id),
+        row.name,
+        client_ip(request),
+    )
     return result

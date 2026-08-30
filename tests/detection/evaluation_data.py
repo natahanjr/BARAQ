@@ -17,11 +17,12 @@ Methodology notes (see docs/phase2/PHASE2_ACCEPTANCE.md):
       of production-grade statistical confidence (no fake confidence).
     * Scenario datasets are checked in, immutable, and replayed verbatim.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-T0 = datetime(2026, 8, 17, 12, 0, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 8, 17, 12, 0, 0, tzinfo=UTC)
 
 
 def _ts(minutes: float) -> str:
@@ -54,7 +55,9 @@ SC_002_EXTERNAL_RDP = {
     "id": "SC-002",
     "name": "external RDP logon (logon type 10, public IP)",
     "label": "TP",
-    "expected": [{"detector_id": "D001", "severity": "high", "expected_mitre": "T1133"}],
+    "expected": [
+        {"detector_id": "D001", "severity": "high", "expected_mitre": "T1133"}
+    ],
     "records": [
         {
             "timestamp": _ts(1),
@@ -72,7 +75,9 @@ SC_003_BRUTE_FORCE = {
     "id": "SC-003",
     "name": "10 failed logons for one account in 15 minutes",
     "label": "TP",
-    "expected": [{"detector_id": "D002", "severity": "medium", "expected_mitre": "T1110"}],
+    "expected": [
+        {"detector_id": "D002", "severity": "medium", "expected_mitre": "T1110"}
+    ],
     "records": [
         {
             "timestamp": _ts(i * 0.5),
@@ -91,7 +96,9 @@ SC_004_SUSPICIOUS_POWERSHELL = {
     "id": "SC-004",
     "name": "encoded PowerShell command from Temp",
     "label": "TP",
-    "expected": [{"detector_id": "D003", "severity": "high", "expected_mitre": "T1059.001"}],
+    "expected": [
+        {"detector_id": "D003", "severity": "high", "expected_mitre": "T1059.001"}
+    ],
     "records": [
         {
             "timestamp": _ts(1),
@@ -99,11 +106,15 @@ SC_004_SUSPICIOUS_POWERSHELL = {
             "host": "workstation-42",
             "user": "alice",
             "action": "process_start",
-            "facts": {"command_line": "powershell.exe -EncodedCommand SQBFAFgA -w hidden",
-                      "path": "C:\\Users\\alice\\AppData\\Local\\Temp\\x.ps1"},
-            "process": {"name": "powershell.exe",
-                        "command_line": "powershell.exe -EncodedCommand SQBFAFgA -w hidden",
-                        "path": "C:\\Users\\alice\\AppData\\Local\\Temp\\x.ps1"},
+            "facts": {
+                "command_line": "powershell.exe -EncodedCommand SQBFAFgA -w hidden",
+                "path": "C:\\Users\\alice\\AppData\\Local\\Temp\\x.ps1",
+            },
+            "process": {
+                "name": "powershell.exe",
+                "command_line": "powershell.exe -EncodedCommand SQBFAFgA -w hidden",
+                "path": "C:\\Users\\alice\\AppData\\Local\\Temp\\x.ps1",
+            },
         }
     ],
 }
@@ -112,7 +123,9 @@ SC_005_PYTHON_WRITABLE_PATH = {
     "id": "SC-005",
     "name": "python from AppData Local Temp",
     "label": "TP",
-    "expected": [{"detector_id": "D004", "severity": "medium", "expected_mitre": "T1059.006"}],
+    "expected": [
+        {"detector_id": "D004", "severity": "medium", "expected_mitre": "T1059.006"}
+    ],
     "records": [
         {
             "timestamp": _ts(1),
@@ -121,7 +134,10 @@ SC_005_PYTHON_WRITABLE_PATH = {
             "user": "alice",
             "action": "process_start",
             "facts": {"path": "C:\\Users\\alice\\AppData\\Local\\Temp\\tool.py"},
-            "process": {"name": "python.exe", "path": "C:\\Users\\alice\\AppData\\Local\\Temp\\tool.py"},
+            "process": {
+                "name": "python.exe",
+                "path": "C:\\Users\\alice\\AppData\\Local\\Temp\\tool.py",
+            },
         }
     ],
 }
@@ -130,7 +146,9 @@ SC_006_RANSOMWARE_BEHAVIOR = {
     "id": "SC-006",
     "name": "20 file modifications in 5 minutes on one host",
     "label": "TP",
-    "expected": [{"detector_id": "D005", "severity": "medium", "expected_mitre": "T1486"}],
+    "expected": [
+        {"detector_id": "D005", "severity": "medium", "expected_mitre": "T1486"}
+    ],
     "records": [
         {
             "timestamp": _ts(i * 0.2),
@@ -158,7 +176,10 @@ SC_007_PYTHON_SYSTEM_PATH = {
             "user": "alice",
             "action": "process_start",
             "facts": {"path": "C:\\Windows\\System32\\python.exe"},
-            "process": {"name": "python.exe", "path": "C:\\Windows\\System32\\python.exe"},
+            "process": {
+                "name": "python.exe",
+                "path": "C:\\Windows\\System32\\python.exe",
+            },
         }
     ],
 }

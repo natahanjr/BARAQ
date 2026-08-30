@@ -1,25 +1,30 @@
 """Online learning (roadmap 4.1): feedback loop, PSI drift, model versioning."""
+
 from __future__ import annotations
 
+from datetime import UTC
+
 import numpy as np
-import pytest
 
 from backend.database.models import NormalizedEvent
 
 
 def _seed_events(db, n=120, user="ml-online-user"):
     """Insert a reproducible set of login events across two clusters."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     rows = []
-    base = datetime.now(timezone.utc)
+    base = datetime.now(UTC)
     for i in range(n):
         rows.append(
             NormalizedEvent(
-                source="test", event_id=4624 if i % 2 == 0 else 4625,
-                category="logon", severity="info",
+                source="test",
+                event_id=4624 if i % 2 == 0 else 4625,
+                category="logon",
+                severity="info",
                 message=f"logon attempt {i}",
-                user=user, host="ml-host",
+                user=user,
+                host="ml-host",
                 timestamp=base - timedelta(minutes=i),
                 raw_json={
                     "facts": {
@@ -107,7 +112,6 @@ def test_train_bumps_version_and_history(db):
 
 
 def test_check_drift_reports_streams(db):
-    from backend.ml.anomaly import get_detector
 
     _seed_events(db)
     _train_detector(db)
@@ -129,9 +133,14 @@ def test_verdict_endpoint_applies_feedback():
     det = get_detector()
     before = det.feedback_weights.get("login", 1.0)
     with TestClient(app, headers={"X-API-Key": "baraq-dev-admin"}) as client:
-        r = client.post("/api/ml/verdicts", json={
-            "event_id": 1, "verdict": "false_positive", "note": "noise",
-        })
+        r = client.post(
+            "/api/ml/verdicts",
+            json={
+                "event_id": 1,
+                "verdict": "false_positive",
+                "note": "noise",
+            },
+        )
         assert r.status_code in (200, 404), r.text
         if r.status_code == 200:
             assert det.feedback_weights.get("login", 1.0) < before or before == 1.0

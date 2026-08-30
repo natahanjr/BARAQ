@@ -15,6 +15,7 @@ The score is a ranking aid for tuning, not a verdict: the analyst decides.
 Every component is derived from data BARAQ already stores, so the analysis
 costs one read-only query per rule.
 """
+
 from __future__ import annotations
 
 import logging
@@ -28,8 +29,15 @@ from backend.database.models import Alert, AlertAction, AnalystNote
 
 logger = logging.getLogger("baraq.fp_analysis")
 
-_ACTIONED = ("block_ip", "kill_process", "quarantine", "isolate",
-             "disable_account", "escalate", "fix")
+_ACTIONED = (
+    "block_ip",
+    "kill_process",
+    "quarantine",
+    "isolate",
+    "disable_account",
+    "escalate",
+    "fix",
+)
 _WORD_RE = re.compile(r"[A-Za-z0-9_.\\/-]{4,}")
 
 
@@ -40,8 +48,12 @@ def analyze(session: Session, org: str = "", limit_rules: int = 50) -> dict:
         stmt = stmt.where(Alert.org == org)
     alerts = list(session.scalars(stmt).all())
     if not alerts:
-        return {"items": [], "total_alerts": 0, "rules_analyzed": 0,
-                "top_fp_candidates": []}
+        return {
+            "items": [],
+            "total_alerts": 0,
+            "rules_analyzed": 0,
+            "top_fp_candidates": [],
+        }
 
     by_rule: dict[str, list[Alert]] = {}
     for alert in alerts:
@@ -77,7 +89,8 @@ def analyze(session: Session, org: str = "", limit_rules: int = 50) -> dict:
         # A rule is "quiet" when its alerts were closed without any response
         # action AND without analyst notes - nobody ever acted on them.
         quiet = sum(
-            1 for a in rows
+            1
+            for a in rows
             if a.status in ("closed", "resolved")
             and action_count.get(a.id, 0) == 0
             and note_count.get(a.id, 0) == 0
@@ -85,11 +98,22 @@ def analyze(session: Session, org: str = "", limit_rules: int = 50) -> dict:
 
         closed_ratio = closed / total
         quiet_ratio = quiet / total
-        trigger_density = min(1.0, (triggered / total) / 12.0)  # 12+ repeats = saturated
+        trigger_density = min(
+            1.0, (triggered / total) / 12.0
+        )  # 12+ repeats = saturated
         confidence_penalty = 1.0 - min(1.0, confidence)
         severity_penalty = 1.0 - min(
-            1.0, sum(severities.get(s, 0) * w for s, w in
-                     (("critical", 1.0), ("high", 0.7), ("medium", 0.4), ("low", 0.1))) / total
+            1.0,
+            sum(
+                severities.get(s, 0) * w
+                for s, w in (
+                    ("critical", 1.0),
+                    ("high", 0.7),
+                    ("medium", 0.4),
+                    ("low", 0.1),
+                )
+            )
+            / total,
         )
 
         fp_score = round(
@@ -110,22 +134,24 @@ def analyze(session: Session, org: str = "", limit_rules: int = 50) -> dict:
 
         demo_share = sum(1 for a in rows if a.demo) / total
 
-        items.append({
-            "rule": rule,
-            "total": total,
-            "active": active,
-            "closed": closed,
-            "avg_trigger_count": round(triggered / total, 2),
-            "avg_confidence": round(confidence, 3),
-            "risk_distribution": dict(risks),
-            "severity_distribution": dict(severities),
-            "closed_without_action": quiet,
-            "actioned_count": actioned,
-            "noted_count": noted,
-            "demo_share": round(demo_share, 3),
-            "fp_candidate_score": fp_score,
-            "top_evidence_tokens": top_tokens,
-        })
+        items.append(
+            {
+                "rule": rule,
+                "total": total,
+                "active": active,
+                "closed": closed,
+                "avg_trigger_count": round(triggered / total, 2),
+                "avg_confidence": round(confidence, 3),
+                "risk_distribution": dict(risks),
+                "severity_distribution": dict(severities),
+                "closed_without_action": quiet,
+                "actioned_count": actioned,
+                "noted_count": noted,
+                "demo_share": round(demo_share, 3),
+                "fp_candidate_score": fp_score,
+                "top_evidence_tokens": top_tokens,
+            }
+        )
 
     items.sort(key=lambda i: -i["fp_candidate_score"])
     return {
@@ -134,6 +160,7 @@ def analyze(session: Session, org: str = "", limit_rules: int = 50) -> dict:
         "rules_analyzed": len(by_rule),
         "top_fp_candidates": items[:5],
     }
+
 
 # ---------------------------------------------------------------------------
 # FP clustering (roadmap: one triage decision per behaviour, not N rows).

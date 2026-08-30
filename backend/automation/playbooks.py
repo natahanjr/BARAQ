@@ -24,18 +24,17 @@ Supported actions (in order of declaration):
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.config import DESTRUCTIVE_ACTIONS, SOAR_DESTRUCTIVE_ACTIONS_ENABLED
 from backend.database.models import (
     Alert,
     AutomationPlaybook,
     Incident,
     PlaybookRun,
 )
-from backend.config import DESTRUCTIVE_ACTIONS, SOAR_DESTRUCTIVE_ACTIONS_ENABLED
 
 logger = logging.getLogger("baraq.automation")
 
@@ -106,15 +105,19 @@ def matches(alert: Alert, triggers: dict) -> bool:
     if rules and (alert.rule or "") not in rules:
         return False
     severities = triggers.get("severity") or []
-    if severities and (alert.severity or "").lower() not in [s.lower() for s in severities]:
+    if severities and (alert.severity or "").lower() not in [
+        s.lower() for s in severities
+    ]:
         return False
     tactics = triggers.get("tactics") or []
     if tactics and (alert.mitre_tactic or "") not in tactics:
         return False
     min_risk = triggers.get("min_risk_level")
-    if min_risk and _RISK_ORDER.get((alert.risk_level or "LOW").upper(), 0) < _RISK_ORDER[min_risk]:
-        return False
-    return True
+    return not (
+        min_risk
+        and _RISK_ORDER.get((alert.risk_level or "LOW").upper(), 0)
+        < _RISK_ORDER[min_risk]
+    )
 
 
 def _execute_one(db: Session, alert: Alert, action: str) -> tuple[str, str]:
@@ -162,7 +165,7 @@ def _execute_one(db: Session, alert: Alert, action: str) -> tuple[str, str]:
 
         try:
             notify_alert(alert.to_dict())
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             return "failed", f"Notification channel error: {exc}"
         return "success", "Analyst notified out-of-band."
     target = _extract_target(alert, action)
@@ -182,19 +185,23 @@ def run_playbook(
         action = step.get("action", "") if isinstance(step, dict) else str(step)
         try:
             status, detail = _execute_one(db, alert, action)
-        except Exception as exc:  # noqa: BLE001 - one bad action must not kill the run
+        except Exception as exc:
             logger.exception("Playbook '%s' action %s failed", playbook.name, action)
             status, detail = "failed", f"error: {exc}"
         results.append({"action": action, "status": status, "detail": detail})
         statuses.append(status)
         logger.info(
             "Playbook '%s' on alert #%s: %s -> %s (%s)",
-            playbook.name, alert.id, action, status, detail[:120],
+            playbook.name,
+            alert.id,
+            action,
+            status,
+            detail[:120],
         )
     overall = (
-        "completed" if all(s == "success" for s in statuses)
-        else "failed" if all(s == "failed" for s in statuses)
-        else "partial"
+        "completed"
+        if all(s == "success" for s in statuses)
+        else "failed" if all(s == "failed" for s in statuses) else "partial"
     )
     run = PlaybookRun(
         playbook_id=playbook.id,
@@ -217,10 +224,16 @@ def find_matching_playbooks(db: Session, alert: Alert) -> list[AutomationPlayboo
     playbooks = db.scalars(
         select(AutomationPlaybook).where(AutomationPlaybook.enabled.is_(True))
     ).all()
-    return [p for p in sorted(playbooks, key=lambda p: p.id) if matches(alert, p.triggers or {})]
+    return [
+        p
+        for p in sorted(playbooks, key=lambda p: p.id)
+        if matches(alert, p.triggers or {})
+    ]
 
 
-def fire_playbooks(db: Session, alert: Alert, triggered_by: str = "auto") -> list[PlaybookRun]:
+def fire_playbooks(
+    db: Session, alert: Alert, triggered_by: str = "auto"
+) -> list[PlaybookRun]:
     """Run every matching playbook for one alert; never raises."""
     runs: list[PlaybookRun] = []
     try:
@@ -233,13 +246,17 @@ def fire_playbooks(db: Session, alert: Alert, triggered_by: str = "auto") -> lis
 
                 for run in runs:
                     log_action(
-                        db, "system", "playbook.auto", "playbook", str(run.playbook_id),
+                        db,
+                        "system",
+                        "playbook.auto",
+                        "playbook",
+                        str(run.playbook_id),
                         f"Auto-fired '{run.playbook_name}' on alert #{run.alert_id} "
                         f"({run.rule}) -> {run.status}",
                     )
-            except Exception:  # noqa: BLE001 - audit must never wedge automation
+            except Exception:
                 logger.exception("Playbook audit logging failed")
-    except Exception:  # noqa: BLE001 - automation must never wedge detection
+    except Exception:
         logger.exception("Automation playbook pass failed for alert #%s", alert.id)
         db.rollback()
     return runs

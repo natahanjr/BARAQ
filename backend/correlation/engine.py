@@ -25,19 +25,21 @@ correlation tables; behavior groups, alerts, incidents, risk, playbooks
 and SOAR are never touched, and the engine refuses the production database
 by name.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import itertools
+from datetime import UTC, datetime
 
 from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-import backend.config as config
+from backend import config
 from backend.aggregation.evidence import merge_observables
-from backend.alerting.models import AlertRecord
 from backend.aggregation.models import BehaviorGroupRecord
+from backend.alerting.models import AlertRecord
 from backend.correlation import audit
 from backend.correlation.confidence import confidence
 from backend.correlation.contract import (
@@ -55,7 +57,6 @@ from backend.correlation.evidence import evidence_rows
 from backend.correlation.fingerprint import finding_fingerprint
 from backend.correlation.lifecycle import IllegalTransition, apply_transition
 from backend.correlation.models import (
-    CorrelationAuditEvent,
     CorrelationEdge,
     CorrelationEvidence,
     CorrelationFindingRecord,
@@ -69,7 +70,10 @@ _SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
 
 def _ensure_not_production_db() -> None:
-    if not config.V2_ENGINES_ALLOW_PROD and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
+    if (
+        not config.V2_ENGINES_ALLOW_PROD
+        and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME
+    ):
         raise RuntimeError(
             f"correlation engine refuses the v1 production database "
             f"({config.PRODUCTION_DB_NAME!r}) by name"
@@ -79,7 +83,9 @@ def _ensure_not_production_db() -> None:
 def next_correlation_id(db: Session) -> str:
     """Public id CF-<6-digit sequence> - never the fingerprint."""
     row = db.scalars(
-        select(CorrelationFindingRecord).order_by(CorrelationFindingRecord.id.desc()).limit(1)
+        select(CorrelationFindingRecord)
+        .order_by(CorrelationFindingRecord.id.desc())
+        .limit(1)
     ).first()
     return f"CF-{(row.id if row else 0) + 1:06d}"
 
@@ -101,7 +107,7 @@ def family_of_group(db: Session, group: BehaviorGroupRecord) -> str:
         )
         for a in alerts
     }
-    return sorted(families)[0]
+    return min(families)
 
 
 def group_summary(db: Session, group: BehaviorGroupRecord) -> dict:
@@ -172,7 +178,9 @@ def edges_for_pair(
     types = [t for t in EDGE_TYPES if t in types]
 
     shared_entities = sorted(
-        set(rel["shared"]["hosts"]) | set(rel["shared"]["users"]) | set(rel["shared"]["sources"])
+        set(rel["shared"]["hosts"])
+        | set(rel["shared"]["users"])
+        | set(rel["shared"]["sources"])
     )
     shared_techniques = sorted(
         {str(t) for t in (earlier.get("techniques") or [])}
@@ -217,7 +225,9 @@ def resolve_chain_type(
         for member in member_summaries
         if primary_phase(member) != "UNKNOWN_PHASE"
     }
-    if len(hosts) >= 3 and bool(edge_types & {"NETWORK_RELATION", "DESTINATION_RELATION"}):
+    if len(hosts) >= 3 and bool(
+        edge_types & {"NETWORK_RELATION", "DESTINATION_RELATION"}
+    ):
         return "HOST_CHAIN"
     if len(member_summaries) >= 3 and len(phases) >= 2:
         return "MULTI_STAGE"
@@ -233,7 +243,7 @@ def finding_confidence(member_summaries: list[dict], edges: list[dict]) -> float
     has_lateral = "LATERAL_MOVEMENT" in relationship_types
     has_progression = any(
         is_progression(primary_phase(a), primary_phase(b))
-        for a, b in zip(member_summaries, member_summaries[1:])
+        for a, b in itertools.pairwise(member_summaries)
     )
     return confidence(
         relationship_types,
@@ -310,12 +320,27 @@ def _claim_finding(
             **{
                 col: getattr(candidate, col)
                 for col in (
-                    "correlation_id", "fingerprint", "title", "description",
-                    "status", "correlation_type", "first_seen", "last_seen",
-                    "member_group_ids", "member_alert_ids", "entities", "hosts",
-                    "users", "source_ips", "mitre_tactics", "mitre_techniques",
-                    "observables", "confidence", "highest_severity",
-                    "created_at", "updated_at",
+                    "correlation_id",
+                    "fingerprint",
+                    "title",
+                    "description",
+                    "status",
+                    "correlation_type",
+                    "first_seen",
+                    "last_seen",
+                    "member_group_ids",
+                    "member_alert_ids",
+                    "entities",
+                    "hosts",
+                    "users",
+                    "source_ips",
+                    "mitre_tactics",
+                    "mitre_techniques",
+                    "observables",
+                    "confidence",
+                    "highest_severity",
+                    "created_at",
+                    "updated_at",
                 )
             }
         )
@@ -394,7 +419,9 @@ def _write_evidence(
 ) -> None:
     for summary in summaries:
         reason = reasons.get(summary["id"], "member of correlation")
-        for row in evidence_rows(finding_id, summary, rule_id="correlation", reason=reason):
+        for row in evidence_rows(
+            finding_id, summary, rule_id="correlation", reason=reason
+        ):
             db.add(
                 CorrelationEvidence(
                     correlation_id=finding_id,
@@ -467,7 +494,9 @@ def _create_finding(
     edges = edges_for_pair(earlier, later, matches, primary_rel)
     edge_types = {edge["relationship_type"] for edge in edges}
     members = [earlier, later]
-    correlation_type = resolve_chain_type(members, edge_types, primary_rule.correlation_type)
+    correlation_type = resolve_chain_type(
+        members, edge_types, primary_rule.correlation_type
+    )
     fp = finding_fingerprint(correlation_type, [earlier["id"], later["id"]], edges)
     confidence_value = finding_confidence(members, edges)
     aggregates = _aggregate(members)
@@ -493,8 +522,12 @@ def _create_finding(
     if not created:
         return None
 
-    _write_member(db, finding.correlation_id, earlier["id"], primary_reason, "seed", now)
-    _write_member(db, finding.correlation_id, later["id"], primary_reason, "member", now)
+    _write_member(
+        db, finding.correlation_id, earlier["id"], primary_reason, "seed", now
+    )
+    _write_member(
+        db, finding.correlation_id, later["id"], primary_reason, "member", now
+    )
     _write_edges(db, finding.correlation_id, edges, now)
     _write_evidence(
         db,
@@ -572,7 +605,9 @@ def _extend_finding(
     edge_types = {edge["relationship_type"] for edge in all_edges}
 
     summaries = [member_summaries[member_id] for member_id in new_members]
-    correlation_type = resolve_chain_type(summaries, edge_types, finding.correlation_type)
+    correlation_type = resolve_chain_type(
+        summaries, edge_types, finding.correlation_type
+    )
     fp = finding_fingerprint(correlation_type, new_members, all_edges)
     if fp != finding.fingerprint:
         conflict = db.scalars(
@@ -619,9 +654,7 @@ def _extend_finding(
     finding.first_seen = min(
         finding.first_seen, tail["first_seen"], group["first_seen"]
     )
-    finding.last_seen = max(
-        finding.last_seen, tail["first_seen"], group["first_seen"]
-    )
+    finding.last_seen = max(finding.last_seen, tail["first_seen"], group["first_seen"])
     finding.confidence = finding_confidence(summaries, all_edges)
     finding.highest_severity = max(
         (finding.highest_severity, group.get("severity") or "low"),
@@ -629,7 +662,9 @@ def _extend_finding(
     )
     finding.updated_at = now
 
-    _write_member(db, finding.correlation_id, group["id"], primary_reason, "member", now)
+    _write_member(
+        db, finding.correlation_id, group["id"], primary_reason, "member", now
+    )
     _write_edges(db, finding.correlation_id, new_edges, now)
     _write_evidence(
         db,
@@ -689,7 +724,7 @@ def correlate(
     Consumes behavior groups only - never raw events or alerts (spec 5.2).
     """
     _ensure_not_production_db()
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
 
     # Re-read everything fresh: a session reused across runs (tests,
     # scheduler retries) must never leak stale identity-map rows.
@@ -720,22 +755,26 @@ def correlate(
 
     for group in groups:
         summary = summaries[group.behavior_group_id]
-        if any(
-            group.behavior_group_id in (f.member_group_ids or []) for f in live
-        ):
+        if any(group.behavior_group_id in (f.member_group_ids or []) for f in live):
             continue
 
         # 1. Extend: the first live finding whose tail pair matches (5.5).
         handled = False
         for finding in live:
-            tail_id = (finding.member_group_ids or [])[-1] if finding.member_group_ids else None
+            tail_id = (
+                (finding.member_group_ids or [])[-1]
+                if finding.member_group_ids
+                else None
+            )
             tail = summaries.get(tail_id) if tail_id else None
             if tail is None:
                 continue
             matches = match_pair(tail, summary)
             if not matches:
                 continue
-            if _extend_finding(db, finding, summaries, tail, summary, matches, now, actor):
+            if _extend_finding(
+                db, finding, summaries, tail, summary, matches, now, actor
+            ):
                 handled = True
                 break
         if handled:
@@ -749,8 +788,8 @@ def correlate(
                 break
             earlier = summaries[earlier_group.behavior_group_id]
             if any(
-                earlier["id"] in (f.member_group_ids or []) and
-                group.behavior_group_id in (f.member_group_ids or [])
+                earlier["id"] in (f.member_group_ids or [])
+                and group.behavior_group_id in (f.member_group_ids or [])
                 for f in live
             ):
                 continue
@@ -767,7 +806,11 @@ def correlate(
 
         # 3. Reopen rejection: a closed finding would have matched (5.32).
         for finding in closed:
-            tail_id = (finding.member_group_ids or [])[-1] if finding.member_group_ids else None
+            tail_id = (
+                (finding.member_group_ids or [])[-1]
+                if finding.member_group_ids
+                else None
+            )
             tail = summaries.get(tail_id) if tail_id else None
             if tail is None:
                 continue
@@ -797,7 +840,7 @@ def expire_correlations(
     """Inactivity lifecycle (spec 5.31): NEW/ACTIVE -> QUIET -> CLOSED.
     CLOSED is terminal - a closed finding is never silently reopened."""
     _ensure_not_production_db()
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     touched: list[CorrelationFindingRecord] = []
 
     from backend.correlation.windows import close_cutoff, quiet_cutoff
@@ -817,7 +860,9 @@ def expire_correlations(
                     correlation_id=finding.correlation_id,
                     action="CORRELATION_QUIET",
                     actor=actor,
-                    details={"inactive_minutes": config.CORRELATION_QUIET_AFTER_MINUTES},
+                    details={
+                        "inactive_minutes": config.CORRELATION_QUIET_AFTER_MINUTES
+                    },
                     now=now,
                 )
                 changed = True

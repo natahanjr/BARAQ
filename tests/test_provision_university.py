@@ -1,4 +1,5 @@
 """Per-university fleet provisioning: org manifests, org map writes, revoke."""
+
 from __future__ import annotations
 
 import json
@@ -24,8 +25,11 @@ def test_provision_org_writes_manifest_and_org_map(monkeypatch, tmp_path):
     vault = _vault(tmp_path, prov)
 
     manifest = univ.provision_org(
-        vault, "univ-a", "https://soc.example.com:8443",
-        ["ws-lib-01", "ws-chem-04"], org_name="University A",
+        vault,
+        "univ-a",
+        "https://soc.example.com:8443",
+        ["ws-lib-01", "ws-chem-04"],
+        org_name="University A",
         tls_cert="certs/baraq.crt",
     )
 
@@ -35,7 +39,9 @@ def test_provision_org_writes_manifest_and_org_map(monkeypatch, tmp_path):
     assert data["tls_ca"] == "certs/baraq.crt"
     assert set(data["hosts"]) == {"ws-lib-01", "ws-chem-04"}
     cmd = data["hosts"]["ws-lib-01"]["command"]
-    assert cmd.startswith("python scripts/agent.py --server https://soc.example.com:8443")
+    assert cmd.startswith(
+        "python scripts/agent.py --server https://soc.example.com:8443"
+    )
     assert '--key "' in cmd
     assert "--tls-ca certs/baraq.crt" in cmd
 

@@ -1,9 +1,10 @@
 """Threat-intel service: DB-cached indicator lookups + alert IOC extraction."""
+
 from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -12,20 +13,23 @@ from sqlalchemy.orm import Session
 from backend.config import THREAT_INTEL_CACHE_HOURS, THREAT_INTEL_ENABLED
 from backend.database.models import ThreatIntelRecord
 from backend.threatintel import (
+    _DOMAIN_RE,
     _EMBEDDED_IOCS,
+    _HASH_RE,
+    _IPV4_RE,
     _abuseipdb,
     _otx,
     _vt,
-    _DOMAIN_RE,
-    _HASH_RE,
-    _IPV4_RE,
     classify_indicator,
 )
 
 logger = logging.getLogger("baraq.threatintel")
 
 _IP_RE = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
-_URL_DOMAIN_RE = re.compile(r"\b(?:https?://)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9]?\.)+[a-z]{2,})(?=[/?#\s'\"\]\),;:>\|]|$)", re.IGNORECASE)
+_URL_DOMAIN_RE = re.compile(
+    r"\b(?:https?://)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9]?\.)+[a-z]{2,})(?=[/?#\s'\"\]\),;:>\|]|$)",
+    re.IGNORECASE,
+)
 _HASH_RE_64 = re.compile(r"\b[a-f0-9]{64}\b", re.IGNORECASE)
 
 #: Suffixes that are almost never real domains - file names, source paths and
@@ -46,14 +50,20 @@ def extract_indicators(text: str, limit: int = 12) -> list[str]:
     if not text:
         return []
     seen: list[str] = []
-    for raw in _IP_RE.findall(text) + [m for m in _URL_DOMAIN_RE.findall(text)] + _HASH_RE_64.findall(text):
+    for raw in (
+        _IP_RE.findall(text)
+        + [m for m in _URL_DOMAIN_RE.findall(text)]
+        + _HASH_RE_64.findall(text)
+    ):
         indicator = raw.strip(" .(),;'\"")
         if not indicator:
             continue
-        if _IPV4_RE.match(indicator) or _HASH_RE.match(indicator):
-            if indicator not in seen:
-                seen.append(indicator)
-        elif _DOMAIN_RE.match(indicator) and not _DOMAIN_DENYLIST.search(indicator):
+        if (
+            _IPV4_RE.match(indicator)
+            or _HASH_RE.match(indicator)
+            or _DOMAIN_RE.match(indicator)
+            and not _DOMAIN_DENYLIST.search(indicator)
+        ):
             if indicator not in seen:
                 seen.append(indicator)
         if len(seen) >= limit:
@@ -61,8 +71,9 @@ def extract_indicators(text: str, limit: int = 12) -> list[str]:
     return seen
 
 
-def lookup_indicator(db: Session, indicator: str, refresh: bool = False,
-                     offline: bool = False) -> dict[str, Any]:
+def lookup_indicator(
+    db: Session, indicator: str, refresh: bool = False, offline: bool = False
+) -> dict[str, Any]:
     """Return a full threat-intel verdict for one indicator.
 
     Order: DB cache -> embedded IOC baseline -> offline classifier -> online
@@ -73,13 +84,17 @@ def lookup_indicator(db: Session, indicator: str, refresh: bool = False,
     indicator = indicator.strip().lower()
     result: dict[str, Any] = {
         "indicator": indicator,
-        "kind": "ip" if _IPV4_RE.match(indicator) else "domain" if _DOMAIN_RE.match(indicator) else "hash",
+        "kind": (
+            "ip"
+            if _IPV4_RE.match(indicator)
+            else "domain" if _DOMAIN_RE.match(indicator) else "hash"
+        ),
         "category": "unknown",
         "label": "No known reputation",
         "confidence": 0.0,
         "sources": [],
         "cached": False,
-        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "checked_at": datetime.now(UTC).isoformat(),
     }
 
     if not THREAT_INTEL_ENABLED:
@@ -87,17 +102,27 @@ def lookup_indicator(db: Session, indicator: str, refresh: bool = False,
         return result
 
     # 1) Cache
-    row = db.scalar(select(ThreatIntelRecord).where(ThreatIntelRecord.indicator == indicator))
+    row = db.scalar(
+        select(ThreatIntelRecord).where(ThreatIntelRecord.indicator == indicator)
+    )
     if row and not refresh:
-        if row.checked_at and row.checked_at > datetime.now(timezone.utc) - timedelta(hours=THREAT_INTEL_CACHE_HOURS):
-            result.update({
-                "category": row.category,
-                "label": row.label,
-                "confidence": row.confidence,
-                "sources": row.sources or [],
-                "cached": True,
-                "checked_at": row.checked_at.isoformat() if row.checked_at else result["checked_at"],
-            })
+        if row.checked_at and row.checked_at > datetime.now(UTC) - timedelta(
+            hours=THREAT_INTEL_CACHE_HOURS
+        ):
+            result.update(
+                {
+                    "category": row.category,
+                    "label": row.label,
+                    "confidence": row.confidence,
+                    "sources": row.sources or [],
+                    "cached": True,
+                    "checked_at": (
+                        row.checked_at.isoformat()
+                        if row.checked_at
+                        else result["checked_at"]
+                    ),
+                }
+            )
             return result
 
     # 2) Embedded baseline
@@ -120,13 +145,22 @@ def lookup_indicator(db: Session, indicator: str, refresh: bool = False,
     # 4) Online providers (only for missing or non-benign indicators)
     if not offline and result["category"] != "benign":
         for provider in (_abuseipdb, _otx, _vt):
-            verdict = provider([indicator]) if provider in (_otx, _vt) else provider(indicator)
+            verdict = (
+                provider([indicator])
+                if provider in (_otx, _vt)
+                else provider(indicator)
+            )
             if not verdict:
                 continue
-            if verdict.get("category") == "malicious" or result["category"] == "unknown":
+            if (
+                verdict.get("category") == "malicious"
+                or result["category"] == "unknown"
+            ):
                 result["category"] = verdict.get("category", result["category"])
                 result["label"] = verdict.get("label", result["label"])
-                result["confidence"] = max(result["confidence"], verdict.get("confidence", 0.6))
+                result["confidence"] = max(
+                    result["confidence"], verdict.get("confidence", 0.6)
+                )
             result["sources"].append(provider.__name__.lstrip("_"))
             break
 
@@ -139,7 +173,7 @@ def lookup_indicator(db: Session, indicator: str, refresh: bool = False,
     row.label = result["label"]
     row.confidence = result["confidence"]
     row.sources = result["sources"]
-    row.checked_at = datetime.now(timezone.utc)
+    row.checked_at = datetime.now(UTC)
     db.commit()
 
     return result

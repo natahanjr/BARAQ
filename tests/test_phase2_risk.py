@@ -1,8 +1,7 @@
 """Phase-2 roadmap tests: developer-workflow detection, dynamic risk
 scoring (additive deltas + roadmap scale) and the root-cause engine."""
-from __future__ import annotations
 
-import pytest
+from __future__ import annotations
 
 from backend.context.engine import ContextFacts
 from backend.database.models import (
@@ -20,20 +19,24 @@ from backend.risk.dynamic import (
 )
 from tests.conftest import run_simulation
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 class FakeEvent:
     def __init__(self, event_id: int):
         self.event_id = event_id
 
 
-def _mk_facts(processes: list[tuple[str, str]] | None = None,
-              cmdline: str = "", ip: str = "", rule: str = "") -> ContextFacts:
+def _mk_facts(
+    processes: list[tuple[str, str]] | None = None,
+    cmdline: str = "",
+    ip: str = "",
+    rule: str = "",
+) -> ContextFacts:
     facts = ContextFacts(rule=rule)
-    for name, path in (processes or []):
+    for name, path in processes or []:
         facts.add_process(name, path)
     if cmdline:
         facts.add_command_line(cmdline)
@@ -42,9 +45,15 @@ def _mk_facts(processes: list[tuple[str, str]] | None = None,
     return facts
 
 
-def _mk_event(db, event_id: int, user: str = "alice", host: str = "web-01",
-              org: str = "univ-a", ts: str = "2026-08-01T10:00:00",
-              message: str = "event") -> NormalizedEvent:
+def _mk_event(
+    db,
+    event_id: int,
+    user: str = "alice",
+    host: str = "web-01",
+    org: str = "univ-a",
+    ts: str = "2026-08-01T10:00:00",
+    message: str = "event",
+) -> NormalizedEvent:
     from datetime import datetime
 
     ev = NormalizedEvent(
@@ -62,9 +71,16 @@ def _mk_event(db, event_id: int, user: str = "alice", host: str = "web-01",
     return ev
 
 
-def _mk_alert(db, user: str = "alice", host: str = "web-01", mitre: str = "T1078",
-              rule: str = "correlation_engine", severity: str = "high",
-              risk_score: float = 70.0, org: str = "univ-a") -> Alert:
+def _mk_alert(
+    db,
+    user: str = "alice",
+    host: str = "web-01",
+    mitre: str = "T1078",
+    rule: str = "correlation_engine",
+    severity: str = "high",
+    risk_score: float = 70.0,
+    org: str = "univ-a",
+) -> Alert:
     alert = Alert(
         name=f"Alert {user}",
         description="test alert",
@@ -113,6 +129,7 @@ def _mk_incident(db, alert: Alert, org: str = "univ-a") -> Incident:
 # roadmap risk scale
 # ---------------------------------------------------------------------------
 
+
 def test_roadmap_level_thresholds():
     assert roadmap_level(0) == "LOW"
     assert roadmap_level(20) == "LOW"
@@ -135,6 +152,7 @@ def test_severity_maps_roadmap_level():
 # dynamic risk adjustments
 # ---------------------------------------------------------------------------
 
+
 def test_developer_tool_penalty():
     facts = _mk_facts(
         processes=[("python.exe", "C:\\dev\\venv\\Scripts\\python.exe")],
@@ -149,8 +167,15 @@ def test_developer_tool_penalty():
 
 
 def test_signed_binary_penalty():
-    facts = _mk_facts(processes=[("cmd.exe", "C:\\Windows\\System32\\cmd.exe"),
-                                 ("powershell.exe", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")])
+    facts = _mk_facts(
+        processes=[
+            ("cmd.exe", "C:\\Windows\\System32\\cmd.exe"),
+            (
+                "powershell.exe",
+                "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            ),
+        ]
+    )
     result = adjust_risk(70.0, facts)
     assert any(a["signal"] == "signed_binary" for a in result["adjustments"])
     assert result["risk"] == 60.0
@@ -164,11 +189,14 @@ def test_unknown_binary_no_signed_penalty():
 
 
 def test_suspicious_network_bonus():
-    facts = _mk_facts(processes=[("cmd.exe", "C:\\Windows\\System32\\cmd.exe")],
-                      ip="203.0.113.5")
+    facts = _mk_facts(
+        processes=[("cmd.exe", "C:\\Windows\\System32\\cmd.exe")], ip="203.0.113.5"
+    )
     result = adjust_risk(50.0, facts)
     assert any(a["signal"] == "suspicious_network" for a in result["adjustments"])
-    assert result["risk"] == 80.0  # 50 + 30 network (signed discount withheld with external IP)
+    assert (
+        result["risk"] == 80.0
+    )  # 50 + 30 network (signed discount withheld with external IP)
 
 
 def test_localhost_ip_not_suspicious():
@@ -178,7 +206,9 @@ def test_localhost_ip_not_suspicious():
 
 
 def test_persistence_bonus_from_event_id():
-    facts = _mk_facts(processes=[("services.exe", "C:\\Windows\\System32\\services.exe")])
+    facts = _mk_facts(
+        processes=[("services.exe", "C:\\Windows\\System32\\services.exe")]
+    )
     result = adjust_risk(50.0, facts, events=[FakeEvent(7045)])
     assert any(a["signal"] == "persistence_detected" for a in result["adjustments"])
     assert result["risk"] == 65.0  # 50 - 10 signed + 25 persistence
@@ -215,8 +245,10 @@ def test_known_user_penalty(db):
 
 def test_combined_developer_workflow_risk_reduced():
     facts = _mk_facts(
-        processes=[("git.exe", "C:\\Program Files\\Git\\cmd\\git.exe"),
-                   ("python.exe", "C:\\dev\\app\\venv\\Scripts\\python.exe")],
+        processes=[
+            ("git.exe", "C:\\Program Files\\Git\\cmd\\git.exe"),
+            ("python.exe", "C:\\dev\\app\\venv\\Scripts\\python.exe"),
+        ],
         cmdline="git pull",
     )
     result = adjust_risk(70.0, facts)
@@ -226,8 +258,10 @@ def test_combined_developer_workflow_risk_reduced():
 
 
 def test_risk_clamped_to_0_100():
-    dev = _mk_facts(processes=[("python.exe", "C:\\dev\\app\\venv\\Scripts\\python.exe")],
-                    cmdline="pip install -r requirements.txt")
+    dev = _mk_facts(
+        processes=[("python.exe", "C:\\dev\\app\\venv\\Scripts\\python.exe")],
+        cmdline="pip install -r requirements.txt",
+    )
     low = adjust_risk(0.0, dev)
     assert low["risk"] == 0.0  # 0 - 40 clamped to 0
     facts = _mk_facts()
@@ -247,10 +281,13 @@ def test_no_adjustments_passthrough():
 # developer-workflow signal detection (feature 5)
 # ---------------------------------------------------------------------------
 
+
 def test_developer_signals_named_set():
     facts = _mk_facts(
-        processes=[("git.exe", "C:\\Program Files\\Git\\cmd\\git.exe"),
-                   ("python.exe", "C:\\dev\\app\\venv\\Scripts\\python.exe")],
+        processes=[
+            ("git.exe", "C:\\Program Files\\Git\\cmd\\git.exe"),
+            ("python.exe", "C:\\dev\\app\\venv\\Scripts\\python.exe"),
+        ],
         cmdline="git pull",
     )
     wf = facts.developer_workflow()
@@ -262,7 +299,12 @@ def test_developer_signals_named_set():
 
 def test_vscode_activity_signal():
     facts = _mk_facts(
-        processes=[("code.exe", "C:\\Users\\alice\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe")],
+        processes=[
+            (
+                "code.exe",
+                "C:\\Users\\alice\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe",
+            )
+        ],
         cmdline="code .",
     )
     assert facts.vscode_activity is True
@@ -270,14 +312,18 @@ def test_vscode_activity_signal():
 
 
 def test_repository_paths_signal():
-    facts = _mk_facts(processes=[("node.exe", "C:\\dev\\app\\node_modules\\.bin\\node.exe")])
+    facts = _mk_facts(
+        processes=[("node.exe", "C:\\dev\\app\\node_modules\\.bin\\node.exe")]
+    )
     assert facts.repository_paths is True
 
 
 def test_notes_annotate_developer_workflow():
     facts = _mk_facts(
-        processes=[("git.exe", "C:\\Program Files\\Git\\cmd\\git.exe"),
-                   ("python.exe", "C:\\dev\\app\\venv\\Scripts\\python.exe")],
+        processes=[
+            ("git.exe", "C:\\Program Files\\Git\\cmd\\git.exe"),
+            ("python.exe", "C:\\dev\\app\\venv\\Scripts\\python.exe"),
+        ],
         cmdline="git pull",
     )
     notes = "\n".join(facts.notes())
@@ -288,6 +334,7 @@ def test_notes_annotate_developer_workflow():
 # ---------------------------------------------------------------------------
 # root cause engine (feature 7)
 # ---------------------------------------------------------------------------
+
 
 def _tree(root: str = "explorer.exe", chain: list[str] | None = None) -> dict:
     return {
@@ -307,13 +354,22 @@ def test_root_cause_benign_developer():
     from backend.investigation.root_cause import root_cause
 
     facts = _mk_facts(
-        processes=[("powershell.exe", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
-                   ("python.exe", "C:\\dev\\app\\venv\\Scripts\\python.exe")],
+        processes=[
+            (
+                "powershell.exe",
+                "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            ),
+            ("python.exe", "C:\\dev\\app\\venv\\Scripts\\python.exe"),
+        ],
         cmdline="python -m pytest",
     )
     risk = adjust_risk(70.0, facts)
-    rc = root_cause(None, facts=facts, risk=risk,
-                    tree=_tree("powershell.exe", ["powershell.exe", "python.exe"]))
+    rc = root_cause(
+        None,
+        facts=facts,
+        risk=risk,
+        tree=_tree("powershell.exe", ["powershell.exe", "python.exe"]),
+    )
     assert "powershell.exe" in rc["summary"]
     assert "python.exe" in rc["summary"]
     assert rc["chain"] == ["powershell.exe", "python.exe"]
@@ -330,8 +386,7 @@ def test_root_cause_malicious_high_risk():
 
     facts = _mk_facts(processes=[("evil.exe", "C:\\Temp\\evil.exe")], ip="203.0.113.9")
     risk = adjust_risk(70.0, facts, events=[FakeEvent(4672), FakeEvent(7045)])
-    rc = root_cause(None, facts=facts, risk=risk,
-                    tree=_tree("evil.exe", ["evil.exe"]))
+    rc = root_cause(None, facts=facts, risk=risk, tree=_tree("evil.exe", ["evil.exe"]))
     assert rc["assessment"] == "Likely Malicious Activity"
     assert rc["verdict_hint"] == "likely_malicious"
     texts = [o["text"] for o in rc["observations"]]
@@ -348,8 +403,12 @@ def test_root_cause_developer_with_elevated_risk():
         cmdline="pip install -r requirements.txt",
     )
     risk = adjust_risk(95.0, facts, events=[FakeEvent(7045)])
-    rc = root_cause(None, facts=facts, risk=risk,
-                    tree=_tree("powershell.exe", ["powershell.exe", "python.exe"]))
+    rc = root_cause(
+        None,
+        facts=facts,
+        risk=risk,
+        tree=_tree("powershell.exe", ["powershell.exe", "python.exe"]),
+    )
     assert rc["assessment"] == "Developer Workflow with Elevated Risk"
 
 

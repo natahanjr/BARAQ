@@ -14,50 +14,105 @@ Results are cached in the ``threat_intel_records`` table for
 ``THREAT_INTEL_CACHE_HOURS`` so repeated lookups (e.g. per scheduler cycle)
 never re-hit the network.
 """
+
 from __future__ import annotations
 
 import ipaddress
 import logging
 import re
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass as dataclass
+from dataclasses import field as field
+from datetime import datetime as datetime
+from datetime import timedelta as timedelta
+from datetime import timezone as timezone
 from typing import Any
 
 from backend.config import (
     THREAT_INTEL_ABUSEIPDB_KEY,
-    THREAT_INTEL_CACHE_HOURS,
-    THREAT_INTEL_ENABLED,
     THREAT_INTEL_OTX_KEY,
     THREAT_INTEL_TIMEOUT,
     THREAT_INTEL_VT_KEY,
 )
+from backend.config import THREAT_INTEL_CACHE_HOURS as THREAT_INTEL_CACHE_HOURS
+from backend.config import THREAT_INTEL_ENABLED as THREAT_INTEL_ENABLED
 
 logger = logging.getLogger("baraq.threatintel")
 
 _IPV4_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
-_DOMAIN_RE = re.compile(r"^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$", re.IGNORECASE)
+_DOMAIN_RE = re.compile(
+    r"^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$", re.IGNORECASE
+)
 _HASH_RE = re.compile(r"^[a-f0-9]{32}(?:[a-f0-9]{32})?$|^[a-f0-9]{64}$", re.IGNORECASE)
 
 #: High-confidence embedded IOC baseline (IPs / domains / hashes known-bad).
 _EMBEDDED_IOCS: dict[str, dict[str, str]] = {
     # Offensive tooling / known scanner families seen in the wild
-    "185.220.101.45": {"category": "malicious", "label": "Known scanning host (TOR exit)"},
-    "45.155.205.233": {"category": "malicious", "label": "Known malicious C2 infrastructure"},
+    "185.220.101.45": {
+        "category": "malicious",
+        "label": "Known scanning host (TOR exit)",
+    },
+    "45.155.205.233": {
+        "category": "malicious",
+        "label": "Known malicious C2 infrastructure",
+    },
     "91.219.236.232": {"category": "malicious", "label": "Known brute-force source"},
     "78.128.113.170": {"category": "malicious", "label": "Known brute-force source"},
-    "94.232.41.138": {"category": "malicious", "label": "Known credential-stuffing host"},
+    "94.232.41.138": {
+        "category": "malicious",
+        "label": "Known credential-stuffing host",
+    },
     "185.220.101.4": {"category": "malicious", "label": "TOR exit node (anonymizer)"},
     "185.220.101.32": {"category": "malicious", "label": "TOR exit node (anonymizer)"},
 }
 
 #: Suspicious TLDs commonly abused in phishing / C2.
-_SUSPICIOUS_TLDS = frozenset({
-    "buzz", "click", "download", "gq", "icu", "info", "link", "ml", "online",
-    "rest", "review", "site", "stream", "tk", "top", "work", "xyz", "zip",
-    "mov", "cfd", "bond", "country", "cyou", "day", "fun", "host", "loan",
-    "men", "monster", "pro", "racing", "repl", "science", "sbs", "skin", "soy",
-    "space", "store", "tattoo", "team", "vip", "wang", "win",
-})
+_SUSPICIOUS_TLDS = frozenset(
+    {
+        "buzz",
+        "click",
+        "download",
+        "gq",
+        "icu",
+        "info",
+        "link",
+        "ml",
+        "online",
+        "rest",
+        "review",
+        "site",
+        "stream",
+        "tk",
+        "top",
+        "work",
+        "xyz",
+        "zip",
+        "mov",
+        "cfd",
+        "bond",
+        "country",
+        "cyou",
+        "day",
+        "fun",
+        "host",
+        "loan",
+        "men",
+        "monster",
+        "pro",
+        "racing",
+        "repl",
+        "science",
+        "sbs",
+        "skin",
+        "soy",
+        "space",
+        "store",
+        "tattoo",
+        "team",
+        "vip",
+        "wang",
+        "win",
+    }
+)
 
 #: ASN blocks that are overwhelmingly abuse-dense (reserved / hosting bait).
 _ABUSE_SUBNETS = (
@@ -80,11 +135,19 @@ def _classify_ip(ip_str: str) -> dict[str, Any] | None:
     if not _IPV4_RE.match(ip_str):
         return None
     if _is_private_ip(ip_str):
-        return {"category": "benign", "label": "Private / loopback / reserved address", "confidence": 1.0}
+        return {
+            "category": "benign",
+            "label": "Private / loopback / reserved address",
+            "confidence": 1.0,
+        }
     for net in _ABUSE_SUBNETS:
         try:
             if ipaddress.ip_address(ip_str) in net:
-                return {"category": "malicious", "label": f"Abuse-dense subnet {net}", "confidence": 0.9}
+                return {
+                    "category": "malicious",
+                    "label": f"Abuse-dense subnet {net}",
+                    "confidence": 0.9,
+                }
         except ValueError:
             continue
     return None
@@ -95,18 +158,24 @@ def _classify_domain(domain: str) -> dict[str, Any] | None:
         return None
     tld = domain.rsplit(".", 1)[-1].lower()
     if tld in _SUSPICIOUS_TLDS:
-        return {"category": "suspicious", "label": f"TLD '.{tld}' frequently abused in phishing", "confidence": 0.7}
+        return {
+            "category": "suspicious",
+            "label": f"TLD '.{tld}' frequently abused in phishing",
+            "confidence": 0.7,
+        }
     return None
 
 
-def _http_json(url: str, headers: dict[str, str] | None = None, timeout: float = 8) -> dict | None:
+def _http_json(
+    url: str, headers: dict[str, str] | None = None, timeout: float = 8
+) -> dict | None:
     import urllib.request
 
     req = urllib.request.Request(url, headers=headers or {})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.read().decode("utf-8")
-    except Exception as exc:  # noqa: BLE001 - provider outage must not break lookups
+    except Exception as exc:
         logger.debug("Threat-intel request failed for %s: %s", url, exc)
         return None
 
@@ -129,7 +198,11 @@ def _abuseipdb(ip_str: str) -> dict[str, Any] | None:
 
         data = json.loads(raw)["data"]
         if data.get("isWhitelisted") and not data.get("abuseConfidenceScore"):
-            return {"category": "benign", "label": "Whitelisted by AbuseIPDB", "confidence": 0.8}
+            return {
+                "category": "benign",
+                "label": "Whitelisted by AbuseIPDB",
+                "confidence": 0.8,
+            }
         score = float(data.get("abuseConfidenceScore") or 0)
         if score >= 50:
             return {
@@ -138,8 +211,12 @@ def _abuseipdb(ip_str: str) -> dict[str, Any] | None:
                 "confidence": min(0.99, 0.5 + score / 100.0),
             }
         if score >= 20:
-            return {"category": "suspicious", "label": f"AbuseIPDB confidence {score:.0f}%", "confidence": 0.6}
-    except Exception:  # noqa: BLE001
+            return {
+                "category": "suspicious",
+                "label": f"AbuseIPDB confidence {score:.0f}%",
+                "confidence": 0.6,
+            }
+    except Exception:
         pass
     return None
 
@@ -166,12 +243,14 @@ def _otx(indicators: list[str]) -> dict[str, Any] | None:
             pulse_count = int(data.get("pulse_info", {}).get("count") or 0)
             if pulse_count > 0:
                 first = (data.get("pulse_info", {}).get("pulses") or [{}])[0]
-                hits.append({
-                    "category": "malicious",
-                    "label": f"OTX: {pulse_count} pulse(s) - {first.get('name', 'unknown')}",
-                    "confidence": min(0.95, 0.6 + pulse_count * 0.05),
-                })
-        except Exception:  # noqa: BLE001
+                hits.append(
+                    {
+                        "category": "malicious",
+                        "label": f"OTX: {pulse_count} pulse(s) - {first.get('name', 'unknown')}",
+                        "confidence": min(0.95, 0.6 + pulse_count * 0.05),
+                    }
+                )
+        except Exception:
             continue
     return hits[0] if hits else None
 
@@ -181,7 +260,11 @@ def _vt(indicators: list[str]) -> dict[str, Any] | None:
     if not THREAT_INTEL_VT_KEY:
         return None
     for indicator in indicators:
-        kind = "ip_addresses" if _IPV4_RE.match(indicator) else "domains" if _DOMAIN_RE.match(indicator) else "files"
+        kind = (
+            "ip_addresses"
+            if _IPV4_RE.match(indicator)
+            else "domains" if _DOMAIN_RE.match(indicator) else "files"
+        )
         raw = _http_json(
             f"https://www.virustotal.com/api/v3/{kind}/{indicator}",
             headers={"x-apikey": THREAT_INTEL_VT_KEY},
@@ -197,18 +280,30 @@ def _vt(indicators: list[str]) -> dict[str, Any] | None:
                 stats = data.get("last_analysis_stats") or {}
                 malicious = int(stats.get("malicious") or 0)
                 if malicious > 0:
-                    return {"category": "malicious", "label": f"VT: {malicious} engines flag", "confidence": min(0.99, 0.6 + malicious * 0.03)}
+                    return {
+                        "category": "malicious",
+                        "label": f"VT: {malicious} engines flag",
+                        "confidence": min(0.99, 0.6 + malicious * 0.03),
+                    }
             elif kind == "domains":
                 stats = data.get("last_analysis_stats") or {}
                 malicious = int(stats.get("malicious") or 0)
                 if malicious > 0:
-                    return {"category": "malicious", "label": f"VT: {malicious} engines flag domain", "confidence": min(0.99, 0.6 + malicious * 0.03)}
+                    return {
+                        "category": "malicious",
+                        "label": f"VT: {malicious} engines flag domain",
+                        "confidence": min(0.99, 0.6 + malicious * 0.03),
+                    }
             else:
                 stats = data.get("last_analysis_stats") or {}
                 malicious = int(stats.get("malicious") or 0)
                 if malicious > 0:
-                    return {"category": "malicious", "label": f"VT: {malicious} engines flag IP", "confidence": min(0.99, 0.6 + malicious * 0.03)}
-        except Exception:  # noqa: BLE001
+                    return {
+                        "category": "malicious",
+                        "label": f"VT: {malicious} engines flag IP",
+                        "confidence": min(0.99, 0.6 + malicious * 0.03),
+                    }
+        except Exception:
             continue
     return None
 

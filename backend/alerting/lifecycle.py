@@ -10,6 +10,7 @@ resolved or suppressed alert is an explicit ``REOPEN`` operation.
     CLOSED -> OPEN (explicit reopen)
     SUPPRESSED -> OPEN (explicit reopen)
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

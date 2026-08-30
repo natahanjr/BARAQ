@@ -16,6 +16,7 @@ Design
   warn in development.  ``BARAQ_LICENSE_BYPASS=1`` is the documented
   troubleshooting escape hatch.
 """
+
 from __future__ import annotations
 
 import base64
@@ -23,12 +24,12 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from backend.config import IS_PRODUCTION, LICENSE_PUBLIC_KEY, TRIAL_DAYS
 from backend.database.models import LicenseRecord
-from backend.config import LICENSE_PUBLIC_KEY, IS_PRODUCTION, TRIAL_DAYS
 
 logger = logging.getLogger("baraq.licensing")
 
@@ -106,7 +107,7 @@ def sign_license(info: LicenseInfo, private_key_pem: bytes | str) -> str:
 def _parse_key(license_key: str) -> tuple[bytes, bytes]:
     if not license_key.startswith(KEY_PREFIX):
         raise ValueError("not a BARAQ license key")
-    payload_b64, sig_b64 = license_key[len(KEY_PREFIX):].split(".", 1)
+    payload_b64, sig_b64 = license_key[len(KEY_PREFIX) :].split(".", 1)
     return _b64d(payload_b64), _b64d(sig_b64)
 
 
@@ -115,7 +116,7 @@ def verify_license(license_key: str, public_key_pem: str | None = None) -> Licen
 
     Raises ValueError on invalid signature or malformed payload.
     """
-    Ed25519PrivateKey, Ed25519PublicKey = _ed25519()
+    _Ed25519PrivateKey, Ed25519PublicKey = _ed25519()
     try:
         pem = _b64d(public_key_pem or LICENSE_PUBLIC_KEY)
         key = Ed25519PublicKey.from_public_bytes(pem)
@@ -124,7 +125,7 @@ def verify_license(license_key: str, public_key_pem: str | None = None) -> Licen
         data = json.loads(payload.decode("utf-8"))
     except (ValueError, KeyError, TypeError, UnicodeDecodeError) as exc:
         raise ValueError(f"invalid license key: {exc}") from exc
-    except Exception as exc:  # noqa: BLE001 - cryptography.InvalidSignature etc.
+    except Exception as exc:
         raise ValueError(f"invalid license key: {exc}") from exc
     return LicenseInfo(
         license_id=data["license_id"],
@@ -149,7 +150,7 @@ class LicenseState:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _trial_start(db: Session) -> datetime:
@@ -167,8 +168,8 @@ def _trial_start(db: Session) -> datetime:
         customer="",
         edition="trial",
         seats=1,
-        expires_at=(datetime.now(timezone.utc) + timedelta(days=TRIAL_DAYS)).isoformat(),
-        activated_at=datetime.now(timezone.utc),
+        expires_at=(datetime.now(UTC) + timedelta(days=TRIAL_DAYS)).isoformat(),
+        activated_at=datetime.now(UTC),
         license_key="",
         payload_json="{}",
     )
@@ -191,7 +192,7 @@ def get_license_state(db: Session) -> LicenseState:
         except (ValueError, KeyError, TypeError):
             return LicenseState("invalid", reason="signature verification failed")
         expires = datetime.fromisoformat(info.expires_at)
-        if expires.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        if expires.replace(tzinfo=UTC) < datetime.now(UTC):
             return LicenseState("expired", reason="license expired")
         return LicenseState(
             "active",
@@ -202,7 +203,7 @@ def get_license_state(db: Session) -> LicenseState:
             license_id=info.license_id,
         )
     start = _trial_start(db)
-    remaining = start + timedelta(days=TRIAL_DAYS) - datetime.now(timezone.utc)
+    remaining = start + timedelta(days=TRIAL_DAYS) - datetime.now(UTC)
     if remaining <= timedelta(0):
         return LicenseState("expired", reason="trial period ended")
     return LicenseState(
@@ -217,9 +218,11 @@ def get_license_state(db: Session) -> LicenseState:
 def activate_license(db: Session, license_key: str) -> LicenseState:
     """Verify and persist a license key. Raises ValueError when invalid."""
     info = verify_license(license_key)
-    existing = db.query(LicenseRecord).filter(
-        LicenseRecord.license_id == info.license_id
-    ).first()
+    existing = (
+        db.query(LicenseRecord)
+        .filter(LicenseRecord.license_id == info.license_id)
+        .first()
+    )
     if existing is not None:
         db.delete(existing)
         db.commit()
@@ -230,7 +233,7 @@ def activate_license(db: Session, license_key: str) -> LicenseState:
             edition=info.edition,
             seats=info.seats,
             expires_at=info.expires_at,
-            activated_at=datetime.now(timezone.utc),
+            activated_at=datetime.now(UTC),
             license_key=license_key,
             payload_json=json.dumps(
                 {

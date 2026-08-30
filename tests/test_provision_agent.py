@@ -1,4 +1,5 @@
 """Agent provisioning helpers: key generation and vault round-trip."""
+
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ def _provision_module():
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     import scripts.provision_agent as prov
+
     return prov
 
 

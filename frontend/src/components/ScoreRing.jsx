@@ -32,7 +32,7 @@ export default function ScoreRing({ score }) {
       </svg>
       <div className="absolute text-center">
         <span className="block text-2xl font-bold text-slate-100">{clamped.toFixed(0)}</span>
-        <span className="block text-[9px] uppercase tracking-widest text-slate-500">Score</span>
+        <span className="block text-[11px] uppercase tracking-widest text-slate-500">Score</span>
       </div>
     </div>
   );

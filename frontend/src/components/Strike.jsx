@@ -71,7 +71,7 @@ export default function Strike({ alert, onClose, onToast }) {
       >
         {/* Title bar */}
         <div className="flex items-center gap-2.5 border-b border-white/10 px-4 py-3">
-          <span className={`rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold tracking-wider ${tone}`}>
+          <span className={`rounded-md border px-2 py-0.5 font-mono text-[11px] font-bold tracking-wider ${tone}`}>
             ⚡ STRIKE
           </span>
           <p className="truncate font-mono text-xs text-slate-300">
@@ -81,7 +81,7 @@ export default function Strike({ alert, onClose, onToast }) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="ml-auto rounded-lg border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-slate-400 transition-colors hover:border-red-500/40 hover:text-red-400"
+            className="ml-auto rounded-xl border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-slate-400 transition-all hover:border-red-500/40 hover:text-red-400"
           >
             ✕
           </button>
@@ -113,7 +113,7 @@ export default function Strike({ alert, onClose, onToast }) {
               <p className="strike-line pt-1 font-bold text-emerald-300" style={{ animationDelay: "340ms" }}>
                 {">"} STRIKE EXECUTED · THREAT CONTAINED · INCIDENT AUTO-OPENED
               </p>
-              <p className="strike-line text-[10px] text-slate-500" style={{ animationDelay: "420ms" }}>
+              <p className="strike-line text-[11px] text-slate-500" style={{ animationDelay: "420ms" }}>
                 containment window: 612ms · closing panel…
               </p>
             </>
@@ -129,7 +129,7 @@ export default function Strike({ alert, onClose, onToast }) {
                 onClose();
                 navigate("/incidents");
               }}
-              className="rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300 transition-colors hover:bg-emerald-500/20"
+              className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-300 transition-all hover:bg-emerald-500/20"
             >
               Open Incident →
             </button>
@@ -137,7 +137,7 @@ export default function Strike({ alert, onClose, onToast }) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 transition-colors hover:text-slate-200"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 transition-all hover:text-slate-200"
           >
             Dismiss
           </button>

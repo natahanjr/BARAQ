@@ -1,10 +1,9 @@
 """Detector D005 - Ransomware behavior tests (Phase 2)."""
+
 from __future__ import annotations
 
 from backend.detection.context import DetectionContext
 from backend.detection.engine import run_detection
-from backend.detection.registry import default_registry
-
 from tests.detection.helpers import file_modify, seed_events, shadow_delete
 
 
@@ -109,9 +108,14 @@ def test_confidence_bounded(db):
 def test_missing_process_name_still_detected(db):
     current = file_modify(0)
     current = current.__class__(
-        timestamp=current.timestamp, host=current.host, user=current.user,
-        source=current.source, action=current.action, facts=current.facts,
-        event_type=current.event_type, process={},
+        timestamp=current.timestamp,
+        host=current.host,
+        user=current.user,
+        source=current.source,
+        action=current.action,
+        facts=current.facts,
+        event_type=current.event_type,
+        process={},
     )
     seeded = [file_modify(i * 0.2) for i in range(1, 20)]
     detection = evaluate(db, current, seeded)
@@ -123,7 +127,9 @@ def test_duplicate_batch_no_extra_detections(db):
     seed_events(db, seeded)
     seed_events(db, seeded)
     context = DetectionContext(db)
-    findings = [f for f in run_detection(file_modify(0), context) if f.detector_id == "D005"]
+    findings = [
+        f for f in run_detection(file_modify(0), context) if f.detector_id == "D005"
+    ]
     assert len(findings) == 1
 
 

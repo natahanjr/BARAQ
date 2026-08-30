@@ -4,17 +4,20 @@ Covers UAC bypasses (T1548.002), SeDebugPrivilege abuse (T1134.001),
 named-pipe impersonation (T1134.005), unquoted service paths (T1574.009),
 and AlwaysInstallElevated (T1574.005).
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
 from backend.database.models import NormalizedEvent
 from backend.detection.rules.base import BaseRule, DetectionResult
 
-_SUSPICIOUS_DIRS = re.compile(r"\\Temp\\|\\Users\\Public\\|\\AppData\\|\\Downloads\\", re.IGNORECASE)
+_SUSPICIOUS_DIRS = re.compile(
+    r"\\Temp\\|\\Users\\Public\\|\\AppData\\|\\Downloads\\", re.IGNORECASE
+)
 
 _UAC_BYPASS = re.compile(
     r"\b(?:fodhelper|computerdefaults|eventvwr|sdclt|slui)\.exe\b[^\n]*"
@@ -63,7 +66,7 @@ class UacBypassRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _UAC_BYPASS.search(cmdline):
                 continue
@@ -97,7 +100,7 @@ class SeDebugPrivilegeRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _SE_DEBUG.search(cmdline):
                 continue
@@ -131,7 +134,7 @@ class NamedPipeImpersonationRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _PIPE_IMPERSONATION.search(cmdline):
                 continue
@@ -165,7 +168,7 @@ class UnquotedServicePathRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 7045,
@@ -207,7 +210,7 @@ class AlwaysInstallElevatedRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 13,

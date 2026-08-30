@@ -1,22 +1,19 @@
 """Phase 4 engine tests (spec 4.4-4.6, 4.46-4.48)."""
+
 from datetime import timedelta
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
 from backend.aggregation.engine import expire_groups, process_alerts
-from backend.aggregation.models import BehaviorGroupMember, BehaviorGroupRecord
-from backend.alerting.engine import process_detection
-
+from backend.aggregation.models import BehaviorGroupRecord
 from tests.aggregation.helpers import (
     GROUP_T0,
     make_alerts,
-    stored_group_audit,
     stored_groups,
     stored_members,
     v1_counts,
 )
-from tests.alerting.helpers import detection
 
 
 def test_full_pipeline_auth_episode(db):
@@ -30,9 +27,9 @@ def test_full_pipeline_auth_episode(db):
     alerts = make_alerts(
         db,
         [
-            dict(detector_id="D001", mitre="T1133", minutes_ago=2.0),
-            dict(detector_id="D002", mitre="T1110", minutes_ago=1.0),
-            dict(detector_id="D001", mitre="T1133", minutes_ago=0.5),
+            {"detector_id": "D001", "mitre": "T1133", "minutes_ago": 2.0},
+            {"detector_id": "D002", "mitre": "T1110", "minutes_ago": 1.0},
+            {"detector_id": "D001", "mitre": "T1133", "minutes_ago": 0.5},
         ],
     )
     assert len(alerts) in (2, 3)
@@ -56,8 +53,8 @@ def test_deterministic_grouping_same_input_same_output(db):
     alerts = fabricate_alerts(
         db,
         [
-            dict(minutes_ago=2.0),
-            dict(detector_id="D002", mitre="T1110", minutes_ago=1.0),
+            {"minutes_ago": 2.0},
+            {"detector_id": "D002", "mitre": "T1110", "minutes_ago": 1.0},
         ],
     )
     process_alerts(db, alerts, now=GROUP_T0)
@@ -71,8 +68,8 @@ def test_idempotent_rerun_no_duplicate_memberships(db):
     alerts = make_alerts(
         db,
         [
-            dict(minutes_ago=1.0),
-            dict(detector_id="D002", mitre="T1110", minutes_ago=0.0),
+            {"minutes_ago": 1.0},
+            {"detector_id": "D002", "mitre": "T1110", "minutes_ago": 0.0},
         ],
     )
     process_alerts(db, alerts, now=GROUP_T0)
@@ -87,7 +84,7 @@ def test_idempotent_rerun_no_duplicate_memberships(db):
 
 def test_single_alert_group_is_valid(db):
     """4.20: single-alert groups are valid."""
-    alerts = make_alerts(db, [dict(minutes_ago=1.0)])
+    alerts = make_alerts(db, [{"minutes_ago": 1.0}])
     process_alerts(db, alerts, now=GROUP_T0)
     groups = stored_groups(db)
     assert len(groups) == 1
@@ -95,7 +92,7 @@ def test_single_alert_group_is_valid(db):
 
 
 def test_group_title_and_description_do_not_overclaim(db):
-    alerts = make_alerts(db, [dict(minutes_ago=1.0)])
+    alerts = make_alerts(db, [{"minutes_ago": 1.0}])
     process_alerts(db, alerts, now=GROUP_T0)
     group = stored_groups(db)[0]
     assert "confirmed" not in group.title.lower()
@@ -106,21 +103,22 @@ def test_group_title_and_description_do_not_overclaim(db):
 
 
 def test_suppressed_alerts_never_aggregated(db):
-    from backend.alerting.lifecycle import transition
-    from backend.alerting.models import AlertRecord
     from backend.alerting.suppression import create_rule
 
-    alerts = make_alerts(db, [dict(minutes_ago=2.0)])
+    alerts = make_alerts(db, [{"minutes_ago": 2.0}])
     rule = create_rule(
-        db, policy_id="SUP-1", reason="legacy noise",
-        expires_at=GROUP_T0 + timedelta(days=1), now=GROUP_T0,
+        db,
+        policy_id="SUP-1",
+        reason="legacy noise",
+        expires_at=GROUP_T0 + timedelta(days=1),
+        now=GROUP_T0,
     )
     db.commit()
     rule.scope = {"host": "workstation-42"}
     db.commit()
     suppressed = make_alerts(
         db,
-        [dict(minutes_ago=1.0, host="workstation-42")],
+        [{"minutes_ago": 1.0, "host": "workstation-42"}],
     )
     assert len(suppressed) == 0  # the Phase 3 engine already suppressed it
     process_alerts(db, alerts, now=GROUP_T0)
@@ -128,7 +126,7 @@ def test_suppressed_alerts_never_aggregated(db):
 
 
 def test_partial_unique_index_blocks_duplicate_live_groups(db):
-    alerts = make_alerts(db, [dict(minutes_ago=1.0)])
+    alerts = make_alerts(db, [{"minutes_ago": 1.0}])
     process_alerts(db, alerts, now=GROUP_T0)
     group = stored_groups(db)[0]
     duplicate = BehaviorGroupRecord(
@@ -153,13 +151,13 @@ def test_partial_unique_index_blocks_duplicate_live_groups(db):
 def test_closed_groups_release_the_fingerprint(db):
     from tests.aggregation.helpers import fabricate_alerts
 
-    alerts = fabricate_alerts(db, [dict(minutes_ago=120.0)])
+    alerts = fabricate_alerts(db, [{"minutes_ago": 120.0}])
     process_alerts(db, alerts, now=GROUP_T0)
     expire_groups(db, now=GROUP_T0)
     expire_groups(db, now=GROUP_T0)
     assert stored_groups(db)[0].status == "CLOSED"
 
-    later = fabricate_alerts(db, [dict(minutes_ago=30.0)])
+    later = fabricate_alerts(db, [{"minutes_ago": 30.0}])
     process_alerts(db, later, now=GROUP_T0)
     assert len(stored_groups(db)) == 2
 
@@ -169,8 +167,8 @@ def test_engine_never_touches_v1_state(db):
     alerts = make_alerts(
         db,
         [
-            dict(minutes_ago=2.0),
-            dict(detector_id="D002", mitre="T1110", minutes_ago=1.0),
+            {"minutes_ago": 2.0},
+            {"detector_id": "D002", "mitre": "T1110", "minutes_ago": 1.0},
         ],
     )
     process_alerts(db, alerts, now=GROUP_T0)
@@ -180,10 +178,11 @@ def test_engine_never_touches_v1_state(db):
 
 
 def test_engine_refuses_production_db_by_name(monkeypatch):
-    import backend.config as config
+    from backend import config
 
     monkeypatch.setattr(
-        config, "DATABASE_URL",
+        config,
+        "DATABASE_URL",
         "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel",
     )
     from backend.aggregation.engine import _ensure_not_production_db
@@ -193,7 +192,7 @@ def test_engine_refuses_production_db_by_name(monkeypatch):
 
 
 def test_membership_reason_and_score_recorded(db):
-    alerts = make_alerts(db, [dict(minutes_ago=2.0)])
+    alerts = make_alerts(db, [{"minutes_ago": 2.0}])
     process_alerts(db, alerts, now=GROUP_T0)
     member = stored_members(db)[0]
     assert "same host" in member.membership_reason
@@ -205,14 +204,21 @@ def test_confidence_bounded_and_deterministic(db):
     alerts = make_alerts(
         db,
         [
-            dict(minutes_ago=2.0, confidence=0.91),
-            dict(detector_id="D002", mitre="T1110", minutes_ago=1.0, confidence=0.82),
+            {"minutes_ago": 2.0, "confidence": 0.91},
+            {
+                "detector_id": "D002",
+                "mitre": "T1110",
+                "minutes_ago": 1.0,
+                "confidence": 0.82,
+            },
         ],
     )
     process_alerts(db, alerts, now=GROUP_T0)
     group = stored_groups(db)[0]
     assert 0.0 <= group.confidence <= 1.0
-    assert group.confidence == round(min(1.0, 0.91 + 0.15), 4)  # strongest + consistency
+    assert group.confidence == round(
+        min(1.0, 0.91 + 0.15), 4
+    )  # strongest + consistency
 
 
 def test_severity_never_escalated(db):
@@ -220,8 +226,13 @@ def test_severity_never_escalated(db):
     alerts = make_alerts(
         db,
         [
-            dict(minutes_ago=2.0, severity="high"),
-            dict(detector_id="D002", mitre="T1110", minutes_ago=1.0, severity="high"),
+            {"minutes_ago": 2.0, "severity": "high"},
+            {
+                "detector_id": "D002",
+                "mitre": "T1110",
+                "minutes_ago": 1.0,
+                "severity": "high",
+            },
         ],
     )
     process_alerts(db, alerts, now=GROUP_T0)
@@ -233,11 +244,23 @@ def test_unrelated_alerts_stay_separate(db):
     alerts = make_alerts(
         db,
         [
-            dict(minutes_ago=2.0),
-            dict(detector_id="D003", host="finance-host", user="bob",
-                 source_ip="203.0.113.7", mitre="T1059.001", minutes_ago=1.0),
-            dict(detector_id="D005", host="backup-host", user="system",
-                 source_ip="203.0.113.9", mitre="T1486", minutes_ago=0.5),
+            {"minutes_ago": 2.0},
+            {
+                "detector_id": "D003",
+                "host": "finance-host",
+                "user": "bob",
+                "source_ip": "203.0.113.7",
+                "mitre": "T1059.001",
+                "minutes_ago": 1.0,
+            },
+            {
+                "detector_id": "D005",
+                "host": "backup-host",
+                "user": "system",
+                "source_ip": "203.0.113.9",
+                "mitre": "T1486",
+                "minutes_ago": 0.5,
+            },
         ],
     )
     process_alerts(db, alerts, now=GROUP_T0)
@@ -256,8 +279,8 @@ def test_different_users_same_host_do_not_group(db):
     alerts = make_alerts(
         db,
         [
-            dict(user="alice", source_ip="203.0.113.5", minutes_ago=2.0),
-            dict(user="bob", source_ip="203.0.113.9", minutes_ago=1.0),
+            {"user": "alice", "source_ip": "203.0.113.5", "minutes_ago": 2.0},
+            {"user": "bob", "source_ip": "203.0.113.9", "minutes_ago": 1.0},
         ],
     )
     process_alerts(db, alerts, now=GROUP_T0)
@@ -269,8 +292,8 @@ def test_cross_host_source_does_not_group(db):
     alerts = make_alerts(
         db,
         [
-            dict(host="host-a", user="user-a", minutes_ago=2.0),
-            dict(host="host-b", user="user-b", minutes_ago=1.0),
+            {"host": "host-a", "user": "user-a", "minutes_ago": 2.0},
+            {"host": "host-b", "user": "user-b", "minutes_ago": 1.0},
         ],
     )
     process_alerts(db, alerts, now=GROUP_T0)
@@ -279,7 +302,7 @@ def test_cross_host_source_does_not_group(db):
 
 def test_alert_reference_integrity(db):
     """4.46: every membership references a real alert."""
-    alerts = make_alerts(db, [dict(minutes_ago=1.0)])
+    alerts = make_alerts(db, [{"minutes_ago": 1.0}])
     process_alerts(db, alerts, now=GROUP_T0)
     member = stored_members(db)[0]
     alert = db.get(type(alerts[0]), alerts[0].id)

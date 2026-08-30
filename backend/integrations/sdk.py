@@ -13,6 +13,7 @@ Example:
     client.incident_create("Ransomware beacon", alert_ids=[a["id"] for a in open_alerts])
     client.alert_action(open_alerts[0]["id"], "contain")
 """
+
 from __future__ import annotations
 
 import json
@@ -39,15 +40,29 @@ class BARAQClient:
     (``start.bat secure``); production deployments use real certificates.
     """
 
-    def __init__(self, base_url: str, api_key: str, timeout: float = 15.0,
-                 verify_ssl: bool = True):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        timeout: float = 15.0,
+        verify_ssl: bool = True,
+    ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
-        self._ctx = ssl.create_default_context() if verify_ssl else ssl._create_unverified_context()  # noqa: S323
+        self._ctx = (
+            ssl.create_default_context()
+            if verify_ssl
+            else ssl._create_unverified_context()
+        )
 
-    def _request(self, method: str, path: str, body: dict | None = None,
-                 params: dict | None = None) -> Any:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        body: dict | None = None,
+        params: dict | None = None,
+    ) -> Any:
         url = self.base_url + path
         if params:
             clean = {k: v for k, v in params.items() if v is not None and v != ""}
@@ -65,36 +80,58 @@ class BARAQClient:
             method=method,
         )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout, context=self._ctx) as resp:
+            with urllib.request.urlopen(
+                req, timeout=self.timeout, context=self._ctx
+            ) as resp:
                 raw = resp.read().decode("utf-8", errors="replace")
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:
             detail = None
             try:
                 detail = json.loads(exc.read().decode("utf-8", errors="replace"))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
-            raise BARAQError(f"BARAQ API {method} {path} -> {exc.code}", exc.code, detail) from exc
+            raise BARAQError(
+                f"BARAQ API {method} {path} -> {exc.code}", exc.code, detail
+            ) from exc
 
     # ---- Alerts ---------------------------------------------------------
-    def alerts(self, status: str = "", severity: str = "", org: str = "",
-               page: int = 1, limit: int = 25) -> dict:
+    def alerts(
+        self,
+        status: str = "",
+        severity: str = "",
+        org: str = "",
+        page: int = 1,
+        limit: int = 25,
+    ) -> dict:
         """List alerts with optional status / severity / org filters."""
-        return self._request("GET", "/api/alerts", params={
-            "page": page, "page_size": limit,
-            "status": status, "severity": severity, "org": org,
-        })
+        return self._request(
+            "GET",
+            "/api/alerts",
+            params={
+                "page": page,
+                "page_size": limit,
+                "status": status,
+                "severity": severity,
+                "org": org,
+            },
+        )
 
     def alert(self, alert_id: int) -> dict:
         return self._request("GET", f"/api/alerts/{alert_id}")
 
     def alert_status(self, alert_id: int, status: str) -> dict:
-        return self._request("PATCH", f"/api/alerts/{alert_id}/status", {"status": status})
+        return self._request(
+            "PATCH", f"/api/alerts/{alert_id}/status", {"status": status}
+        )
 
     def alert_action(self, alert_id: int, action: str, target: str = "") -> dict:
         """Take an action (fix / contain / isolate / block / kill / quarantine...)."""
-        return self._request("POST", f"/api/alerts/{alert_id}/actions",
-                             {"action": action, "target": target})
+        return self._request(
+            "POST",
+            f"/api/alerts/{alert_id}/actions",
+            {"action": action, "target": target},
+        )
 
     def alert_note(self, alert_id: int, note: str) -> dict:
         return self._request("POST", f"/api/alerts/{alert_id}/notes", {"note": note})
@@ -106,15 +143,23 @@ class BARAQClient:
     def incident(self, incident_id: int) -> dict:
         return self._request("GET", f"/api/incidents/{incident_id}")
 
-    def incident_create(self, title: str, description: str = "",
-                        alert_ids: list[int] | None = None) -> dict:
-        return self._request("POST", "/api/incidents", {
-            "title": title, "description": description,
-            "alert_ids": alert_ids or [],
-        })
+    def incident_create(
+        self, title: str, description: str = "", alert_ids: list[int] | None = None
+    ) -> dict:
+        return self._request(
+            "POST",
+            "/api/incidents",
+            {
+                "title": title,
+                "description": description,
+                "alert_ids": alert_ids or [],
+            },
+        )
 
     def incident_comment(self, incident_id: int, body: str) -> dict:
-        return self._request("POST", f"/api/incidents/{incident_id}/comments", {"body": body})
+        return self._request(
+            "POST", f"/api/incidents/{incident_id}/comments", {"body": body}
+        )
 
     # ---- Intel / integration dispatch -----------------------------------
     def intel_lookup(self, indicator: str) -> dict:

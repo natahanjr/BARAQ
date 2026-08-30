@@ -10,10 +10,10 @@ to learn optimal blending weights, rather than using fixed 0.6/0.4 ratios.
 This allows the system to adaptively weight models based on their actual
 performance on the current data distribution.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import numpy as np
 
@@ -21,6 +21,7 @@ logger = logging.getLogger("baraq.ml.ensemble")
 
 try:
     from sklearn.linear_model import LogisticRegression
+
     HAS_SKLEARN = True
 except ImportError:  # pragma: no cover
     HAS_SKLEARN = False
@@ -101,7 +102,9 @@ class EnsembleStacker:
 
         try:
             self.meta_model = LogisticRegression(
-                C=1.0, class_weight="balanced", max_iter=200,
+                C=1.0,
+                class_weight="balanced",
+                max_iter=200,
                 random_state=42,
             )
             self.meta_model.fit(meta_X, y_true)
@@ -127,7 +130,7 @@ class EnsembleStacker:
                 "train_accuracy": round(train_acc, 4),
                 "n_samples": n,
             }
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("Meta-learner training failed: %s", e)
             self.meta_weights = {"if": 0.6, "supervised": 0.4, "markov": 0.0}
             return {"status": "training-failed", "trained": False, "error": str(e)}
@@ -144,14 +147,22 @@ class EnsembleStacker:
         Otherwise falls back to fixed 0.6*IF + 0.4*supervised ratio.
         """
         if self.is_trained and self.meta_model is not None:
-            meta = np.array([[if_score, supervised_proba, markov_score,
-                              if_score * supervised_proba,
-                              if_score * markov_score,
-                              supervised_proba * markov_score]])
+            meta = np.array(
+                [
+                    [
+                        if_score,
+                        supervised_proba,
+                        markov_score,
+                        if_score * supervised_proba,
+                        if_score * markov_score,
+                        supervised_proba * markov_score,
+                    ]
+                ]
+            )
             try:
                 proba = self.meta_model.predict_proba(meta)[0]
                 return float(proba[1]) if len(proba) > 1 else float(proba[0])
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
         # Fallback: fixed ratio
@@ -166,11 +177,13 @@ class EnsembleStacker:
     ) -> np.ndarray:
         """Batch prediction for efficiency."""
         if self.is_trained and self.meta_model is not None:
-            meta_X = self.extract_meta_features(if_scores, supervised_probas, markov_scores)
+            meta_X = self.extract_meta_features(
+                if_scores, supervised_probas, markov_scores
+            )
             try:
                 proba = self.meta_model.predict_proba(meta_X)
                 return proba[:, 1] if proba.shape[1] > 1 else proba[:, 0]
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
         # Fallback

@@ -1,25 +1,11 @@
 """Tests for the AD / process-abuse / defense-evasion / exfil-C2 rule set
 (19 rules added for the enterprise-detection expansion)."""
+
 from __future__ import annotations
 
 import pytest
 
-from backend.detection.rules.kerberos import (
-    AsRepRoastingRule,
-    DCSyncRule,
-    GoldenTicketRule,
-    KerberoastingRule,
-    PassTheHashRule,
-    PassTheTicketRule,
-    SilverTicketRule,
-)
 from backend.detection.rules.ad_abuse import BloodHoundReconRule, GpoAbuseRule
-from backend.detection.rules.process_abuse import (
-    DllSideloadingRule,
-    PrintNightmareRule,
-    ProcessInjectionRule,
-    TokenManipulationRule,
-)
 from backend.detection.rules.defense_evasion import (
     AmsiBypassRule,
     CertificateSpoofingRule,
@@ -29,6 +15,21 @@ from backend.detection.rules.exfil_c2 import (
     CloudSyncExfilRule,
     DnsTunnelingRule,
     WebhookC2Rule,
+)
+from backend.detection.rules.kerberos import (
+    AsRepRoastingRule,
+    DCSyncRule,
+    GoldenTicketRule,
+    KerberoastingRule,
+    PassTheHashRule,
+    PassTheTicketRule,
+    SilverTicketRule,
+)
+from backend.detection.rules.process_abuse import (
+    DllSideloadingRule,
+    PrintNightmareRule,
+    ProcessInjectionRule,
+    TokenManipulationRule,
 )
 from tests.fixtures import (
     add_normalized,
@@ -100,7 +101,16 @@ def test_kerberoasting_event_and_tooling(db):
     from tests.fixtures import _process
 
     add_normalized(db, kerberoast())
-    add_normalized(db, [_process("Rubeus.exe", "Rubeus.exe kerberoast /outfile:hashes.txt", path=r"C:\Tools\Rubeus.exe")])
+    add_normalized(
+        db,
+        [
+            _process(
+                "Rubeus.exe",
+                "Rubeus.exe kerberoast /outfile:hashes.txt",
+                path=r"C:\Tools\Rubeus.exe",
+            )
+        ],
+    )
     findings = KerberoastingRule(db).evaluate(10)
     assert len(findings) == 2
     assert all(f.mitre_id == "T1558.003" for f in findings)

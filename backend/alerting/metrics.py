@@ -4,9 +4,10 @@ Operational + noise metrics over the v2 alert store. No unsupported
 precision: MTTA/MTTR are reported in minutes WITH their sample sizes.
 FPR is only surfaced when enough labeled data exists (see feedback.py).
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from statistics import median
 
 from sqlalchemy import func, select
@@ -18,7 +19,7 @@ from backend.config import ALERT_MIN_LABELED_FOR_FPR
 
 
 def metrics(db: Session, now: datetime | None = None) -> dict:
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     alerts = list(db.scalars(select(AlertRecord)).all())
     total = len(alerts)
     occurrences = db.scalar(select(func.count()).select_from(AlertOccurrence)) or 0
@@ -39,13 +40,23 @@ def metrics(db: Session, now: datetime | None = None) -> dict:
         else:
             age_buckets["4h+"] += 1
 
-    def _span(a: AlertRecord, start: datetime | None, end: datetime | None) -> float | None:
+    def _span(
+        a: AlertRecord, start: datetime | None, end: datetime | None
+    ) -> float | None:
         if start is None or end is None:
             return None
         return (end - start).total_seconds() / 60
 
-    mtta = [v for v in (_span(a, a.created_at, a.acknowledged_at) for a in alerts) if v is not None]
-    mttr = [v for v in (_span(a, a.created_at, a.resolved_at) for a in alerts) if v is not None]
+    mtta = [
+        v
+        for v in (_span(a, a.created_at, a.acknowledged_at) for a in alerts)
+        if v is not None
+    ]
+    mttr = [
+        v
+        for v in (_span(a, a.created_at, a.resolved_at) for a in alerts)
+        if v is not None
+    ]
 
     # Noise metrics (spec 3.37): measured from actual stored data.
     detection_total = sum(len(a.detection_ids or [1]) for a in alerts) if alerts else 0
@@ -62,10 +73,14 @@ def metrics(db: Session, now: datetime | None = None) -> dict:
         "low_alerts": by_severity.get("low", 0),
         "deduplicated_alerts": deduplicated,
         "occurrence_count": occurrences,
-        "mean_time_to_acknowledge_minutes": round(sum(mtta) / len(mtta), 1) if mtta else None,
+        "mean_time_to_acknowledge_minutes": (
+            round(sum(mtta) / len(mtta), 1) if mtta else None
+        ),
         "median_time_to_acknowledge_minutes": round(median(mtta), 1) if mtta else None,
         "mtta_sample_size": len(mtta),
-        "mean_time_to_resolve_minutes": round(sum(mttr) / len(mttr), 1) if mttr else None,
+        "mean_time_to_resolve_minutes": (
+            round(sum(mttr) / len(mttr), 1) if mttr else None
+        ),
         "median_time_to_resolve_minutes": round(median(mttr), 1) if mttr else None,
         "mttr_sample_size": len(mttr),
         "false_positive_count": fb["false_positives"],
@@ -73,7 +88,9 @@ def metrics(db: Session, now: datetime | None = None) -> dict:
         "feedback_count": fb["total_feedback"],
         "alert_reduction_ratio": reduction,
         "duplicate_alert_ratio": round(deduplicated / total, 4) if total else 0.0,
-        "alerts_per_detection": round(total / detection_total, 4) if detection_total else None,
+        "alerts_per_detection": (
+            round(total / detection_total, 4) if detection_total else None
+        ),
         "occurrences_per_alert": round(occurrences / total, 2) if total else 0.0,
         "age_buckets": age_buckets,
     }

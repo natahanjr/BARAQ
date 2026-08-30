@@ -6,10 +6,11 @@ ransomware-style extensions and drop ransom notes. T1490 flags deletion of
 Volume Shadow Copies and boot-recovery tampering that precede destructive
 encryption.
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from backend.detection.rules.base import BaseRule, DetectionResult
 
@@ -70,7 +71,7 @@ class RansomwareImpactRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         for cmdline, label, user in self.cmdline_candidates(since):
             indicators = []
@@ -115,7 +116,7 @@ class InhibitRecoveryRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _RECOVERY_KILL.search(cmdline):
                 continue

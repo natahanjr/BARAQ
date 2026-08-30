@@ -1,8 +1,8 @@
 """Test the remote agent control channel (command queue -> agent -> result)."""
+
 from __future__ import annotations
 
 import pytest
-
 from fastapi.testclient import TestClient
 
 
@@ -30,7 +30,12 @@ def test_queue_command_requires_admin():
     from backend.main import app
 
     with TestClient(app, headers={"X-API-Key": "baraq-dev-analyst"}) as bare:
-        assert bare.post("/api/endpoints/agent-dev/commands", json={"action": "escalate"}).status_code == 403
+        assert (
+            bare.post(
+                "/api/endpoints/agent-dev/commands", json={"action": "escalate"}
+            ).status_code
+            == 403
+        )
 
 
 def test_queue_command_unknown_agent_404(client):
@@ -66,7 +71,11 @@ def test_full_command_lifecycle(client):
 
     created = client.post(
         "/api/endpoints/agent-dev/commands",
-        json={"action": "kill_process", "target": "miner.exe", "note": "suspected cryptominer"},
+        json={
+            "action": "kill_process",
+            "target": "miner.exe",
+            "note": "suspected cryptominer",
+        },
     )
     assert created.status_code == 200
     cmd = created.json()

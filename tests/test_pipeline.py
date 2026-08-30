@@ -1,7 +1,6 @@
 """Test end-to-end pipeline, alerting, MITRE enrichment, reports and AI."""
-from __future__ import annotations
 
-import pytest
+from __future__ import annotations
 
 from backend.ai.assistant import SecurityAssistant
 from backend.mitre.attack import get_recommendation, get_tactic, get_technique_name
@@ -10,7 +9,9 @@ from tests.conftest import run_simulation
 
 def test_full_suite_end_to_end(db):
     result = run_simulation(db)
-    assert result["alerts_created"] >= 5  # brute force, PS, priv-esc, persistence, recon
+    assert (
+        result["alerts_created"] >= 5
+    )  # brute force, PS, priv-esc, persistence, recon
     assert result["saved_events"] > 0
     assert result["saved_connections"] > 0
 
@@ -28,7 +29,7 @@ def test_all_scenarios_detected(db):
         "persistence": "Persistence Mechanism Installed",
         "port_scan": "Network Service Discovery (Port Scan)",
     }
-    for scenario, _ in scenarios.items():
+    for scenario in scenarios:
         run_pipeline(db, _scenario(scenario))
 
     alerts = db.query(Alert).all()

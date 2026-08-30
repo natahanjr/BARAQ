@@ -4,6 +4,7 @@ Aggregate counts over the entity risk store - never fabricated accuracy.
 Latency percentiles come from the per-calculation duration recorded in the
 audit trail (6.74).
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -27,7 +28,7 @@ def _percentile(values: list[float], pct: float) -> float:
     ordered = sorted(values)
     if pct >= 100:
         return ordered[-1]
-    index = int(round(pct / 100.0 * (len(ordered) - 1)))
+    index = round(pct / 100.0 * (len(ordered) - 1))
     return ordered[index]
 
 
@@ -35,9 +36,7 @@ def risk_metrics(db: Session, now: datetime | None = None) -> dict:
     now = now or utcnow()
     total = db.scalars(select(func.count()).select_from(EntityRiskV2)).one()
     with_risk = db.scalars(
-        select(func.count())
-        .select_from(EntityRiskV2)
-        .where(EntityRiskV2.score > 0)
+        select(func.count()).select_from(EntityRiskV2).where(EntityRiskV2.score > 0)
     ).one()
 
     severity_counts: dict[str, int] = {}
@@ -91,7 +90,9 @@ def risk_metrics(db: Session, now: datetime | None = None) -> dict:
 
     by_entity_type: dict[str, dict] = {}
     for entity_type in ENTITY_TYPES:
-        per_severity = {sev.lower(): 0 for sev in ("critical", "high", "medium", "low", "minimal")}
+        per_severity = {
+            sev.lower(): 0 for sev in ("critical", "high", "medium", "low", "minimal")
+        }
         for severity, count in db.execute(
             select(EntityRiskV2.severity, func.count())
             .where(EntityRiskV2.entity_type == entity_type)
@@ -113,8 +114,9 @@ def risk_metrics(db: Session, now: datetime | None = None) -> dict:
 
     transitions: dict[str, int] = {}
     for action in db.scalars(
-        select(EntityRiskV2AuditEvent.action)
-        .where(EntityRiskV2AuditEvent.action.in_(("RISK_STATE_CHANGED",)))
+        select(EntityRiskV2AuditEvent.action).where(
+            EntityRiskV2AuditEvent.action.in_(("RISK_STATE_CHANGED",))
+        )
     ).all():
         transitions[action] = transitions.get(action, 0) + 1
 
@@ -127,8 +129,9 @@ def risk_metrics(db: Session, now: datetime | None = None) -> dict:
     latencies = [
         float(details.get("duration_ms", 0.0))
         for details in db.scalars(
-            select(EntityRiskV2AuditEvent.details)
-            .where(EntityRiskV2AuditEvent.action == "RISK_RECALCULATED")
+            select(EntityRiskV2AuditEvent.details).where(
+                EntityRiskV2AuditEvent.action == "RISK_RECALCULATED"
+            )
         ).all()
         if details and details.get("duration_ms") is not None
     ]
@@ -139,9 +142,7 @@ def risk_metrics(db: Session, now: datetime | None = None) -> dict:
         "max_ms": round(_percentile(latencies, 100), 3),
     }
 
-    snapshots = db.scalars(
-        select(func.count()).select_from(EntityRiskV2Snapshot)
-    ).one()
+    snapshots = db.scalars(select(func.count()).select_from(EntityRiskV2Snapshot)).one()
     expired = db.scalars(
         select(func.count())
         .select_from(EntityRiskV2Factor)

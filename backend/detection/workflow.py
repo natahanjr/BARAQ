@@ -14,6 +14,7 @@ States:
 Transitions marked with ``escalate`` bump the severity instead of the
 state; ``reopen`` moves a closed alert back to open for follow-up.
 """
+
 from __future__ import annotations
 
 #: Allowed transitions: state -> set of reachable states.
@@ -47,6 +48,7 @@ def next_states(current: str) -> list[str]:
     if current not in TRANSITIONS:
         return []
     return sorted(TRANSITIONS[current])
+
 
 #: State categories used by dashboards and dedup logic.
 #: Anything except ``closed`` is still an active incident: a repeated

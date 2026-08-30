@@ -5,6 +5,7 @@ probability of compromise, never alert severity, never a second detection
 engine (spec 6.83). All values are deterministic and bounded; scores are
 0-100 and every contribution traces to concrete evidence.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -143,7 +144,9 @@ class EntityRisk:
         if self.entity_type not in ENTITY_TYPES:
             raise ValueError(f"invalid entity type {self.entity_type!r}")
         if not 0.0 <= self.score <= 100.0:
-            raise ValueError(f"entity risk score must be bounded 0..100, got {self.score}")
+            raise ValueError(
+                f"entity risk score must be bounded 0..100, got {self.score}"
+            )
         if self.severity not in RISK_SEVERITIES:
             raise ValueError(f"invalid risk severity {self.severity!r}")
         if self.state not in RISK_STATES:

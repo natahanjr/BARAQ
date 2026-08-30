@@ -4,9 +4,10 @@ Deterministic registry: rule ids, versions, types and windows are pure
 data - no dynamic rule loading, no ML, no probabilities. The registry is
 frozen at import time; changing a rule requires a version bump.
 """
+
 from __future__ import annotations
 
-from backend.correlation.rules import RULES, RULES_VERSION, RULE_BY_ID
+from backend.correlation.rules import RULE_BY_ID, RULES, RULES_VERSION
 
 REGISTRY_VERSION = RULES_VERSION
 

@@ -1,14 +1,15 @@
 """Shared helpers for Phase 2 detection tests."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from backend.telemetry.contract import EVENT
 
 
 def dt(minutes_ago: float = 0) -> datetime:
     """Deterministic anchor timestamps: 2026-08-17 12:00:00 UTC minus offset."""
-    return datetime(2026, 8, 17, 12, 0, 0, tzinfo=timezone.utc) - timedelta(minutes=minutes_ago)
+    return datetime(2026, 8, 17, 12, 0, 0, tzinfo=UTC) - timedelta(minutes=minutes_ago)
 
 
 def event(**overrides) -> EVENT:
@@ -28,8 +29,13 @@ def event(**overrides) -> EVENT:
     return EVENT(**base)
 
 
-def logon_failed(minutes_ago: float, user: str = "alice", host: str = "workstation-42",
-                 source_ip: str = "198.51.100.7", **facts) -> EVENT:
+def logon_failed(
+    minutes_ago: float,
+    user: str = "alice",
+    host: str = "workstation-42",
+    source_ip: str = "198.51.100.7",
+    **facts,
+) -> EVENT:
     return event(
         timestamp=dt(minutes_ago),
         host=host,
@@ -41,8 +47,13 @@ def logon_failed(minutes_ago: float, user: str = "alice", host: str = "workstati
     )
 
 
-def logon_success(minutes_ago: float, user: str = "alice", host: str = "workstation-42",
-                  source_ip: str = "198.51.100.7", logon_type: int = 2) -> EVENT:
+def logon_success(
+    minutes_ago: float,
+    user: str = "alice",
+    host: str = "workstation-42",
+    source_ip: str = "198.51.100.7",
+    logon_type: int = 2,
+) -> EVENT:
     return event(
         timestamp=dt(minutes_ago),
         host=host,
@@ -54,8 +65,12 @@ def logon_success(minutes_ago: float, user: str = "alice", host: str = "workstat
     )
 
 
-def file_modify(minutes_ago: float, host: str = "workstation-42", path: str = "C:\\data\\docs",
-                process: str = "chrome.exe") -> EVENT:
+def file_modify(
+    minutes_ago: float,
+    host: str = "workstation-42",
+    path: str = "C:\\data\\docs",
+    process: str = "chrome.exe",
+) -> EVENT:
     return event(
         timestamp=dt(minutes_ago),
         host=host,
@@ -72,7 +87,10 @@ def shadow_delete(minutes_ago: float, host: str = "workstation-42") -> EVENT:
         host=host,
         action="shadow_delete",
         event_type="file",
-        process={"name": "vssadmin.exe", "command_line": "vssadmin delete shadows /all /quiet"},
+        process={
+            "name": "vssadmin.exe",
+            "command_line": "vssadmin delete shadows /all /quiet",
+        },
         facts={"command_line": "vssadmin delete shadows /all /quiet"},
     )
 
@@ -87,7 +105,9 @@ def seed_events(db, events: list[EVENT]) -> None:
     raw = [e.to_dict() for e in events]
     stats = ingest(db, raw)
     assert stats["failed"] == 0, f"seeding failed: {stats}"
-    assert stats["ingested"] + stats["duplicates"] == len(events), f"seeding incomplete: {stats}"
+    assert stats["ingested"] + stats["duplicates"] == len(
+        events
+    ), f"seeding incomplete: {stats}"
 
 
 def row_to_event(row) -> EVENT:

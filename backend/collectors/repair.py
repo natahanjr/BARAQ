@@ -14,6 +14,7 @@ service control denied) is recorded in the step result and never aborts the
 remaining steps.  The sequence itself is purely data-driven, so tests can
 run it on any platform with the OS-specific steps stubbed.
 """
+
 from __future__ import annotations
 
 import logging
@@ -22,7 +23,7 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.config import DATA_QUALITY_REPAIR_COOLDOWN_MINUTES
 
@@ -49,38 +50,58 @@ def _run(cmd: list[str], timeout: int = 60) -> tuple[int, str]:
     if is_windows():
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
-        proc = subprocess.run(cmd, **kwargs)  # noqa: S603 - operator-triggered repair
+        proc = subprocess.run(cmd, **kwargs)
         return proc.returncode, (proc.stdout or "")[:300] + (proc.stderr or "")[:300]
     except FileNotFoundError:
         return -1, "command not found"
     except subprocess.TimeoutExpired:
         return -1, f"timed out after {timeout}s"
-    except Exception as exc:  # noqa: BLE001 - repair must never raise
+    except Exception as exc:
         return -1, str(exc)[:300]
 
 
 def clear_log(channel: str) -> dict:
     """Clear one Windows event log channel (``wevtutil cl``)."""
     if not is_windows():
-        return {"step": f"clear {channel}", "status": "skipped", "detail": "not a Windows host"}
+        return {
+            "step": f"clear {channel}",
+            "status": "skipped",
+            "detail": "not a Windows host",
+        }
     code, output = _run(["wevtutil", "cl", channel])
     if code == 0:
         logger.info("Event log %s cleared", channel)
         return {"step": f"clear {channel}", "status": "ok", "detail": "log cleared"}
-    return {"step": f"clear {channel}", "status": "failed", "detail": output or f"wevtutil exit {code}"}
+    return {
+        "step": f"clear {channel}",
+        "status": "failed",
+        "detail": output or f"wevtutil exit {code}",
+    }
 
 
 def restart_eventlog_service() -> dict:
     """Restart the Windows EventLog service (needs admin/service perms)."""
     if not is_windows():
-        return {"step": "restart EventLog service", "status": "skipped", "detail": "not a Windows host"}
+        return {
+            "step": "restart EventLog service",
+            "status": "skipped",
+            "detail": "not a Windows host",
+        }
     _, stop_out = _run(["sc", "stop", "EventLog"], timeout=90)
     code, start_out = _run(["sc", "start", "EventLog"], timeout=90)
     if code == 0:
         logger.info("EventLog service restarted")
-        return {"step": "restart EventLog service", "status": "ok", "detail": "service restarted"}
+        return {
+            "step": "restart EventLog service",
+            "status": "ok",
+            "detail": "service restarted",
+        }
     detail = (stop_out + " " + start_out).strip()[:300]
-    return {"step": "restart EventLog service", "status": "failed", "detail": detail or f"sc exit {code}"}
+    return {
+        "step": "restart EventLog service",
+        "status": "failed",
+        "detail": detail or f"sc exit {code}",
+    }
 
 
 def _retrain_model() -> dict:
@@ -89,9 +110,12 @@ def _retrain_model() -> dict:
         from backend.ml.tasks import train_in_background
 
         started = train_in_background(force=True)
-        return {"step": "retrain ML", "status": "ok" if started else "skipped",
-                "detail": "training started" if started else "training already running"}
-    except Exception as exc:  # noqa: BLE001
+        return {
+            "step": "retrain ML",
+            "status": "ok" if started else "skipped",
+            "detail": "training started" if started else "training already running",
+        }
+    except Exception as exc:
         return {"step": "retrain ML", "status": "failed", "detail": str(exc)[:300]}
 
 
@@ -100,15 +124,17 @@ def _notify_admin(reason: str, status: str, steps: list[dict]) -> None:
     try:
         from backend.notify import notify_alert
 
-        notify_alert({
-            "title": "BARAQ data-quality auto-repair",
-            "severity": "critical" if status == "critical" else "high",
-            "name": "BARAQ data-quality auto-repair",
-            "description": f"Repair sequence triggered ({reason}).",
-            "evidence": f"Steps: {steps}",
-            "host": os.environ.get("COMPUTERNAME", ""),
-        })
-    except Exception:  # noqa: BLE001 - notification must never break repair
+        notify_alert(
+            {
+                "title": "BARAQ data-quality auto-repair",
+                "severity": "critical" if status == "critical" else "high",
+                "name": "BARAQ data-quality auto-repair",
+                "description": f"Repair sequence triggered ({reason}).",
+                "evidence": f"Steps: {steps}",
+                "host": os.environ.get("COMPUTERNAME", ""),
+            }
+        )
+    except Exception:
         logger.debug("Repair notification failed", exc_info=True)
 
 
@@ -116,7 +142,9 @@ def repair_due() -> bool:
     """True when a repair may run (cooldown elapsed)."""
     global _last_repair_ts
     with _last_repair_lock:
-        return (time.time() - _last_repair_ts) >= DATA_QUALITY_REPAIR_COOLDOWN_MINUTES * 60
+        return (
+            time.time() - _last_repair_ts
+        ) >= DATA_QUALITY_REPAIR_COOLDOWN_MINUTES * 60
 
 
 def _mark_repaired() -> None:
@@ -125,16 +153,24 @@ def _mark_repaired() -> None:
         _last_repair_ts = time.time()
 
 
-def run_repair(db, reason: str, clear_logs: bool = True,
-               restart_service: bool = True, retrain: bool = True) -> dict:
+def run_repair(
+    db,
+    reason: str,
+    clear_logs: bool = True,
+    restart_service: bool = True,
+    retrain: bool = True,
+) -> dict:
     """Run the full repair sequence; returns per-step results.
 
     Safe on any platform: the OS-specific steps report "skipped" outside
     Windows and "failed" on privilege errors without aborting the sequence.
     """
     if not repair_due():
-        return {"triggered": False, "reason": reason,
-                "detail": "repair cooldown active (last repair within cooldown window)"}
+        return {
+            "triggered": False,
+            "reason": reason,
+            "detail": "repair cooldown active (last repair within cooldown window)",
+        }
 
     steps: list[dict] = []
     if clear_logs:
@@ -158,11 +194,15 @@ def run_repair(db, reason: str, clear_logs: bool = True,
         from backend.audit import log_action
 
         log_action(
-            db, "system", "data_quality.repair", "system", "data-quality",
+            db,
+            "system",
+            "data_quality.repair",
+            "system",
+            "data-quality",
             f"{reason} | steps: {len(steps)}, failures: {len(failures)}",
             "127.0.0.1",
         )
-    except Exception:  # noqa: BLE001 - audit must never break repair
+    except Exception:
         logger.debug("Repair audit entry failed", exc_info=True)
 
     _notify_admin(reason, "critical" if failures else "ok", steps)
@@ -172,5 +212,5 @@ def run_repair(db, reason: str, clear_logs: bool = True,
         "reason": reason,
         "success": success,
         "steps": steps,
-        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": datetime.now(UTC).isoformat(),
     }

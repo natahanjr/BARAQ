@@ -11,14 +11,14 @@ Windows collectors so the central pipeline can normalise them:
 Diffs are stateful: each collector remembers what it already shipped so the
 server receives deltas, not full snapshots, every cycle.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import re
 import subprocess
-import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger("baraq.agent.linux")
 
@@ -51,13 +51,13 @@ def _run(cmd: list[str], timeout: int = 15) -> str:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _read_state(name: str) -> set[str]:
     try:
         with open(os.path.join(STATE_DIR, name), encoding="utf-8") as fh:
-            return set(line.strip() for line in fh if line.strip())
+            return {line.strip() for line in fh if line.strip()}
     except OSError:
         return set()
 
@@ -106,33 +106,37 @@ def collect_auth() -> list[dict]:
     for line in _tail_authlog(path):
         m = _FAILED_SSH.search(line)
         if m:
-            records.append({
-                "source": "linux-auth",
-                "event_id": 4625,
-                "timestamp": _now_iso(),
-                "category": "login",
-                "action": "logon_failure",
-                "message": f"Failed SSH login for {m.group('user')} from {m.group('ip')}",
-                "severity": 4,
-                "user": {"name": m.group("user")},
-                "network": {"source_ip": m.group("ip")},
-                "logon": {"type": 3, "sub_status": "0xC000006A"},
-            })
+            records.append(
+                {
+                    "source": "linux-auth",
+                    "event_id": 4625,
+                    "timestamp": _now_iso(),
+                    "category": "login",
+                    "action": "logon_failure",
+                    "message": f"Failed SSH login for {m.group('user')} from {m.group('ip')}",
+                    "severity": 4,
+                    "user": {"name": m.group("user")},
+                    "network": {"source_ip": m.group("ip")},
+                    "logon": {"type": 3, "sub_status": "0xC000006A"},
+                }
+            )
             continue
         m = _ACCEPTED_SSH.search(line)
         if m:
-            records.append({
-                "source": "linux-auth",
-                "event_id": 4624,
-                "timestamp": _now_iso(),
-                "category": "login",
-                "action": "logon_success",
-                "message": f"Accepted SSH login for {m.group('user')} from {m.group('ip')}",
-                "severity": 1,
-                "user": {"name": m.group("user")},
-                "network": {"source_ip": m.group("ip")},
-                "logon": {"type": 3},
-            })
+            records.append(
+                {
+                    "source": "linux-auth",
+                    "event_id": 4624,
+                    "timestamp": _now_iso(),
+                    "category": "login",
+                    "action": "logon_success",
+                    "message": f"Accepted SSH login for {m.group('user')} from {m.group('ip')}",
+                    "severity": 1,
+                    "user": {"name": m.group("user")},
+                    "network": {"source_ip": m.group("ip")},
+                    "logon": {"type": 3},
+                }
+            )
     return records
 
 
@@ -163,20 +167,24 @@ def collect_connections() -> list[dict]:
         if key in seen:
             continue
         seen.add(key)
-        records.append({
-            "source": "linux-conn",
-            "event_id": 3,
-            "timestamp": now,
-            "category": "network",
-            "action": "connect",
-            "message": f"Connection {lhost}:{lport} -> {rhost}:{rport}",
-            "severity": 2,
-            "network": {
-                "local_ip": lhost, "local_port": lport,
-                "remote_ip": rhost, "remote_port": rport,
-            },
-            "process": {"name": proc},
-        })
+        records.append(
+            {
+                "source": "linux-conn",
+                "event_id": 3,
+                "timestamp": now,
+                "category": "network",
+                "action": "connect",
+                "message": f"Connection {lhost}:{lport} -> {rhost}:{rport}",
+                "severity": 2,
+                "network": {
+                    "local_ip": lhost,
+                    "local_port": lport,
+                    "remote_ip": rhost,
+                    "remote_port": rport,
+                },
+                "process": {"name": proc},
+            }
+        )
     return records
 
 
@@ -199,19 +207,23 @@ def collect_processes() -> list[dict]:
         key = f"{pid}::{comm}"
         current.add(key)
         if key not in state:
-            records.append({
-                "source": "linux-proc",
-                "event_id": 4688,
-                "timestamp": now,
-                "category": "process",
-                "action": "process_launch",
-                "message": f"New process {comm} (pid {pid})",
-                "severity": 2,
-                "process": {
-                    "name": comm, "pid": int(pid), "parent_pid": int(ppid),
-                    "command_line": args,
-                },
-            })
+            records.append(
+                {
+                    "source": "linux-proc",
+                    "event_id": 4688,
+                    "timestamp": now,
+                    "category": "process",
+                    "action": "process_launch",
+                    "message": f"New process {comm} (pid {pid})",
+                    "severity": 2,
+                    "process": {
+                        "name": comm,
+                        "pid": int(pid),
+                        "parent_pid": int(ppid),
+                        "command_line": args,
+                    },
+                }
+            )
     if not state:
         # First run: prime the baseline silently so the server receives
         # only genuine new processes, not the entire process table.
@@ -226,6 +238,6 @@ def collect() -> list[dict]:
     for fn in (collect_auth, collect_connections, collect_processes):
         try:
             records.extend(fn())
-        except Exception as exc:  # noqa: BLE001 - one collector must not kill the agent
+        except Exception as exc:
             logger.warning("Linux collector %s failed: %s", fn.__name__, exc)
     return records

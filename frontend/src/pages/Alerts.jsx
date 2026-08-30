@@ -5,6 +5,7 @@ import SeverityBadge from "../components/SeverityBadge.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import RiskBadge from "../components/RiskBadge.jsx";
 import { Loading, EmptyState, ErrorBanner } from "../components/Feedback.jsx";
+import { ConfirmDialog, ContextMenu } from "../components/ui/index.js";
 
 const PAGE_SIZE = 25;
 
@@ -14,7 +15,7 @@ function OrgChip({ org }) {
   if (!org) return null;
   return (
     <span
-      className="max-w-[120px] truncate rounded-md px-2.5 py-1 font-mono text-[10px] font-semibold tracking-wide"
+      className="max-w-[120px] truncate rounded-md px-2.5 py-1 font-mono text-[11px] font-semibold tracking-wide"
       style={{ background: "var(--accent-violet)", color: "var(--fg-primary)", opacity: 0.7 }}
       title={`Organization: ${org}`}
     >
@@ -31,7 +32,20 @@ function AlertRow({ alert, selected, onToggle, onFix, onQuickStatus }) {
     return new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   };
 
+  const contextItems = [
+    { label: "Investigate", icon: "🔍", onClick: () => onQuickStatus(alert.id, "in_progress") },
+    { label: "Contain", icon: "🛡️", onClick: () => onQuickStatus(alert.id, "contained") },
+    { separator: true },
+    { label: "View details", icon: "📋", onClick: () => window.location.href = `/alerts/${alert.id}` },
+    { separator: true },
+    ...(isAdmin() && alert.status !== "closed" ? [
+      { label: "Fix alert", icon: "✅", onClick: () => onFix(alert.id) },
+    ] : []),
+    { label: "Close alert", icon: "✕", onClick: () => onQuickStatus(alert.id, "closed"), danger: true },
+  ];
+
   return (
+    <ContextMenu items={contextItems}>
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -83,20 +97,20 @@ function AlertRow({ alert, selected, onToggle, onFix, onQuickStatus }) {
               <StatusBadge status={alert.status} />
               <RiskBadge level={alert.risk_level} score={alert.risk_score} />
               {alert.host && (
-                <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] font-medium text-[var(--fg-secondary)] ring-1 ring-[var(--border-subtle)]">
+                <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[11px] font-medium text-[var(--fg-secondary)] ring-1 ring-[var(--border-subtle)]">
                   {alert.host}
                 </span>
               )}
               {isAdmin() && <OrgChip org={alert.org} />}
               {alert.mitre_id && (
-                <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] font-medium text-[var(--fg-secondary)] ring-1 ring-[var(--border-subtle)]">
+                <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[11px] font-medium text-[var(--fg-secondary)] ring-1 ring-[var(--border-subtle)]">
                   {alert.mitre_id}
                 </span>
               )}
               {(alert.intel_hits || 0) > 0 && (
                 <span
                   title="Known-bad indicator(s) flagged at detection time"
-                  className="inline-flex items-center gap-1 rounded-md border border-[var(--severity-critical)]/25 bg-[var(--severity-critical)]/[0.08] px-2.5 py-1 text-[10px] font-semibold text-[var(--severity-critical)]"
+                  className="inline-flex items-center gap-1 rounded-md border border-[var(--severity-critical)]/25 bg-[var(--severity-critical)]/[0.08] px-2.5 py-1 text-[11px] font-semibold text-[var(--severity-critical)]"
                 >
                   <span className="text-[11px]">&#9889;</span>
                   {alert.intel_hits} intel hit{alert.intel_hits > 1 ? "s" : ""}
@@ -111,7 +125,7 @@ function AlertRow({ alert, selected, onToggle, onFix, onQuickStatus }) {
             </span>
             <div className="mt-2 space-y-1">
               {alert.first_seen && (
-                <p className="text-[10px] text-[var(--fg-muted)]" title="First seen">
+                <p className="text-[11px] text-[var(--fg-muted)]" title="First seen">
                   {formatTime(alert.first_seen)}
                 </p>
               )}
@@ -129,7 +143,7 @@ function AlertRow({ alert, selected, onToggle, onFix, onQuickStatus }) {
           onChange={(e) => onQuickStatus(alert.id, e.target.value)}
           title="Quick triage status"
           aria-label={`Quick status for alert ${alert.id}`}
-          className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3 py-2 text-[11px] font-medium text-[var(--fg-secondary)] transition-all focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
+          className="form-select rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] px-3 py-2 text-[11px] font-medium text-[var(--fg-secondary)] transition-all duration-[var(--duration-normal)] focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
         >
           {STATUSES.map((s) => (
             <option key={s} value={s}>
@@ -142,13 +156,14 @@ function AlertRow({ alert, selected, onToggle, onFix, onQuickStatus }) {
             type="button"
             title="Fix alert and restore security score"
             onClick={() => onFix(alert.id)}
-            className="rounded-lg border border-[var(--status-healthy)]/25 bg-[var(--status-healthy)]/[0.08] px-3.5 py-2 text-[11px] font-semibold text-[var(--status-healthy)] transition-all hover:border-[var(--status-healthy)]/40 hover:bg-[var(--status-healthy)]/15"
+            className="rounded-xl border border-[var(--status-healthy)]/25 bg-[var(--status-healthy)]/[0.08] px-3.5 py-2 text-[11px] font-semibold text-[var(--status-healthy)] transition-all hover:border-[var(--status-healthy)]/40 hover:bg-[var(--status-healthy)]/15"
           >
             Fix
           </button>
         )}
       </div>
     </div>
+    </ContextMenu>
   );
 }
 
@@ -170,6 +185,16 @@ export default function Alerts() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [clusters, setClusters] = useState(null);
   const [activeCluster, setActiveCluster] = useState(null);
+
+  // Confirm dialog state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState({ title: "", message: "", onConfirm: () => {}, variant: "danger" });
+  const [confirmBusy, setConfirmBusy] = useState(false);
+
+  const showConfirm = (title, message, onConfirm, variant = "danger") => {
+    setConfirmConfig({ title, message, onConfirm, variant });
+    setConfirmOpen(true);
+  };
 
   useEffect(() => {
     api.clusters().then(setClusters).catch(() => setClusters(null));
@@ -260,11 +285,9 @@ export default function Alerts() {
     }
   };
 
-  const bulkStatus = async (status) => {
+  const doBulkStatus = async (status) => {
     if (selected.size === 0) return;
-    const label = status === "in_progress" ? "investigating" : status;
-    if (status === "closed" && !window.confirm(`Close ${selected.size} selected alert(s)?`)) return;
-    setBulkBusy(true);
+    setConfirmBusy(true);
     setError("");
     try {
       const results = await Promise.allSettled(
@@ -273,35 +296,59 @@ export default function Alerts() {
       const failed = results.filter((r) => r.status === "rejected").length;
       if (failed > 0) setError(`${failed} alert(s) failed to update`);
       setSelected(new Set());
+      setConfirmOpen(false);
       load();
     } catch (e) {
       setError(e.message);
     } finally {
-      setBulkBusy(false);
+      setConfirmBusy(false);
     }
   };
 
-  const bulkFix = async () => {
+  const bulkStatus = (status) => {
     if (selected.size === 0) return;
-    if (!window.confirm(`Fix ${selected.size} selected alert(s)?`)) return;
-    setBulkBusy(true);
+    const label = status === "in_progress" ? "investigating" : status;
+    if (status === "closed") {
+      showConfirm(
+        `Close ${selected.size} alert(s)?`,
+        `This will change ${selected.size} alert(s) to closed status. You can reopen them later if needed.`,
+        () => doBulkStatus(status),
+        "warning"
+      );
+    } else {
+      doBulkStatus(status);
+    }
+  };
+
+  const doBulkFix = async () => {
+    if (selected.size === 0) return;
+    setConfirmBusy(true);
     setError("");
     try {
       const results = await Promise.allSettled([...selected].map((id) => api.fixAlert(id)));
       const failed = results.filter((r) => r.status === "rejected").length;
       if (failed > 0) setError(`${failed} alert(s) failed to fix`);
       setSelected(new Set());
+      setConfirmOpen(false);
       load();
     } catch (e) {
       setError(e.message);
     } finally {
-      setBulkBusy(false);
+      setConfirmBusy(false);
     }
   };
 
-  const clearAll = async () => {
-    if (!data || data.total === 0) return;
-    if (!window.confirm("Clear all open alerts? A forced security report will be generated first.")) return;
+  const bulkFix = () => {
+    if (selected.size === 0) return;
+    showConfirm(
+      `Fix ${selected.size} alert(s)?`,
+      `This will mark ${selected.size} alert(s) as resolved and restore your security score.`,
+      doBulkFix,
+      "primary"
+    );
+  };
+
+  const doClearAll = async () => {
     setClearing(true);
     setError("");
     setClearResult(null);
@@ -311,6 +358,7 @@ export default function Alerts() {
       setStatus("");
       setSeverity("");
       setPage(1);
+      setConfirmOpen(false);
       load();
     } catch (e) {
       setError(e.message);
@@ -319,17 +367,27 @@ export default function Alerts() {
     }
   };
 
+  const clearAll = () => {
+    if (!data || data.total === 0) return;
+    showConfirm(
+      "Clear all open alerts?",
+      "A forced security report will be generated first. This will close all open alerts and create an incident report.",
+      doClearAll,
+      "warning"
+    );
+  };
+
   return (
     <div className="space-y-6 pb-16">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">Security Operations</p>
-          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">Alerts</h1>
+          <h1 className="mt-1 text-page-title text-[var(--fg-primary)]">Alerts</h1>
           <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">All detected threats and security events</p>
         </div>
         <div className="flex items-center gap-3">
           {data && (
-            <div className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 transition-all duration-300 hover:border-[var(--border-strong)] hover:shadow-lg">
+            <div className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-300 p-5 hover:border-[var(--border-strong)] hover:shadow-lg">
               <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-40" style={{ background: "var(--accent-cyan)" }} />
               <div className="relative flex items-start justify-between">
                 <div>
@@ -362,7 +420,7 @@ export default function Alerts() {
       </header>
 
       {clearResult && (
-        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-5">
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-5">
           <div className="flex items-start gap-3">
             <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--status-healthy)]/15 text-xs text-[var(--status-healthy)]">
               &#10003;
@@ -374,7 +432,7 @@ export default function Alerts() {
                   href={`/reports/${clearResult.report.file_path.split(/[\\/]/).pop()}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-1.5 inline-flex items-center gap-1 text-[13px] font-medium text-[var(--accent-cyan)] transition-colors hover:text-[var(--accent-cyan)]/80"
+                  className="mt-1.5 inline-flex items-center gap-1 text-[13px] font-medium text-[var(--accent-cyan)] transition-all hover:text-[var(--accent-cyan)]/80"
                 >
                   View incident report ({clearResult.report.title}, {clearResult.report.format})
                   <span className="text-[11px]">&rarr;</span>
@@ -399,7 +457,7 @@ export default function Alerts() {
               type="button"
               onClick={() => bulkStatus("in_progress")}
               disabled={bulkBusy}
-              className="rounded-lg border border-[var(--severity-medium)]/25 bg-[var(--severity-medium)]/[0.06] px-3.5 py-1.5 text-[11px] font-semibold text-[var(--severity-medium)] transition-all hover:bg-[var(--severity-medium)]/12 disabled:opacity-40"
+              className="rounded-xl border border-[var(--severity-medium)]/25 bg-[var(--severity-medium)]/[0.06] px-3.5 py-1.5 text-[11px] font-semibold text-[var(--severity-medium)] transition-all hover:bg-[var(--severity-medium)]/12 disabled:opacity-40"
             >
               Investigating
             </button>
@@ -407,7 +465,7 @@ export default function Alerts() {
               type="button"
               onClick={() => bulkStatus("contained")}
               disabled={bulkBusy}
-              className="rounded-lg border border-[var(--accent-violet)]/25 bg-[var(--accent-violet)]/[0.06] px-3.5 py-1.5 text-[11px] font-semibold text-[var(--accent-violet)] transition-all hover:bg-[var(--accent-violet)]/12 disabled:opacity-40"
+              className="rounded-xl border border-[var(--accent-violet)]/25 bg-[var(--accent-violet)]/[0.06] px-3.5 py-1.5 text-[11px] font-semibold text-[var(--accent-violet)] transition-all hover:bg-[var(--accent-violet)]/12 disabled:opacity-40"
             >
               Contained
             </button>
@@ -415,7 +473,7 @@ export default function Alerts() {
               type="button"
               onClick={() => bulkStatus("closed")}
               disabled={bulkBusy}
-              className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-1.5 text-[11px] font-semibold text-[var(--fg-secondary)] transition-all hover:bg-[var(--bg-surface)] disabled:opacity-40"
+              className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-1.5 text-[11px] font-semibold text-[var(--fg-secondary)] hover:bg-[var(--bg-surface)] disabled:opacity-40"
             >
               Close
             </button>
@@ -424,7 +482,7 @@ export default function Alerts() {
                 type="button"
                 onClick={bulkFix}
                 disabled={bulkBusy}
-                className="rounded-lg border border-[var(--status-healthy)]/25 bg-[var(--status-healthy)]/[0.06] px-3.5 py-1.5 text-[11px] font-semibold text-[var(--status-healthy)] transition-all hover:bg-[var(--status-healthy)]/12 disabled:opacity-40"
+                className="rounded-xl border border-[var(--status-healthy)]/25 bg-[var(--status-healthy)]/[0.06] px-3.5 py-1.5 text-[11px] font-semibold text-[var(--status-healthy)] transition-all hover:bg-[var(--status-healthy)]/12 disabled:opacity-40"
               >
                 Fix all
               </button>
@@ -433,7 +491,7 @@ export default function Alerts() {
               type="button"
               onClick={() => setSelected(new Set())}
               disabled={bulkBusy}
-              className="ml-auto rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] transition-all hover:bg-[var(--bg-surface)] disabled:opacity-40"
+              className="ml-auto rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-1.5 text-[11px] font-medium text-[var(--fg-muted)] hover:bg-[var(--bg-surface)] disabled:opacity-40"
             >
               Clear selection
             </button>
@@ -441,7 +499,7 @@ export default function Alerts() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-4">
+      <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-4">
         <span className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">
           Filter
         </span>
@@ -452,7 +510,7 @@ export default function Alerts() {
             setStatus(e.target.value);
             setPage(1);
           }}
-          className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2 text-[12px] font-medium text-[var(--fg-secondary)] transition-all focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
+          className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-2 text-[12px] font-medium text-[var(--fg-secondary)] focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
           aria-label="Filter by status"
         >
           <option value="">All Statuses</option>
@@ -468,7 +526,7 @@ export default function Alerts() {
             setSeverity(e.target.value);
             setPage(1);
           }}
-          className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2 text-[12px] font-medium text-[var(--fg-secondary)] transition-all focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
+          className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-2 text-[12px] font-medium text-[var(--fg-secondary)] focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
           aria-label="Filter by severity"
         >
           <option value="">All Severities</option>
@@ -484,7 +542,7 @@ export default function Alerts() {
           <button
             type="button"
             onClick={reset}
-            className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2 text-[12px] font-medium text-[var(--fg-muted)] transition-all hover:bg-[var(--bg-surface)] hover:text-[var(--fg-secondary)]"
+            className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-2 text-[12px] font-medium text-[var(--fg-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--fg-secondary)]"
           >
             Reset
           </button>
@@ -494,7 +552,7 @@ export default function Alerts() {
         <select
           value={sortBy}
           onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
-          className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2 text-[12px] font-medium text-[var(--fg-secondary)] transition-all focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
+          className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-2 text-[12px] font-medium text-[var(--fg-secondary)] focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
           aria-label="Sort alerts by"
         >
           <option value="created_at">Last Seen</option>
@@ -506,7 +564,7 @@ export default function Alerts() {
         <button
           type="button"
           onClick={() => setSortDir((d) => d === "desc" ? "asc" : "desc")}
-          className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-inset)] px-2.5 py-2 text-[12px] font-medium text-[var(--fg-muted)] transition-all hover:bg-[var(--bg-surface)] hover:text-[var(--fg-secondary)]"
+          className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-2.5 py-2 text-[12px] font-medium text-[var(--fg-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--fg-secondary)]"
           aria-label={`Sort ${sortDir === "desc" ? "ascending" : "descending"}`}
         >
           {sortDir === "desc" ? "↓" : "↑"}
@@ -520,7 +578,7 @@ export default function Alerts() {
       </div>
 
       {clusters && clusters.cluster_count > 1 && (
-        <div className="mb-4 rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-4">
+        <div className="mb-4 rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-4">
           <div className="mb-2.5 flex items-baseline justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">
               Behaviour clusters — {clusters.cluster_count} patterns covering{" "}
@@ -570,7 +628,7 @@ export default function Alerts() {
       {!data && !error && <Loading label="Loading alerts" />}
 
       {data && data.items.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-8 py-20 text-center">
+        <div className="flex flex-col items-center justify-center rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 px-8 py-20 text-center">
           <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-[var(--radius-xl)] bg-[var(--accent-cyan)]/10 ring-1 ring-[var(--border-subtle)]">
             <svg className="h-8 w-8 text-[var(--accent-cyan)]/60" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
@@ -643,7 +701,7 @@ export default function Alerts() {
             type="button"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] px-4 py-2 text-[12px] font-medium text-[var(--fg-secondary)] transition-all hover:bg-[var(--bg-surface)] disabled:opacity-40"
+            className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-4 py-2 text-[12px] font-medium text-[var(--fg-secondary)] hover:bg-[var(--bg-surface)] disabled:opacity-40"
           >
             Prev
           </button>
@@ -654,12 +712,23 @@ export default function Alerts() {
             type="button"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] px-4 py-2 text-[12px] font-medium text-[var(--fg-secondary)] transition-all hover:bg-[var(--bg-surface)] disabled:opacity-40"
+            className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-4 py-2 text-[12px] font-medium text-[var(--fg-secondary)] hover:bg-[var(--bg-surface)] disabled:opacity-40"
           >
             Next
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => { setConfirmOpen(false); setConfirmBusy(false); }}
+        onConfirm={confirmConfig.onConfirm}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        confirmLabel={confirmConfig.variant === "warning" ? "Proceed" : confirmConfig.variant === "primary" ? "Fix all" : "Confirm"}
+        variant={confirmConfig.variant}
+        loading={confirmBusy}
+      />
     </div>
   );
 }

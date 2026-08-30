@@ -1,39 +1,35 @@
-const SEVERITY_STYLES = {
+const SEVERITY = {
   critical: {
-    chip: "border-red-500/25 bg-red-500/[0.08] text-red-300",
-    dot: "bg-red-400 shadow-[0_0_6px_rgba(255,107,147,0.6)]",
+    chip: "border-[var(--severity-critical-border)] bg-[var(--severity-critical-muted)] text-[var(--severity-critical)]",
+    glyph: "■",
   },
   high: {
-    chip: "border-orange-500/25 bg-orange-500/[0.08] text-orange-300",
-    dot: "bg-orange-400 shadow-[0_0_5px_rgba(251,146,60,0.5)]",
+    chip: "border-[var(--severity-high-border)] bg-[var(--severity-high-muted)] text-[var(--severity-high)]",
+    glyph: "▲",
   },
   medium: {
-    chip: "border-blue-400/20 bg-blue-400/[0.06] text-blue-300",
-    dot: "bg-blue-400",
+    chip: "border-[var(--severity-medium-border)] bg-[var(--severity-medium-muted)] text-[var(--severity-medium)]",
+    glyph: "●",
   },
   low: {
-    chip: "border-slate-400/15 bg-slate-400/[0.05] text-slate-300",
-    dot: "bg-slate-400",
+    chip: "border-[var(--severity-low-border)] bg-[var(--severity-low-muted)] text-[var(--severity-low)]",
+    glyph: "○",
   },
   info: {
-    chip: "border-slate-400/15 bg-slate-400/[0.04] text-slate-400",
-    dot: "bg-slate-500",
+    chip: "border-[var(--border-default)] bg-[var(--bg-surface-hover)] text-[var(--fg-secondary)]",
+    glyph: "–",
   },
 };
 
 export default function SeverityBadge({ severity = "info", className = "" }) {
   const s = String(severity).toLowerCase();
-  const style = SEVERITY_STYLES[s] || SEVERITY_STYLES.info;
+  const style = SEVERITY[s] || SEVERITY.info;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-[3px] text-[10px] font-semibold tracking-wide uppercase ${style.chip} ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-[3px] text-[11px] font-semibold tracking-wide uppercase ${style.chip} ${className}`}
       title={s.toUpperCase()}
     >
-      <span
-        className={`h-[5px] w-[5px] rounded-full ${style.dot} ${
-          s === "critical" ? "badge-critical" : ""
-        }`}
-      />
+      <span aria-hidden="true" className="text-[9px] leading-none">{style.glyph}</span>
       {s}
     </span>
   );

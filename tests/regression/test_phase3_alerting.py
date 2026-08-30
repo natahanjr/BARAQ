@@ -4,15 +4,16 @@ ALERT-001..ALERT-012 replay the exact noisy scenarios that caused the
 original v1 alert flooding, through the v2 pipeline: detection -> alert
 management -> analyst-facing alert.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
 
 import pytest
-from backend.alerting.engine import process_detection
-from backend.alerting.models import AlertFeedback
 from sqlalchemy import select
 
+from backend.alerting.engine import process_detection
+from backend.alerting.models import AlertFeedback
 from tests.alerting.helpers import T0, detection, stored_alerts, stored_audit, v1_counts
 
 
@@ -99,7 +100,9 @@ def test_alert_008_suppressed_known_benign_no_visible_alert(db):
 
 
 def test_alert_009_critical_detection_critical_alert(db):
-    alert = process_detection(db, detection(severity="critical", confidence=0.99), now=T0)
+    alert = process_detection(
+        db, detection(severity="critical", confidence=0.99), now=T0
+    )
     assert alert.severity == "critical"
     assert alert.status == "OPEN"
 
@@ -108,9 +111,13 @@ def test_alert_010_feedback_recorded(db):
     alert = process_detection(db, detection(), now=T0)
     from backend.alerting.feedback import submit
 
-    submit(db, alert.alert_id, "FALSE_POSITIVE", analyst="analyst@example", comment="scan")
+    submit(
+        db, alert.alert_id, "FALSE_POSITIVE", analyst="analyst@example", comment="scan"
+    )
     db.commit()
-    rows = db.scalars(select(AlertFeedback).where(AlertFeedback.alert_id == alert.alert_id)).all()
+    rows = db.scalars(
+        select(AlertFeedback).where(AlertFeedback.alert_id == alert.alert_id)
+    ).all()
     assert len(rows) == 1
     assert rows[0].feedback_type == "FALSE_POSITIVE"
     assert rows[0].analyst_id == "analyst@example"
@@ -123,8 +130,14 @@ def test_alert_011_acknowledgement_audit_event(db):
     alert.status = "ACKNOWLEDGED"
     alert.acknowledged_at = T0 + timedelta(minutes=1)
     alert.acknowledged_by = "analyst@example"
-    audit.record(db, alert.alert_id, "ACKNOWLEDGED", "OPEN", "ACKNOWLEDGED",
-                 actor="analyst@example")
+    audit.record(
+        db,
+        alert.alert_id,
+        "ACKNOWLEDGED",
+        "OPEN",
+        "ACKNOWLEDGED",
+        actor="analyst@example",
+    )
     db.commit()
     events = stored_audit(db)
     assert [e.action for e in events] == ["CREATED", "ACKNOWLEDGED"]
@@ -147,8 +160,11 @@ def test_phase3_success_criteria_no_flood(db):
         db,
         [
             detection(
-                detector_id="D002", mitre="T1110", severity="medium",
-                confidence=0.65, minutes_ago=i * 0.3,
+                detector_id="D002",
+                mitre="T1110",
+                severity="medium",
+                confidence=0.65,
+                minutes_ago=i * 0.3,
             )
             for i in range(18)
         ],

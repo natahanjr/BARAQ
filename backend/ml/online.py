@@ -18,14 +18,14 @@ Improvements over v1:
 5. **Reservoir sampling**: replaces FIFO with statistically representative
    sampling that maintains distribution across time.
 """
+
 from __future__ import annotations
 
 import logging
 import math
 import random
 from collections import deque
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 
@@ -33,12 +33,14 @@ logger = logging.getLogger("baraq.ml.online")
 
 try:
     from sklearn.ensemble import IsolationForest, RandomForestClassifier
+
     HAS_SKLEARN = True
 except ImportError:  # pragma: no cover
     HAS_SKLEARN = False
 
 try:
     from xgboost import XGBClassifier
+
     HAS_XGBOOST = True
 except ImportError:  # pragma: no cover
     HAS_XGBOOST = False
@@ -59,7 +61,9 @@ class ADWINDriftDetector:
     variance-based cut detection.
     """
 
-    def __init__(self, delta: float = 0.002, min_window: int = 30, max_window: int = 500):
+    def __init__(
+        self, delta: float = 0.002, min_window: int = 30, max_window: int = 500
+    ):
         """
         Args:
             delta: confidence bound for change detection (smaller = less sensitive)
@@ -91,7 +95,7 @@ class ADWINDriftDetector:
         # Check for drift by splitting window at every point and comparing halves
         w = list(self._window)
         n = len(w)
-        mean_total = sum(w) / n
+        sum(w) / n
 
         # Find the best cut point (maximum variance reduction)
         best_cut = -1
@@ -118,7 +122,8 @@ class ADWINDriftDetector:
         n_right = n - best_cut
         epsilon = math.sqrt(
             (1.0 / (2.0 * n_left) + 1.0 / (2.0 * n_right))
-            * 2.0 * math.log(2.0 / self.delta)
+            * 2.0
+            * math.log(2.0 / self.delta)
         )
 
         mean_left = sum(w[:best_cut]) / n_left
@@ -183,7 +188,7 @@ class ReservoirBuffer:
         timestamp: datetime | None = None,
     ) -> None:
         """Add a feature vector with importance weight."""
-        ts = timestamp or datetime.now(timezone.utc)
+        ts = timestamp or datetime.now(UTC)
         feat = np.array(features, dtype=float)
         lab = label if label is not None else -1
         self._n_seen += 1
@@ -232,7 +237,11 @@ class ReservoirBuffer:
         labels = self.get_labels()
         weights = self.get_weights()
         if len(features) == 0:
-            return np.empty((0, 0)), np.empty((0,), dtype=int), np.empty((0,), dtype=float)
+            return (
+                np.empty((0, 0)),
+                np.empty((0,), dtype=int),
+                np.empty((0,), dtype=float),
+            )
         labeled_mask = labels >= 0
         return features[labeled_mask], labels[labeled_mask], weights[labeled_mask]
 
@@ -282,11 +291,12 @@ class ActiveLearner:
 
         try:
             from backend.ml.anomaly import MLAnomalyDetector
+
             proba = MLAnomalyDetector.supervised_proba(None, features, model)
             # Margin sampling: events near 0.5 are most uncertain
             uncertainty = 1.0 - abs(proba - 0.5) * 2.0
             return max(0.0, min(1.0, uncertainty))
-        except Exception:  # noqa: BLE001
+        except Exception:
             return 0.5
 
     def suggest_for_labeling(
@@ -304,16 +314,18 @@ class ActiveLearner:
         for i, (features, behavior) in enumerate(zip(features_list, behaviors)):
             model = models.get(behavior)
             uncertainty = self.score_uncertainty(features, model, behavior)
-            candidates.append({
-                "index": i,
-                "behavior": behavior,
-                "uncertainty": round(uncertainty, 4),
-                "features": features,
-            })
+            candidates.append(
+                {
+                    "index": i,
+                    "behavior": behavior,
+                    "uncertainty": round(uncertainty, 4),
+                    "features": features,
+                }
+            )
 
         # Sort by uncertainty (highest first)
         candidates.sort(key=lambda x: x["uncertainty"], reverse=True)
-        return candidates[:self.top_k]
+        return candidates[: self.top_k]
 
 
 # ---------------------------------------------------------------------------
@@ -356,7 +368,8 @@ class OnlineLearner:
 
         # Improvement 2: ADWIN drift detection
         self.drift_detectors: dict[str, ADWINDriftDetector] = {
-            s: ADWINDriftDetector(delta=adwin_delta) for s in ["login", "process", "network"]
+            s: ADWINDriftDetector(delta=adwin_delta)
+            for s in ["login", "process", "network"]
         }
 
         # Improvement 3: Model versioning
@@ -384,7 +397,7 @@ class OnlineLearner:
         if self.detector.is_ready:
             try:
                 score = self.detector.score_event(features)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
         # Track prequential scores
@@ -397,12 +410,17 @@ class OnlineLearner:
         # Improvement 2: ADWIN drift detection on prequential error
         # Error = 1 if we're confident and wrong (simplified: high score + labeled benign)
         if label is not None:
-            error = 1.0 if (score > 0.7 and label == 0) or (score < 0.3 and label == 1) else 0.0
+            error = (
+                1.0
+                if (score > 0.7 and label == 0) or (score < 0.3 and label == 1)
+                else 0.0
+            )
             drift_detected = self.drift_detectors[stream].update(error)
             if drift_detected:
                 logger.warning(
                     "ADWIN drift detected in %s stream (error_rate=%.3f), triggering retrain",
-                    stream, self.drift_detectors[stream].current_error_rate,
+                    stream,
+                    self.drift_detectors[stream].current_error_rate,
                 )
 
         # Improvement 1: Add to importance-weighted buffer
@@ -414,7 +432,9 @@ class OnlineLearner:
 
         return score
 
-    def record_verdict(self, stream: str, features: list[float], is_attack: bool) -> None:
+    def record_verdict(
+        self, stream: str, features: list[float], is_attack: bool
+    ) -> None:
         """Record an analyst verdict with high importance weight."""
         label = 1 if is_attack else 0
         self.buffers[stream].add(features, label, weight=self.analyst_weight)
@@ -426,13 +446,13 @@ class OnlineLearner:
             return False
 
         # Improvement 2: ADWIN drift triggers immediate update
-        for stream, dd in self.drift_detectors.items():
+        for dd in self.drift_detectors.values():
             if dd.window_size >= dd.min_window and dd.current_error_rate > 0.3:
                 return True
 
         if self._last_update is None:
             return True
-        elapsed = datetime.now(timezone.utc) - self._last_update
+        elapsed = datetime.now(UTC) - self._last_update
         if elapsed < self.update_interval:
             return False
         return (
@@ -461,18 +481,20 @@ class OnlineLearner:
             try:
                 pre_scores = self.detector.models[stream].decision_function(X)
                 pre_update_scores[stream] = float(np.mean(pre_scores))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pre_update_scores[stream] = 0.0
 
             try:
                 self._update_stream_model(stream, X, y, weights, session)
                 updated_streams.append(stream)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 errors.append(f"{stream}: {e}")
 
         # Improvement 3: Validate and rollback if degraded
         if updated_streams:
-            rollback_needed = self._validate_post_update(pre_update_scores, updated_streams)
+            rollback_needed = self._validate_post_update(
+                pre_update_scores, updated_streams
+            )
             if rollback_needed:
                 self._rollback_models()
                 return {
@@ -482,7 +504,7 @@ class OnlineLearner:
                     "streams_attempted": updated_streams,
                 }
 
-            self._last_update = datetime.now(timezone.utc)
+            self._last_update = datetime.now(UTC)
             self._events_since_update = 0
             self._verdicts_since_update = 0
             self._update_count += 1
@@ -490,7 +512,7 @@ class OnlineLearner:
             try:
                 self.detector._save_meta()
                 self.detector._save_bundle()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.debug("Failed to persist online update", exc_info=True)
 
         return {
@@ -498,8 +520,12 @@ class OnlineLearner:
             "updated": bool(updated_streams),
             "streams_updated": updated_streams,
             "errors": errors,
-            "buffer_sizes": {s: self.buffers[s].size for s in ["login", "process", "network"]},
-            "buffer_seen": {s: self.buffers[s].n_seen for s in ["login", "process", "network"]},
+            "buffer_sizes": {
+                s: self.buffers[s].size for s in ["login", "process", "network"]
+            },
+            "buffer_seen": {
+                s: self.buffers[s].n_seen for s in ["login", "process", "network"]
+            },
             "update_count": self._update_count,
             "drift_rates": {
                 s: round(dd.current_error_rate, 4)
@@ -537,7 +563,7 @@ class OnlineLearner:
             new_auc = float(np.mean(new_scores > 0))
             if new_auc >= old_auc * 0.95:
                 self.detector.models[stream] = new_if
-        except Exception:  # noqa: BLE001
+        except Exception:
             self.detector.models[stream] = new_if
 
         # Warm-start supervised with weighted data
@@ -548,11 +574,14 @@ class OnlineLearner:
         # Update baseline CDF
         try:
             raws = np.array(
-                [self.detector._score_with(self.detector.models[stream], row) for row in X],
+                [
+                    self.detector._score_with(self.detector.models[stream], row)
+                    for row in X
+                ],
                 dtype=float,
             )
             self.detector.baselines[stream] = self.detector._compact_baseline(raws)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
         # Update threshold
@@ -565,7 +594,7 @@ class OnlineLearner:
                     supervised=self.detector.supervised_by_stream.get(stream),
                 )
                 self.detector.thresholds[stream] = new_threshold
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
     def _warm_start_supervised(
@@ -583,7 +612,7 @@ class OnlineLearner:
         neg = int(len(y) - pos)
 
         # Try warm-start on existing RF
-        if old_sup is not None and hasattr(old_sup, 'n_estimators'):
+        if old_sup is not None and hasattr(old_sup, "n_estimators"):
             try:
                 new_n_estimators = min(old_sup.n_estimators + 15, 180)
                 if isinstance(old_sup, RandomForestClassifier):
@@ -591,24 +620,32 @@ class OnlineLearner:
                     old_sup.fit(X, y)
                     self.detector.supervised_by_stream[stream] = old_sup
                     return
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
         # Train new classifier from scratch on weighted buffer
         if HAS_XGBOOST and len(y) >= 50 and min(pos, neg) >= 5:
             scale = (neg / max(pos, 1)) if pos and neg else 1.0
             model = XGBClassifier(
-                n_estimators=80, max_depth=3, learning_rate=0.08,
-                random_state=ML_RANDOM_STATE, eval_metric="logloss",
-                scale_pos_weight=scale, subsample=0.9, colsample_bytree=0.9,
+                n_estimators=80,
+                max_depth=3,
+                learning_rate=0.08,
+                random_state=ML_RANDOM_STATE,
+                eval_metric="logloss",
+                scale_pos_weight=scale,
+                subsample=0.9,
+                colsample_bytree=0.9,
                 min_child_weight=2,
             )
             model.fit(X, y, sample_weight=weights)
             name = "xgboost"
         elif len(y) >= 10 and min(pos, neg) >= 3:
             model = RandomForestClassifier(
-                n_estimators=60, max_depth=5, random_state=ML_RANDOM_STATE,
-                class_weight="balanced_subsample", min_samples_leaf=2,
+                n_estimators=60,
+                max_depth=5,
+                random_state=ML_RANDOM_STATE,
+                class_weight="balanced_subsample",
+                min_samples_leaf=2,
                 warm_start=True,
             )
             model.fit(X, y, sample_weight=weights)
@@ -620,12 +657,15 @@ class OnlineLearner:
         if len(y) >= 18 and min(pos, neg) >= 4:
             try:
                 from sklearn.calibration import CalibratedClassifierCV
-                cal = CalibratedClassifierCV(model, cv=min(3, min(pos, neg)), method="isotonic")
+
+                cal = CalibratedClassifierCV(
+                    model, cv=min(3, min(pos, neg)), method="isotonic"
+                )
                 cal.fit(X, y, sample_weight=weights)
                 self.detector.supervised_by_stream[stream] = cal
                 self.detector.supervised_name_by_stream[stream] = name + "+calibrated"
                 return
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
         self.detector.supervised_by_stream[stream] = model
@@ -637,6 +677,7 @@ class OnlineLearner:
     def _snapshot_models(self) -> None:
         """Snapshot current models for potential rollback."""
         import copy
+
         self._model_snapshots = {
             "models": copy.deepcopy(self.detector.models),
             "baselines": {k: v.copy() for k, v in self.detector.baselines.items()},
@@ -652,8 +693,12 @@ class OnlineLearner:
         self.detector.models = self._model_snapshots["models"]
         self.detector.baselines = self._model_snapshots["baselines"]
         self.detector.thresholds = self._model_snapshots["thresholds"]
-        self.detector.supervised_by_stream = self._model_snapshots["supervised_by_stream"]
-        self.detector.supervised_name_by_stream = self._model_snapshots["supervised_name_by_stream"]
+        self.detector.supervised_by_stream = self._model_snapshots[
+            "supervised_by_stream"
+        ]
+        self.detector.supervised_name_by_stream = self._model_snapshots[
+            "supervised_name_by_stream"
+        ]
         self._model_snapshots = {}
         logger.info("Online update rolled back to pre-update snapshot")
 
@@ -680,20 +725,26 @@ class OnlineLearner:
                 if new_mean < old_mean * 0.8:
                     logger.warning(
                         "Online update degraded %s: mean_score %.3f -> %.3f",
-                        stream, old_mean, new_mean,
+                        stream,
+                        old_mean,
+                        new_mean,
                     )
                     return True
-            except Exception:  # noqa: BLE001
+            except Exception:
                 continue
         return False
 
     # ------------------------------------------------------------------
     # Improvement 4: Active learning suggestions
     # ------------------------------------------------------------------
-    def suggest_labeling(self, features_list: list[list[float]], behaviors: list[str]) -> list[dict]:
+    def suggest_labeling(
+        self, features_list: list[list[float]], behaviors: list[str]
+    ) -> list[dict]:
         """Suggest the most uncertain events for analyst labeling."""
         return self.active_learner.suggest_for_labeling(
-            features_list, behaviors, self.detector.supervised_by_stream,
+            features_list,
+            behaviors,
+            self.detector.supervised_by_stream,
         )
 
     def prequential_report(self) -> dict:
@@ -705,10 +756,11 @@ class OnlineLearner:
             labels = self.buffers[stream].get_labels()
             if len(labels) < 10 or len(np.unique(labels)) < 2:
                 continue
-            scores_arr = np.array(scores[-len(labels):])
-            labels_arr = labels[:len(scores_arr)]
+            scores_arr = np.array(scores[-len(labels) :])
+            labels_arr = labels[: len(scores_arr)]
             try:
                 from sklearn.metrics import brier_score_loss, roc_auc_score
+
                 brier = brier_score_loss(labels_arr, scores_arr)
                 auc = roc_auc_score(labels_arr, scores_arr)
                 report[stream] = {
@@ -716,14 +768,18 @@ class OnlineLearner:
                     "auc_roc": round(float(auc), 4),
                     "n_samples": len(labels_arr),
                 }
-            except Exception:  # noqa: BLE001
+            except Exception:
                 continue
         return report
 
     def status(self) -> dict:
         return {
-            "buffer_sizes": {s: self.buffers[s].size for s in ["login", "process", "network"]},
-            "buffer_seen": {s: self.buffers[s].n_seen for s in ["login", "process", "network"]},
+            "buffer_sizes": {
+                s: self.buffers[s].size for s in ["login", "process", "network"]
+            },
+            "buffer_seen": {
+                s: self.buffers[s].n_seen for s in ["login", "process", "network"]
+            },
             "events_since_update": self._events_since_update,
             "verdicts_since_update": self._verdicts_since_update,
             "last_update": self._last_update.isoformat() if self._last_update else None,

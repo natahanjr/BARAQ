@@ -6,15 +6,16 @@ whose live precision collapsed, writing the result into the runtime
 the next detection cycle without restarts. A review-queue entry is kept for
 analyst visibility - auto-tuning is reversible with one click.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from backend.detection.tuning import get_raw, set_tuning
 from backend.api.fp_analysis import analyze as fp_analyze
+from backend.detection.tuning import get_raw, set_tuning
 
 logger = logging.getLogger("baraq.rule_tuning")
 
@@ -39,7 +40,6 @@ def auto_tune(db: Session, org: str = "") -> dict:
     weights = dict(weights_raw) if isinstance(weights_raw, dict) else {}
 
     queue: list[dict] = []
-    changed = False
     for item in items:
         rule = item.get("rule") or ""
         total = int(item.get("total") or 0)
@@ -51,19 +51,21 @@ def auto_tune(db: Session, org: str = "") -> dict:
         if weights.get(rule) == DAMPED_WEIGHT:
             continue  # already damped
         weights[rule] = DAMPED_WEIGHT
-        changed = True
         entry = {
             "rule": rule,
             "fp_score": round(score, 3),
             "total_alerts": total,
             "action": "risk_weight_damped",
             "weight": DAMPED_WEIGHT,
-            "since": datetime.now(timezone.utc).isoformat(),
+            "since": datetime.now(UTC).isoformat(),
         }
         queue.append(entry)
         logger.info(
             "Rule auto-tuned: %s damped to %.2f weight (fp_score=%.2f, n=%d)",
-            rule, DAMPED_WEIGHT, score, total,
+            rule,
+            DAMPED_WEIGHT,
+            score,
+            total,
         )
 
     if queue:

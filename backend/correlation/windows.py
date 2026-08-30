@@ -5,11 +5,12 @@ hardcoded. A pair of groups only correlates when they fall inside the
 sequence window, and a finding chain only stays a single chain while every
 consecutive member pair is inside its window.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-import backend.config as config
+from backend import config
 
 
 def window_minutes(window_key: str) -> int:

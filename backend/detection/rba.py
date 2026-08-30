@@ -1,10 +1,14 @@
 from __future__ import annotations
+
 import logging
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
-from backend.database.models import Alert, Incident, AlertEventLink, NormalizedEvent
+
+from backend.database.models import Alert, Incident
 
 logger = logging.getLogger("baraq.detection.rba")
+
 
 class RBAManager:
     """
@@ -62,8 +66,11 @@ class RBAManager:
         )
         alerts = self.session.scalars(stmt).all()
 
-        significant = [a for a in alerts if not self._is_noise(a)
-                       and (a.risk_score or 0.0) >= self.MIN_ALERT_RISK]
+        significant = [
+            a
+            for a in alerts
+            if not self._is_noise(a) and (a.risk_score or 0.0) >= self.MIN_ALERT_RISK
+        ]
         if len(significant) < self.MIN_CLUSTER_ALERTS:
             return None
 
@@ -76,10 +83,11 @@ class RBAManager:
         unique_tactics = set()
         has_significant_severity = False
         for alert in significant:
-            total_risk += (alert.risk_score or 0.0)
+            total_risk += alert.risk_score or 0.0
             unique_tactics.add(alert.mitre_tactic)
             has_significant_severity = has_significant_severity or alert.severity in (
-                "high", "critical",
+                "high",
+                "critical",
             )
 
         if len(unique_tactics) < 2 and not has_significant_severity:
@@ -91,27 +99,32 @@ class RBAManager:
 
         logger.info(
             "Entity %s risk evaluation: Score %.2f (Tactics: %d, significant alerts: %d)",
-            host, final_risk, len(unique_tactics), len(significant),
+            host,
+            final_risk,
+            len(unique_tactics),
+            len(significant),
         )
 
         # 3. Threshold Check & Incident Creation
         if final_risk >= self.risk_threshold:
-            return self._create_rba_incident(host, org, significant, final_risk, unique_tactics)
+            return self._create_rba_incident(
+                host, org, significant, final_risk, unique_tactics
+            )
 
         return None
 
-    def _create_rba_incident(self, host: str, org: str, alerts: list[Alert], score: float, tactics: set[str]):
+    def _create_rba_incident(
+        self, host: str, org: str, alerts: list[Alert], score: float, tactics: set[str]
+    ):
         """
         Promotes a cluster of alerts to a formal Incident.
         """
         # Check if an open RBA incident already exists for this host to avoid duplicates
         stmt = select(Incident).where(
-            Incident.host == host, 
-            Incident.org == org, 
-            Incident.status == "open"
+            Incident.host == host, Incident.org == org, Incident.status == "open"
         )
         existing = self.session.scalar(stmt)
-        
+
         if existing:
             existing.risk_score = score
             existing.risk_level = self._get_level(score)
@@ -132,25 +145,31 @@ class RBAManager:
         )
         self.session.add(incident)
         self.session.commit()
-        
+
         # Link the alerts to this incident (using a hypothetical link model or similar)
         # In this schema, we can add notes or simply keep the association in the dashboard
         return incident
 
     def _get_level(self, score: float) -> str:
-        if score >= 85: return "CRITICAL"
-        if score >= 65: return "HIGH"
-        if score >= 40: return "MEDIUM"
+        if score >= 85:
+            return "CRITICAL"
+        if score >= 65:
+            return "HIGH"
+        if score >= 40:
+            return "MEDIUM"
         return "LOW"
 
     def process_all_hosts(self, org: str = ""):
         """Scan all endpoints in an org for risk clusters."""
         from backend.database.models import Endpoint
-        hosts = self.session.scalars(select(Endpoint.host).where(Endpoint.org == org)).all()
-        
+
+        hosts = self.session.scalars(
+            select(Endpoint.host).where(Endpoint.org == org)
+        ).all()
+
         created_count = 0
         for host in hosts:
             if self.evaluate_entity_risk(host, org):
                 created_count += 1
-        
+
         return created_count

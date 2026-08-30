@@ -31,6 +31,13 @@ export function ThemeProvider({ children }) {
     root.style.colorScheme = resolved;
   }, [resolved]);
 
+  // Listen for keyboard shortcut theme toggle
+  useEffect(() => {
+    const handler = () => cycleTheme();
+    window.addEventListener("baraq:cycle-theme", handler);
+    return () => window.removeEventListener("baraq:cycle-theme", handler);
+  }, [cycleTheme]);
+
   useEffect(() => {
     if (preference !== "system") return;
     const mq = window.matchMedia?.("(prefers-color-scheme: light)");

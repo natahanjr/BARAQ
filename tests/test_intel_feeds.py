@@ -1,5 +1,6 @@
 """Threat-intel feed ingestion (roadmap 4.3): STIX/TAXII/MISP parsing,
 IOC matching, refresh flow + API endpoints."""
+
 from __future__ import annotations
 
 from backend.database.models import ThreatIntelFeedState, ThreatIntelRecord
@@ -50,9 +51,17 @@ def test_misp_attributes_flatten():
     data = {
         "response": {
             "Attribute": [
-                {"type": "ip-dst", "value": "203.0.113.9", "category": "Network activity"},
+                {
+                    "type": "ip-dst",
+                    "value": "203.0.113.9",
+                    "category": "Network activity",
+                },
                 {"type": "sha256", "value": "c" * 64, "category": "Artifacts dropped"},
-                {"type": "url", "value": "https://bad.example.net/x", "category": "Payload delivery"},
+                {
+                    "type": "url",
+                    "value": "https://bad.example.net/x",
+                    "category": "Payload delivery",
+                },
                 {"type": "email-src", "value": "x@y.z", "category": "Payload delivery"},
             ]
         }
@@ -92,15 +101,19 @@ def test_refresh_feeds_upserts_and_is_idempotent(db, monkeypatch):
 
     rows = db.query(ThreatIntelRecord).all()
     assert len(rows) == 2
-    ip_row = db.query(ThreatIntelRecord).filter(
-        ThreatIntelRecord.indicator == "203.0.113.77"
-    ).one()
+    ip_row = (
+        db.query(ThreatIntelRecord)
+        .filter(ThreatIntelRecord.indicator == "203.0.113.77")
+        .one()
+    )
     assert ip_row.category == "malicious"
     assert ip_row.sources == ["csv:test-feed"]
 
-    state = db.query(ThreatIntelFeedState).filter(
-        ThreatIntelFeedState.name == "test-feed"
-    ).one()
+    state = (
+        db.query(ThreatIntelFeedState)
+        .filter(ThreatIntelFeedState.name == "test-feed")
+        .one()
+    )
     assert state.ioc_count == 2
     assert state.total_fetched == 2
     assert state.last_success_at is not None
@@ -114,24 +127,34 @@ def test_refresh_feeds_upserts_and_is_idempotent(db, monkeypatch):
 def test_refresh_feeds_never_downgrades_existing_record(db, monkeypatch):
     import backend.intel.feeds as feeds_mod
 
-    db.add(ThreatIntelRecord(
-        indicator="203.0.113.88", kind="ip", category="benign",
-        label="old", confidence=0.9, sources=["old-src"],
-    ))
+    db.add(
+        ThreatIntelRecord(
+            indicator="203.0.113.88",
+            kind="ip",
+            category="benign",
+            label="old",
+            confidence=0.9,
+            sources=["old-src"],
+        )
+    )
     db.commit()
 
     monkeypatch.setattr(
-        feeds_mod, "THREAT_INTEL_FEEDS",
+        feeds_mod,
+        "THREAT_INTEL_FEEDS",
         [{"name": "t", "type": "csv", "url": "https://feed.test/iocs.txt"}],
     )
     monkeypatch.setattr(
-        feeds_mod, "fetch_feed",
+        feeds_mod,
+        "fetch_feed",
         lambda sub: [("ip", "203.0.113.88", "new", 0.5)],
     )
     feeds_mod.refresh_feeds(db)
-    row = db.query(ThreatIntelRecord).filter(
-        ThreatIntelRecord.indicator == "203.0.113.88"
-    ).one()
+    row = (
+        db.query(ThreatIntelRecord)
+        .filter(ThreatIntelRecord.indicator == "203.0.113.88")
+        .one()
+    )
     assert row.category == "malicious"  # category upgraded
     assert row.confidence == 0.9  # confidence never downgraded
 
@@ -140,15 +163,16 @@ def test_refresh_feeds_reports_error(db, monkeypatch):
     import backend.intel.feeds as feeds_mod
 
     monkeypatch.setattr(
-        feeds_mod, "THREAT_INTEL_FEEDS",
+        feeds_mod,
+        "THREAT_INTEL_FEEDS",
         [{"name": "dead", "type": "csv", "url": "https://feed.test/iocs.txt"}],
     )
     monkeypatch.setattr(feeds_mod, "fetch_feed", lambda sub: [])
     summary = feeds_mod.refresh_feeds(db)
     assert summary["feeds"][0]["status"] == "error"
-    state = db.query(ThreatIntelFeedState).filter(
-        ThreatIntelFeedState.name == "dead"
-    ).one()
+    state = (
+        db.query(ThreatIntelFeedState).filter(ThreatIntelFeedState.name == "dead").one()
+    )
     assert state.last_error
 
 
@@ -166,14 +190,26 @@ def test_feed_state_skipped_when_disabled(db, monkeypatch):
 def test_match_text_finds_known_iocs_only(db):
     from backend.intel.feeds import match_text
 
-    db.add(ThreatIntelRecord(
-        indicator="203.0.113.66", kind="ip", category="malicious",
-        label="known bad", confidence=0.9, sources=["csv:test"],
-    ))
-    db.add(ThreatIntelRecord(
-        indicator="ok.example.net", kind="domain", category="benign",
-        label="fine", confidence=0.9, sources=["test"],
-    ))
+    db.add(
+        ThreatIntelRecord(
+            indicator="203.0.113.66",
+            kind="ip",
+            category="malicious",
+            label="known bad",
+            confidence=0.9,
+            sources=["csv:test"],
+        )
+    )
+    db.add(
+        ThreatIntelRecord(
+            indicator="ok.example.net",
+            kind="domain",
+            category="benign",
+            label="fine",
+            confidence=0.9,
+            sources=["test"],
+        )
+    )
     db.commit()
 
     matches = match_text(db, "connection from 203.0.113.66 to ok.example.net")
@@ -184,12 +220,20 @@ def test_match_text_respects_confidence_floor(db, monkeypatch):
     import backend.intel.feeds as feeds_mod
 
     monkeypatch.setattr(
-        feeds_mod, "THREAT_INTEL_FEED_MIN_CONFIDENCE", 0.9,
+        feeds_mod,
+        "THREAT_INTEL_FEED_MIN_CONFIDENCE",
+        0.9,
     )
-    db.add(ThreatIntelRecord(
-        indicator="203.0.113.55", kind="ip", category="malicious",
-        label="low conf", confidence=0.6, sources=["csv:test"],
-    ))
+    db.add(
+        ThreatIntelRecord(
+            indicator="203.0.113.55",
+            kind="ip",
+            category="malicious",
+            label="low conf",
+            confidence=0.6,
+            sources=["csv:test"],
+        )
+    )
     db.commit()
     assert feeds_mod.match_text(db, "hit 203.0.113.55") == []
 

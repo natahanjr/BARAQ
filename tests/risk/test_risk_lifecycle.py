@@ -1,23 +1,20 @@
 """Phase 6 lifecycle tests (spec 6.19, 6.21-6.24, 6.44, 6.66, 6.76)."""
+
 from __future__ import annotations
 
 from datetime import timedelta
 
-from sqlalchemy import select
-
 import pytest
+from sqlalchemy import select
 
 from backend.risk import engine
 from backend.risk.models import (
     EntityRiskV2AuditEvent,
     EntityRiskV2Factor,
-    EntityRiskV2Snapshot,
 )
-
 from tests.risk.helpers import (
     RISK_T0,
     alert_evidence,
-    finding_evidence,
     group_evidence,
     stored_audit,
     stored_snapshots,
@@ -28,7 +25,9 @@ def test_decay_halves_24h_old_evidence(db):
     engine.apply_group(
         db,
         group_evidence(
-            "g5", "h1", ["T1021.001"],
+            "g5",
+            "h1",
+            ["T1021.001"],
             observed=RISK_T0 - timedelta(hours=24),
         ),
         now=RISK_T0,
@@ -39,7 +38,9 @@ def test_decay_halves_24h_old_evidence(db):
 
 def test_stale_state_after_window(db):
     engine.apply_group(
-        db, group_evidence("g5", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g5", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     assert risk.state == "HIGH"
@@ -50,7 +51,9 @@ def test_stale_state_after_window(db):
 
 def test_peak_score_never_decreases(db):
     engine.apply_group(
-        db, group_evidence("g5", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g5", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     assert risk.peak_score == 42.0
@@ -63,12 +66,16 @@ def test_peak_score_never_decreases(db):
 
 def test_trend_rising_then_falling(db):
     engine.apply_alert(
-        db, alert_evidence("ALR-000001", "h1", severity="medium"), now=RISK_T0,
+        db,
+        alert_evidence("ALR-000001", "h1", severity="medium"),
+        now=RISK_T0,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     assert risk.trend == "UNKNOWN"
     engine.apply_group(
-        db, group_evidence("g5", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g5", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     db.refresh(risk)
     assert risk.trend == "RISING"
@@ -80,10 +87,14 @@ def test_trend_rising_then_falling(db):
 
 def test_threshold_crossing_audited(db):
     engine.apply_alert(
-        db, alert_evidence("ALR-000001", "h1", severity="medium"), now=RISK_T0,
+        db,
+        alert_evidence("ALR-000001", "h1", severity="medium"),
+        now=RISK_T0,
     )
     engine.apply_group(
-        db, group_evidence("g5", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g5", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     events = db.scalars(
@@ -100,7 +111,9 @@ def test_threshold_crossing_audited(db):
 
 def test_state_changed_audited(db):
     engine.apply_group(
-        db, group_evidence("g5", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g5", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     events = db.scalars(
@@ -116,10 +129,14 @@ def test_state_changed_audited(db):
 
 def test_snapshots_are_append_only(db):
     engine.apply_alert(
-        db, alert_evidence("ALR-000001", "h1", severity="medium"), now=RISK_T0,
+        db,
+        alert_evidence("ALR-000001", "h1", severity="medium"),
+        now=RISK_T0,
     )
     engine.apply_group(
-        db, group_evidence("g5", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g5", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     snapshots = [s for s in stored_snapshots(db) if s.risk_id == risk.risk_id]
@@ -130,7 +147,9 @@ def test_snapshots_are_append_only(db):
 
 def test_failure_boundary_audits_without_losing_state(db):
     engine.apply_group(
-        db, group_evidence("g5", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g5", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     engine.failure_boundary(db, risk.risk_id, ValueError("boom"), now=RISK_T0)
@@ -142,7 +161,9 @@ def test_failure_boundary_audits_without_losing_state(db):
 
 def test_audit_carries_model_version_and_actor(db):
     engine.apply_group(
-        db, group_evidence("g5", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g5", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     for event in stored_audit(db):
         assert event.model_version == "1.0.0"
@@ -153,16 +174,16 @@ def test_factors_keep_history_after_expiry(db):
     engine.apply_group(
         db,
         group_evidence(
-            "g5", "h1", ["T1021.001"],
+            "g5",
+            "h1",
+            ["T1021.001"],
             observed=RISK_T0 - timedelta(days=30),
         ),
         now=RISK_T0,
     )
     risk = engine.risk_for_entity(db, "HOST", "h1")
     factors = db.scalars(
-        select(EntityRiskV2Factor).where(
-            EntityRiskV2Factor.risk_id == risk.risk_id
-        )
+        select(EntityRiskV2Factor).where(EntityRiskV2Factor.risk_id == risk.risk_id)
     ).all()
     assert len(factors) >= 3
     assert all(f.expires_at < RISK_T0 for f in factors)

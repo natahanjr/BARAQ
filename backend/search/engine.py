@@ -45,7 +45,7 @@ import re
 import shlex
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -195,7 +195,9 @@ def _relative_time(value: str, now: datetime) -> datetime:
     return now + delta
 
 
-def _parse_time(value: str | None, now: datetime, default_offset: timedelta) -> datetime:
+def _parse_time(
+    value: str | None, now: datetime, default_offset: timedelta
+) -> datetime:
     if not value:
         return now - default_offset
     try:
@@ -240,13 +242,16 @@ def _span_seconds(span: str) -> int:
     m = re.fullmatch(r"(\d+)([smhdw])", span.strip().lower())
     if not m:
         raise SearchError(f"invalid span {span!r} (use e.g. 15m, 1h, 1d)")
-    return int(m.group(1)) * {
-        "s": 1,
-        "m": 60,
-        "h": 3600,
-        "d": 86400,
-        "w": 604800,
-    }[m.group(2)]
+    return (
+        int(m.group(1))
+        * {
+            "s": 1,
+            "m": 60,
+            "h": 3600,
+            "d": 86400,
+            "w": 604800,
+        }[m.group(2)]
+    )
 
 
 def _parse_aggs(agg_tokens: list[str], fields: dict) -> list[tuple[str, str, str]]:
@@ -286,7 +291,7 @@ def _build_query(
     latest: str | None,
     include_demo: bool = False,
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = _parse_time(earliest, now, timedelta(hours=24))
     end = _parse_time(latest, now, timedelta(0))
     if start > end:
@@ -400,9 +405,7 @@ def execute_search(
 
     if not aggregated:
         time_col = fields.get("timestamp") or fields.get("created_at")
-        objs = db.execute(
-            stmt.order_by(time_col.desc()).limit(limit)
-        ).scalars().all()
+        objs = db.execute(stmt.order_by(time_col.desc()).limit(limit)).scalars().all()
         rows = [[_coerce(getattr(o, f)) for f in fields] for o in objs]
         if keep_fields is not None:
             idx = [list(fields).index(f) for f in keep_fields]
@@ -444,14 +447,16 @@ def execute_search(
                     rows = [
                         r
                         for r in rows
-                        if (lambda v: {
-                            "==": v == cmp_val,
-                            "=": v == cmp_val,
-                            ">": v > cmp_val,
-                            ">=": v >= cmp_val,
-                            "<": v < cmp_val,
-                            "<=": v <= cmp_val,
-                        }[op])(r[col_i])
+                        if (
+                            lambda v: {
+                                "==": v == cmp_val,
+                                "=": v == cmp_val,
+                                ">": v > cmp_val,
+                                ">=": v >= cmp_val,
+                                "<": v < cmp_val,
+                                "<=": v <= cmp_val,
+                            }[op]
+                        )(r[col_i])
                     ]
 
     return SearchResult(
@@ -472,14 +477,16 @@ def _run_stats(db: Session, stmt, model, fields: dict, pipe: _Pipe):
     limit = 100
     if name == "stats":
         if not args or "by" not in args:
-            raise SearchError("stats requires aggregations with 'by', e.g. | stats count by user")
+            raise SearchError(
+                "stats requires aggregations with 'by', e.g. | stats count by user"
+            )
         by_idx = args.index("by")
         agg_tokens, group_by = args[:by_idx], args[by_idx + 1 :]
         group_by = [g.strip().rstrip(",").strip() for g in group_by]
         if not group_by:
             raise SearchError("stats requires at least one group-by field after 'by'")
         aggs = _parse_aggs(agg_tokens, fields)
-        order_agg, reverse = "count", True
+        _order_agg, reverse = "count", True
     elif name in ("top", "rare"):
         limit = 10
         rest = list(args)
@@ -493,7 +500,7 @@ def _run_stats(db: Session, stmt, model, fields: dict, pipe: _Pipe):
             raise SearchError(f"unknown field {field_tok!r}")
         group_by = [field_tok] + [g.strip().rstrip(",").strip() for g in rest]
         aggs = [("count", "count", None)]
-        order_agg, reverse = "count", name == "top"
+        _order_agg, reverse = "count", name == "top"
     else:
         raise SearchError(f"unknown pipe: {name!r}")
 
@@ -527,7 +534,7 @@ def _run_timechart(
         span = args.pop(0).split("=", 1)[1]
     span_sec = _span_seconds(span)
     time_col_name = "timestamp" if "timestamp" in fields else "created_at"
-    time_col = fields[time_col_name]
+    fields[time_col_name]
 
     group_by: list[str] = []
     agg_tokens: list[str] = []
@@ -573,8 +580,7 @@ def _run_timechart(
         rows = []
         for b in sorted(bucket_totals):
             rows.append(
-                [_coerce(b), bucket_totals[b]]
-                + [pivot[b].get(v, 0) for v in by_vals]
+                [_coerce(b), bucket_totals[b]] + [pivot[b].get(v, 0) for v in by_vals]
             )
         return rows, columns
 
@@ -642,7 +648,12 @@ def _run_transaction(
             cur_count = 1
     if cur_key is not None and cur_start is not None:
         transactions.append(
-            [_coerce(cur_start), round((cur_last - cur_start).total_seconds(), 1), cur_count, cur_key]
+            [
+                _coerce(cur_start),
+                round((cur_last - cur_start).total_seconds(), 1),
+                cur_count,
+                cur_key,
+            ]
         )
     transactions.sort(key=lambda r: r[0], reverse=True)
     return transactions, ["_time", "duration", "count", by_field]

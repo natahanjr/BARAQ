@@ -14,14 +14,13 @@ Composition for host 10.0.0.7 (weights from config):
     RF008_RECENCY                     +8   (recent activity)
     TOTAL                             72   HIGH RISING
 """
+
 from __future__ import annotations
 
 import pytest
 
 from backend.correlation.engine import correlate
-from backend.correlation.models import CorrelationFindingRecord
 from backend.risk import engine as risk_engine
-
 from tests.correlation.helpers import CORR_T0, canonical_specs, make_groups
 from tests.risk.helpers import stored_risks
 
@@ -55,9 +54,7 @@ def test_dod_30_alerts_5_groups_1_finding_host_risk_72(db):
     assert finding.member_group_ids and len(finding.member_group_ids) == 5
     assert "10.0.0.7" in (finding.hosts or [])
 
-    risk_engine.apply_groups(
-        db, [_group_evidence(g) for g in groups], now=CORR_T0
-    )
+    risk_engine.apply_groups(db, [_group_evidence(g) for g in groups], now=CORR_T0)
     risk_engine.apply_finding(
         db,
         {
@@ -95,9 +92,10 @@ def test_dod_30_alerts_5_groups_1_finding_host_risk_72(db):
     assert risk.confidence == 1.0
 
     # Why is this entity high risk? Every contribution traces to evidence.
+    from sqlalchemy import select
+
     from backend.risk.calculator import calculate_risk
     from backend.risk.models import EntityRiskV2Factor
-    from sqlalchemy import select
 
     factors = db.scalars(
         select(EntityRiskV2Factor)
@@ -108,7 +106,9 @@ def test_dod_30_alerts_5_groups_1_finding_host_risk_72(db):
     for factor in factors:
         assert factor.reason
         assert factor.evidence
-        by_factor[factor.factor_id] = by_factor.get(factor.factor_id, 0.0) + factor.contribution
+        by_factor[factor.factor_id] = (
+            by_factor.get(factor.factor_id, 0.0) + factor.contribution
+        )
 
     assert by_factor == {
         "RF001_EXTERNAL_ACCESS": 12.0,
@@ -124,11 +124,17 @@ def test_dod_30_alerts_5_groups_1_finding_host_risk_72(db):
     calculation = calculate_risk(
         [
             {
-                "factor_id": f.factor_id, "factor_type": f.factor_type,
-                "source_type": f.source_type, "source_id": f.source_id,
-                "value": f.value, "weight": f.weight, "origin": f.origin,
-                "created_at": f.created_at, "expires_at": f.expires_at,
-                "reason": f.reason, "evidence": f.evidence,
+                "factor_id": f.factor_id,
+                "factor_type": f.factor_type,
+                "source_type": f.source_type,
+                "source_id": f.source_id,
+                "value": f.value,
+                "weight": f.weight,
+                "origin": f.origin,
+                "created_at": f.created_at,
+                "expires_at": f.expires_at,
+                "reason": f.reason,
+                "evidence": f.evidence,
             }
             for f in factors
         ],

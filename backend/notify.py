@@ -15,6 +15,7 @@ Delivery reliability (Phase 1 hardening):
 * Alerts that no remote channel accepts are written to a JSON fallback
   directory (``NOTIFY_FALLBACK_DIR``) so nothing is ever silently dropped.
 """
+
 from __future__ import annotations
 
 import json
@@ -27,7 +28,7 @@ import subprocess
 import threading
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.mime.text import MIMEText
 from pathlib import Path
 
@@ -76,18 +77,19 @@ def _payload(alert: dict) -> dict:
 
 def _slack_payload(alert: dict) -> dict:
     body = _payload(alert)
-    color = {"low": "#f0ad4e", "medium": "#f39c12", "high": "#e67e22", "critical": "#e74c3c"}.get(
-        body.get("severity", ""), "#95a5a6"
-    )
-    lines = "\n".join(
-        f"*{k}:* {v}" for k, v in body.items() if v not in (None, "")
-    )
+    color = {
+        "low": "#f0ad4e",
+        "medium": "#f39c12",
+        "high": "#e67e22",
+        "critical": "#e74c3c",
+    }.get(body.get("severity", ""), "#95a5a6")
+    lines = "\n".join(f"*{k}:* {v}" for k, v in body.items() if v not in (None, ""))
     return {
         "attachments": [
             {
                 "color": color,
                 "fallback": f"[BARAQ] {body.get('severity','').upper()} "
-                            f"{body.get('name','')} ({body.get('mitre_id','')})",
+                f"{body.get('name','')} ({body.get('mitre_id','')})",
                 "title": f"BARAQ alert #{body.get('alert_id')} - {body.get('name','')}",
                 "text": lines,
                 "mrkdwn_in": ["text"],
@@ -98,13 +100,14 @@ def _slack_payload(alert: dict) -> dict:
 
 def _teams_payload(alert: dict) -> dict:
     body = _payload(alert)
-    color = {"low": "warning", "medium": "warning", "high": "attention", "critical": "attention"}.get(
-        body.get("severity", ""), "accent"
-    )
+    color = {
+        "low": "warning",
+        "medium": "warning",
+        "high": "attention",
+        "critical": "attention",
+    }.get(body.get("severity", ""), "accent")
     facts = [
-        {"name": k, "value": str(v)}
-        for k, v in body.items()
-        if v not in (None, "")
+        {"name": k, "value": str(v)} for k, v in body.items() if v not in (None, "")
     ]
     return {
         "@type": "MessageCard",
@@ -191,15 +194,29 @@ def _send_toast(alert: dict) -> None:
     """Windows toast notification via a small PowerShell helper (best-effort)."""
     if not TOAST_ENABLED or os.name != "nt":
         return
-    title = f"BARAQ: {alert.get('severity', '').upper()} alert {alert.get('mitre_id', '')}"
+    title = (
+        f"BARAQ: {alert.get('severity', '').upper()} alert {alert.get('mitre_id', '')}"
+    )
     message = f"{alert.get('name', '')} - {alert.get('evidence', '')[:240]}"
     script = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "toast.ps1"
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "scripts",
+        "toast.ps1",
     )
     subprocess.run(
         [
-            "powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass",
-            "-File", script, "-Title", title, "-Message", message,
+            "powershell",
+            "-NoProfile",
+            "-WindowStyle",
+            "Hidden",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            script,
+            "-Title",
+            title,
+            "-Message",
+            message,
         ],
         timeout=20,
         capture_output=True,
@@ -212,13 +229,13 @@ def _write_fallback(alert: dict) -> Path | None:
     try:
         directory = Path(NOTIFY_FALLBACK_DIR)
         directory.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
         target = directory / f"alert-{alert.get('id', 'unknown')}-{stamp}.json"
         target.write_text(
             json.dumps(
                 {
                     "delivered": False,
-                    "dropped_at": datetime.now(timezone.utc).isoformat(),
+                    "dropped_at": datetime.now(UTC).isoformat(),
                     "alert": alert,
                 },
                 indent=2,
@@ -227,7 +244,7 @@ def _write_fallback(alert: dict) -> Path | None:
             encoding="utf-8",
         )
         return target
-    except Exception as exc:  # noqa: BLE001 - fallback must never crash the worker
+    except Exception as exc:
         logger.error("Notification file fallback failed: %s", exc)
         return None
 
@@ -264,20 +281,17 @@ class NotificationHealth:
                 state["ok"] = True
                 state["successes"] += 1
                 state["consecutive_failures"] = 0
-                state["last_success_at"] = datetime.now(timezone.utc).isoformat()
+                state["last_success_at"] = datetime.now(UTC).isoformat()
             else:
                 state["ok"] = False
                 state["failures"] += 1
                 state["consecutive_failures"] += 1
                 state["last_error"] = error[:300]
-                state["last_failure_at"] = datetime.now(timezone.utc).isoformat()
+                state["last_failure_at"] = datetime.now(UTC).isoformat()
 
     def snapshot(self) -> dict:
         with self._lock:
-            return {
-                name: dict(state)
-                for name, state in sorted(self._channels.items())
-            }
+            return {name: dict(state) for name, state in sorted(self._channels.items())}
 
 
 notification_health = NotificationHealth()
@@ -302,7 +316,7 @@ _SENDERS: list[tuple[str, str]] = [
     ("toast", "_send_toast"),
 ]
 
-_queue: "queue.Queue[tuple[int, dict]]" = queue.Queue(maxsize=1024)
+_queue: queue.Queue[tuple[int, dict]] = queue.Queue(maxsize=1024)
 _worker_started = False
 _worker_lock = threading.Lock()
 
@@ -313,8 +327,10 @@ def _worker_loop() -> None:
         attempts, alert = _queue.get()
         try:
             _deliver(alert, attempts)
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Notification worker crashed on alert %s: %s", alert.get("id"), exc)
+        except Exception as exc:
+            logger.error(
+                "Notification worker crashed on alert %s: %s", alert.get("id"), exc
+            )
         finally:
             _queue.task_done()
 
@@ -334,7 +350,7 @@ def _deliver(alert: dict, attempts: int) -> None:
             try:
                 sender(alert)
                 notification_health.record(name, True)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 notification_health.record(name, False, str(exc))
                 failures.append(name)
         if not failures:
@@ -342,14 +358,19 @@ def _deliver(alert: dict, attempts: int) -> None:
         if attempt < attempts - 1:
             logger.warning(
                 "Notification channels %s failed; retrying in %.1fs (attempt %d/%d)",
-                ",".join(failures), delay, attempt + 2, attempts,
+                ",".join(failures),
+                delay,
+                attempt + 2,
+                attempts,
             )
             time.sleep(delay)
             delay *= 2
         else:
             logger.error(
                 "Notification channels %s exhausted %d attempts for alert %s",
-                ",".join(failures), attempts, alert.get("id"),
+                ",".join(failures),
+                attempts,
+                alert.get("id"),
             )
             _write_fallback(alert)
 
@@ -371,9 +392,7 @@ def _start_worker() -> None:
     with _worker_lock:
         if _worker_started:
             return
-        threading.Thread(
-            target=_worker_loop, daemon=True, name="baraq-notify"
-        ).start()
+        threading.Thread(target=_worker_loop, daemon=True, name="baraq-notify").start()
         _worker_started = True
 
 

@@ -16,10 +16,10 @@ const STATUSES = [
 const SEVERITIES = ["critical", "high", "medium", "low"];
 
 const inputClass =
-  "w-full rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] px-4 py-3 text-[13px] text-[var(--fg-primary)] placeholder-[var(--fg-faint)] outline-none transition-all focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20";
+  "w-full rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-4 py-3 text-[13px] text-[var(--fg-primary)] placeholder-[var(--fg-faint)] outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20";
 
 const selectClass =
-  "rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] px-4 py-3 text-[13px] text-[var(--fg-primary)] placeholder-[var(--fg-faint)] outline-none transition-all focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20";
+  "rounded-xl border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-4 py-3 text-[13px] text-[var(--fg-primary)] placeholder-[var(--fg-faint)] outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-[var(--accent-cyan)] focus:ring-2 focus:ring-[var(--accent-cyan)]/20";
 
 function confidenceTone(label) {
   return {
@@ -33,7 +33,7 @@ function ConfidenceBadge({ score, label }) {
   const pct = Math.round((score ?? 0) * 100);
   return (
     <span
-      className={`rounded border px-2 py-0.5 font-mono text-[10px] ${confidenceTone(label)}`}
+      className={`rounded border px-2 py-0.5 font-mono text-[11px] ${confidenceTone(label)}`}
       title={`Confidence: ${pct}%${label ? ` (${label})` : ""}`}
     >
       {pct}% {label || ""}
@@ -69,12 +69,12 @@ function IncidentCard({ incident, onOpen, onSelect, selected }) {
             <ConfidenceBadge score={incident.confidence} label={null} />
           )}
           {incident.alert_count > 0 && (
-            <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] text-[var(--accent-cyan)] ring-1 ring-[var(--border-default)]">
+            <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[11px] text-[var(--accent-cyan)] ring-1 ring-[var(--border-default)]">
               {incident.alert_count} alert{incident.alert_count === 1 ? "" : "s"}
             </span>
           )}
           {incident.mitre_id && (
-            <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] text-[var(--fg-secondary)] ring-1 ring-[var(--border-default)]">
+            <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[11px] text-[var(--fg-secondary)] ring-1 ring-[var(--border-default)]">
               {incident.mitre_id}
             </span>
           )}
@@ -143,7 +143,7 @@ function CreateIncident({ onCreated }) {
   };
 
   return (
-    <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+    <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold text-[var(--fg-primary)]">New Incident</h3>
         {isAdmin() && (
@@ -339,7 +339,7 @@ function IncidentDetail({ incident, onChanged }) {
         </div>
       </div>
 
-      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
         <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--fg-muted)]"><span className="h-1 w-1 rounded-full bg-[var(--accent-cyan)]" />Status</h3>
         {isAdmin() ? (
           <>
@@ -396,7 +396,7 @@ function IncidentDetail({ incident, onChanged }) {
                 />
               </label>
             </div>
-            <p className="mt-2 text-[10px] text-[var(--fg-faint)]">
+            <p className="mt-2 text-[11px] text-[var(--fg-faint)]">
               Changes are audited and recorded on the timeline.
             </p>
           </>
@@ -408,7 +408,7 @@ function IncidentDetail({ incident, onChanged }) {
         )}
       </div>
 
-      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
         <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--fg-muted)]"><span className="h-1 w-1 rounded-full bg-[var(--accent-cyan)]" />Linked Alerts ({incident.alerts?.length || 0})</h3>
         {incident.alerts?.length ? (
           <div className="space-y-1.5">
@@ -425,7 +425,7 @@ function IncidentDetail({ incident, onChanged }) {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--fg-faint)]">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 text-[var(--fg-faint)]">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             </div>
             <p className="text-sm font-semibold text-[var(--fg-secondary)]">No linked alerts</p>
@@ -451,7 +451,7 @@ function IncidentDetail({ incident, onChanged }) {
         )}
       </div>
 
-      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
         <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--fg-muted)]"><span className="h-1 w-1 rounded-full bg-[var(--accent-cyan)]" />Timeline ({incident.comments?.length || 0})</h3>
         <form onSubmit={submitComment} className="mb-4 flex gap-2">
           <input
@@ -475,7 +475,7 @@ function IncidentDetail({ incident, onChanged }) {
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-[var(--accent-cyan)]">{c.author}</span>
                   {c.kind !== "comment" && (
-                    <span className="rounded-md bg-[var(--accent-violet)]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--accent-violet)]">
+                    <span className="rounded-md bg-[var(--accent-violet)]/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase text-[var(--accent-violet)]">
                       {c.kind}
                     </span>
                   )}
@@ -491,7 +491,7 @@ function IncidentDetail({ incident, onChanged }) {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--fg-faint)]">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 text-[var(--fg-faint)]">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
             </div>
             <p className="text-sm font-semibold text-[var(--fg-secondary)]">No timeline entries</p>
@@ -500,7 +500,7 @@ function IncidentDetail({ incident, onChanged }) {
         )}
       </div>
 
-      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+      <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
         <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--fg-muted)]"><span className="h-1 w-1 rounded-full bg-[var(--accent-cyan)]" />Investigation</h3>
         {investigationError ? (
           <p className="text-xs text-[var(--severity-critical)]">{investigationError}</p>
@@ -547,7 +547,7 @@ function IncidentDetail({ incident, onChanged }) {
                     ))}
                   </div>
                   {(rc.risk?.adjustments || []).length > 0 && (
-                    <p className="mt-2 font-mono text-[10px] text-[var(--fg-faint)]">
+                    <p className="mt-2 font-mono text-[11px] text-[var(--fg-faint)]">
                       risk adjustments:{" "}
                       {rc.risk.adjustments.map((a) => `${a.signal} ${a.delta >= 0 ? "+" : ""}${a.delta}`).join(" · ")}
                     </p>
@@ -565,16 +565,16 @@ function IncidentDetail({ incident, onChanged }) {
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-violet)]">
                       Attack chain
                     </p>
-                    <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] text-[var(--accent-violet)] ring-1 ring-[var(--border-default)]">
+                    <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[11px] text-[var(--accent-violet)] ring-1 ring-[var(--border-default)]">
                       {ch.confidence.toFixed(2)} confidence
                     </span>
                     {ch.risk_boost > 0 && (
-                      <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] text-[var(--severity-critical)] ring-1 ring-[var(--border-default)]">
+                      <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[11px] text-[var(--severity-critical)] ring-1 ring-[var(--border-default)]">
                         risk +{ch.risk_boost}
                       </span>
                     )}
                     {ch.cohesive_root && (
-                      <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] text-[var(--status-healthy)] ring-1 ring-[var(--border-default)]">
+                      <span className="rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[11px] text-[var(--status-healthy)] ring-1 ring-[var(--border-default)]">
                         root: {ch.root_process}
                       </span>
                     )}
@@ -583,7 +583,7 @@ function IncidentDetail({ incident, onChanged }) {
                     {ch.sequence.map((s, idx) => (
                       <span key={`${s}-${idx}`} className="flex items-center gap-1.5">
                         <span
-                          className={`rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wide ring-1 ring-[var(--border-default)] ${
+                          className={`rounded-md bg-[var(--bg-inset)] px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide ring-1 ring-[var(--border-default)] ${
                             ch.has_terminal && idx === ch.sequence.length - 1
                               ? "text-[var(--severity-critical)] ring-[var(--severity-critical)]/30"
                               : "text-[var(--fg-secondary)]"
@@ -599,7 +599,7 @@ function IncidentDetail({ incident, onChanged }) {
                   </div>
                   <p className="mt-2 text-[11px] leading-relaxed text-[var(--fg-secondary)]">{ch.narrative}</p>
                   {ch.span_min > 0 && (
-                    <p className="mt-1 font-mono text-[10px] text-[var(--fg-faint)]">
+                    <p className="mt-1 font-mono text-[11px] text-[var(--fg-faint)]">
                       span {ch.span_min.toFixed(0)} min · max gap {ch.max_gap_min.toFixed(1)} min ·{" "}
                       {ch.ordered ? "canonical order" : `${(ch.ordered_ratio * 100).toFixed(0)}% ordered`}
                     </p>
@@ -759,7 +759,7 @@ export default function Incidents() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">SECTION</p>
-          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">Incidents</h1>
+          <h1 className="mt-1 text-page-title text-[var(--fg-primary)]">Incidents</h1>
           <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">Security cases: group alerts, track ownership and response status</p>
         </div>
       </header>
@@ -780,7 +780,7 @@ export default function Incidents() {
               <Loading label="Loading incidents" />
             ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--fg-faint)]">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 text-[var(--fg-faint)]">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
                 </div>
                 <p className="text-sm font-semibold text-[var(--fg-secondary)]">No incidents</p>
@@ -807,9 +807,9 @@ export default function Incidents() {
               onChanged={load}
             />
           ) : (
-            <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+            <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
               <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--fg-faint)]">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 text-[var(--fg-faint)]">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
                 </div>
                 <p className="text-sm font-semibold text-[var(--fg-secondary)]">Select an incident</p>

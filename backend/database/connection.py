@@ -4,6 +4,7 @@ The backend runs on PostgreSQL via SQLAlchemy 2.0 ORM:
 ``BARAQ_DATABASE_URL=postgresql://user:pass@host:5432/db`` with the
 psycopg3 driver (``pip install "psycopg[binary]"``).
 """
+
 from __future__ import annotations
 
 import logging
@@ -11,7 +12,6 @@ import logging
 from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.orm import sessionmaker
 
-from backend.settings import get_settings
 from backend.database.models import (
     Alert,
     Base,
@@ -28,6 +28,7 @@ from backend.database.models import (
     UsbDevice,
     VulnFinding,
 )
+from backend.settings import get_settings
 
 logger = logging.getLogger("baraq.db")
 settings = get_settings()
@@ -43,7 +44,7 @@ def normalize_database_url(url: str) -> str:
     """
     for prefix in ("postgresql://", "postgres://"):
         if url.startswith(prefix):
-            return "postgresql+psycopg://" + url[len(prefix):]
+            return "postgresql+psycopg://" + url[len(prefix) :]
     return url
 
 
@@ -189,7 +190,9 @@ def _readonly_engine():
     if not READONLY_DATABASE_URL:
         return None
     return create_engine(
-        normalize_database_url(settings.database_url),  # Note: using the same database URL for now; if we want a separate read replica, we would need a different setting.
+        normalize_database_url(
+            settings.database_url
+        ),  # Note: using the same database URL for now; if we want a separate read replica, we would need a different setting.
         echo=settings.echo_sql,
         pool_pre_ping=True,
         pool_size=settings.db_pool_size,
@@ -202,7 +205,9 @@ def _readonly_engine():
 
 readonly_engine = _readonly_engine()
 
-SessionReadonly = sessionmaker(bind=readonly_engine or engine, autoflush=False, expire_on_commit=False)
+SessionReadonly = sessionmaker(
+    bind=readonly_engine or engine, autoflush=False, expire_on_commit=False
+)
 
 
 #: Demo-aware tables: every ORM query against these is restricted to the
@@ -334,10 +339,10 @@ def init_db() -> None:
     # Register every model module on the shared Base before DDL so a bare
     # import (tests, CLI tools) still creates the full v2 schema - the app
     # entry point imports these transitively, standalone callers may not.
-    from backend.aggregation import models as _aggregation_models  # noqa: F401
-    from backend.alerting import models as _alerting_models  # noqa: F401
     import backend.correlation.models as _correlation_models  # noqa: F401
     import backend.detection.models as _detection_models  # noqa: F401
+    from backend.aggregation import models as _aggregation_models  # noqa: F401
+    from backend.alerting import models as _alerting_models  # noqa: F401
     from backend.incidents import models as _incident_models  # noqa: F401
     from backend.risk import models as _risk_models  # noqa: F401
     from backend.telemetry.models import TelemetryEvent as _v2_events  # noqa: F401
@@ -345,7 +350,11 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     inspector = inspect(engine)
     for table, columns in _ADDITIVE_MIGRATIONS.items():
-        existing = {c["name"] for c in inspector.get_columns(table)} if inspector.has_table(table) else set()
+        existing = (
+            {c["name"] for c in inspector.get_columns(table)}
+            if inspector.has_table(table)
+            else set()
+        )
         with engine.begin() as conn:
             for column, ddl_type in columns:
                 if column not in existing:
@@ -366,10 +375,17 @@ def init_db() -> None:
                 if not inspector.has_table(table):
                     continue
                 col = next(
-                    (c for c in inspect(engine).get_columns(table) if c["name"] == column),
+                    (
+                        c
+                        for c in inspect(engine).get_columns(table)
+                        if c["name"] == column
+                    ),
                     None,
                 )
-                if col is not None and getattr(col.get("type"), "timezone", True) is False:
+                if (
+                    col is not None
+                    and getattr(col.get("type"), "timezone", True) is False
+                ):
                     conn.exec_driver_sql(
                         f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMPTZ"
                     )
@@ -404,8 +420,14 @@ def init_db() -> None:
         )
         # Tenant-scoped detection: rules filter every telemetry table by org.
         for _aux_table in (
-            "processes", "network_connections", "dns_queries", "http_requests",
-            "emails", "usb_devices", "file_scans", "vuln_findings",
+            "processes",
+            "network_connections",
+            "dns_queries",
+            "http_requests",
+            "emails",
+            "usb_devices",
+            "file_scans",
+            "vuln_findings",
         ):
             conn.exec_driver_sql(
                 f"CREATE INDEX IF NOT EXISTS idx_{_aux_table}_org ON {_aux_table} (org)"

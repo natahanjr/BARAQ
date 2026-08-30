@@ -59,7 +59,7 @@ const ACCENT_STYLES = {
   },
 };
 
-function MetricCard({ label, value, icon: Icon, trend, trendLabel, accent = "cyan", loading = false, className = "" }) {
+function MetricCard({ label, value, icon: Icon, trend, trendLabel, accent = "cyan", loading = false, zeroLabel, className = "" }) {
   const numRef = useRef(null);
   const prevVal = useRef(0);
 
@@ -89,7 +89,7 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, accent = "cya
 
   if (loading) {
     return (
-      <div className={["rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-5", className].join(" ")}>
+      <div className={["rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-5", className].join(" ")}>
         <div className="h-3 w-20 rounded bg-[var(--bg-surface-active)] animate-pulse" />
         <div className="mt-3 h-8 w-16 rounded bg-[var(--bg-surface-active)] animate-pulse" />
       </div>
@@ -98,8 +98,7 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, accent = "cya
 
   return (
     <div className={[
-      "group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-5",
-      "transition-all duration-300",
+      "group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-300 p-5",
       s.border,
       "hover:shadow-lg",
       className,
@@ -109,7 +108,7 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, accent = "cya
 
       <div className="relative flex items-start justify-between">
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">
+          <p className="text-label text-[var(--fg-muted)]">
             {label}
           </p>
           <div className="mt-2 flex items-end gap-2.5">
@@ -122,14 +121,21 @@ function MetricCard({ label, value, icon: Icon, trend, trendLabel, accent = "cya
             </span>
             {trend !== undefined && (
               <span className={`mb-1 flex items-center gap-0.5 text-[11px] font-semibold ${trend >= 0 ? "text-[var(--status-healthy)]" : "text-[var(--severity-critical)]"}`}>
-                <span className="text-[9px]">{trend >= 0 ? "\u25B2" : "\u25BC"}</span>
+                <span className="text-[11px]">{trend >= 0 ? "\u25B2" : "\u25BC"}</span>
                 {Math.abs(trend)}%
               </span>
             )}
           </div>
-          {trendLabel && (
+          {Number(value || 0) === 0 && zeroLabel ? (
+            <p className="mt-1.5 flex items-center gap-1 text-[11px] text-[var(--status-healthy)]">
+              <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 8l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {zeroLabel}
+            </p>
+          ) : trendLabel ? (
             <p className="mt-1.5 text-[11px] text-[var(--fg-muted)]">{trendLabel}</p>
-          )}
+          ) : null}
         </div>
 
         {/* Icon with glowing background */}

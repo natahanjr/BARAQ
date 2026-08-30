@@ -239,7 +239,7 @@ export default function HeartbeatChart({ data = [] }) {
       </MonitorChrome>
 
       {data.length > 0 && (
-        <div className="absolute right-0 bottom-2 left-4 flex justify-between text-[10px] text-slate-500">
+        <div className="absolute right-0 bottom-2 left-4 flex justify-between text-[11px] text-slate-500">
           {data.map((d, i) =>
             i % axisStep === 0 ? <span key={i}>{d.label || "—"}</span> : <span key={i} />
           )}
@@ -255,11 +255,11 @@ export default function HeartbeatChart({ data = [] }) {
 
       {hover != null && (
         <div
-          className="pointer-events-none absolute top-3 z-10 -translate-x-1/2 rounded-lg border border-slate-600/60 bg-slate-900/95 px-3 py-2 shadow-xl"
+          className="pointer-events-none absolute top-3 z-10 -translate-x-1/2 rounded-xl border border-slate-600/60 bg-slate-900/95 px-3 py-2 shadow-xl"
           style={{ left: `${((hover + 0.5) / data.length) * 100}%` }}
         >
           <p className="text-[11px] font-semibold text-slate-100">{data[hover].label || "—"}</p>
-          <div className="mt-1 flex items-center gap-3 text-[10px]">
+          <div className="mt-1 flex items-center gap-3 text-[11px]">
             <span className="flex items-center gap-1 text-emerald-400">
               <span className="h-1.5 w-4 rounded bg-emerald-400/70" /> {data[hover].count || 0} events
             </span>
@@ -270,7 +270,7 @@ export default function HeartbeatChart({ data = [] }) {
         </div>
       )}
 
-      <div className="absolute bottom-2 left-2 flex items-center gap-3 text-[10px] text-slate-500">
+      <div className="absolute bottom-2 left-2 flex items-center gap-3 text-[11px] text-slate-500">
         <span className="flex items-center gap-1.5">
           <span className="font-bold text-emerald-400">♥</span> events
         </span>

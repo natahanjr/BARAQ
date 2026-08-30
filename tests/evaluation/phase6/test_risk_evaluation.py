@@ -4,6 +4,7 @@ Runs the 27 hand-labeled RISK-001..RISK-027 scenarios through the real
 engine and verifies every expected score/severity/state/trend/factor set.
 No accuracy percentage is ever fabricated (6.56).
 """
+
 from __future__ import annotations
 
 from backend.risk.evaluation import run_evaluation

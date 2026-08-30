@@ -16,6 +16,7 @@ relationship_type). Deterministic: the same member sequence with the same
 edges always yields the same fingerprint - the UUID-free guarantee is
 tested (spec 5.6, 5.7).
 """
+
 from __future__ import annotations
 
 import hashlib

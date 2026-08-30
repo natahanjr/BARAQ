@@ -3,9 +3,10 @@
 Detects new administrator accounts (4720 + 4732 to Administrators) and
 suspicious privileged group membership changes (4728/4732 to admin SIDs).
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -42,7 +43,7 @@ class PrivilegeEscalationRule(BaseRule):
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         covered_event_ids: set[int] = set()
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         # 1) New account creation followed by addition to a privileged group.
         new_accounts = self.session.scalars(
@@ -54,8 +55,12 @@ class PrivilegeEscalationRule(BaseRule):
         ).all()
 
         for creation in new_accounts:
-            facts = (creation.raw_json or {}).get("facts", {}) if creation.raw_json else {}
-            account = facts.get("new_account") or facts.get("account_name") or creation.user
+            facts = (
+                (creation.raw_json or {}).get("facts", {}) if creation.raw_json else {}
+            )
+            account = (
+                facts.get("new_account") or facts.get("account_name") or creation.user
+            )
 
             evidence_bits = [f"account '{account}' created by '{creation.user}'"]
             ev_ids = [creation.id]
@@ -70,8 +75,12 @@ class PrivilegeEscalationRule(BaseRule):
             for add in admin_additions:
                 g = (add.raw_json or {}).get("facts", {}) if add.raw_json else {}
                 member = g.get("new_account", "") or g.get("member", "")
-                if self._is_admin_group(g) and (member.lower() == account.lower() or not member):
-                    evidence_bits.append(f"added to '{g.get('group', 'privileged group')}' via Event {add.event_id}")
+                if self._is_admin_group(g) and (
+                    member.lower() == account.lower() or not member
+                ):
+                    evidence_bits.append(
+                        f"added to '{g.get('group', 'privileged group')}' via Event {add.event_id}"
+                    )
                     ev_ids.append(add.id)
                     covered_event_ids.add(add.id)
 
@@ -85,11 +94,15 @@ class PrivilegeEscalationRule(BaseRule):
                 )
             ).all()
             for logon in privileged_logons:
-                facts = (logon.raw_json or {}).get("facts", {}) if logon.raw_json else {}
-                logon_user = facts.get("new_account") or facts.get("account_name") or logon.user
+                facts = (
+                    (logon.raw_json or {}).get("facts", {}) if logon.raw_json else {}
+                )
+                logon_user = (
+                    facts.get("new_account") or facts.get("account_name") or logon.user
+                )
                 if logon_user and logon_user.lower() == account.lower():
                     evidence_bits.append(
-                        f"privileged logon with special privileges (Event 4672)"
+                        "privileged logon with special privileges (Event 4672)"
                     )
                     ev_ids.append(logon.id)
 

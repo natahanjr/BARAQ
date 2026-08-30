@@ -1,4 +1,5 @@
 """Phase 7 incident fingerprinting (spec 7.4, 7.5)."""
+
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +13,9 @@ def _normalize(value: object) -> str:
     if isinstance(value, list):
         return json.dumps(sorted(value), separators=(",", ":"))
     if isinstance(value, dict):
-        return json.dumps({k: _normalize(v) for k, v in sorted(value.items())}, separators=(",", ":"))
+        return json.dumps(
+            {k: _normalize(v) for k, v in sorted(value.items())}, separators=(",", ":")
+        )
     return str(value)
 
 

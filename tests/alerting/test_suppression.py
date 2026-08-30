@@ -1,4 +1,5 @@
 """Alert suppression tests (spec 3.25, 3.26)."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -8,7 +9,6 @@ import pytest
 from backend.alerting.models import AlertSuppressionRule
 from backend.alerting.suppression import create_rule, is_suppressed, matches
 from backend.detection.contract import make_detection_id
-
 from tests.alerting.helpers import T0, detection, stored_suppressions
 
 
@@ -18,25 +18,37 @@ def _d(**kw):
 
 def test_rule_requires_reason(db):
     with pytest.raises(ValueError, match="documented reason"):
-        create_rule(db, policy_id="SUP-1", reason="  ", expires_at=T0 + timedelta(hours=1))
+        create_rule(
+            db, policy_id="SUP-1", reason="  ", expires_at=T0 + timedelta(hours=1)
+        )
 
 
 def test_rule_requires_future_expiration(db):
     with pytest.raises(ValueError, match="must expire in the future"):
-        create_rule(db, policy_id="SUP-1", reason="maintenance",
-                    expires_at=T0 - timedelta(hours=1), now=T0)
+        create_rule(
+            db,
+            policy_id="SUP-1",
+            reason="maintenance",
+            expires_at=T0 - timedelta(hours=1),
+            now=T0,
+        )
 
 
 def test_no_permanent_suppression(db):
     """Spec 3.26: permanent silent suppression is not allowed - every rule
     must expire within a bounded, auditable horizon."""
     with pytest.raises(ValueError, match="no permanent suppression"):
-        create_rule(db, policy_id="SUP-1", reason="silent",
-                    expires_at=T0 + timedelta(days=365 * 10), now=T0)
+        create_rule(
+            db,
+            policy_id="SUP-1",
+            reason="silent",
+            expires_at=T0 + timedelta(days=365 * 10),
+            now=T0,
+        )
 
 
 def test_rule_stored_with_scope(db):
-    rule = create_rule(
+    create_rule(
         db,
         policy_id="SUP-1",
         reason="Approved maintenance on workstation-42",
@@ -56,7 +68,8 @@ def test_rule_stored_with_scope(db):
 
 def test_matches_exact_scope(db):
     rule = AlertSuppressionRule(
-        policy_id="SUP-1", reason="maintenance",
+        policy_id="SUP-1",
+        reason="maintenance",
         expires_at=T0 + timedelta(hours=1),
         scope={"host": "workstation-42"},
     )
@@ -66,7 +79,8 @@ def test_matches_exact_scope(db):
 
 def test_matches_wildcard(db):
     rule = AlertSuppressionRule(
-        policy_id="SUP-1", reason="maintenance",
+        policy_id="SUP-1",
+        reason="maintenance",
         expires_at=T0 + timedelta(hours=1),
         scope={"detector_id": "D001", "host": "*", "user": "*"},
     )
@@ -75,7 +89,8 @@ def test_matches_wildcard(db):
 
 def test_matches_source_ip_subnet(db):
     rule = AlertSuppressionRule(
-        policy_id="SUP-1", reason="known admin source",
+        policy_id="SUP-1",
+        reason="known admin source",
         expires_at=T0 + timedelta(hours=1),
         scope={"source_ip": "185.0.0.0/8"},
     )
@@ -85,7 +100,8 @@ def test_matches_source_ip_subnet(db):
 
 def test_matches_detector_scope(db):
     rule = AlertSuppressionRule(
-        policy_id="SUP-1", reason="maint",
+        policy_id="SUP-1",
+        reason="maint",
         expires_at=T0 + timedelta(hours=1),
         scope={"detector_id": "D002"},
     )
@@ -93,11 +109,21 @@ def test_matches_detector_scope(db):
 
 
 def test_is_suppressed_only_active_rules(db):
-    create_rule(db, policy_id="SUP-1", reason="active rule",
-                expires_at=T0 + timedelta(hours=1), now=T0,
-                scope={"detector_id": "D001", "host": "workstation-42"})
-    expired = create_rule(db, policy_id="SUP-2", reason="expired rule",
-                          expires_at=T0 + timedelta(hours=1), now=T0)
+    create_rule(
+        db,
+        policy_id="SUP-1",
+        reason="active rule",
+        expires_at=T0 + timedelta(hours=1),
+        now=T0,
+        scope={"detector_id": "D001", "host": "workstation-42"},
+    )
+    expired = create_rule(
+        db,
+        policy_id="SUP-2",
+        reason="expired rule",
+        expires_at=T0 + timedelta(hours=1),
+        now=T0,
+    )
     expired.expires_at = T0 - timedelta(minutes=1)
     db.commit()
     assert is_suppressed(db, _d(host="workstation-42"), now=T0).policy_id == "SUP-1"
@@ -105,8 +131,13 @@ def test_is_suppressed_only_active_rules(db):
 
 
 def test_expired_rule_never_suppresses(db):
-    rule = create_rule(db, policy_id="SUP-1", reason="past maintenance",
-                       expires_at=T0 + timedelta(hours=1), now=T0)
+    rule = create_rule(
+        db,
+        policy_id="SUP-1",
+        reason="past maintenance",
+        expires_at=T0 + timedelta(hours=1),
+        now=T0,
+    )
     rule.expires_at = T0 - timedelta(minutes=1)
     db.commit()
     assert is_suppressed(db, _d(host="workstation-42"), now=T0) is None

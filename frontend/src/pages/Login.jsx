@@ -88,10 +88,10 @@ export default function Login() {
   };
 
   const inputCls =
-    "w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-teal-500";
+    "w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3.5 py-2.5 text-sm text-[var(--fg-primary)] outline-none transition-all duration-[var(--duration-normal)] focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-[var(--input-border-focus)] placeholder:text-[var(--input-placeholder)]";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#080e14] px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--bg-app)] px-4">
       <div
         className="pointer-events-none fixed inset-0"
         style={{
@@ -99,13 +99,13 @@ export default function Login() {
             "radial-gradient(600px 400px at 20% 10%, rgba(20,184,166,0.07), transparent 60%), radial-gradient(600px 400px at 80% 90%, rgba(234,179,8,0.06), transparent 60%)",
         }}
       />
-      <div className="relative w-full max-w-sm">
+      <div className="relative w-full max-w-sm animate-fade-in-up">
         <div className="mb-8 flex flex-col items-center gap-3">
           <svg className="h-16 w-16" viewBox="0 0 64 64">
             <defs>
               <linearGradient id="lgShield" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#14b8a6" />
-                <stop offset="100%" stopColor="#eab308" />
+                <stop offset="0%" stopColor="var(--accent-cyan)" />
+                <stop offset="100%" stopColor="var(--accent-violet)" />
               </linearGradient>
               <filter id="lgGlow" x="-40%" y="-40%" width="180%" height="180%">
                 <feGaussianBlur stdDeviation="2.4" result="blur" />
@@ -129,13 +129,13 @@ export default function Login() {
             />
             <path
               d="M36.5 12 L22 34.5 L30.5 34.5 L26.5 52 L44 27.5 L34.5 27.5 Z"
-              fill="#14b8a6"
+              fill="var(--accent-cyan)"
               filter="url(#lgGlow)"
             />
           </svg>
           <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-wide text-white">BARAQ</h1>
-            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-teal-400">
+            <h1 className="text-2xl font-bold tracking-wide text-[var(--fg-primary)]">BARAQ</h1>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.25em]" style={{ color: "var(--accent-cyan)" }}>
               {mode === "register" ? "Account Registration" : "Operator Access"}
             </p>
           </div>
@@ -143,11 +143,11 @@ export default function Login() {
 
         <form
           onSubmit={submit}
-          className="glass-line space-y-4 rounded-2xl bg-[#0f1a24]/85 p-6 shadow-[0_0_60px_-15px_rgba(20,184,166,0.3)] backdrop-blur-xl"
+          className="glass-line space-y-4 rounded-2xl bg-[var(--bg-surface)]/85 p-6 shadow-[0_0_60px_-15px_var(--accent-cyan-muted)] backdrop-blur-xl border border-[var(--border-default)]"
         >
           {challenge ? (
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="code">
+              <label className="mb-1.5 block text-xs font-medium text-[var(--fg-secondary)]" htmlFor="code">
                 Verification code
               </label>
               <input
@@ -159,18 +159,18 @@ export default function Login() {
                 autoFocus
                 required
                 placeholder="6-digit authenticator code"
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-center font-mono text-lg tracking-[0.5em] text-slate-100 outline-none transition-colors placeholder:text-sm placeholder:tracking-normal placeholder:text-slate-600 focus:border-teal-500"
+                className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3.5 py-2.5 text-center font-mono text-lg tracking-[0.5em] text-[var(--fg-primary)] outline-none transition-all duration-[var(--duration-normal)] focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-[var(--input-border-focus)] placeholder:text-sm placeholder:tracking-normal placeholder:text-[var(--input-placeholder)]"
               />
-              <p className="mt-2 text-center text-[11px] text-slate-500">
+              <p className="mt-2 text-center text-[11px] text-[var(--fg-muted)]">
                 Password verified for{" "}
-                <span className="font-mono text-teal-400">{username}</span> — enter
+                <span className="font-mono" style={{ color: "var(--accent-cyan)" }}>{username}</span> — enter
                 the code from your authenticator app.
               </p>
             </div>
           ) : mode === "register" ? (
             <>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="reg-username">
+                <label className="mb-1.5 block text-xs font-medium text-[var(--fg-secondary)]" htmlFor="reg-username">
                   Username
                 </label>
                 <input
@@ -187,8 +187,8 @@ export default function Login() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="reg-name">
-                  Full name <span className="text-slate-600">(optional)</span>
+                <label className="mb-1.5 block text-xs font-medium text-[var(--fg-secondary)]" htmlFor="reg-name">
+                  Full name <span className="text-[var(--fg-faint)]">(optional)</span>
                 </label>
                 <input
                   id="reg-name"
@@ -200,8 +200,8 @@ export default function Login() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="reg-org">
-                  Organization <span className="text-slate-600">(optional)</span>
+                <label className="mb-1.5 block text-xs font-medium text-[var(--fg-secondary)]" htmlFor="reg-org">
+                  Organization <span className="text-[var(--fg-faint)]">(optional)</span>
                 </label>
                 <input
                   id="reg-org"
@@ -212,8 +212,8 @@ export default function Login() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="reg-password">
-                  Password <span className="text-slate-600">(min 8 characters)</span>
+                <label className="mb-1.5 block text-xs font-medium text-[var(--fg-secondary)]" htmlFor="reg-password">
+                  Password <span className="text-[var(--fg-faint)]">(min 8 characters)</span>
                 </label>
                 <input
                   id="reg-password"
@@ -228,7 +228,7 @@ export default function Login() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="reg-confirm">
+                <label className="mb-1.5 block text-xs font-medium text-[var(--fg-secondary)]" htmlFor="reg-confirm">
                   Confirm password
                 </label>
                 <input
@@ -243,7 +243,7 @@ export default function Login() {
                   placeholder="••••••••"
                 />
               </div>
-              <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-300">
+              <p className="rounded-xl border px-3 py-2 text-[11px] leading-relaxed" style={{ background: "var(--warning-bg)", borderColor: "var(--warning-border)", color: "var(--warning-text)" }}>
                 New accounts are created as analysts and stay locked until an
                 administrator verifies them. You will be able to sign in once your
                 account is approved.
@@ -252,7 +252,7 @@ export default function Login() {
           ) : (
             <>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="username">
+                <label className="mb-1.5 block text-xs font-medium text-[var(--fg-secondary)]" htmlFor="username">
                   Username
                 </label>
                 <input
@@ -262,12 +262,12 @@ export default function Login() {
                   autoComplete="username"
                   autoFocus
                   required
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-teal-500"
+                  className={inputCls}
                   placeholder="e.g. admin"
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-400" htmlFor="password">
+                <label className="mb-1.5 block text-xs font-medium text-[var(--fg-secondary)]" htmlFor="password">
                   Password
                 </label>
                 <input
@@ -277,7 +277,7 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
                   required
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-teal-500"
+                  className={inputCls}
                   placeholder="••••••••"
                 />
               </div>
@@ -285,13 +285,13 @@ export default function Login() {
           )}
 
           {error && (
-            <p className="rounded-lg border px-4 py-2.5 text-sm" style={{ background: "var(--error-bg, #fef2f2)", borderColor: "var(--error-border, #fecaca)", color: "var(--error-text, #991b1b)" }}>
+            <p className="rounded-xl border px-4 py-2.5 text-sm" style={{ background: "var(--error-bg)", borderColor: "var(--error-border)", color: "var(--error-text)" }}>
               {error}
             </p>
           )}
 
           {notice && (
-            <p className="rounded-lg border px-4 py-2.5 text-sm" style={{ background: "var(--success-bg, #ecfdf5)", borderColor: "var(--success-border, #a7f3d0)", color: "var(--success-text, #065f46)" }}>
+            <p className="rounded-xl border px-4 py-2.5 text-sm" style={{ background: "var(--success-bg)", borderColor: "var(--success-border)", color: "var(--success-text)" }}>
               {notice}
             </p>
           )}
@@ -299,7 +299,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded-lg bg-gradient-to-r from-teal-600 to-teal-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:from-teal-500 hover:to-teal-400 disabled:opacity-50"
+            className="w-full rounded-lg bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-cyan)]/80 px-4 py-2.5 text-sm font-semibold text-[var(--fg-inverse)] transition-all duration-[var(--duration-normal)] hover:brightness-110 disabled:opacity-50 shadow-[var(--shadow-sm)]"
           >
             {busy
               ? challenge
@@ -319,7 +319,7 @@ export default function Login() {
               type="button"
               onClick={cancelMfa}
               disabled={busy}
-              className="w-full rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-200 disabled:opacity-50"
+              className="w-full rounded-xl border border-[var(--border-default)] px-4 py-2 text-xs font-medium text-[var(--fg-secondary)] transition-all duration-[var(--duration-normal)] hover:border-[var(--border-strong)] hover:text-[var(--fg-primary)] disabled:opacity-50"
             >
               ← Back to sign in
             </button>
@@ -328,22 +328,22 @@ export default function Login() {
           {!challenge && mode === "login" && (sso?.oidc || sso?.ldap) && (
             <>
               <div className="flex items-center gap-3">
-                <span className="h-px flex-1 bg-slate-800" />
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">
+                <span className="h-px flex-1 bg-[var(--border-subtle)]" />
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-[var(--fg-faint)]">
                   Single sign-on
                 </span>
-                <span className="h-px flex-1 bg-slate-800" />
+                <span className="h-px flex-1 bg-[var(--border-subtle)]" />
               </div>
               {sso?.oidc && (
                 <a
                   href="/api/auth/oidc/login"
-                  className="block w-full rounded-lg border border-slate-600 bg-slate-800 px-4 py-2.5 text-center text-sm font-semibold text-slate-200 transition-colors hover:border-slate-400 hover:bg-slate-700"
+                  className="block w-full rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface-raised)] px-4 py-2.5 text-center text-sm font-semibold text-[var(--fg-primary)] transition-all duration-[var(--duration-normal)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)]"
                 >
                   Continue with SSO
                 </a>
               )}
               {sso?.ldap && !sso?.oidc && (
-                <p className="text-center text-[11px] text-slate-500">
+                <p className="text-center text-[11px] text-[var(--fg-muted)]">
                   Directory accounts sign in below with their corporate credentials.
                 </p>
               )}
@@ -354,7 +354,7 @@ export default function Login() {
             <button
               type="button"
               onClick={() => switchMode("register")}
-              className="w-full rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-400 transition-colors hover:border-teal-500/50 hover:text-teal-300"
+              className="w-full rounded-xl border border-[var(--border-default)] px-4 py-2 text-xs font-medium text-[var(--fg-secondary)] transition-all duration-[var(--duration-normal)] hover:border-[var(--accent-cyan)]/50 hover:text-[var(--accent-cyan)]"
             >
               New here? Create an account
             </button>
@@ -363,15 +363,15 @@ export default function Login() {
             <button
               type="button"
               onClick={() => switchMode("login")}
-              className="w-full rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-200"
+              className="w-full rounded-xl border border-[var(--border-default)] px-4 py-2 text-xs font-medium text-[var(--fg-secondary)] transition-all duration-[var(--duration-normal)] hover:border-[var(--border-strong)] hover:text-[var(--fg-primary)]"
             >
               ← Back to sign in
             </button>
           )}
 
           {mode === "login" && (
-            <p className="text-center text-[11px] text-slate-600">
-              Default account: <span className="font-mono text-slate-500">admin / baraqadmin</span>
+            <p className="text-center text-[11px] text-[var(--fg-faint)]">
+              Default account: <span className="font-mono text-[var(--fg-muted)]">admin / baraqadmin</span>
             </p>
           )}
         </form>

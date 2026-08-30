@@ -18,6 +18,7 @@ docs/phase0/METRICS_REGISTRY.md (p2.det.latency_ms).
 The benchmark is small (n = 8) and fully human-labeled; see
 docs/phase2/PHASE2_ACCEPTANCE.md for the methodology statement.
 """
+
 from __future__ import annotations
 
 import time
@@ -25,7 +26,6 @@ import time
 from backend.detection.context import DetectionContext
 from backend.detection.engine import run_and_persist
 from backend.telemetry.ingestion.pipeline import ingest
-
 from tests.detection.evaluation_data import SCENARIOS, expected_detector_ids
 from tests.detection.helpers import stored_events
 
@@ -52,7 +52,9 @@ def _run_scenario(db, scenario: dict) -> tuple[dict[str, tuple[str, str]], float
             continue
         records = run_and_persist(db, [event], context)
         for record in records:
-            fired.setdefault(record.detector_id, (record.severity, record.mitre_technique or ""))
+            fired.setdefault(
+                record.detector_id, (record.severity, record.mitre_technique or "")
+            )
     latency_s = time.perf_counter() - start
     return fired, latency_s
 
@@ -109,7 +111,10 @@ def evaluate_scenarios(db) -> dict:
     return {
         "results": results,
         "metrics": {
-            "TP": tp, "FP": fp, "FN": fn, "TN": tn,
+            "TP": tp,
+            "FP": fp,
+            "FN": fn,
+            "TN": tn,
             "precision": round(precision, 4),
             "recall": round(recall, 4),
             "f1": round(f1, 4),
@@ -140,9 +145,7 @@ def test_expected_severity_and_mitre_match(db):
     for result in report["results"]:
         for exp in _expected_entries(result["id"]):
             det = result["detections"].get(exp["detector_id"])
-            assert det is not None, (
-                f"{result['id']}: {exp['detector_id']} did not fire"
-            )
+            assert det is not None, f"{result['id']}: {exp['detector_id']} did not fire"
             assert det["severity"] == exp["severity"], (
                 f"{result['id']} {exp['detector_id']}: severity "
                 f"{det['severity']} != {exp['severity']}"
@@ -154,9 +157,7 @@ def test_expected_severity_and_mitre_match(db):
 
 
 def _expected_entries(scenario_id: str) -> list[dict]:
-    return next(
-        s["expected"] for s in SCENARIOS if s["id"] == scenario_id
-    )
+    return next(s["expected"] for s in SCENARIOS if s["id"] == scenario_id)
 
 
 def test_metrics_perfect_on_benchmark(db):
@@ -196,12 +197,10 @@ def test_evaluation_writes_only_detections(db):
 
     tables = ("alerts", "incidents", "entity_risk")
     before = {
-        t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar()
-        for t in tables
+        t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar() for t in tables
     }
     evaluate_scenarios(db)
     after = {
-        t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar()
-        for t in tables
+        t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar() for t in tables
     }
     assert after == before

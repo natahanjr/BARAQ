@@ -5,9 +5,10 @@ Converts raw collector records into canonical :class:`EVENT` objects.
 Owned by ``telemetry/normalization``. May only consume raw records and the
 EVENT contract; never reads detection state and never writes anywhere.
 """
+
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from backend.telemetry.contract import EVENT
@@ -97,9 +98,8 @@ class GenericNormalizer:
         if ts is None:
             ts = fallback_ts
         if ts.tzinfo is None:
-            from datetime import timezone
 
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
         return EVENT(
             timestamp=ts,
             host=str(raw.get("host", "-")),
@@ -111,7 +111,8 @@ class GenericNormalizer:
             raw=raw,
             integrity=raw.get("data_integrity", "complete"),
             event_id=str(raw.get("event_id", "")),
-            event_type=str(raw.get("event_type", "")) or _derive_event_type(str(raw.get("action", ""))),
+            event_type=str(raw.get("event_type", ""))
+            or _derive_event_type(str(raw.get("action", ""))),
             destination=str(raw.get("destination", "")),
             process=dict(raw.get("process") or {}),
             network=dict(raw.get("network") or {}),
@@ -145,9 +146,8 @@ class WindowsEventNormalizer:
         if ts is None:
             ts = fallback_ts
         if ts.tzinfo is None:
-            from datetime import timezone
 
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
         eid = int(raw.get("event_id", 0))
         data = dict(raw.get("event_data") or {})
         if eid in self._LOGON_EVENTS:
@@ -161,7 +161,9 @@ class WindowsEventNormalizer:
             }
             event_type = "authentication"
             destination = str(data.get("workstation_name") or "")
-            network = {"src_ip": data.get("ip_address")} if data.get("ip_address") else {}
+            network = (
+                {"src_ip": data.get("ip_address")} if data.get("ip_address") else {}
+            )
             outcome = "success" if eid == 4624 else "failure"
         else:
             action = f"event_{eid}"
@@ -169,7 +171,9 @@ class WindowsEventNormalizer:
             facts = {k: v for k, v in data.items() if v is not None}
             event_type = "process" if eid == 4688 else "event"
             destination = str(data.get("workstation_name") or "")
-            network = {"src_ip": data.get("ip_address")} if data.get("ip_address") else {}
+            network = (
+                {"src_ip": data.get("ip_address")} if data.get("ip_address") else {}
+            )
             outcome = str(raw.get("outcome") or "")
         process = {}
         if eid == 4688:

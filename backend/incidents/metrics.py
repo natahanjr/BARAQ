@@ -1,17 +1,22 @@
 """Phase 7 incident metrics (spec 7.36, 7.37, 7.49)."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select
 
 from backend.incidents.config import INCIDENT_SLA_MINUTES
-from backend.incidents.contract import INCIDENT_PRIORITIES, INCIDENT_SEVERITIES, INCIDENT_STATES
+from backend.incidents.contract import (
+    INCIDENT_PRIORITIES,
+    INCIDENT_SEVERITIES,
+    INCIDENT_STATES,
+)
 from backend.incidents.models import (
+    IncidentV2,
     IncidentV2AuditEvent,
     IncidentV2Feedback,
-    IncidentV2,
 )
 
 
@@ -21,21 +26,28 @@ def _percentile(values: list[float], pct: float) -> float:
     ordered = sorted(values)
     if pct >= 100:
         return ordered[-1]
-    index = int(round(pct / 100.0 * (len(ordered) - 1)))
+    index = round(pct / 100.0 * (len(ordered) - 1))
     return ordered[index]
 
 
 def incident_metrics(db, now: datetime | None = None) -> dict[str, Any]:
-    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    now = now or datetime.now(UTC).replace(tzinfo=None)
     if now.tzinfo is not None:
-        now = now.astimezone(timezone.utc).replace(tzinfo=None)
+        now = now.astimezone(UTC).replace(tzinfo=None)
     total = db.scalars(select(func.count()).select_from(IncidentV2)).one()
     by_status: dict[str, int] = {s: 0 for s in INCIDENT_STATES}
     for status in db.scalars(select(IncidentV2.status)).all():
         by_status[status] = by_status.get(status, 0) + 1
 
     active = sum(
-        by_status.get(s, 0) for s in ("NEW", "TRIAGED", "INVESTIGATING", "CONTAINMENT_REQUIRED", "CONTAINED")
+        by_status.get(s, 0)
+        for s in (
+            "NEW",
+            "TRIAGED",
+            "INVESTIGATING",
+            "CONTAINMENT_REQUIRED",
+            "CONTAINED",
+        )
     )
 
     by_severity: dict[str, int] = {s: 0 for s in INCIDENT_SEVERITIES}
@@ -56,8 +68,11 @@ def incident_metrics(db, now: datetime | None = None) -> dict[str, Any]:
     within_sla = 0
     breached = 0
     for created_at, priority in db.execute(
-        select(IncidentV2.created_at, IncidentV2.priority)
-        .where(IncidentV2.status.in_(("NEW", "TRIAGED", "INVESTIGATING", "CONTAINMENT_REQUIRED")))
+        select(IncidentV2.created_at, IncidentV2.priority).where(
+            IncidentV2.status.in_(
+                ("NEW", "TRIAGED", "INVESTIGATING", "CONTAINMENT_REQUIRED")
+            )
+        )
     ).all():
         age_hours = (now - created_at).total_seconds() / 3600.0
         ages.append(age_hours)
@@ -69,14 +84,14 @@ def incident_metrics(db, now: datetime | None = None) -> dict[str, Any]:
             within_sla += 1
 
     calculations = db.scalars(
-        select(func.count()).select_from(IncidentV2AuditEvent).where(
-            IncidentV2AuditEvent.action == "INCIDENT_CREATED"
-        )
+        select(func.count())
+        .select_from(IncidentV2AuditEvent)
+        .where(IncidentV2AuditEvent.action == "INCIDENT_CREATED")
     ).one()
     failures = db.scalars(
-        select(func.count()).select_from(IncidentV2AuditEvent).where(
-            IncidentV2AuditEvent.action == "INCIDENT_CREATION_FAILED"
-        )
+        select(func.count())
+        .select_from(IncidentV2AuditEvent)
+        .where(IncidentV2AuditEvent.action == "INCIDENT_CREATION_FAILED")
     ).one()
 
     latency = {
@@ -119,5 +134,3 @@ def incident_metrics(db, now: datetime | None = None) -> dict[str, Any]:
         "feedback": feedback_counts,
         "sample_size": total,
     }
-
-

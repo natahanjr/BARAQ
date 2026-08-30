@@ -9,19 +9,20 @@ The private key defaults to licensing\\private_key.pem (gitignored). Set
 BARAQ_LICENSE_PRIVATE_KEY to use another key. The matching public key must
 be embedded in backend/config.py (LICENSE_PUBLIC_KEY) of the shipped build.
 """
+
 from __future__ import annotations
 
 import argparse
 import base64
 import sys
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from backend.licensing import LicenseInfo, sign_license  # noqa: E402
+from backend.licensing import LicenseInfo, sign_license
 
 DEFAULT_PRIVATE_KEY = ROOT / "licensing" / "private_key.pem"
 
@@ -39,15 +40,24 @@ def _load_private_key(path: Path) -> bytes:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate BARAQ license keys")
     parser.add_argument("--customer", default="", help="customer/organisation name")
-    parser.add_argument("--edition", default="standard",
-                        choices=["trial", "standard", "professional"])
+    parser.add_argument(
+        "--edition", default="standard", choices=["trial", "standard", "professional"]
+    )
     parser.add_argument("--seats", type=int, default=1, help="licensed endpoint seats")
-    parser.add_argument("--expires", default="", help="expiry date YYYY-MM-DD (default 1 year)")
+    parser.add_argument(
+        "--expires", default="", help="expiry date YYYY-MM-DD (default 1 year)"
+    )
     parser.add_argument("--features", default="", help="comma-separated feature flags")
-    parser.add_argument("--generate-keypair", action="store_true",
-                        help="generate licensing/private_key.pem + public_key.pem")
-    parser.add_argument("--private-key", default=str(DEFAULT_PRIVATE_KEY),
-                        help="path to the private key file")
+    parser.add_argument(
+        "--generate-keypair",
+        action="store_true",
+        help="generate licensing/private_key.pem + public_key.pem",
+    )
+    parser.add_argument(
+        "--private-key",
+        default=str(DEFAULT_PRIVATE_KEY),
+        help="path to the private key file",
+    )
     args = parser.parse_args()
 
     if args.generate_keypair:
@@ -61,13 +71,17 @@ def main() -> None:
         (out_dir / "public_key.pem").write_text(
             enc(key.public_key().public_bytes_raw())
         )
-        print(f"private key : {(out_dir / 'private_key.pem')}  (keep secret, never ship)")
+        print(
+            f"private key : {(out_dir / 'private_key.pem')}  (keep secret, never ship)"
+        )
         print(f"public key  : {(out_dir / 'public_key.pem')}")
         print("Embed the public key value into backend/config.py LICENSE_PUBLIC_KEY.")
         return
 
-    expires = args.expires or (date.today().replace(year=date.today().year + 1)).isoformat()
-    issued = datetime.now(timezone.utc).isoformat()
+    expires = (
+        args.expires or (date.today().replace(year=date.today().year + 1)).isoformat()
+    )
+    issued = datetime.now(UTC).isoformat()
     info = LicenseInfo(
         license_id=str(uuid.uuid4()),
         customer=args.customer,

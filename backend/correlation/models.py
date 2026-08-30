@@ -13,9 +13,10 @@ Tables:
     correlation_evidence      - evidence preserved from groups/rules
     correlation_audit_events  - every state-changing operation
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     DateTime,
@@ -35,7 +36,7 @@ from backend.database.models import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class CorrelationFindingRecord(Base):
@@ -85,9 +86,15 @@ class CorrelationFindingRecord(Base):
     #: Strongest member group severity - never escalated (spec 5.25).
     highest_severity: Mapped[str] = mapped_column(String(16), index=True, default="low")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -121,7 +128,9 @@ class CorrelationMember(Base):
 
     __tablename__ = "correlation_members"
     __table_args__ = (
-        UniqueConstraint("correlation_id", "behavior_group_id", name="uq_corr_member_group"),
+        UniqueConstraint(
+            "correlation_id", "behavior_group_id", name="uq_corr_member_group"
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -139,7 +148,9 @@ class CorrelationMember(Base):
     #: access -> lateral movement, same user, within 60-minute window".
     membership_reason: Mapped[str] = mapped_column(Text, default="")
     role: Mapped[str] = mapped_column(String(64), default="member")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
 
 class CorrelationEdge(Base):
@@ -170,7 +181,9 @@ class CorrelationEdge(Base):
     shared_techniques: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     evidence: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     strength: Mapped[float] = mapped_column(Float, default=0.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
 
 class CorrelationEvidence(Base):
@@ -188,7 +201,9 @@ class CorrelationEvidence(Base):
     field: Mapped[str] = mapped_column(String(128), default="")
     value: Mapped[str] = mapped_column(Text, default="")
     reason: Mapped[str] = mapped_column(String(256), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
 
 
 class CorrelationAuditEvent(Base):
@@ -205,4 +220,6 @@ class CorrelationAuditEvent(Base):
     action: Mapped[str] = mapped_column(String(32), index=True)
     actor: Mapped[str] = mapped_column(String(128), default="system")
     details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )

@@ -1,6 +1,8 @@
 @echo off
 rem ===========================================================================
-rem  BARAQ - one-click launcher (Windows) - Updated 2026-08-28
+rem  BARAQ - one-click launcher (Windows) - Updated 2026-08-30
+rem  UI/UX: token-driven system, WCAG-AA contrast, focus-trapped overlays,
+rem  accessible badges/menus/tooltips, automated axe-core a11y gate.
 rem  Usage:
 rem    start.bat secure       -> STANDARD: HTTPS (TLS) with self-signed cert
 rem    start.bat secure lan   -> standard + exposed to the local network
@@ -23,7 +25,7 @@ echo.
 echo  ============================================
 echo   BARAQ - Live Threat Detection
 echo   Version: v6 (Phase 2 - ML Enhancements)
-echo   Date: 2026-08-28
+echo   Date: 2026-08-30
 if /i "%LAN_MODE%"=="lan" echo   MODE: LAN (accessible from your network)
 if /i "%SECURE_MODE%"=="secure" echo   MODE: HTTPS (TLS encrypted)
 echo  ============================================
@@ -86,35 +88,50 @@ if not exist ".env" (
 echo        Configuration: OK
 
 rem ---------------------------------------------------------------------------
-rem  STEP 5: Dashboard build
+rem  STEP 5: Dashboard build (always rebuild to include all UI/UX changes)
 rem ---------------------------------------------------------------------------
-echo  [5/10] Checking dashboard...
-if not exist "frontend\dist\index.html" (
-    where node >nul 2>nul
+echo  [5/10] Building dashboard (UI/UX hardened build)...
+where node >nul 2>nul
+if errorlevel 1 (
+    echo  [WARN] Node.js not found - dashboard UI will not be served.
+    echo         Install Node.js 18+ then run:  cd frontend ^&^& npm install ^&^& npm run build
+) else (
+    pushd frontend
+    call npm install
     if errorlevel 1 (
-        echo  [WARN] Node.js not found - dashboard UI will not be served.
-        echo         Install Node.js 18+ then run:  cd frontend ^&^& npm install ^&^& npm run build
-    ) else (
-        echo        Building dashboard ^(first run only^)...
-        pushd frontend
-        call npm install
-        if errorlevel 1 (
-            echo  [ERROR] npm install failed.
-            popd
-            pause
-            exit /b 1
-        )
-        call npm run build
-        if errorlevel 1 (
-            echo  [ERROR] Dashboard build failed.
-            popd
-            pause
-            exit /b 1
-        )
+        echo  [ERROR] npm install failed.
         popd
+        pause
+        exit /b 1
     )
+    call npm run build
+    if errorlevel 1 (
+        echo  [ERROR] Dashboard build failed.
+        popd
+        pause
+        exit /b 1
+    )
+    popd
+    echo        Dashboard: OK
 )
-echo        Dashboard: OK
+
+rem ---------------------------------------------------------------------------
+rem  STEP 5b: Accessibility gate (axe-core smoke tests)
+rem ---------------------------------------------------------------------------
+echo  [5b/10] Running a11y gate (axe-core)...
+where node >nul 2>nul
+if errorlevel 1 (
+    echo  [SKIP] Node.js missing - skipping a11y gate.
+) else (
+    pushd frontend
+    call npm test
+    if errorlevel 1 (
+        echo  [WARN] a11y gate reported issues - review src/test/a11y.test.jsx
+    ) else (
+        echo        a11y gate: OK
+    )
+    popd
+)
 
 rem ---------------------------------------------------------------------------
 rem  STEP 6: TLS (if secure mode)
@@ -316,6 +333,7 @@ echo    NTLM, Kerberos, PrintService, AppLocker
 echo    DNS Client, Hardware Events, USB, BitLocker, DiskDiagnostic
 echo.
 echo  Dashboard:    http://127.0.0.1:5173 (dev) or %URL% (prod)
+echo  A11y gate:    axe-core smoke tests (npm test in frontend) - runs each launch
 echo.
 echo  [DONE]  BARAQ is starting in the background. Closing this window...
 ping -n 3 127.0.0.1 >nul

@@ -14,17 +14,20 @@ Options:
     --force     overwrite target tables that already contain rows
     --batch     rows per insert batch (default 1000)
 """
+
 from __future__ import annotations
 
 import argparse
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(message)s"
+)
 logger = logging.getLogger("baraq.migrate")
 
 _BATCH = 1000
@@ -32,7 +35,7 @@ _BATCH = 1000
 
 def _as_aware(value):
     if isinstance(value, datetime) and value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
+        return value.replace(tzinfo=UTC)
     return value
 
 
@@ -42,7 +45,9 @@ def _tables(engine):
     return sorted(inspect(engine).get_table_names())
 
 
-def _copy_table(src_engine, dst_engine, table_name: str, force: bool) -> tuple[int, int]:
+def _copy_table(
+    src_engine, dst_engine, table_name: str, force: bool
+) -> tuple[int, int]:
     from sqlalchemy import MetaData, func, select
 
     meta = MetaData()
@@ -50,7 +55,11 @@ def _copy_table(src_engine, dst_engine, table_name: str, force: bool) -> tuple[i
     table = meta.tables[table_name]
 
     with dst_engine.connect() as dst:
-        existing = dst.execute(select(func.count()).select_from(table)).scalar() if force else None
+        existing = (
+            dst.execute(select(func.count()).select_from(table)).scalar()
+            if force
+            else None
+        )
         if not force and existing:
             raise SystemExit(
                 f"Table '{table_name}' already has {existing} row(s) on the target. "
@@ -66,7 +75,9 @@ def _copy_table(src_engine, dst_engine, table_name: str, force: bool) -> tuple[i
     with src_engine.connect() as src, dst_engine.begin() as dst:
         for row in src.execution_options(stream_results=True).execute(select(table)):
             source_rows += 1
-            buffer.append({c.key: _as_aware(row._mapping[c.key]) for c in table.columns})
+            buffer.append(
+                {c.key: _as_aware(row._mapping[c.key]) for c in table.columns}
+            )
             if len(buffer) >= _BATCH:
                 dst.execute(table.insert(), buffer)
                 copied += len(buffer)
@@ -118,7 +129,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pg-url", default=None, help="Target PostgreSQL URL")
     parser.add_argument("--sqlite", default=None, help="Source SQLite file path")
-    parser.add_argument("--force", action="store_true", help="Overwrite non-empty target tables")
+    parser.add_argument(
+        "--force", action="store_true", help="Overwrite non-empty target tables"
+    )
     parser.add_argument("--batch", type=int, default=1000)
     args = parser.parse_args()
     global _BATCH
@@ -149,14 +162,21 @@ def main() -> None:
         source_rows, copied = _copy_table(src, dst, table_name, args.force)
         total += copied
         marker = "OK" if source_rows == copied else "MISMATCH"
-        logger.info("%-24s %8d -> %8d rows  %s", table_name, source_rows, copied, marker)
+        logger.info(
+            "%-24s %8d -> %8d rows  %s", table_name, source_rows, copied, marker
+        )
         if source_rows != copied:
-            logger.warning("Table %s: copied %d of %d rows - re-run to retry", table_name, copied, source_rows)
+            logger.warning(
+                "Table %s: copied %d of %d rows - re-run to retry",
+                table_name,
+                copied,
+                source_rows,
+            )
 
     _fix_sequences(dst)
     logger.info("Migration complete: %d rows copied in total", total)
     logger.info("Point BARAQ at the new database:")
-    logger.info('  set BARAQ_DATABASE_URL=%s', pg_url)
+    logger.info("  set BARAQ_DATABASE_URL=%s", pg_url)
     logger.info("  python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000")
 
 

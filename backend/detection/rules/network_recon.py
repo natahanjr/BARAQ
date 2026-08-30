@@ -3,9 +3,10 @@
 Detects port-scanning behaviour: a single source probing many distinct
 remote ports of one host within a short window.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 
@@ -36,7 +37,7 @@ class NetworkReconRule(BaseRule):
         self.window_seconds = window_seconds
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
-        since = datetime.now(timezone.utc) - timedelta(seconds=self.window_seconds)
+        since = datetime.now(UTC) - timedelta(seconds=self.window_seconds)
         findings: list[DetectionResult] = []
 
         stmt = (
@@ -53,7 +54,10 @@ class NetworkReconRule(BaseRule):
                 *self._org_conds(NetworkConnection),
             )
             .group_by(NetworkConnection.local_ip, NetworkConnection.remote_ip)
-            .having(func.count(func.distinct(NetworkConnection.remote_port)) >= self.distinct_ports)
+            .having(
+                func.count(func.distinct(NetworkConnection.remote_port))
+                >= self.distinct_ports
+            )
         )
 
         for row in self.session.execute(stmt).all():
@@ -68,7 +72,9 @@ class NetworkReconRule(BaseRule):
                 self._result(
                     evidence=evidence,
                     event_ids=[],
-                    severity="high" if row.ports >= self.distinct_ports * 2 else "medium",
+                    severity=(
+                        "high" if row.ports >= self.distinct_ports * 2 else "medium"
+                    ),
                     confidence=min(0.95, 0.6 + row.ports * 0.005),
                 )
             )

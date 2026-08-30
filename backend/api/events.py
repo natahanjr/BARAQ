@@ -1,4 +1,5 @@
 """Events, processes, network, DNS, HTTP API endpoints."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -6,7 +7,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
-from backend.database.models import DnsQuery, HttpRequest, NetworkConnection, NormalizedEvent, ProcessRecord
+from backend.database.models import (
+    DnsQuery,
+    HttpRequest,
+    NetworkConnection,
+    NormalizedEvent,
+    ProcessRecord,
+)
 from backend.security import require_auth, tenant_scope
 
 router = APIRouter(prefix="/api", tags=["events"], dependencies=[Depends(require_auth)])
@@ -49,7 +56,12 @@ def list_events(
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()
-    return {"total": total, "page": page, "page_size": page_size, "items": [e.to_dict() for e in rows]}
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [e.to_dict() for e in rows],
+    }
 
 
 @router.get("/events/statistics")
@@ -61,15 +73,11 @@ def event_statistics(request: Request, db: Session = Depends(get_db)):
         stmt_event = stmt_event.where(NormalizedEvent.org == scope)
         stmt_category = stmt_category.where(NormalizedEvent.org == scope)
     by_event = db.execute(
-        stmt_event
-        .group_by(NormalizedEvent.event_id)
+        stmt_event.group_by(NormalizedEvent.event_id)
         .order_by(func.count(NormalizedEvent.id).desc())
         .limit(20)
     ).all()
-    by_category = db.execute(
-        stmt_category
-        .group_by(NormalizedEvent.category)
-    ).all()
+    by_category = db.execute(stmt_category.group_by(NormalizedEvent.category)).all()
     return {
         "by_event_id": [{"event_id": int(r[0]), "count": int(r[1])} for r in by_event],
         "by_category": [{"category": r[0], "count": int(r[1])} for r in by_category],
@@ -89,7 +97,9 @@ def get_event(event_id: int, request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/processes")
-def list_processes(limit: int = Query(200, ge=1, le=1000), db: Session = Depends(get_db)):
+def list_processes(
+    limit: int = Query(200, ge=1, le=1000), db: Session = Depends(get_db)
+):
     rows = db.scalars(
         select(ProcessRecord).order_by(ProcessRecord.observed_at.desc()).limit(limit)
     ).all()
@@ -109,6 +119,7 @@ def list_network(
         stmt = stmt.where(NetworkConnection.remote_ip == remote_ip)
     if since:
         from datetime import datetime as _dt
+
         try:
             since_dt = _dt.fromisoformat(since)
             stmt = stmt.where(NetworkConnection.observed_at >= since_dt)
@@ -136,7 +147,9 @@ def list_network(
             NetworkConnection.remote_ip.like("172.1%"),
             NetworkConnection.remote_ip.like("127.%"),
         )
-    rows = db.scalars(stmt.order_by(NetworkConnection.observed_at.desc()).limit(limit)).all()
+    rows = db.scalars(
+        stmt.order_by(NetworkConnection.observed_at.desc()).limit(limit)
+    ).all()
     return {"total": len(rows), "items": [c.to_dict() for c in rows]}
 
 
@@ -178,12 +191,18 @@ def network_stats(db: Session = Depends(get_db)):
     http_count = db.scalar(select(func.count(HttpRequest.id))) or 0
 
     # Bandwidth totals
-    total_sent = db.scalar(select(func.coalesce(func.sum(NetworkConnection.bytes_sent), 0))) or 0
-    total_recv = db.scalar(select(func.coalesce(func.sum(NetworkConnection.bytes_recv), 0))) or 0
+    total_sent = (
+        db.scalar(select(func.coalesce(func.sum(NetworkConnection.bytes_sent), 0))) or 0
+    )
+    total_recv = (
+        db.scalar(select(func.coalesce(func.sum(NetworkConnection.bytes_recv), 0))) or 0
+    )
 
     # Top remote IPs by connection count
     top_ips = db.execute(
-        select(NetworkConnection.remote_ip, func.count(NetworkConnection.id).label("cnt"))
+        select(
+            NetworkConnection.remote_ip, func.count(NetworkConnection.id).label("cnt")
+        )
         .where(NetworkConnection.remote_ip != "")
         .group_by(NetworkConnection.remote_ip)
         .order_by(func.count(NetworkConnection.id).desc())
@@ -192,7 +211,9 @@ def network_stats(db: Session = Depends(get_db)):
 
     # Top ports by connection count
     top_ports = db.execute(
-        select(NetworkConnection.remote_port, func.count(NetworkConnection.id).label("cnt"))
+        select(
+            NetworkConnection.remote_port, func.count(NetworkConnection.id).label("cnt")
+        )
         .where(NetworkConnection.remote_port > 0)
         .group_by(NetworkConnection.remote_port)
         .order_by(func.count(NetworkConnection.id).desc())
@@ -271,25 +292,25 @@ def ip_geo(ip: str = Query(...)):
     asn_hint = ""
     ip_str = str(addr)
     if classification == "external":
-        if ip_str.startswith("13.107") or ip_str.startswith("52.96") or ip_str.startswith("204.79.197"):
+        if ip_str.startswith(("13.107", "52.96", "204.79.197")):
             org = "Microsoft"
-        elif ip_str.startswith("142.250") or ip_str.startswith("142.251") or ip_str.startswith("172.217") or ip_str.startswith("216.58"):
+        elif ip_str.startswith(("142.250", "142.251", "172.217", "216.58")):
             org = "Google"
-        elif ip_str.startswith("149.154") or ip_str.startswith("91.108"):
+        elif ip_str.startswith(("149.154", "91.108")):
             org = "Telegram"
-        elif ip_str.startswith("162.159") or ip_str.startswith("104.16") or ip_str.startswith("172.64"):
+        elif ip_str.startswith(("162.159", "104.16", "172.64")):
             org = "Cloudflare"
-        elif ip_str.startswith("20.190") or ip_str.startswith("20.86") or ip_str.startswith("40.1"):
+        elif ip_str.startswith(("20.190", "20.86", "40.1")):
             org = "Azure"
-        elif ip_str.startswith("52.123") or ip_str.startswith("52.110"):
+        elif ip_str.startswith(("52.123", "52.110")):
             org = "Microsoft 365"
-        elif ip_str.startswith("135.116") or ip_str.startswith("13.107"):
+        elif ip_str.startswith(("135.116", "13.107")):
             org = "Microsoft"
-        elif ip_str.startswith("98.66") or ip_str.startswith("20.86"):
+        elif ip_str.startswith(("98.66", "20.86")):
             org = "Azure"
-        elif ip_str.startswith("140.82") or ip_str.startswith("199.232"):
+        elif ip_str.startswith(("140.82", "199.232")):
             org = "GitHub"
-        elif ip_str.startswith("173.194") or ip_str.startswith("74.125"):
+        elif ip_str.startswith(("173.194", "74.125")):
             org = "Google"
 
     return {

@@ -52,7 +52,11 @@ def _validate(key: str, value: Any) -> Any:
     if isinstance(value, dict):
         if expected is dict:
             return {
-                str(k): float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else v
+                str(k): (
+                    float(v)
+                    if isinstance(v, (int, float)) and not isinstance(v, bool)
+                    else v
+                )
                 for k, v in value.items()
             }
         raise ValueError(f"tuning key {key!r} expects a mapping")
@@ -74,7 +78,9 @@ def _validate(key: str, value: Any) -> Any:
         if isinstance(value, list):
             return value
         raise ValueError(f"tuning key {key!r} expects a list")
-    raise ValueError(f"tuning key {key!r} expects {getattr(expected, '__name__', expected)}")
+    raise ValueError(
+        f"tuning key {key!r} expects {getattr(expected, '__name__', expected)}"
+    )
 
 
 def get_raw(db: Session) -> dict[str, Any]:
@@ -92,23 +98,37 @@ def get_tuning(db: Session) -> dict[str, Any]:
             **(raw.get("rule_risk_weights") or {}),
         },
         "risk_thresholds": {
-            "medium": float(raw.get("risk_thresholds", {}).get("medium", ENTITY_RISK_LEVEL_MEDIUM))
-            if isinstance(raw.get("risk_thresholds"), dict)
-            else float(ENTITY_RISK_LEVEL_MEDIUM),
-            "high": float(raw.get("risk_thresholds", {}).get("high", ENTITY_RISK_LEVEL_HIGH))
-            if isinstance(raw.get("risk_thresholds"), dict)
-            else float(ENTITY_RISK_LEVEL_HIGH),
-            "critical": float(raw.get("risk_thresholds", {}).get("critical", ENTITY_RISK_LEVEL_CRITICAL))
-            if isinstance(raw.get("risk_thresholds"), dict)
-            else float(ENTITY_RISK_LEVEL_CRITICAL),
+            "medium": (
+                float(
+                    raw.get("risk_thresholds", {}).get(
+                        "medium", ENTITY_RISK_LEVEL_MEDIUM
+                    )
+                )
+                if isinstance(raw.get("risk_thresholds"), dict)
+                else float(ENTITY_RISK_LEVEL_MEDIUM)
+            ),
+            "high": (
+                float(
+                    raw.get("risk_thresholds", {}).get("high", ENTITY_RISK_LEVEL_HIGH)
+                )
+                if isinstance(raw.get("risk_thresholds"), dict)
+                else float(ENTITY_RISK_LEVEL_HIGH)
+            ),
+            "critical": (
+                float(
+                    raw.get("risk_thresholds", {}).get(
+                        "critical", ENTITY_RISK_LEVEL_CRITICAL
+                    )
+                )
+                if isinstance(raw.get("risk_thresholds"), dict)
+                else float(ENTITY_RISK_LEVEL_CRITICAL)
+            ),
         },
         "risk_decay_days": float(raw.get("risk_decay_days", ENTITY_RISK_DECAY_DAYS)),
         "risk_notable_window_hours": float(
             raw.get("risk_notable_window_hours", ENTITY_RISK_NOTABLE_WINDOW_HOURS)
         ),
-        "entity_risk_enabled": bool(
-            raw.get("entity_risk_enabled", True)
-        ),
+        "entity_risk_enabled": bool(raw.get("entity_risk_enabled", True)),
     }
 
 
@@ -117,7 +137,9 @@ def set_tuning(
 ) -> dict[str, Any]:
     """Persist one tuning value (validated) and return the new effective set."""
     clean = _validate(key, value)
-    row = db.execute(select(DetectionTuning).where(DetectionTuning.key == key)).scalar_one_or_none()
+    row = db.execute(
+        select(DetectionTuning).where(DetectionTuning.key == key)
+    ).scalar_one_or_none()
     if row is None:
         row = DetectionTuning(key=key, value=clean, updated_by=updated_by)
         db.add(row)

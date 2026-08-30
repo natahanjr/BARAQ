@@ -1,9 +1,10 @@
 """Network connection collector using psutil net_connections()."""
+
 from __future__ import annotations
 
 import ipaddress
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.collectors.base import BaseCollector
 
@@ -21,14 +22,29 @@ LISTEN_STATES = {"LISTEN"}
 
 # Heuristic org tagging by well-known IP prefixes (no network egress).
 _ORG_PREFIXES = [
-    ("13.107", "Microsoft"), ("52.96", "Microsoft"), ("52.123", "Microsoft 365"),
-    ("52.110", "Microsoft 365"), ("135.116", "Microsoft"), ("204.79.197", "Microsoft"),
-    ("142.250", "Google"), ("142.251", "Google"), ("172.217", "Google"), ("216.58", "Google"),
-    ("173.194", "Google"), ("74.125", "Google"),
-    ("149.154", "Telegram"), ("91.108", "Telegram"),
-    ("162.159", "Cloudflare"), ("104.16", "Cloudflare"), ("172.64", "Cloudflare"),
-    ("20.190", "Azure"), ("20.86", "Azure"), ("40.1", "Azure"), ("98.66", "Azure"),
-    ("140.82", "GitHub"), ("199.232", "GitHub"),
+    ("13.107", "Microsoft"),
+    ("52.96", "Microsoft"),
+    ("52.123", "Microsoft 365"),
+    ("52.110", "Microsoft 365"),
+    ("135.116", "Microsoft"),
+    ("204.79.197", "Microsoft"),
+    ("142.250", "Google"),
+    ("142.251", "Google"),
+    ("172.217", "Google"),
+    ("216.58", "Google"),
+    ("173.194", "Google"),
+    ("74.125", "Google"),
+    ("149.154", "Telegram"),
+    ("91.108", "Telegram"),
+    ("162.159", "Cloudflare"),
+    ("104.16", "Cloudflare"),
+    ("172.64", "Cloudflare"),
+    ("20.190", "Azure"),
+    ("20.86", "Azure"),
+    ("40.1", "Azure"),
+    ("98.66", "Azure"),
+    ("140.82", "GitHub"),
+    ("199.232", "GitHub"),
     ("13.107.4", "Microsoft"),
 ]
 
@@ -103,7 +119,7 @@ class NetworkCollector(BaseCollector):
         if not self.enabled():
             return []
         records: list[dict] = []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         now_ts = now.timestamp()
         try:
             conns = psutil.net_connections(kind="inet")
@@ -124,17 +140,19 @@ class NetworkCollector(BaseCollector):
             key = (pid, lip, lport, rip, rport)
             live_keys.add(key)
             per_pid[pid] = per_pid.get(pid, 0) + 1
-            raw.append({
-                "pid": pid,
-                "process": self._pid_name(pid) if pid else "",
-                "local_ip": lip,
-                "local_port": lport,
-                "remote_ip": rip,
-                "remote_port": rport,
-                "state": conn.status or "",
-                "is_listening": conn.status in LISTEN_STATES,
-                "key": key,
-            })
+            raw.append(
+                {
+                    "pid": pid,
+                    "process": self._pid_name(pid) if pid else "",
+                    "local_ip": lip,
+                    "local_port": lport,
+                    "remote_ip": rip,
+                    "remote_port": rport,
+                    "state": conn.status or "",
+                    "is_listening": conn.status in LISTEN_STATES,
+                    "key": key,
+                }
+            )
 
         # Pass 2: distribute process I/O equally across its connections
         pid_io = {}
@@ -151,21 +169,23 @@ class NetworkCollector(BaseCollector):
                 self._first_seen[key] = now_ts
             duration = round(max(0.0, now_ts - self._first_seen[key]), 2)
             sent, recv = pid_io.get(r["pid"], (0, 0))
-            records.append({
-                "source": "network",
-                "pid": r["pid"],
-                "process": r["process"],
-                "local_ip": r["local_ip"],
-                "local_port": r["local_port"],
-                "remote_ip": r["remote_ip"],
-                "remote_port": r["remote_port"],
-                "state": r["state"],
-                "is_listening": r["is_listening"],
-                "bytes_sent": sent,
-                "bytes_recv": recv,
-                "duration_seconds": duration,
-                "org": _org_for(r["remote_ip"]),
-                "timestamp": now.isoformat(),
-            })
+            records.append(
+                {
+                    "source": "network",
+                    "pid": r["pid"],
+                    "process": r["process"],
+                    "local_ip": r["local_ip"],
+                    "local_port": r["local_port"],
+                    "remote_ip": r["remote_ip"],
+                    "remote_port": r["remote_port"],
+                    "state": r["state"],
+                    "is_listening": r["is_listening"],
+                    "bytes_sent": sent,
+                    "bytes_recv": recv,
+                    "duration_seconds": duration,
+                    "org": _org_for(r["remote_ip"]),
+                    "timestamp": now.isoformat(),
+                }
+            )
         self.logger.debug("Collected %d network connections", len(records))
         return records

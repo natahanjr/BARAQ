@@ -8,6 +8,7 @@ allow-list, and (b) the Sigma engine reports a hardcoded 0.8 confidence that
 defeated the low-confidence gate. Alert bodies additionally embedded Windows'
 literal template placeholder prose.
 """
+
 from __future__ import annotations
 
 from backend.context.engine import assess_text
@@ -87,6 +88,7 @@ def test_browser_parent_does_not_count_as_dev_context():
 # Problem 2: placeholder template prose never becomes the stored message
 # ---------------------------------------------------------------------------
 
+
 def test_normalizer_rejects_placeholder_template_message():
     from backend.analyzers.normalizer import Normalizer
 
@@ -124,6 +126,7 @@ def test_placeholder_regex_matches_windows_wording_variants():
 # Problem 3 (deep defence): strong dev context + known-good binaries means
 # the finding is never stored as an alert at all.
 # ---------------------------------------------------------------------------
+
 
 def _gate(facts, rule):
     from backend.detection.alerting import _is_dev_workflow_fp

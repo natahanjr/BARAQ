@@ -10,10 +10,10 @@ The robustness module:
 3. Validates that critical features (event_id, threat intel) maintain prediction consistency
 4. Provides a robustness score for model selection and monitoring
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import numpy as np
 
@@ -59,15 +59,23 @@ def prediction_stability_test(
         - critical_feature_sensitivity: dict of per-feature sensitivity scores
     """
     if model is None or len(X) == 0:
-        return {"mean_stability": 0.0, "stability_by_noise": {}, "critical_feature_sensitivity": {}}
+        return {
+            "mean_stability": 0.0,
+            "stability_by_noise": {},
+            "critical_feature_sensitivity": {},
+        }
 
     noise_levels = noise_levels or [0.02, 0.05, 0.10, 0.15]
     rng = np.random.default_rng(42)
 
     try:
         baseline_pred = model.predict(X)
-    except Exception:  # noqa: BLE001
-        return {"mean_stability": 0.0, "stability_by_noise": {}, "critical_feature_sensitivity": {}}
+    except Exception:
+        return {
+            "mean_stability": 0.0,
+            "stability_by_noise": {},
+            "critical_feature_sensitivity": {},
+        }
 
     stability_by_noise: dict[float, float] = {}
     for noise_std in noise_levels:
@@ -79,11 +87,13 @@ def prediction_stability_test(
                 perturbed_pred = model.predict(X_perturbed)
                 unchanged += int(np.sum(perturbed_pred == baseline_pred))
                 total += len(baseline_pred)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 continue
         stability_by_noise[noise_std] = unchanged / max(total, 1)
 
-    mean_stability = float(np.mean(list(stability_by_noise.values()))) if stability_by_noise else 0.0
+    mean_stability = (
+        float(np.mean(list(stability_by_noise.values()))) if stability_by_noise else 0.0
+    )
 
     # Critical feature sensitivity analysis
     n_features = X.shape[1]
@@ -99,13 +109,15 @@ def prediction_stability_test(
             perturbed_pred = model.predict(X_perturbed)
             flip_rate = float(np.mean(base_pred != perturbed_pred))
             critical_sensitivity[feat_idx] = flip_rate
-        except Exception:  # noqa: BLE001
+        except Exception:
             critical_sensitivity[feat_idx] = 1.0
 
     return {
         "mean_stability": round(mean_stability, 4),
         "stability_by_noise": {k: round(v, 4) for k, v in stability_by_noise.items()},
-        "critical_feature_sensitivity": {k: round(v, 4) for k, v in critical_sensitivity.items()},
+        "critical_feature_sensitivity": {
+            k: round(v, 4) for k, v in critical_sensitivity.items()
+        },
     }
 
 
@@ -139,9 +151,9 @@ def feature_importance_stability(
     importance_matrix = np.zeros((n_bootstrap, n_features))
 
     try:
-        baseline_score = model.score(X, np.zeros(len(X))) if hasattr(model, 'score') else None
-    except Exception:  # noqa: BLE001
-        baseline_score = None
+        (model.score(X, np.zeros(len(X))) if hasattr(model, "score") else None)
+    except Exception:
+        pass
 
     for b in range(n_bootstrap):
         idx = rng.choice(len(X), size=len(X), replace=True)
@@ -154,7 +166,7 @@ def feature_importance_stability(
                 base_dec = np.mean(np.abs(model.decision_function(X_boot)))
                 perm_dec = np.mean(np.abs(model.decision_function(X_perm)))
                 importance_matrix[b, f] = abs(base_dec - perm_dec)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 importance_matrix[b, f] = 0.0
 
     mean_importance = np.mean(importance_matrix, axis=0)
@@ -164,7 +176,9 @@ def feature_importance_stability(
     rankings = np.zeros_like(importance_matrix)
     for b in range(n_bootstrap):
         rankings[b] = np.argsort(np.argsort(-importance_matrix[b]))
-    ranking_cv = float(np.mean(np.std(rankings, axis=0) / np.mean(rankings, axis=0 + 1e-9)))
+    ranking_cv = float(
+        np.mean(np.std(rankings, axis=0) / np.mean(rankings, axis=0 + 1e-9))
+    )
 
     return {
         "mean_importance": [round(float(x), 6) for x in mean_importance],
@@ -190,7 +204,11 @@ def evaluate_robustness(
     results: dict[str, dict] = {}
     scores: list[float] = []
 
-    for behavior, X in [("login", X_login), ("process", X_process), ("network", X_network)]:
+    for behavior, X in [
+        ("login", X_login),
+        ("process", X_process),
+        ("network", X_network),
+    ]:
         model = detector.models.get(behavior)
         if model is None or X is None or len(X) < 5:
             continue
@@ -210,5 +228,9 @@ def evaluate_robustness(
     return {
         "overall_robustness_score": round(overall_score, 4),
         "per_stream": results,
-        "verdict": "robust" if overall_score >= 0.85 else "moderate" if overall_score >= 0.70 else "fragile",
+        "verdict": (
+            "robust"
+            if overall_score >= 0.85
+            else "moderate" if overall_score >= 0.70 else "fragile"
+        ),
     }

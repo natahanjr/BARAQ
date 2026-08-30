@@ -1,10 +1,10 @@
 """Alert audit trail tests (spec 3.27, 3.35)."""
+
 from __future__ import annotations
 
 from backend.alerting import audit
 from backend.alerting.engine import process_detection
 from backend.alerting.models import AlertRecord
-
 from tests.alerting.helpers import detection, stored_audit
 
 
@@ -70,13 +70,16 @@ def test_suppressed_detection_is_audited(db):
     from datetime import timedelta
 
     from backend.alerting.suppression import create_rule
-
     from tests.alerting.helpers import T0
 
-    create_rule(db, policy_id="SUP-1", reason="approved maintenance",
-                expires_at=T0 + timedelta(hours=1),
-                scope={"detector_id": "D001", "host": "workstation-42"},
-                now=T0)
+    create_rule(
+        db,
+        policy_id="SUP-1",
+        reason="approved maintenance",
+        expires_at=T0 + timedelta(hours=1),
+        scope={"detector_id": "D001", "host": "workstation-42"},
+        now=T0,
+    )
     db.commit()
     process_detection(db, detection(), now=T0)
     events = stored_audit(db)

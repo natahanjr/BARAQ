@@ -7,16 +7,17 @@ alerts, incidents, entity_risk, risk_events, playbooks, SOAR or ML
 production scoring. The only persistence a detection ever has is the
 ``detections`` table - and even that is opt-in via ``persist``.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-import backend.config as config
+from backend import config
 from backend.detection.context import DetectionContext
 from backend.detection.contract import DETECTION
 from backend.detection.models import DetectionRecord
@@ -29,7 +30,10 @@ logger = logging.getLogger("baraq.detection.engine")
 def _ensure_not_production_db() -> None:
     """Phase 0.7/2.14 isolation: the detection store is a v2 table and must
     never be written into the v1 production database."""
-    if not config.V2_ENGINES_ALLOW_PROD and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME:
+    if (
+        not config.V2_ENGINES_ALLOW_PROD
+        and make_url(config.DATABASE_URL).database == config.PRODUCTION_DB_NAME
+    ):
         raise RuntimeError(
             f"refusing: v2 detection store is read-only against the "
             f"production database '{config.PRODUCTION_DB_NAME}'"
@@ -53,8 +57,10 @@ def run_detection(
             continue
         try:
             finding = detector.evaluate(event, context)
-        except Exception:  # noqa: BLE001 - one bad detector never kills the run
-            logger.exception("detector %s failed on event %s", detector.id, event.action)
+        except Exception:
+            logger.exception(
+                "detector %s failed on event %s", detector.id, event.action
+            )
             continue
         if finding is not None:
             findings.append(finding)
@@ -84,7 +90,9 @@ def persist(db: Session, detection: DETECTION) -> DetectionRecord:
     """
     _ensure_not_production_db()
     existing = db.scalars(
-        select(DetectionRecord).where(DetectionRecord.detection_id == detection.detection_id)
+        select(DetectionRecord).where(
+            DetectionRecord.detection_id == detection.detection_id
+        )
     ).first()
     if existing:
         existing.severity = detection.severity
@@ -94,11 +102,9 @@ def persist(db: Session, detection: DETECTION) -> DetectionRecord:
         existing.evidence = [e.to_dict() for e in detection.evidence]
         existing.observables = [dict(o) for o in detection.observables]
         existing.event_ids = sorted(set(existing.event_ids) | set(detection.event_ids))
-        existing.updated_at = datetime.now(timezone.utc)
-        if detection.first_seen < existing.first_seen:
-            existing.first_seen = detection.first_seen
-        if detection.last_seen > existing.last_seen:
-            existing.last_seen = detection.last_seen
+        existing.updated_at = datetime.now(UTC)
+        existing.first_seen = min(existing.first_seen, detection.first_seen)
+        existing.last_seen = max(existing.last_seen, detection.last_seen)
         db.commit()
         return existing
     row = DetectionRecord(

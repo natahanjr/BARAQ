@@ -5,6 +5,7 @@ ingest batch cost proportional to the batch, not to the accumulated window,
 without changing detection outcomes: every attack event still alerts, and
 idle re-runs produce no work and no duplicate alerts.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import func, select

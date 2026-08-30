@@ -1,9 +1,9 @@
 """Tests for field-level AES-256-GCM encryption at rest (backend.crypto)."""
+
 from __future__ import annotations
 
-import os
 import sys
-import tempfile
+from datetime import UTC
 
 import pytest
 
@@ -42,7 +42,6 @@ def test_roundtrip(encryption_on):
 
 
 def test_encryption_disabled_passthrough(monkeypatch):
-    from backend.crypto import decrypt_text, encrypt_text
 
     monkeypatch.setenv("BARAQ_ENCRYPT_AT_REST", "0")
     import importlib
@@ -69,10 +68,9 @@ def test_corrupt_blob_returns_none():
 
 
 def test_key_persists_in_vault(encryption_on, tmp_path):
+    from backend import crypto
     from backend.config import ENCRYPTION_KEY_NAME
     from backend.vault import SecretVault
-
-    import backend.crypto as crypto
 
     crypto._cached_key = None
     k1 = crypto._load_key()
@@ -83,7 +81,7 @@ def test_key_persists_in_vault(encryption_on, tmp_path):
 
 
 def test_column_roundtrip_via_orm(encryption_on, tmp_path):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from sqlalchemy import text
 
@@ -92,12 +90,19 @@ def test_column_roundtrip_via_orm(encryption_on, tmp_path):
 
     db = SessionLocal()
     try:
-        db.add(NormalizedEvent(
-            event_id=4625, category="Login", source="Security", user="bob",
-            host="h1", risk="Medium", severity="medium",
-            message="Failed logon for ADM\\bob using password s3cr3t+",
-            timestamp=datetime.now(timezone.utc),
-        ))
+        db.add(
+            NormalizedEvent(
+                event_id=4625,
+                category="Login",
+                source="Security",
+                user="bob",
+                host="h1",
+                risk="Medium",
+                severity="medium",
+                message="Failed logon for ADM\\bob using password s3cr3t+",
+                timestamp=datetime.now(UTC),
+            )
+        )
         db.add(AuditLog(actor="admin", action="config.set", detail="password rotated"))
         db.commit()
 

@@ -1,9 +1,9 @@
 """Render BARAQ_Combined_Guide.md -> a polished HTML page, then print to
 A4 PDF using headless Edge (modern CSS, TOC, syntax-styled blocks, tables).
 """
+
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
 import time

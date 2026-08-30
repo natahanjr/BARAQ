@@ -9,6 +9,7 @@ score real messages.
 Pure-live: when no directory is configured the collector is disabled and
 returns no records.
 """
+
 from __future__ import annotations
 
 import json

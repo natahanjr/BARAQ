@@ -62,10 +62,32 @@ const typeStyles = {
 };
 
 const typeIcons = {
-  success: "✓",
-  error: "✕",
-  warning: "⚠",
-  info: "i",
+  success: (
+    <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6" />
+      <path d="M5.5 8l2 2 3.5-3.5" />
+    </svg>
+  ),
+  error: (
+    <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6" />
+      <path d="M6 6l4 4M10 6l-4 4" />
+    </svg>
+  ),
+  warning: (
+    <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 2L14.5 13H1.5L8 2Z" />
+      <path d="M8 7v3" />
+      <circle cx="8" cy="12" r="0.5" fill="currentColor" />
+    </svg>
+  ),
+  info: (
+    <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 7v4" />
+      <circle cx="8" cy="5" r="0.5" fill="currentColor" />
+    </svg>
+  ),
 };
 
 function ToastItem({ toast, onDismiss }) {
@@ -84,11 +106,12 @@ function ToastItem({ toast, onDismiss }) {
         exiting ? "opacity-0 translate-x-4" : "animate-toast-in",
         typeStyles[toast.type] || typeStyles.info,
       ].join(" ")}
-      role="alert"
+      role={toast.type === "error" ? "alert" : "status"}
+      aria-atomic="true"
     >
       <div className="flex items-start gap-3">
         {typeIcons[toast.type] && (
-          <span className="text-sm mt-0.5 shrink-0">{typeIcons[toast.type]}</span>
+          <span className="mt-0.5 shrink-0">{typeIcons[toast.type]}</span>
         )}
         <div className="flex-1 min-w-0">
           {toast.title && <p className="text-sm font-semibold text-[var(--fg-primary)]">{toast.title}</p>}

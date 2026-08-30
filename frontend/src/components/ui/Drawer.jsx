@@ -1,8 +1,10 @@
 import { memo, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useFocusTrap } from "../../hooks/useFocusTrap.js";
 
 function Drawer({ open, onClose, title, children, side = "right", width = 420, className = "" }) {
   const panelRef = useRef(null);
+  useFocusTrap(panelRef, open);
 
   useEffect(() => {
     if (!open) return;
@@ -16,7 +18,9 @@ function Drawer({ open, onClose, title, children, side = "right", width = 420, c
   }, [open, onClose]);
 
   useEffect(() => {
-    if (open) panelRef.current?.focus();
+    if (!open) return;
+    const prev = document.activeElement;
+    return () => prev?.focus();
   }, [open]);
 
   if (!open) return null;
@@ -34,6 +38,9 @@ function Drawer({ open, onClose, title, children, side = "right", width = 420, c
       <div
         ref={panelRef}
         tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title || "Panel"}
         className={[
           "absolute inset-y-0 flex flex-col border-[var(--border-default)] bg-[var(--bg-surface)] shadow-[var(--shadow-xl)] outline-none",
           "animate-drawer-in",

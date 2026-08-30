@@ -7,11 +7,12 @@ alerts already at/below the computed severity are left untouched.
 Usage:
     venv\\Scripts\\python tools\\backfill_fp_demotion.py [--dry-run]
 """
+
 from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -57,7 +58,7 @@ def main() -> None:
                 alert.score = {"critical": 10, "high": 7, "medium": 4, "low": 1}.get(
                     new_sev, alert.score
                 )
-                alert.updated_at = datetime.now(timezone.utc)
+                alert.updated_at = datetime.now(UTC)
             demoted += 1
         if not args.dry_run:
             session.commit()

@@ -6,12 +6,13 @@ the notification-health pattern (:class:`IntegrationHealth`), so a dead
 ticketing server never breaks the platform. HTTP transport is isolated in
 :func:`_post_json` for testability.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.config import (
     INTEGRATIONS_MIN_SEVERITY,
@@ -36,20 +37,28 @@ class IntegrationHealth:
         self._state: dict[str, dict] = {}
 
     def record(self, name: str, ok: bool, error: str = "") -> None:
-        state = self._state.setdefault(name, {
-            "configured": True, "ok": True, "successes": 0, "failures": 0,
-            "last_error": "", "last_success_at": None, "last_failure_at": None,
-        })
+        state = self._state.setdefault(
+            name,
+            {
+                "configured": True,
+                "ok": True,
+                "successes": 0,
+                "failures": 0,
+                "last_error": "",
+                "last_success_at": None,
+                "last_failure_at": None,
+            },
+        )
         if ok:
             state["ok"] = True
             state["successes"] += 1
-            state["last_success_at"] = datetime.now(timezone.utc).isoformat()
+            state["last_success_at"] = datetime.now(UTC).isoformat()
             state["last_error"] = ""
         else:
             state["ok"] = False
             state["failures"] += 1
             state["last_error"] = error[:300]
-            state["last_failure_at"] = datetime.now(timezone.utc).isoformat()
+            state["last_failure_at"] = datetime.now(UTC).isoformat()
 
     def snapshot(self) -> dict:
         return {name: dict(state) for name, state in sorted(self._state.items())}
@@ -79,7 +88,7 @@ def _post_json(url: str, headers: dict[str, str], payload: dict) -> dict | None:
         with urllib.request.urlopen(req, timeout=15) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
             return json.loads(raw) if raw else {}
-    except Exception as exc:  # noqa: BLE001 - provider outage must not break alerts
+    except Exception as exc:
         logger.warning("Integration POST failed for %s: %s", url, exc)
         return None
 
@@ -107,9 +116,7 @@ def _jira_create(alert: dict) -> dict | None:
             "issuetype": {"name": JIRA_ISSUE_TYPE},
         }
     }
-    result = _post_json(
-        f"{JIRA_URL.rstrip('/')}/rest/api/2/issue", headers, payload
-    )
+    result = _post_json(f"{JIRA_URL.rstrip('/')}/rest/api/2/issue", headers, payload)
     if result and result.get("key"):
         return {
             "system": "jira",
@@ -128,7 +135,9 @@ def _servicenow_create(alert: dict) -> dict | None:
 
     headers = {
         "Authorization": "Basic "
-        + base64.b64encode(f"{SERVICENOW_USERNAME}:{SERVICENOW_PASSWORD}".encode()).decode(),
+        + base64.b64encode(
+            f"{SERVICENOW_USERNAME}:{SERVICENOW_PASSWORD}".encode()
+        ).decode(),
         "Accept": "application/json",
     }
     payload = {
@@ -173,20 +182,28 @@ def dispatch_alert(db, alert) -> dict:
 
     if alert.severity not in SEVERITY_ORDER:
         alert.severity = "low"
-    if SEVERITY_ORDER.index(alert.severity) < SEVERITY_ORDER.index(INTEGRATIONS_MIN_SEVERITY):
+    if SEVERITY_ORDER.index(alert.severity) < SEVERITY_ORDER.index(
+        INTEGRATIONS_MIN_SEVERITY
+    ):
         return {"dispatched": False, "reason": "below min severity", "results": []}
 
     results: list[dict] = []
     if "jira" in _configured():
-        link = _jira_create(alert.to_dict() if hasattr(alert, "to_dict") else {"id": alert.id})
-        integration_health.record("jira", link is not None,
-                                  "" if link else "Jira create failed")
+        link = _jira_create(
+            alert.to_dict() if hasattr(alert, "to_dict") else {"id": alert.id}
+        )
+        integration_health.record(
+            "jira", link is not None, "" if link else "Jira create failed"
+        )
         if link:
             results.append(link)
     if "servicenow" in _configured():
-        link = _servicenow_create(alert.to_dict() if hasattr(alert, "to_dict") else {"id": alert.id})
-        integration_health.record("servicenow", link is not None,
-                                  "" if link else "ServiceNow create failed")
+        link = _servicenow_create(
+            alert.to_dict() if hasattr(alert, "to_dict") else {"id": alert.id}
+        )
+        integration_health.record(
+            "servicenow", link is not None, "" if link else "ServiceNow create failed"
+        )
         if link:
             results.append(link)
 

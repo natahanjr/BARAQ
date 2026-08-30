@@ -1,42 +1,42 @@
-const STATUS_STYLES = {
+const STATUS = {
   open: {
-    chip: "border-rose-500/25 bg-rose-500/[0.08] text-rose-300",
-    dot: "bg-rose-400 shadow-[0_0_5px_rgba(251,113,133,0.5)]",
+    chip: "border-[var(--severity-critical-border)] bg-[var(--severity-critical-muted)] text-[var(--severity-critical)]",
+    glyph: "●",
   },
   in_progress: {
-    chip: "border-amber-500/25 bg-amber-500/[0.08] text-amber-300",
-    dot: "bg-amber-400 shadow-[0_0_5px_rgba(251,191,36,0.5)]",
+    chip: "border-[var(--severity-medium-border)] bg-[var(--severity-medium-muted)] text-[var(--severity-medium)]",
+    glyph: "◐",
   },
   investigating: {
-    chip: "border-amber-500/25 bg-amber-500/[0.08] text-amber-300",
-    dot: "bg-amber-400 shadow-[0_0_5px_rgba(251,191,36,0.5)]",
+    chip: "border-[var(--severity-medium-border)] bg-[var(--severity-medium-muted)] text-[var(--severity-medium)]",
+    glyph: "◑",
   },
   contained: {
-    chip: "border-violet-500/25 bg-violet-500/[0.08] text-violet-300",
-    dot: "bg-violet-400 shadow-[0_0_5px_rgba(167,139,250,0.5)]",
+    chip: "border-[var(--accent-violet-border)] bg-[var(--accent-violet-muted)] text-[var(--accent-violet)]",
+    glyph: "◆",
   },
   closed: {
-    chip: "border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-300",
-    dot: "bg-emerald-400",
+    chip: "border-[var(--status-healthy-border)] bg-[var(--status-healthy-muted)] text-[var(--status-healthy)]",
+    glyph: "✓",
   },
   resolved: {
-    chip: "border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-300",
-    dot: "bg-emerald-400",
+    chip: "border-[var(--status-healthy-border)] bg-[var(--status-healthy-muted)] text-[var(--status-healthy)]",
+    glyph: "✓",
   },
   dismissed: {
-    chip: "border-slate-500/20 bg-slate-500/[0.06] text-slate-400",
-    dot: "bg-slate-400",
+    chip: "border-[var(--border-default)] bg-[var(--bg-surface-hover)] text-[var(--fg-muted)]",
+    glyph: "–",
   },
 };
 
 export default function StatusBadge({ status = "open", className = "" }) {
   const s = String(status).toLowerCase();
-  const style = STATUS_STYLES[s] || STATUS_STYLES.open;
+  const style = STATUS[s] || STATUS.open;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-[3px] text-[10px] font-semibold tracking-wide uppercase ${style.chip} ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-[3px] text-[11px] font-semibold tracking-wide uppercase ${style.chip} ${className}`}
     >
-      <span className={`h-[5px] w-[5px] rounded-full ${style.dot}`} />
+      <span aria-hidden="true" className="text-[9px] leading-none">{style.glyph}</span>
       {s}
     </span>
   );

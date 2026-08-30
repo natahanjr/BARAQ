@@ -11,6 +11,7 @@ blind threshold - each detector has its own semantics:
     D005 Ransomware            lower threshold: any behavioral detection
     unknown detector           high + 0.80 (fail closed)
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -91,7 +92,9 @@ def policy_for(detector_id: str) -> AlertPolicy:
 def evaluate_detection(detection: DETECTION) -> EligibilityResult:
     """Spec 3.5: does this detection deserve to become an alert?"""
     policy = policy_for(detection.detector_id)
-    severity_ok = _SEVERITY_RANK.get(detection.severity, 0) >= _SEVERITY_RANK[policy.min_severity]
+    severity_ok = (
+        _SEVERITY_RANK.get(detection.severity, 0) >= _SEVERITY_RANK[policy.min_severity]
+    )
     confidence_ok = detection.confidence >= policy.min_confidence
     if severity_ok and confidence_ok:
         return EligibilityResult(

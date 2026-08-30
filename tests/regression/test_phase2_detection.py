@@ -9,6 +9,7 @@ engine's behavior (see tests/regression/v1-known-problems/*.md):
 * side effects              v1 tables (alerts/incidents/entity_risk)
                             are never touched by detection
 """
+
 from __future__ import annotations
 
 from sqlalchemy import select, text
@@ -16,9 +17,7 @@ from sqlalchemy import select, text
 from backend.detection.context import DetectionContext
 from backend.detection.engine import run_and_persist
 from backend.telemetry.ingestion.pipeline import ingest
-
 from tests.detection.helpers import (
-    dt,
     file_modify,
     logon_failed,
     logon_success,
@@ -30,8 +29,7 @@ V1_TABLES = ("alerts", "incidents", "entity_risk")
 
 def _v1_counts(db) -> dict:
     return {
-        t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar()
-        for t in V1_TABLES
+        t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar() for t in V1_TABLES
     }
 
 
@@ -58,8 +56,7 @@ def _stored_detections(db) -> list:
 def test_rdp_duplication_001_burst_yields_one_detection(db):
     """v1: rdp_lateral fired 1 alert per event (30 alerts for one burst)."""
     burst = [
-        logon_success(i / 60, logon_type=10, source_ip="203.0.113.5")
-        for i in range(6)
+        logon_success(i / 60, logon_type=10, source_ip="203.0.113.5") for i in range(6)
     ]
     before = _v1_counts(db)
     rows = _replay(db, burst)
@@ -76,10 +73,7 @@ def test_rdp_duplication_001_burst_yields_one_detection(db):
 
 def test_brute_force_overalerting_001_campaign_yields_one_detection(db):
     """v1: 15 per-event alerts + 3 alert families for one campaign."""
-    failures = [
-        logon_failed(i / 60, source_ip="198.51.100.7")
-        for i in range(60)
-    ]
+    failures = [logon_failed(i / 60, source_ip="198.51.100.7") for i in range(60)]
     before = _v1_counts(db)
     rows = _replay(db, failures)
     after = _v1_counts(db)
@@ -105,11 +99,8 @@ def test_single_file_modification_no_detection(db):
 def test_benign_burst_no_detection_no_side_effects(db):
     """Benign traffic (internal logons + routine file edits) stays silent."""
     benign = [
-        logon_success(i / 60, logon_type=2, source_ip="10.0.0.5")
-        for i in range(5)
-    ] + [
-        file_modify(i / 60) for i in range(3)
-    ]
+        logon_success(i / 60, logon_type=2, source_ip="10.0.0.5") for i in range(5)
+    ] + [file_modify(i / 60) for i in range(3)]
     before = _v1_counts(db)
     rows = _replay(db, benign)
     assert rows == []

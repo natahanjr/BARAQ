@@ -6,6 +6,7 @@
   for external tooling (SOAR playbooks, cron jobs, third-party consoles) to
   query alerts/incidents, take actions and dispatch tickets.
 """
+
 from backend.integrations.client import (  # noqa: F401
     dispatch_alert,
     integration_health,

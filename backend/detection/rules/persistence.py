@@ -4,11 +4,11 @@ Detects startup persistence mechanisms: new services (7045), new
 scheduled tasks (4698) and suspicious binary paths in unusual
 directories (temp, public, appdata).
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
-from pathlib import PureWindowsPath
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -24,7 +24,9 @@ SUSPICIOUS_BINS = re.compile(r"\.(exe|dll|ps1|vbs|bat|cmd|scr)$", re.IGNORECASE)
 
 def _path_flags(path: str) -> tuple[bool, bool]:
     suspicious_dir = bool(SUSPICIOUS_DIRS.search(path))
-    suspicious_bin = bool(SUSPICIOUS_BINS.search(path)) and not path.lower().endswith(".dll")
+    suspicious_bin = bool(SUSPICIOUS_BINS.search(path)) and not path.lower().endswith(
+        ".dll"
+    )
     return suspicious_dir, suspicious_bin
 
 
@@ -45,7 +47,7 @@ class PersistenceRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id.in_([7045, 4698, 4702]),
@@ -66,8 +68,14 @@ class PersistenceRule(BaseRule):
                 continue
 
             # Common masquerading names (legit-looking, non-standard service).
-            masquerade = re.fullmatch(r"(Windows[A-Za-z]+(?:Svc|Service|Update|Task)|System[A-Za-z]+)", name)
-            confidence = self.confidence + (0.1 if masquerade else 0.0) + (0.05 if bin_flag else 0.0)
+            masquerade = re.fullmatch(
+                r"(Windows[A-Za-z]+(?:Svc|Service|Update|Task)|System[A-Za-z]+)", name
+            )
+            confidence = (
+                self.confidence
+                + (0.1 if masquerade else 0.0)
+                + (0.05 if bin_flag else 0.0)
+            )
 
             evidence = (
                 f"{'Service' if event.event_id == 7045 else 'Scheduled task'} "

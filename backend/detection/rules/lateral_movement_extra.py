@@ -4,10 +4,11 @@ Covers RDP hijacking (T1021.001), SMB admin-share access (T1021.002),
 WinRM (T1021.006) and SSH (T1021.004) based movement, plus remote
 desktop session abuse.
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -53,7 +54,7 @@ class SmbAdminShareRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _SMB_SHARE.search(cmdline):
                 continue
@@ -109,7 +110,7 @@ class RdpLateralRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 4624,
@@ -152,7 +153,7 @@ class WinRmLateralRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _WINRM.search(cmdline):
                 continue
@@ -207,7 +208,7 @@ class SshLateralRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _SSH.search(cmdline):
                 continue

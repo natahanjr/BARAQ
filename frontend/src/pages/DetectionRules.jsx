@@ -68,7 +68,7 @@ function DetectionRules() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">Security Rules</p>
-          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">Detection Rules</h1>
+          <h1 className="mt-1 text-page-title text-[var(--fg-primary)]">Detection Rules</h1>
           <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">Manage and configure security detection rules</p>
         </div>
         <Button size="sm" onClick={() => setShowCreate(true)}>+ New Rule</Button>
@@ -77,7 +77,7 @@ function DetectionRules() {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {statCards.map((s) => (
-          <div key={s.label} className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 transition-all duration-300 hover:border-[var(--border-strong)] hover:shadow-lg">
+          <div key={s.label} className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-300 p-5 hover:border-[var(--border-strong)] hover:shadow-lg">
             <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-40" style={{ background: s.color }} />
             <div className="relative flex items-start justify-between">
               <div>
@@ -98,7 +98,7 @@ function DetectionRules() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search rules..."
-            className="w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] py-2.5 pl-9 pr-3 text-[13px] text-[var(--fg-primary)] placeholder:text-[var(--fg-faint)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
+            className="w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 py-2.5 pl-9 pr-3 text-[13px] text-[var(--fg-primary)] placeholder:text-[var(--fg-faint)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
           />
         </div>
         <Tabs
@@ -114,7 +114,7 @@ function DetectionRules() {
 
       {/* Rules List */}
       {filtered.length === 0 ? (
-        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-12 text-center">
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-12 text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-cyan-muted)]">
             <span className="text-2xl">{"\uD83D\uDCCA"}</span>
           </div>
@@ -131,7 +131,7 @@ function DetectionRules() {
               <div
                 key={rule.id}
                 onClick={() => setSelectedRule(selectedRule?.id === rule.id ? null : rule)}
-                className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-5 py-4 transition-all duration-200 hover:border-[var(--border-strong)] hover:shadow-md cursor-pointer"
+                className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 px-5 py-4 hover:border-[var(--border-strong)] hover:shadow-md cursor-pointer"
               >
                 <div className="flex items-center justify-between gap-4">
                   {/* Left */}
@@ -149,10 +149,10 @@ function DetectionRules() {
 
                   {/* Right: status + severity */}
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ background: `${sev.text}14`, color: sev.text }}>
+                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: `${sev.text}14`, color: sev.text }}>
                       {rule.severity || "info"}
                     </span>
-                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold ${enabled ? "bg-[var(--status-healthy)]/[0.10] text-[var(--status-healthy)]" : "bg-[var(--fg-muted)]/[0.10] text-[var(--fg-muted)]"}`}>
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${enabled ? "bg-[var(--status-healthy)]/[0.10] text-[var(--status-healthy)]" : "bg-[var(--fg-muted)]/[0.10] text-[var(--fg-muted)]"}`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${enabled ? "bg-[var(--status-healthy)]" : "bg-[var(--fg-muted)]"}`} />
                       {enabled ? "On" : "Off"}
                     </span>
@@ -166,7 +166,7 @@ function DetectionRules() {
 
       {/* ── Rule Detail Panel ────────────────────────────── */}
       {selectedRule && (
-        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+        <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-cyan-muted)]">
@@ -188,7 +188,7 @@ function DetectionRules() {
               { label: "Category", value: selectedRule.category || "general", color: "var(--accent-violet)" },
             ].map((s) => (
               <div key={s.label} className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">{s.label}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">{s.label}</p>
                 <p className="mt-1 text-[14px] font-semibold" style={{ color: s.color }}>{s.value}</p>
               </div>
             ))}
@@ -215,7 +215,7 @@ function DetectionRules() {
       {/* ── Create Rule Modal ────────────────────────────── */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowCreate(false)}>
-          <div className="w-full max-w-lg mx-4 rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)]/95 p-6 shadow-2xl backdrop-blur-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg mx-4 rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200/95 p-6 shadow-2xl backdrop-blur-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-[18px] font-bold text-[var(--fg-primary)]">Create Detection Rule</h2>
               <button onClick={() => setShowCreate(false)} className="rounded-lg p-1.5 text-[var(--fg-muted)] hover:bg-[var(--bg-surface-hover)] transition-colors">{"\u2715"}</button>
@@ -242,7 +242,7 @@ function DetectionRules() {
                 <label className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Name</label>
                 <input
                   required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="mt-1.5 w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2.5 text-[13px] text-[var(--fg-primary)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
+                  className="mt-1.5 w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-2.5 text-[13px] text-[var(--fg-primary)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
                   placeholder="e.g., Suspicious PowerShell Execution"
                 />
               </div>
@@ -251,7 +251,7 @@ function DetectionRules() {
                   <label className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Severity</label>
                   <select
                     value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}
-                    className="mt-1.5 w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2.5 text-[13px] text-[var(--fg-primary)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
+                    className="mt-1.5 w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-2.5 text-[13px] text-[var(--fg-primary)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
                   >
                     <option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
                   </select>
@@ -260,7 +260,7 @@ function DetectionRules() {
                   <label className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">MITRE Technique</label>
                   <input
                     value={form.mitre} onChange={(e) => setForm({ ...form, mitre: e.target.value })}
-                    className="mt-1.5 w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2.5 text-[13px] font-mono text-[var(--fg-primary)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
+                    className="mt-1.5 w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-2.5 text-[13px] font-mono text-[var(--fg-primary)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
                     placeholder="T1059"
                   />
                 </div>
@@ -269,7 +269,7 @@ function DetectionRules() {
                 <label className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Description</label>
                 <textarea
                   value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3}
-                  className="mt-1.5 w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2.5 text-[13px] text-[var(--fg-primary)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20 resize-none"
+                  className="mt-1.5 w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-2.5 text-[13px] text-[var(--fg-primary)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20 resize-none"
                   placeholder="Describe what this rule detects..."
                 />
               </div>

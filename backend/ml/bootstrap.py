@@ -14,11 +14,12 @@ framework uses, with seeded domain randomization (timing / address / user
 jitter) so the IsolationForest baselines are non-degenerate while every run
 of this module produces an equivalent model.
 """
+
 from __future__ import annotations
 
 import logging
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 logger = logging.getLogger("baraq.ml.bootstrap")
@@ -69,12 +70,12 @@ def _jitter_records(records: list[dict], rng: random.Random) -> list[dict]:
     shift = timedelta(minutes=rng.randint(-14 * 24 * 60, 14 * 24 * 60))
     users = ["alice", "bob", "carol", "dave", "erin", "svc_backup", "jdoe"]
     hosts = ["WS-01", "WS-02", "SRV-db", "SRV-web", "LAPTOP-7"]
-    octets = lambda: rng.randint(2, 254)  # noqa: E731
+    octets = lambda: rng.randint(2, 254)
 
     def _mutate_ip(ip: str, testnet: bool) -> str:
         if not ip or not isinstance(ip, str):
             return ip
-        if testnet and (ip.startswith("203.0.113.") or ip.startswith("198.51.100.")):
+        if testnet and (ip.startswith(("203.0.113.", "198.51.100."))):
             return f"{ip.rsplit('.', 1)[0]}.{octets()}"
         parts = ip.split(".")
         if len(parts) == 4:
@@ -88,9 +89,9 @@ def _jitter_records(records: list[dict], rng: random.Random) -> list[dict]:
             r["timestamp"] = ts + shift
         elif isinstance(ts, str):
             try:
-                r["timestamp"] = datetime.fromisoformat(
-                    ts.replace("Z", "+00:00")
-                ) + shift
+                r["timestamp"] = (
+                    datetime.fromisoformat(ts.replace("Z", "+00:00")) + shift
+                )
             except ValueError:
                 pass
         r["user"] = rng.choice(users)
@@ -141,8 +142,8 @@ def build_bootstrap_model(
         ML_BOOTSTRAP_BUNDLE,
         ML_FEATURE_VERSION,
     )
-    from backend.ml.anomaly import MLAnomalyDetector
     from backend.evaluation.holdout import _cleanup, _empty_session, _persist
+    from backend.ml.anomaly import MLAnomalyDetector
 
     output = Path(output_path or ML_BOOTSTRAP_BUNDLE).resolve()
     records = build_corpus(seed=seed)
@@ -193,7 +194,7 @@ def build_bootstrap_model(
     finally:
         try:
             _cleanup(session, engine, marker)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning("scratch db %s left behind", marker)
 
 

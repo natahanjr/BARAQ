@@ -27,6 +27,7 @@ the run completes, trigger a retrain:
 
     POST /api/system/ml/train?force=true&hours=24   (admin API key)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -45,8 +46,30 @@ SCAN_TARGETS = [
 
 #: Ports probed per target - mimics an attacker enumerating services.
 SCAN_PORTS = [
-    21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 443, 445,
-    993, 995, 1433, 1521, 3306, 3389, 5432, 6379, 8080, 8443, 9090, 27017,
+    21,
+    22,
+    23,
+    25,
+    53,
+    80,
+    110,
+    135,
+    139,
+    143,
+    443,
+    445,
+    993,
+    995,
+    1433,
+    1521,
+    3306,
+    3389,
+    5432,
+    6379,
+    8080,
+    8443,
+    9090,
+    27017,
 ]
 
 #: C2-style beacon targets: periodic connect attempts on a single port.
@@ -89,33 +112,40 @@ def _hold_syn_sent(targets: list[tuple[str, int]], hold_seconds: float) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--seconds", type=int, default=240,
-                        help="total run duration (default 240)")
+    parser.add_argument(
+        "--seconds", type=int, default=240, help="total run duration (default 240)"
+    )
     args = parser.parse_args()
 
     total = args.seconds
     started = time.monotonic()
     round_no = 0
 
-    print(f"BARAQ real network-attack generator (T1046 scan + T1071 beacon)")
-    print(f"targets (TEST-NET documentation ranges, non-routable): "
-          f"{', '.join(SCAN_TARGETS)}")
+    print("BARAQ real network-attack generator (T1046 scan + T1071 beacon)")
+    print(
+        f"targets (TEST-NET documentation ranges, non-routable): "
+        f"{', '.join(SCAN_TARGETS)}"
+    )
     print(f"duration: {total}s; collector polls every {_POLL_CYCLE}s\n")
 
     while time.monotonic() - started < total:
         round_no += 1
         # Port scan wave: every target x many ports.
-        _hold_syn_sent([(h, p) for h in SCAN_TARGETS for p in SCAN_PORTS], _POLL_CYCLE * 2)
+        _hold_syn_sent(
+            [(h, p) for h in SCAN_TARGETS for p in SCAN_PORTS], _POLL_CYCLE * 2
+        )
         # Beacon wave: periodic single-port check-ins.
         _hold_syn_sent(BEACON_TARGETS, _POLL_CYCLE * 2)
         elapsed = time.monotonic() - started
-        print(f"round {round_no}: wave done at {elapsed:.0f}s/{total}s "
-              f"({len(SCAN_TARGETS)} scan targets x {len(SCAN_PORTS)} ports + "
-              f"{len(BEACON_TARGETS)} beacons)")
+        print(
+            f"round {round_no}: wave done at {elapsed:.0f}s/{total}s "
+            f"({len(SCAN_TARGETS)} scan targets x {len(SCAN_PORTS)} ports + "
+            f"{len(BEACON_TARGETS)} beacons)"
+        )
 
     print("\nDone. Attack rows are in the DB; trigger retrain now:")
 
-    print('  POST /api/system/ml/train?force=true&hours=24  (admin key)')
+    print("  POST /api/system/ml/train?force=true&hours=24  (admin key)")
 
 
 if __name__ == "__main__":

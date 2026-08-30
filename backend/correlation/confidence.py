@@ -17,9 +17,10 @@ lateral edge:
 
     0.40 + 0.30 + 0.10 + 0.05 + 0.03 = 0.88
 """
+
 from __future__ import annotations
 
-import backend.config as config
+from backend import config
 
 
 def confidence(
@@ -41,5 +42,7 @@ def confidence(
     if has_lateral_edge:
         value += config.CORRELATION_CONFIDENCE_LATERAL_BONUS
 
-    value = max(config.CORRELATION_CONFIDENCE_MIN, min(config.CORRELATION_CONFIDENCE_MAX, value))
+    value = max(
+        config.CORRELATION_CONFIDENCE_MIN, min(config.CORRELATION_CONFIDENCE_MAX, value)
+    )
     return round(value, 4)

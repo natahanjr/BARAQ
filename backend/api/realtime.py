@@ -5,6 +5,7 @@ session token used by the REST API (``Authorization: Bearer`` flow). The
 endpoint is excluded from the API-key middleware so browsers can connect
 directly.
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,7 +36,10 @@ async def realtime_ws(websocket: WebSocket):
     await websocket.accept()
     queue = await hub.connect()
     await websocket.send_json(
-        {"type": "hello", "payload": {"user": payload.get("sub"), "role": payload.get("role")}}
+        {
+            "type": "hello",
+            "payload": {"user": payload.get("sub"), "role": payload.get("role")},
+        }
     )
     try:
         while True:

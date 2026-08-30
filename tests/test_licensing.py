@@ -1,14 +1,18 @@
 """Licensing module tests: key signing/verification, tamper detection,
 trial fallback, activation flow, and production fail-closed behaviour."""
+
 from __future__ import annotations
 
 import base64
 import json
-import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
+# A test-only keypair: private key signs, public key verifies via the module.
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from backend.database.models import LicenseRecord
 from backend.licensing import (
     LicenseInfo,
     activate_license,
@@ -17,15 +21,13 @@ from backend.licensing import (
     sign_license,
     verify_license,
 )
-from backend.database.models import LicenseRecord
-
-# A test-only keypair: private key signs, public key verifies via the module.
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 _TEST_PRIVATE = Ed25519PrivateKey.generate()
-_TEST_PUBLIC = base64.urlsafe_b64encode(
-    _TEST_PRIVATE.public_key().public_bytes_raw()
-).rstrip(b"=").decode("ascii")
+_TEST_PUBLIC = (
+    base64.urlsafe_b64encode(_TEST_PRIVATE.public_key().public_bytes_raw())
+    .rstrip(b"=")
+    .decode("ascii")
+)
 
 
 def _sign(**overrides) -> str:
@@ -34,9 +36,9 @@ def _sign(**overrides) -> str:
         customer=overrides.get("customer", "Test University"),
         edition=overrides.get("edition", "professional"),
         seats=overrides.get("seats", 10),
-        issued_at=overrides.get("issued_at", datetime.now(timezone.utc).isoformat()),
+        issued_at=overrides.get("issued_at", datetime.now(UTC).isoformat()),
         expires_at=overrides.get(
-            "expires_at", (datetime.now(timezone.utc) + timedelta(days=365)).isoformat()
+            "expires_at", (datetime.now(UTC) + timedelta(days=365)).isoformat()
         ),
         features=overrides.get("features", ["sigma", "tls"]),
     )
@@ -63,9 +65,11 @@ def test_tampered_key_rejected(monkeypatch):
 
 def test_wrong_public_key_rejected():
     other = Ed25519PrivateKey.generate()
-    other_pub = base64.urlsafe_b64encode(
-        other.public_key().public_bytes_raw()
-    ).rstrip(b"=").decode("ascii")
+    other_pub = (
+        base64.urlsafe_b64encode(other.public_key().public_bytes_raw())
+        .rstrip(b"=")
+        .decode("ascii")
+    )
     key = _sign()
     with pytest.raises(ValueError):
         verify_license(key, other_pub)
@@ -106,7 +110,7 @@ def test_activate_invalid_key_rejected(db, monkeypatch):
 
 def test_expired_license_reported(db, monkeypatch):
     monkeypatch.setattr("backend.licensing.LICENSE_PUBLIC_KEY", _TEST_PUBLIC)
-    past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    past = (datetime.now(UTC) - timedelta(days=1)).isoformat()
     key = _sign(expires_at=past)
     activate_license(db, key)
     state = get_license_state(db)
@@ -115,10 +119,16 @@ def test_expired_license_reported(db, monkeypatch):
 
 def test_trial_expiry_after_grace(db, monkeypatch):
     monkeypatch.setattr("backend.licensing.TRIAL_DAYS", 0)
-    start = datetime.now(timezone.utc) - timedelta(hours=1)
+    start = datetime.now(UTC) - timedelta(hours=1)
     row = LicenseRecord(
-        license_id="trial", customer="", edition="trial", seats=1,
-        expires_at="", license_key="", payload_json="{}", activated_at=start,
+        license_id="trial",
+        customer="",
+        edition="trial",
+        seats=1,
+        expires_at="",
+        license_key="",
+        payload_json="{}",
+        activated_at=start,
     )
     db.add(row)
     db.commit()
@@ -130,11 +140,17 @@ def test_enforce_license_fail_closed_production(db, monkeypatch):
     monkeypatch.setattr("backend.licensing.LICENSE_PUBLIC_KEY", _TEST_PUBLIC)
     monkeypatch.setattr("backend.licensing.IS_PRODUCTION", True)
     monkeypatch.setattr("backend.licensing.TRIAL_DAYS", -1)
-    start = datetime.now(timezone.utc) - timedelta(days=2)
+    start = datetime.now(UTC) - timedelta(days=2)
     db.add(
         LicenseRecord(
-            license_id="trial", customer="", edition="trial", seats=1,
-            expires_at="", license_key="", payload_json="{}", activated_at=start,
+            license_id="trial",
+            customer="",
+            edition="trial",
+            seats=1,
+            expires_at="",
+            license_key="",
+            payload_json="{}",
+            activated_at=start,
         )
     )
     db.commit()
@@ -153,8 +169,9 @@ def test_license_json_roundtrip(db, monkeypatch):
     monkeypatch.setattr("backend.licensing.LICENSE_PUBLIC_KEY", _TEST_PUBLIC)
     activate_license(db, _sign(features=["sigma", "reporting"]))
     payload = json.loads(
-        db.query(LicenseRecord).filter(
-            LicenseRecord.license_id == "test-license-1"
-        ).first().payload_json
+        db.query(LicenseRecord)
+        .filter(LicenseRecord.license_id == "test-license-1")
+        .first()
+        .payload_json
     )
     assert payload["features"] == ["sigma", "reporting"]

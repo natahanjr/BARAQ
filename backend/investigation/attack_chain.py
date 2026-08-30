@@ -16,11 +16,13 @@ The chain is persisted on the incident (``chain_json``) and refreshed every
 time an alert is absorbed into the incident, so the case narrative grows as
 the campaign unfolds.
 """
+
 from __future__ import annotations
 
+import itertools
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import select
 
@@ -72,7 +74,9 @@ def _linked_alerts(db, incident: Incident) -> list[Alert]:
     )
 
 
-def _stage_timeline(stages: dict[str, datetime]) -> tuple[list[str], float, float, float]:
+def _stage_timeline(
+    stages: dict[str, datetime],
+) -> tuple[list[str], float, float, float]:
     """(ordered stage names, span minutes, max inter-stage gap, ordered ratio).
 
     Reuses the same ordering math as the kill-chain correlation rule so
@@ -92,16 +96,21 @@ def _stage_timeline(stages: dict[str, datetime]) -> tuple[list[str], float, floa
 
     first, last = timed[0][0], timed[-1][0]
     span_min = (last - first).total_seconds() / 60.0
-    max_gap = max((t2 - t1).total_seconds() / 60.0 for (t1, _), (t2, _) in zip(timed, timed[1:]))
+    max_gap = max(
+        (t2 - t1).total_seconds() / 60.0
+        for (t1, _), (t2, _) in itertools.pairwise(timed)
+    )
 
     strict = [s for s in sequence if s != "Discovery"]
     index_seq = [order_index.get(s, 9999) for s in strict]
-    ordered = sum(1 for a, b in zip(index_seq, index_seq[1:]) if b > a)
+    ordered = sum(1 for a, b in itertools.pairwise(index_seq) if b > a)
     ratio = ordered / max(len(index_seq) - 1, 1)
     return sequence, float(span_min), float(max_gap), float(ratio)
 
 
-_STAGE_ALTERNATION = "|".join(re.escape(n) for n in sorted(_STAGE_NAMES, key=len, reverse=True))
+_STAGE_ALTERNATION = "|".join(
+    re.escape(n) for n in sorted(_STAGE_NAMES, key=len, reverse=True)
+)
 
 
 def _evidence_stage_fallback(evidence: str) -> list[str]:
@@ -114,7 +123,9 @@ def _evidence_stage_fallback(evidence: str) -> list[str]:
         return []
     for m in re.finditer(r"\(([^()]*)\)", evidence):
         inner = m.group(1)
-        found = [name for name in re.findall(_STAGE_ALTERNATION, inner) if name != "Other"]
+        found = [
+            name for name in re.findall(_STAGE_ALTERNATION, inner) if name != "Other"
+        ]
         if len(found) >= 2:
             return found
     return []
@@ -122,7 +133,7 @@ def _evidence_stage_fallback(evidence: str) -> list[str]:
 
 def reconstruct_chain(db, incident: Incident) -> dict:
     """Rebuild the attack chain of an incident; empty chain when <2 stages."""
-    from backend.investigation.dedup import _evidence_user, _root_process
+    from backend.investigation.dedup import _root_process
 
     alerts = _linked_alerts(db, incident)
     if not alerts:
@@ -182,14 +193,20 @@ def reconstruct_chain(db, incident: Incident) -> dict:
         + (_RISK_COHESIVE_ROOT if cohesive_root else 0),
     )
 
-    narrative_parts = [f"{len(sequence)}-stage attack chain on {incident.host or 'unknown host'}"]
+    narrative_parts = [
+        f"{len(sequence)}-stage attack chain on {incident.host or 'unknown host'}"
+    ]
     if ordered:
         narrative_parts.append("stages follow the canonical kill-chain order")
     if has_terminal:
-        narrative_parts.append("terminal stage reached (exfiltration / lateral movement)")
+        narrative_parts.append(
+            "terminal stage reached (exfiltration / lateral movement)"
+        )
     if cohesive_root:
         narrative_parts.append("alerts share a single root process")
-    narrative_parts.append(f"chain span {span_min:.0f} min" if span_min else "timing unavailable")
+    narrative_parts.append(
+        f"chain span {span_min:.0f} min" if span_min else "timing unavailable"
+    )
 
     return {
         "stages": stages,
@@ -253,7 +270,7 @@ def apply_chain(db, incident: Incident) -> dict:
             from backend.risk.dynamic import roadmap_level
 
             incident.risk_level = roadmap_level(new_risk)
-        except Exception:  # noqa: BLE001 - risk label is cosmetic
+        except Exception:
             pass
     db.flush()
     return chain

@@ -1,10 +1,10 @@
 """Phase 6 isolation tests (spec 6.61-6.64, 6.72, 6.83, 6.84)."""
+
 from __future__ import annotations
 
 from sqlalchemy import func, select, text
 
 from backend.risk import engine
-
 from tests.risk.helpers import (
     RISK_T0,
     finding_evidence,
@@ -38,7 +38,9 @@ def _tables_of_interest():
 def test_risk_ingestion_touches_nothing_else(db):
     before = _tables_of_interest()
     engine.apply_group(
-        db, group_evidence("g1", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g1", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     engine.apply_finding(db, finding_evidence("CF-000001", ["h1"]), now=RISK_T0)
     db.commit()
@@ -50,7 +52,9 @@ def test_risk_ingestion_touches_nothing_else(db):
 
 def test_risk_never_touches_v1_entity_risk_store(db):
     engine.apply_group(
-        db, group_evidence("g1", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g1", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     db.commit()
     assert _count(db, "entity_risk") == 0
@@ -59,7 +63,9 @@ def test_risk_never_touches_v1_entity_risk_store(db):
 
 def test_risk_never_creates_incidents_or_soar(db):
     engine.apply_group(
-        db, group_evidence("g1", "h1", ["T1021.001"]), now=RISK_T0,
+        db,
+        group_evidence("g1", "h1", ["T1021.001"]),
+        now=RISK_T0,
     )
     engine.apply_finding(db, finding_evidence("CF-000001", ["h1"]), now=RISK_T0)
     db.commit()
@@ -76,7 +82,9 @@ def test_no_ml_import_in_risk_package():
     for module_info in pkgutil.walk_packages(
         backend.risk.__path__, prefix="backend.risk."
     ):
-        if module_info.name.endswith(".entity_risk") or module_info.name.endswith(".scoring"):
+        if module_info.name.endswith(".entity_risk") or module_info.name.endswith(
+            ".scoring"
+        ):
             continue
         module = __import__(module_info.name, fromlist=["*"])
         source = inspect.getsource(module)
@@ -97,10 +105,8 @@ def test_no_external_reputation_dependency(db):
 
 def test_risk_is_never_a_verdict(db):
     from backend.risk.contract import BANNED_RISK_PHRASES
-    from backend.risk.engine import _add_factor
-    from backend.risk.models import EntityRiskV2Factor
 
-    risk = engine.get_or_create_risk(db, "HOST", "h1", now=RISK_T0)
+    engine.get_or_create_risk(db, "HOST", "h1", now=RISK_T0)
     # The engine has no path that emits verdict language; the contract's
     # banned phrases exist so future factors never add them.
     assert "compromised" in BANNED_RISK_PHRASES

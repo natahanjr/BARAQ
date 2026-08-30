@@ -1,8 +1,8 @@
 """Detector registry tests (Phase 2)."""
+
 from __future__ import annotations
 
 from backend.detection.registry import Registry, default_registry
-
 from tests.detection.helpers import event
 
 
@@ -28,9 +28,15 @@ def test_registry_duplicate_raises():
 
 def test_detector_supports_event_type():
     registry = default_registry()
-    auth_event = event(event_type="authentication", action="logon", facts={"logon_type": 10},
-                       network={"src_ip": "203.0.113.5"})
-    process_event = event(event_type="process", action="process_start", process={"name": "python.exe"})
+    auth_event = event(
+        event_type="authentication",
+        action="logon",
+        facts={"logon_type": 10},
+        network={"src_ip": "203.0.113.5"},
+    )
+    process_event = event(
+        event_type="process", action="process_start", process={"name": "python.exe"}
+    )
     file_event = event(event_type="file", action="file_modify")
 
     d001 = registry.get("D001")

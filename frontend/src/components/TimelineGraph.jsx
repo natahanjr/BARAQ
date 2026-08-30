@@ -185,15 +185,15 @@ export default function TimelineGraph({ events = [], attackChain = [], windowMin
 
         {hasEvents ? (
           <>
-            <div className="absolute bottom-2 left-4 text-[10px] text-slate-500">
+            <div className="absolute bottom-2 left-4 text-[11px] text-slate-500">
               {fmt(new Date(min).toISOString())}
             </div>
-            <div className="absolute right-4 bottom-2 text-[10px] text-slate-500">
+            <div className="absolute right-4 bottom-2 text-[11px] text-slate-500">
               {fmt(new Date(max).toISOString())}
             </div>
           </>
         ) : (
-          <div className="absolute bottom-2 left-4 text-[10px] text-slate-500">
+          <div className="absolute bottom-2 left-4 text-[11px] text-slate-500">
             standing by · healthy resting rhythm
           </div>
         )}
@@ -221,12 +221,12 @@ export default function TimelineGraph({ events = [], attackChain = [], windowMin
                       isAnomaly ? "bg-violet-500" : COLORS[severity] || COLORS.info
                     }`}
                   />
-                  <div className="pointer-events-none absolute top-7 z-20 hidden w-52 rounded-lg border border-slate-700 bg-slate-900/95 p-2.5 shadow-xl group-hover:block">
+                  <div className="pointer-events-none absolute top-7 z-20 hidden w-52 rounded-xl border border-slate-700 bg-slate-900/95 p-2.5 shadow-xl group-hover:block">
                     <p className="text-[11px] font-semibold text-slate-100">
                       Event {event.event_id} {isAnomaly && <span className="text-violet-400">· ML anomaly</span>}
                     </p>
-                    <p className="mt-0.5 text-[10px] text-slate-400">{fmt(event.timestamp)}</p>
-                    <p className="mt-1 line-clamp-3 text-[10px] leading-snug text-slate-300">
+                    <p className="mt-0.5 text-[11px] text-slate-400">{fmt(event.timestamp)}</p>
+                    <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-slate-300">
                       {event.message || event.category}
                     </p>
                   </div>
@@ -255,7 +255,7 @@ export default function TimelineGraph({ events = [], attackChain = [], windowMin
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-slate-500">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
         <span className="flex items-center gap-1.5">
           <span className="font-bold text-emerald-400">♥</span> heartbeat at each event
         </span>

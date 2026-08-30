@@ -1,8 +1,7 @@
 """Phase-1 roadmap tests: incident dedup engine, confidence scoring,
 process-tree reconstruction (GUID linkage) and investigation enrichment."""
-from __future__ import annotations
 
-import pytest
+from __future__ import annotations
 
 from backend.database.models import (
     Alert,
@@ -22,9 +21,16 @@ from backend.investigation.process_tree import build_process_tree
 from tests.conftest import run_simulation
 
 
-def _mk_alert(db, user: str, host: str = "web-01", mitre: str = "T1078",
-              rule: str = "correlation_engine", confidence: float = 0.8,
-              org: str = "univ-a", evidence: str = "") -> Alert:
+def _mk_alert(
+    db,
+    user: str,
+    host: str = "web-01",
+    mitre: str = "T1078",
+    rule: str = "correlation_engine",
+    confidence: float = 0.8,
+    org: str = "univ-a",
+    evidence: str = "",
+) -> Alert:
     alert = Alert(
         name=f"Chain {user}",
         description=f"Correlated activity for {user}",
@@ -70,6 +76,7 @@ def _mk_incident(db, alert: Alert, org: str = "univ-a") -> Incident:
 # ---------------------------------------------------------------------------
 # Dedup engine
 # ---------------------------------------------------------------------------
+
 
 def test_correlation_key_shape(db):
     alert = _mk_alert(db, "alice", mitre="T1110", evidence="user 'alice' on web-01")
@@ -141,8 +148,9 @@ def test_auto_incident_via_simulation_and_dedup(db):
     # A fresh alert matching the incident's own dimensions folds in instead
     # of duplicating.
     user, host, mitre = inc.correlation_key.split("|")[:3]
-    again = _mk_alert(db, user, host=host, mitre=mitre,
-                      evidence=f"user '{user}' on {host}")
+    again = _mk_alert(
+        db, user, host=host, mitre=mitre, evidence=f"user '{user}' on {host}"
+    )
     merged = find_open_incident(db, inc.correlation_key, org=inc.org)
     assert merged is not None and merged.id == inc.id
     merge_alert(db, merged, again)
@@ -154,6 +162,7 @@ def test_auto_incident_via_simulation_and_dedup(db):
 # ---------------------------------------------------------------------------
 # Confidence scoring
 # ---------------------------------------------------------------------------
+
 
 def test_incident_confidence_scoring(db):
     a1 = _mk_alert(db, "alice", confidence=0.9, evidence="user 'alice' on web-01")
@@ -196,21 +205,29 @@ def test_confidence_rises_with_corroborating_alerts(db):
 # Process tree reconstruction (GUID linkage)
 # ---------------------------------------------------------------------------
 
-def _mk_event(db, event_id: int, facts: dict, ts: str,
-              user: str = "alice", host: str = "web-01", org: str = "univ-a") -> NormalizedEvent:
+
+def _mk_event(
+    db,
+    event_id: int,
+    facts: dict,
+    ts: str,
+    user: str = "alice",
+    host: str = "web-01",
+    org: str = "univ-a",
+) -> NormalizedEvent:
     from datetime import datetime
 
-    ev = NormalizedEvent(**{
-        "event_id": event_id,
-        "timestamp": datetime.fromisoformat(ts),
-        "category": "Process",
-        "user": user,
-        "host": host,
-        "org": org,
-        "risk": "Low",
-        "message": " ".join(f"{k}: {v}" for k, v in facts.items()),
-        "raw_json": {"facts": facts, "record_number": 1, "data_integrity": {}},
-    })
+    ev = NormalizedEvent(
+        event_id=event_id,
+        timestamp=datetime.fromisoformat(ts),
+        category="Process",
+        user=user,
+        host=host,
+        org=org,
+        risk="Low",
+        message=" ".join(f"{k}: {v}" for k, v in facts.items()),
+        raw_json={"facts": facts, "record_number": 1, "data_integrity": {}},
+    )
     db.add(ev)
     db.flush()
     return ev
@@ -220,22 +237,39 @@ def test_process_tree_guid_linking_wins_over_pid_reuse(db):
     from datetime import datetime
 
     parent = ProcessRecord(
-        pid=100, ppid=1, name="cmd.exe", path="C:\\Windows\\System32\\cmd.exe",
-        command_line="", parent_name="explorer.exe", user="alice",
-        guid="G-PARENT", parent_guid="", is_new=False,
-        observed_at=datetime.fromisoformat("2026-08-15T10:00:00+00:00"), org="univ-a",
+        pid=100,
+        ppid=1,
+        name="cmd.exe",
+        path="C:\\Windows\\System32\\cmd.exe",
+        command_line="",
+        parent_name="explorer.exe",
+        user="alice",
+        guid="G-PARENT",
+        parent_guid="",
+        is_new=False,
+        observed_at=datetime.fromisoformat("2026-08-15T10:00:00+00:00"),
+        org="univ-a",
     )
     child = ProcessRecord(
-        pid=200, ppid=999,  # ppid is stale/meaningless - GUID wins
-        name="whoami.exe", path="C:\\temp\\whoami.exe",
-        command_line="whoami /priv", parent_name="cmd.exe", user="alice",
-        guid="G-CHILD", parent_guid="G-PARENT", is_new=True,
-        observed_at=datetime.fromisoformat("2026-08-15T10:00:01+00:00"), org="univ-a",
+        pid=200,
+        ppid=999,  # ppid is stale/meaningless - GUID wins
+        name="whoami.exe",
+        path="C:\\temp\\whoami.exe",
+        command_line="whoami /priv",
+        parent_name="cmd.exe",
+        user="alice",
+        guid="G-CHILD",
+        parent_guid="G-PARENT",
+        is_new=True,
+        observed_at=datetime.fromisoformat("2026-08-15T10:00:01+00:00"),
+        org="univ-a",
     )
     db.add_all([parent, child])
     db.commit()
 
-    evidence = _mk_event(db, 4624, {"AccountName": "alice"}, "2026-08-15T10:00:01+00:00")
+    evidence = _mk_event(
+        db, 4624, {"AccountName": "alice"}, "2026-08-15T10:00:01+00:00"
+    )
     tree = build_process_tree(db, [evidence], org="univ-a", window_minutes=30)
     assert tree["node_count"] == 2
     nodes = {n["pid"]: n for t in tree["trees"] for n in t["nodes"]}
@@ -247,14 +281,28 @@ def test_process_tree_ppid_fallback_without_guids(db):
     from datetime import datetime
 
     parent = ProcessRecord(
-        pid=300, ppid=1, name="powershell.exe", path="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-        command_line="", parent_name="explorer.exe", user="bob",
-        is_new=False, observed_at=datetime.fromisoformat("2026-08-15T11:00:00+00:00"), org="univ-a",
+        pid=300,
+        ppid=1,
+        name="powershell.exe",
+        path="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        command_line="",
+        parent_name="explorer.exe",
+        user="bob",
+        is_new=False,
+        observed_at=datetime.fromisoformat("2026-08-15T11:00:00+00:00"),
+        org="univ-a",
     )
     child = ProcessRecord(
-        pid=301, ppid=300, name="whoami.exe", path="C:\\temp\\whoami.exe",
-        command_line="whoami", parent_name="powershell.exe", user="bob",
-        is_new=True, observed_at=datetime.fromisoformat("2026-08-15T11:00:01+00:00"), org="univ-a",
+        pid=301,
+        ppid=300,
+        name="whoami.exe",
+        path="C:\\temp\\whoami.exe",
+        command_line="whoami",
+        parent_name="powershell.exe",
+        user="bob",
+        is_new=True,
+        observed_at=datetime.fromisoformat("2026-08-15T11:00:01+00:00"),
+        org="univ-a",
     )
     db.add_all([parent, child])
     db.commit()
@@ -269,19 +317,47 @@ def test_process_tree_ppid_fallback_without_guids(db):
 # Investigation enrichment
 # ---------------------------------------------------------------------------
 
+
 def test_enrich_incident_six_w_and_counts(db):
-    add_normalized = __import__("tests.fixtures", fromlist=["add_normalized"]).add_normalized
-    add_normalized(db, [
-        {"source": "eventlog", "channel": "Security", "event_id": 4625, "org": "univ-a",
-         "timestamp": "2026-08-15T12:00:00+00:00", "user": "alice", "host": "web-01",
-         "message": "An account failed to log on. Account Name: alice SourceIp 10.0.0.9"},
-        {"source": "eventlog", "channel": "Security", "event_id": 4104, "org": "univ-a",
-         "timestamp": "2026-08-15T12:00:10+00:00", "user": "alice", "host": "web-01",
-         "message": "PowerShell ScriptBlock text: DownloadString"},
-    ], event_only=True)
-    _mk_event(db, 4688, {"NewProcessId": "400", "ProcessId": "300",
-                         "NewProcessName": "C:\\temp\\mimikatz.exe"},
-              "2026-08-15T12:00:05+00:00")
+    add_normalized = __import__(
+        "tests.fixtures", fromlist=["add_normalized"]
+    ).add_normalized
+    add_normalized(
+        db,
+        [
+            {
+                "source": "eventlog",
+                "channel": "Security",
+                "event_id": 4625,
+                "org": "univ-a",
+                "timestamp": "2026-08-15T12:00:00+00:00",
+                "user": "alice",
+                "host": "web-01",
+                "message": "An account failed to log on. Account Name: alice SourceIp 10.0.0.9",
+            },
+            {
+                "source": "eventlog",
+                "channel": "Security",
+                "event_id": 4104,
+                "org": "univ-a",
+                "timestamp": "2026-08-15T12:00:10+00:00",
+                "user": "alice",
+                "host": "web-01",
+                "message": "PowerShell ScriptBlock text: DownloadString",
+            },
+        ],
+        event_only=True,
+    )
+    _mk_event(
+        db,
+        4688,
+        {
+            "NewProcessId": "400",
+            "ProcessId": "300",
+            "NewProcessName": "C:\\temp\\mimikatz.exe",
+        },
+        "2026-08-15T12:00:05+00:00",
+    )
 
     events = db.query(NormalizedEvent).order_by(NormalizedEvent.id).all()
     alert = _mk_alert(db, "alice", evidence="user 'alice' on web-01")
@@ -306,15 +382,33 @@ def test_enrich_incident_six_w_and_counts(db):
 
 
 def test_enrich_incident_full_confidence(db):
-    add_normalized = __import__("tests.fixtures", fromlist=["add_normalized"]).add_normalized
-    add_normalized(db, [
-        {"source": "eventlog", "channel": "Security", "event_id": 4688,
-         "timestamp": "2026-08-15T13:00:00+00:00", "user": "alice", "host": "web-01",
-         "message": "New Process Name:\tC:\\temp\\x.exe NewProcessId:\t500 ProcessId:\t400"},
-        {"source": "eventlog", "channel": "Security", "event_id": 4624,
-         "timestamp": "2026-08-15T13:00:01+00:00", "user": "alice", "host": "web-01",
-         "message": "An account was successfully logged on. Account Name: alice"},
-    ], event_only=True)
+    add_normalized = __import__(
+        "tests.fixtures", fromlist=["add_normalized"]
+    ).add_normalized
+    add_normalized(
+        db,
+        [
+            {
+                "source": "eventlog",
+                "channel": "Security",
+                "event_id": 4688,
+                "timestamp": "2026-08-15T13:00:00+00:00",
+                "user": "alice",
+                "host": "web-01",
+                "message": "New Process Name:\tC:\\temp\\x.exe NewProcessId:\t500 ProcessId:\t400",
+            },
+            {
+                "source": "eventlog",
+                "channel": "Security",
+                "event_id": 4624,
+                "timestamp": "2026-08-15T13:00:01+00:00",
+                "user": "alice",
+                "host": "web-01",
+                "message": "An account was successfully logged on. Account Name: alice",
+            },
+        ],
+        event_only=True,
+    )
 
     events = db.query(NormalizedEvent).order_by(NormalizedEvent.id).all()
     alert = _mk_alert(db, "alice", evidence="user 'alice' on web-01")

@@ -1,32 +1,33 @@
 """Phase 6 metrics + evaluation tests (spec 6.55, 6.56, 6.74)."""
+
 from __future__ import annotations
 
 from backend.risk import engine
 from backend.risk.evaluation import run_evaluation
 from backend.risk.evaluation_data import SCENARIOS
 from backend.risk.metrics import risk_metrics
-from backend.risk.models import EntityRiskV2Factor
-
 from tests.risk.helpers import (
     RISK_T0,
     finding_evidence,
     group_evidence,
-    stored_factors,
     stored_risks,
 )
 
 
 def _seed(db):
     engine.apply_group(
-        db, group_evidence("g1", "h1", ["T1021.001"], alert_count=10),
+        db,
+        group_evidence("g1", "h1", ["T1021.001"], alert_count=10),
         now=RISK_T0,
     )
     engine.apply_group(
-        db, group_evidence("g2", "h2", ["T1110"], alert_count=20),
+        db,
+        group_evidence("g2", "h2", ["T1110"], alert_count=20),
         now=RISK_T0,
     )
     engine.apply_group(
-        db, group_evidence("g3", "h3", ["T1059.001"], severity="medium"),
+        db,
+        group_evidence("g3", "h3", ["T1059.001"], severity="medium"),
         now=RISK_T0,
     )
     engine.apply_finding(
@@ -56,13 +57,18 @@ def test_metrics_totals(db):
     assert metrics["snapshot_count"] > 0
     assert metrics["factor_expiration_count"] == 0
     assert metrics["calculation_latency"]["p50_ms"] >= 0
-    assert metrics["calculation_latency"]["max_ms"] >= metrics["calculation_latency"]["p50_ms"]
+    assert (
+        metrics["calculation_latency"]["max_ms"]
+        >= metrics["calculation_latency"]["p50_ms"]
+    )
 
 
 def test_metrics_latency_percentiles_order(db):
     _seed(db)
     latency = risk_metrics(db, now=RISK_T0)["calculation_latency"]
-    assert latency["p50_ms"] <= latency["p95_ms"] <= latency["p99_ms"] <= latency["max_ms"]
+    assert (
+        latency["p50_ms"] <= latency["p95_ms"] <= latency["p99_ms"] <= latency["max_ms"]
+    )
 
 
 def test_metrics_never_fabricates_accuracy(db):
@@ -72,7 +78,11 @@ def test_metrics_never_fabricates_accuracy(db):
     assert "precision" not in metrics
     assert "recall" not in metrics
     assert set(metrics["score_distribution"]) == {
-        "0_19", "20_39", "40_59", "60_79", "80_100",
+        "0_19",
+        "20_39",
+        "40_59",
+        "60_79",
+        "80_100",
     }
 
 
@@ -89,10 +99,10 @@ def test_metrics_concentration_by_entity_type(db):
     hosts = metrics["by_entity_type"]["HOST"]
     assert hosts["total"] == 3
     assert hosts["medium"] == 1
-    assert sum(
-        band["total"]
-        for band in metrics["by_entity_type"].values()
-    ) == metrics["total_entities"]
+    assert (
+        sum(band["total"] for band in metrics["by_entity_type"].values())
+        == metrics["total_entities"]
+    )
 
 
 def test_evaluation_reports_raw_scenario_counts(db):
@@ -117,6 +127,12 @@ def test_every_scenario_has_full_shape():
         for step in scenario["steps"]:
             assert "at" in step
             assert any(
-                key in step for key in ("evidence", "replay", "expire",
-                                        "recalculate_entities", "propagate")
+                key in step
+                for key in (
+                    "evidence",
+                    "replay",
+                    "expire",
+                    "recalculate_entities",
+                    "propagate",
+                )
             )

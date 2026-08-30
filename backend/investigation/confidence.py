@@ -11,7 +11,7 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from backend.context.engine import ContextFacts
-from backend.database.models import Alert, AlertEventLink, Incident, NormalizedEvent
+from backend.database.models import Alert, Incident, NormalizedEvent
 
 
 def _mean(values: list[float]) -> float:
@@ -70,12 +70,13 @@ def incident_confidence(
             0.30 * min(1.0, (enrichment.get("event_count") or 0) / 8.0)
             + 0.30 * float(tree.get("completeness") or 0.0)
             + 0.20 * min(1.0, (enrichment.get("process_count") or 0) / 3.0)
-            + 0.20 * min(1.0, (len(six_w.get("who") or []) + len(six_w.get("where") or [])) / 2.0)
+            + 0.20
+            * min(
+                1.0, (len(six_w.get("who") or []) + len(six_w.get("where") or [])) / 2.0
+            )
         )
     else:
-        ev_ids = [
-            link.event_id for alert in alerts for link in alert.events
-        ][:200]
+        ev_ids = [link.event_id for alert in alerts for link in alert.events][:200]
         evidence = min(1.0, len(ev_ids) / 8.0)
         enrichment_quality = 0.5 * evidence + 0.5 * min(1.0, len(alerts) / 3.0)
 
@@ -106,10 +107,26 @@ def incident_confidence(
         "score": score,
         "label": label,
         "breakdown": [
-            {"factor": "detection quality", "score": round(detection_quality, 3), "weight": 0.40},
-            {"factor": "correlation strength", "score": round(correlation_strength, 3), "weight": 0.30},
-            {"factor": "enrichment quality", "score": round(enrichment_quality, 3), "weight": 0.30},
-            {"factor": "suppression signals", "score": round(-suppression, 3), "weight": 0.0},
+            {
+                "factor": "detection quality",
+                "score": round(detection_quality, 3),
+                "weight": 0.40,
+            },
+            {
+                "factor": "correlation strength",
+                "score": round(correlation_strength, 3),
+                "weight": 0.30,
+            },
+            {
+                "factor": "enrichment quality",
+                "score": round(enrichment_quality, 3),
+                "weight": 0.30,
+            },
+            {
+                "factor": "suppression signals",
+                "score": round(-suppression, 3),
+                "weight": 0.0,
+            },
         ],
     }
 
@@ -129,7 +146,8 @@ def story_confidence(
     ml_agreement = 0.0
     if ev_ids:
         ml_scores = [
-            float(s) for s in session.scalars(
+            float(s)
+            for s in session.scalars(
                 select(NormalizedEvent.ml_score).where(
                     NormalizedEvent.id.in_(ev_ids),
                     NormalizedEvent.ml_score.isnot(None),
@@ -154,7 +172,11 @@ def story_confidence(
     factors = [
         ("evidence volume", evidence_volume, 0.15),
         ("ML agreement", ml_agreement, 0.20),
-        ("process tree completeness", tree_completeness * (0.85 if seed_found else 0.35), 0.20),
+        (
+            "process tree completeness",
+            tree_completeness * (0.85 if seed_found else 0.35),
+            0.20,
+        ),
         ("rule confidence", rule_confidence, 0.15),
         ("context clarity", context_clarity, 0.15),
         ("related alert corroboration", cluster_signal, 0.15),

@@ -1,9 +1,10 @@
-import { memo, useState, useRef, useEffect } from "react";
+import { memo, useState, useRef, useEffect, useId, isValidElement, cloneElement } from "react";
 
 function Tooltip({ children, content, side = "top", delay = 300, className = "" }) {
   const [open, setOpen] = useState(false);
   const timer = useRef(null);
   const triggerRef = useRef(null);
+  const id = useId();
 
   const show = () => { timer.current = setTimeout(() => setOpen(true), delay); };
   const hide = () => { clearTimeout(timer.current); setOpen(false); };
@@ -11,6 +12,11 @@ function Tooltip({ children, content, side = "top", delay = 300, className = "" 
   useEffect(() => () => clearTimeout(timer.current), []);
 
   if (!content) return children;
+
+  const described = open ? id : undefined;
+  const child = isValidElement(children)
+    ? cloneElement(children, { "aria-describedby": described })
+    : children;
 
   const positions = {
     top: "bottom-full left-1/2 -translate-x-1/2 mb-2",
@@ -28,9 +34,10 @@ function Tooltip({ children, content, side = "top", delay = 300, className = "" 
       onFocus={show}
       onBlur={hide}
     >
-      {children}
+      {child}
       {open && (
         <div
+          id={id}
           className={[
             "absolute z-[var(--z-tooltip)] pointer-events-none",
             "rounded-[var(--radius-md)] bg-[var(--bg-surface-overlay)] border border-[var(--border-default)]",

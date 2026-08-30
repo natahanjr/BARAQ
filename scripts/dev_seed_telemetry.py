@@ -14,6 +14,7 @@ Rules (see docs/phase0/ENVIRONMENTS.md):
 Usage:
     python scripts/dev_seed_telemetry.py [--keep] [--records N] [--seed S]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -21,7 +22,7 @@ import os
 import random
 import sys
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -94,7 +95,9 @@ def _synthetic_records(rng: random.Random, now: datetime, count: int) -> list[di
                     "source": "syslog",
                     "action": rng.choice(["ssh_login", "sudo", "cron_job"]),
                     "facts": {
-                        "source_ip": rng.choice(attack_ips + ["10.0.0." + str(rng.randint(2, 99))]),
+                        "source_ip": rng.choice(
+                            attack_ips + ["10.0.0." + str(rng.randint(2, 99))]
+                        ),
                         "service": "sshd",
                     },
                 }
@@ -108,7 +111,11 @@ def _synthetic_records(rng: random.Random, now: datetime, count: int) -> list[di
                     "user": "-",
                     "source": "web",
                     "action": "request",
-                    "facts": {"source_ip": "10.0.0." + str(rng.randint(2, 99)), "method": "GET", "status": 200},
+                    "facts": {
+                        "source_ip": "10.0.0." + str(rng.randint(2, 99)),
+                        "method": "GET",
+                        "status": 200,
+                    },
                 }
             )
             continue
@@ -120,7 +127,9 @@ def _synthetic_records(rng: random.Random, now: datetime, count: int) -> list[di
                 "event_data": {
                     "target_user_name": rng.choice(users),
                     "ip_address": "127.0.0.1" if rng.random() < 0.5 else "10.0.0.5",
-                    "process_name": rng.choice(["explorer.exe", "svchost.exe", "cmd.exe"]),
+                    "process_name": rng.choice(
+                        ["explorer.exe", "svchost.exe", "cmd.exe"]
+                    ),
                 },
                 "time_created": ts.isoformat(),
             }
@@ -130,8 +139,12 @@ def _synthetic_records(rng: random.Random, now: datetime, count: int) -> list[di
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--keep", action="store_true", help="keep the scratch DB after the run")
-    parser.add_argument("--records", type=int, default=500, help="synthetic records to generate")
+    parser.add_argument(
+        "--keep", action="store_true", help="keep the scratch DB after the run"
+    )
+    parser.add_argument(
+        "--records", type=int, default=500, help="synthetic records to generate"
+    )
     parser.add_argument("--seed", type=int, default=7, help="deterministic PRNG seed")
     args = parser.parse_args()
 
@@ -176,7 +189,7 @@ def main() -> int:
         db = SessionLocal()
         try:
             rng = random.Random(args.seed)
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             records = _synthetic_records(rng, now, args.records)
             stats = ingest(db, records)
             replay = ingest(db, records)
@@ -200,7 +213,7 @@ def main() -> int:
             return 0
         finally:
             db.close()
-    except Exception as exc:  # noqa: BLE001 - report and still drop the DB
+    except Exception as exc:
         print(f"FAILED: {exc}", file=sys.stderr)
         import traceback
 

@@ -10,9 +10,11 @@ Upsert semantics (mirrors the Neo4j adapter): on conflict, counters
 ``first_seen``/``last_seen`` run to the true min/max so re-syncing a batch
 never erases history or double-counts.
 """
+
 from __future__ import annotations
 
 import logging
+
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -23,12 +25,28 @@ from backend.graph.base import GraphStore
 logger = logging.getLogger("baraq.graph")
 
 _node_columns = {
-    "kind", "name", "display_name", "label", "risk_level", "risk_score",
-    "alerts_count", "events_count", "properties", "first_seen", "last_seen",
+    "kind",
+    "name",
+    "display_name",
+    "label",
+    "risk_level",
+    "risk_score",
+    "alerts_count",
+    "events_count",
+    "properties",
+    "first_seen",
+    "last_seen",
 }
 _edge_columns = {
-    "src_kind", "src_name", "rel", "dst_kind", "dst_name",
-    "weight", "first_seen", "last_seen", "properties",
+    "src_kind",
+    "src_name",
+    "rel",
+    "dst_kind",
+    "dst_name",
+    "weight",
+    "first_seen",
+    "last_seen",
+    "properties",
 }
 
 _upsert_cls = pg_insert
@@ -67,7 +85,9 @@ class PostgresStore(GraphStore):
 
     # -- mutations --------------------------------------------------------
 
-    def upsert_entities(self, db, entities: list[dict], accumulate: bool = False) -> None:
+    def upsert_entities(
+        self, db, entities: list[dict], accumulate: bool = False
+    ) -> None:
         """Create-or-update nodes by (kind, name).
 
         With ``accumulate=False`` every field is replaced with the incoming
@@ -88,8 +108,12 @@ class PostgresStore(GraphStore):
             "properties": excluded.properties,
         }
         if accumulate:
-            set_["alerts_count"] = _accumulate(EntityNode.alerts_count, excluded.alerts_count)
-            set_["events_count"] = _accumulate(EntityNode.events_count, excluded.events_count)
+            set_["alerts_count"] = _accumulate(
+                EntityNode.alerts_count, excluded.alerts_count
+            )
+            set_["events_count"] = _accumulate(
+                EntityNode.events_count, excluded.events_count
+            )
             set_["first_seen"] = _earliest(EntityNode.first_seen, excluded.first_seen)
             set_["last_seen"] = _latest(EntityNode.last_seen, excluded.last_seen)
         else:
@@ -241,9 +265,7 @@ class PostgresStore(GraphStore):
                     rels = db.scalars(
                         select(EntityEdge)
                         .where(or_(*conditions))
-                        .order_by(
-                            EntityEdge.weight.desc(), EntityEdge.last_seen.desc()
-                        )
+                        .order_by(EntityEdge.weight.desc(), EntityEdge.last_seen.desc())
                         .limit(max(1, edge_limit - len(edges)))
                     ).all()
 
@@ -273,8 +295,12 @@ class PostgresStore(GraphStore):
         if names:
             conditions = []
             for k, n in names:
-                conditions.append((EntityEdge.src_kind == k) & (EntityEdge.src_name == n))
-                conditions.append((EntityEdge.dst_kind == k) & (EntityEdge.dst_name == n))
+                conditions.append(
+                    (EntityEdge.src_kind == k) & (EntityEdge.src_name == n)
+                )
+                conditions.append(
+                    (EntityEdge.dst_kind == k) & (EntityEdge.dst_name == n)
+                )
             rels = db.scalars(
                 select(EntityEdge)
                 .where(or_(*conditions))
@@ -293,9 +319,9 @@ class PostgresStore(GraphStore):
             if (d["kind"], d["name"]) in node_ids:
                 included.append(d)
         return {
-            "nodes": sorted(
-                included, key=lambda d: d["risk_score"], reverse=True
-            )[:limit],
+            "nodes": sorted(included, key=lambda d: d["risk_score"], reverse=True)[
+                :limit
+            ],
             "edges": edge_rows,
         }
 

@@ -8,6 +8,7 @@ privilege escalation, no suspicious network), and an assessment.
     observations: [ "Persistence observed: ...", "No privilege escalation observed", ... ]
     assessment:   "Likely Benign Developer Activity"
 """
+
 from __future__ import annotations
 
 import logging
@@ -58,22 +59,42 @@ def _observations(risk: dict, facts) -> list[dict]:
     out: list[dict] = []
 
     if "persistence_detected" in adjustments:
-        out.append({"type": "warning", "text": "Persistence observed: " + adjustments["persistence_detected"]["note"]})
+        out.append(
+            {
+                "type": "warning",
+                "text": "Persistence observed: "
+                + adjustments["persistence_detected"]["note"],
+            }
+        )
     else:
         out.append({"type": "ok", "text": "No persistence observed"})
 
     if "credential_access" in adjustments:
-        out.append({"type": "warning", "text": "Privilege escalation / credential access observed: " + adjustments["credential_access"]["note"]})
+        out.append(
+            {
+                "type": "warning",
+                "text": "Privilege escalation / credential access observed: "
+                + adjustments["credential_access"]["note"],
+            }
+        )
     else:
         out.append({"type": "ok", "text": "No privilege escalation observed"})
 
     if "suspicious_network" in adjustments:
-        out.append({"type": "warning", "text": "Suspicious network activity observed: " + adjustments["suspicious_network"]["note"]})
+        out.append(
+            {
+                "type": "warning",
+                "text": "Suspicious network activity observed: "
+                + adjustments["suspicious_network"]["note"],
+            }
+        )
     else:
         out.append({"type": "ok", "text": "No suspicious network activity observed"})
 
     if risk.get("developer_workflow"):
-        out.append({"type": "info", "text": "Developer workflow detected - risk reduced"})
+        out.append(
+            {"type": "info", "text": "Developer workflow detected - risk reduced"}
+        )
     return out
 
 
@@ -112,7 +133,9 @@ def root_cause(
     if tree is None and events is not None:
         from backend.investigation.process_tree import build_process_tree
 
-        tree = build_process_tree(session, events, org=(incident.org if incident else "") or "")
+        tree = build_process_tree(
+            session, events, org=(incident.org if incident else "") or ""
+        )
 
     if facts is None:
         from backend.context import assess_events
@@ -133,7 +156,7 @@ def root_cause(
                 from backend.investigation.dedup import _root_process
 
                 root = _root_process(session, incident.alerts[0].alert)
-            except Exception:  # noqa: BLE001 - fallback must never crash
+            except Exception:
                 root = None
         if not root and chain:
             root = chain[0]

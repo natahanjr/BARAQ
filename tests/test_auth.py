@@ -1,4 +1,5 @@
 """Tests for API authentication (RBAC) and input validation."""
+
 from __future__ import annotations
 
 import pytest
@@ -29,6 +30,7 @@ def _post(client, path, key, body=None):
 # Authentication
 # ---------------------------------------------------------------------------
 
+
 def test_missing_key_rejected(client):
     assert _get(client, "/api/dashboard/summary").status_code == 401
 
@@ -54,9 +56,12 @@ def test_root_is_public(client):
 # RBAC: admin-only endpoints
 # ---------------------------------------------------------------------------
 
+
 def test_analyst_cannot_trigger_actions(client):
     # Need an alert to act on; analyst role must still be blocked at the route.
-    resp = _post(client, "/api/alerts/1/actions", ANALYST_KEY, {"action": "acknowledge"})
+    resp = _post(
+        client, "/api/alerts/1/actions", ANALYST_KEY, {"action": "acknowledge"}
+    )
     assert resp.status_code == 403
 
 
@@ -72,7 +77,9 @@ def test_admin_can_trigger_actions(client):
         db.close()
 
     alert_id = _get(client, "/api/alerts", key=ADMIN_KEY).json()["items"][0]["id"]
-    resp = _post(client, f"/api/alerts/{alert_id}/actions", ADMIN_KEY, {"action": "acknowledge"})
+    resp = _post(
+        client, f"/api/alerts/{alert_id}/actions", ADMIN_KEY, {"action": "acknowledge"}
+    )
     assert resp.status_code == 200
     assert resp.json()["status"] == "success"
 
@@ -96,6 +103,7 @@ def test_analyst_cannot_run_evaluation(client):
 # Input validation
 # ---------------------------------------------------------------------------
 
+
 def test_invalid_alert_status_rejected(client):
     resp = client.patch(
         "/api/alerts/1/status",
@@ -106,7 +114,9 @@ def test_invalid_alert_status_rejected(client):
 
 
 def test_invalid_alert_action_rejected(client):
-    resp = _post(client, "/api/alerts/1/actions", ADMIN_KEY, {"action": "delete_everything"})
+    resp = _post(
+        client, "/api/alerts/1/actions", ADMIN_KEY, {"action": "delete_everything"}
+    )
     assert resp.status_code == 422
 
 

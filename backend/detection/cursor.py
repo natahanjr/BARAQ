@@ -10,6 +10,7 @@ The cursor is process-global (single-writer): ``run_pipeline`` advances it
 under ``CURSOR_LOCK`` after a detection pass, so concurrent ingest handlers
 and the background scheduler never evaluate the same event range twice.
 """
+
 from __future__ import annotations
 
 import threading

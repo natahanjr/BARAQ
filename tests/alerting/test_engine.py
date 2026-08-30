@@ -1,4 +1,5 @@
 """Alert engine tests (spec 3.2, 3.18-3.19, 3.28-3.31)."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -7,7 +8,6 @@ import pytest
 
 from backend.alerting.engine import process_detection
 from backend.detection.contract import make_detection_id
-
 from tests.alerting.helpers import T0, detection, stored_alerts, v1_counts
 
 
@@ -78,10 +78,11 @@ def test_detection_reference_retained(db):
 
 
 def test_refuses_production_db_by_name(monkeypatch, db):
-    import backend.config as config
+    from backend import config
 
     monkeypatch.setattr(
-        config, "DATABASE_URL",
+        config,
+        "DATABASE_URL",
         "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel",
     )
     with pytest.raises(RuntimeError, match="production database"):

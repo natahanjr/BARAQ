@@ -27,7 +27,9 @@ def _evidence_scope(alert: Alert) -> str:
     text = alert.evidence or ""
     if alert.events:
         text += " " + " ".join(
-            (link.event.message or "") + " " + ((link.event.user or "") + " " + (link.event.host or ""))
+            (link.event.message or "")
+            + " "
+            + ((link.event.user or "") + " " + (link.event.host or ""))
             for link in list(alert.events)[:12]
         )
     return text
@@ -35,7 +37,9 @@ def _evidence_scope(alert: Alert) -> str:
 
 def _evidence_user(alert: Alert) -> str:
     scope = _evidence_scope(alert)
-    m = re.search(r"\b(?:user|user_name|user_id|account)\s*[:=]\s*([A-Za-z0-9_.\\-]+)", scope)
+    m = re.search(
+        r"\b(?:user|user_name|user_id|account)\s*[:=]\s*([A-Za-z0-9_.\\-]+)", scope
+    )
     return m.group(1) if m else ""
 
 
@@ -46,7 +50,9 @@ def _verdict_for(session, alert_id: int) -> str:
     return row[0] if row else ""
 
 
-def cluster_related_alerts(session, alert: Alert, max_results: int = MAX_RESULTS) -> list[dict]:
+def cluster_related_alerts(
+    session, alert: Alert, max_results: int = MAX_RESULTS
+) -> list[dict]:
     """Return alerts related to ``alert`` ranked by story relevance."""
     own_events = set(
         session.scalars(
@@ -73,7 +79,10 @@ def cluster_related_alerts(session, alert: Alert, max_results: int = MAX_RESULTS
     if own_events:
         rows = session.execute(
             select(AlertEventLink.alert_id, func.count())
-            .where(AlertEventLink.event_id.in_(own_events), AlertEventLink.alert_id != alert.id)
+            .where(
+                AlertEventLink.event_id.in_(own_events),
+                AlertEventLink.alert_id != alert.id,
+            )
             .group_by(AlertEventLink.alert_id)
         ).all()
         shared_events = {aid: int(cnt) for aid, cnt in rows}
@@ -82,15 +91,19 @@ def cluster_related_alerts(session, alert: Alert, max_results: int = MAX_RESULTS
     for cand in candidates:
         if cand.demo and not alert.demo:
             continue
-        cand_events = set(
+        set(
             session.scalars(
-                select(AlertEventLink.event_id).where(AlertEventLink.alert_id == cand.id)
+                select(AlertEventLink.event_id).where(
+                    AlertEventLink.alert_id == cand.id
+                )
             ).all()
         )
         shared = shared_events.get(cand.id, 0)
         same_user = bool(own_user) and own_user == _evidence_user(cand)
         same_host = bool(own_host) and own_host == (cand.host or "")
-        same_corr = bool(alert.correlation_id) and alert.correlation_id == cand.correlation_id
+        same_corr = (
+            bool(alert.correlation_id) and alert.correlation_id == cand.correlation_id
+        )
 
         score = 0.0
         reasons: list[str] = []
@@ -108,7 +121,8 @@ def cluster_related_alerts(session, alert: Alert, max_results: int = MAX_RESULTS
             reasons.append("same user")
         proximity = 1.0 - min(
             1.0,
-            abs((cand.created_at - alert.created_at).total_seconds()) / (CLUSTER_WINDOW_MINUTES * 60),
+            abs((cand.created_at - alert.created_at).total_seconds())
+            / (CLUSTER_WINDOW_MINUTES * 60),
         )
         score += proximity * 0.8
         if score < 1.0:
@@ -116,22 +130,24 @@ def cluster_related_alerts(session, alert: Alert, max_results: int = MAX_RESULTS
         if not shared and not same_corr and not same_host and not same_user:
             continue
 
-        scored.append({
-            "id": cand.id,
-            "name": cand.name,
-            "rule": cand.rule,
-            "severity": cand.severity,
-            "status": cand.status,
-            "risk_level": cand.risk_level,
-            "risk_score": cand.risk_score,
-            "confidence": cand.confidence,
-            "mitre_id": cand.mitre_id,
-            "created_at": cand.created_at.isoformat(),
-            "verdict": _verdict_for(session, cand.id),
-            "shared_event_count": shared,
-            "relevance_score": round(score, 2),
-            "reasons": reasons,
-        })
+        scored.append(
+            {
+                "id": cand.id,
+                "name": cand.name,
+                "rule": cand.rule,
+                "severity": cand.severity,
+                "status": cand.status,
+                "risk_level": cand.risk_level,
+                "risk_score": cand.risk_score,
+                "confidence": cand.confidence,
+                "mitre_id": cand.mitre_id,
+                "created_at": cand.created_at.isoformat(),
+                "verdict": _verdict_for(session, cand.id),
+                "shared_event_count": shared,
+                "relevance_score": round(score, 2),
+                "reasons": reasons,
+            }
+        )
 
     scored.sort(key=lambda d: (-d["relevance_score"], d["created_at"]))
     return scored[:max_results]

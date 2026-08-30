@@ -1,34 +1,31 @@
 """Phase 7 incident management API (spec 7.30-7.33, 7.35, 7.39, 7.48-7.51)."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
-from backend.incidents.config import INCIDENT_SLA_MINUTES
-from backend.incidents.contract import (
-    AUDIT_ACTIONS,
-    INCIDENT_PRIORITIES,
-    INCIDENT_SEVERITIES,
-    INCIDENT_STATES,
+from backend.incidents.audit import audit
+from backend.incidents.engine import (
+    suppress_incident,
+    transition_incident,
 )
-from backend.incidents.engine import create_incident, suppress_incident, transition_incident
 from backend.incidents.investigation import add_note, assign_incident, get_timeline
 from backend.incidents.metrics import incident_metrics
 from backend.incidents.models import (
+    IncidentV2,
     IncidentV2AlertLink,
+    IncidentV2AuditEvent,
     IncidentV2BehaviorGroupLink,
     IncidentV2CorrelationLink,
     IncidentV2Evidence,
     IncidentV2Feedback,
     IncidentV2GraphEdge,
-    IncidentV2Note,
     IncidentV2RiskLink,
-    IncidentV2,
 )
 from backend.security import require_auth
 
@@ -139,9 +136,15 @@ def incident_detail(incident_id: str, db: Session = Depends(get_db)) -> dict:
 def incident_alerts(incident_id: str, db: Session = Depends(get_db)) -> dict:
     _gate()
     rows = db.scalars(
-        select(IncidentV2AlertLink).where(IncidentV2AlertLink.incident_id == incident_id)
+        select(IncidentV2AlertLink).where(
+            IncidentV2AlertLink.incident_id == incident_id
+        )
     ).all()
-    return {"incident_id": incident_id, "count": len(rows), "alerts": [r.alert_id for r in rows]}
+    return {
+        "incident_id": incident_id,
+        "count": len(rows),
+        "alerts": [r.alert_id for r in rows],
+    }
 
 
 @router.get("/{incident_id}/groups")
@@ -152,7 +155,11 @@ def incident_groups(incident_id: str, db: Session = Depends(get_db)) -> dict:
             IncidentV2BehaviorGroupLink.incident_id == incident_id
         )
     ).all()
-    return {"incident_id": incident_id, "count": len(rows), "groups": [r.behavior_group_id for r in rows]}
+    return {
+        "incident_id": incident_id,
+        "count": len(rows),
+        "groups": [r.behavior_group_id for r in rows],
+    }
 
 
 @router.get("/{incident_id}/correlations")
@@ -163,7 +170,11 @@ def incident_correlations(incident_id: str, db: Session = Depends(get_db)) -> di
             IncidentV2CorrelationLink.incident_id == incident_id
         )
     ).all()
-    return {"incident_id": incident_id, "count": len(rows), "correlations": [r.correlation_finding_id for r in rows]}
+    return {
+        "incident_id": incident_id,
+        "count": len(rows),
+        "correlations": [r.correlation_finding_id for r in rows],
+    }
 
 
 @router.get("/{incident_id}/risk")
@@ -172,7 +183,11 @@ def incident_risk(incident_id: str, db: Session = Depends(get_db)) -> dict:
     rows = db.scalars(
         select(IncidentV2RiskLink).where(IncidentV2RiskLink.incident_id == incident_id)
     ).all()
-    return {"incident_id": incident_id, "count": len(rows), "risks": [r.risk_id for r in rows]}
+    return {
+        "incident_id": incident_id,
+        "count": len(rows),
+        "risks": [r.risk_id for r in rows],
+    }
 
 
 @router.get("/{incident_id}/evidence")
@@ -238,7 +253,9 @@ def incident_graph(incident_id: str, db: Session = Depends(get_db)) -> dict:
     if incident is None:
         raise HTTPException(status_code=404, detail=f"unknown incident {incident_id}")
     rows = db.scalars(
-        select(IncidentV2GraphEdge).where(IncidentV2GraphEdge.incident_id == incident_id)
+        select(IncidentV2GraphEdge).where(
+            IncidentV2GraphEdge.incident_id == incident_id
+        )
     ).all()
     nodes = [{"id": incident_id, "kind": "INCIDENT", "label": incident.title}]
     edges = [
@@ -262,10 +279,12 @@ def post_transition(
     actor: str = Query(default="system"),
 ) -> dict:
     try:
-        result = transition_incident(db, incident_id, status.upper(), actor=actor, reason=reason)
+        result = transition_incident(
+            db, incident_id, status.upper(), actor=actor, reason=reason
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return result
 
@@ -307,12 +326,18 @@ def post_suppress(
     expires_in_days: int = Query(default=30, ge=1, le=90),
     actor: str = Query(default="system"),
 ) -> dict:
-    expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=expires_in_days)
+    expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+        days=expires_in_days
+    )
     try:
         row = suppress_incident(db, incident_id, reason, scope, expires_at, actor)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    return {"suppression_id": row.id, "incident_id": incident_id, "expires_at": row.expires_at.isoformat()}
+    return {
+        "suppression_id": row.id,
+        "incident_id": incident_id,
+        "expires_at": row.expires_at.isoformat(),
+    }
 
 
 @router.post("/{incident_id}/feedback")
@@ -336,7 +361,12 @@ def post_feedback(
     )
     db.add(row)
     db.flush()
-    audit(db, incident_id, "INCIDENT_FEEDBACK_ADDED", actor=analyst, new_value=feedback_type.upper(), now=datetime.now(timezone.utc).replace(tzinfo=None))
+    audit(
+        db,
+        incident_id,
+        "INCIDENT_FEEDBACK_ADDED",
+        actor=analyst,
+        new_value=feedback_type.upper(),
+        now=datetime.now(UTC).replace(tzinfo=None),
+    )
     return {"feedback_id": row.id, "incident_id": incident_id}
-
-

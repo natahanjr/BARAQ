@@ -7,20 +7,21 @@ paths (spec 3.20). Every state-changing endpoint validates legal lifecycle
 transitions, records an audit event, and can never create incidents,
 mutate risk or execute SOAR.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-import backend.config as config
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.alerting import audit, feedback as feedback_mod
+from backend import config
+from backend.alerting import audit
+from backend.alerting import feedback as feedback_mod
 from backend.alerting.lifecycle import IllegalTransition, transition
 from backend.alerting.metrics import metrics as alert_metrics
 from backend.alerting.models import (
-    AlertFeedback,
     AlertOccurrence,
     AlertRecord,
     AlertSuppressionRule,
@@ -56,7 +57,14 @@ def _fetch(db: Session, alert_id: str) -> AlertRecord:
 
 
 def _validate_status(status: str) -> None:
-    if status not in ("OPEN", "ACKNOWLEDGED", "IN_PROGRESS", "RESOLVED", "CLOSED", "SUPPRESSED"):
+    if status not in (
+        "OPEN",
+        "ACKNOWLEDGED",
+        "IN_PROGRESS",
+        "RESOLVED",
+        "CLOSED",
+        "SUPPRESSED",
+    ):
         raise HTTPException(status_code=422, detail=f"invalid status {status!r}")
 
 
@@ -65,13 +73,15 @@ def _validate_severity(severity: str) -> None:
         raise HTTPException(status_code=422, detail=f"invalid severity {severity!r}")
 
 
-def _apply_transition(db: Session, row: AlertRecord, target: str, action: str, actor: str) -> dict:
+def _apply_transition(
+    db: Session, row: AlertRecord, target: str, action: str, actor: str
+) -> dict:
     try:
         t = transition(row.status, target, reopen=(action == "REOPENED"))
     except IllegalTransition as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     row.status = t.new_status
-    row.updated_at = datetime.now(timezone.utc)
+    row.updated_at = datetime.now(UTC)
     if t.new_status == "ACKNOWLEDGED":
         row.acknowledged_at = row.updated_at
         row.acknowledged_by = actor
@@ -138,7 +148,7 @@ def list_alerts(
     if first_seen_to:
         stmt = stmt.where(AlertRecord.first_seen <= first_seen_to)
     rows = db.scalars(stmt.offset(offset).limit(limit)).all()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     items = []
     for r in rows:
         item = r.to_dict()
@@ -172,14 +182,19 @@ def get_feedback_stats(db: Session = Depends(get_db)):
     """Feedback + false-positive statistics (spec 3.14, 3.15)."""
     if not config.ALERTS_V2_ENABLED:
         return {"status": "disabled", "stats": {}}
-    return {"status": "ok", "stats": feedback_mod.stats(db, config.ALERT_MIN_LABELED_FOR_FPR)}
+    return {
+        "status": "ok",
+        "stats": feedback_mod.stats(db, config.ALERT_MIN_LABELED_FOR_FPR),
+    }
 
 
 @router.get("/suppressions")
 def list_suppressions(db: Session = Depends(get_db)):
     if not config.ALERTS_V2_ENABLED:
         return {"status": "disabled", "items": []}
-    rows = db.scalars(select(AlertSuppressionRule).order_by(AlertSuppressionRule.created_at.desc())).all()
+    rows = db.scalars(
+        select(AlertSuppressionRule).order_by(AlertSuppressionRule.created_at.desc())
+    ).all()
     return {"status": "ok", "items": [_suppression_dict(r) for r in rows]}
 
 
@@ -190,10 +205,14 @@ def add_suppression(request: Request, payload: dict, db: Session = Depends(get_d
         return {"status": "disabled", "rule": None}
     reason = str(payload.get("reason") or "").strip()
     if not reason:
-        raise HTTPException(status_code=422, detail="suppression requires a documented reason")
+        raise HTTPException(
+            status_code=422, detail="suppression requires a documented reason"
+        )
     expires = payload.get("expires_at")
     if not expires:
-        raise HTTPException(status_code=422, detail="suppression requires an expiration")
+        raise HTTPException(
+            status_code=422, detail="suppression requires an expiration"
+        )
     try:
         expires_at = datetime.fromisoformat(str(expires).replace("Z", "+00:00"))
     except ValueError as exc:
@@ -201,7 +220,9 @@ def add_suppression(request: Request, payload: dict, db: Session = Depends(get_d
     try:
         rule = create_rule(
             db,
-            policy_id=str(payload.get("policy_id") or f"SUP-{int(datetime.now(timezone.utc).timestamp())}"),
+            policy_id=str(
+                payload.get("policy_id") or f"SUP-{int(datetime.now(UTC).timestamp())}"
+            ),
             reason=reason,
             expires_at=expires_at,
             scope=payload.get("scope") or {},
@@ -285,18 +306,24 @@ def get_evidence(alert_id: str, db: Session = Depends(get_db)):
 def acknowledge(alert_id: str, request: Request, db: Session = Depends(get_db)):
     if not config.ALERTS_V2_ENABLED:
         return {"status": "disabled", "alert": None}
-    return _apply_transition(db, _fetch(db, alert_id), "ACKNOWLEDGED", "ACKNOWLEDGED", actor_name(request))
+    return _apply_transition(
+        db, _fetch(db, alert_id), "ACKNOWLEDGED", "ACKNOWLEDGED", actor_name(request)
+    )
 
 
 @router.post("/{alert_id}/in-progress")
 def in_progress(alert_id: str, request: Request, db: Session = Depends(get_db)):
     if not config.ALERTS_V2_ENABLED:
         return {"status": "disabled", "alert": None}
-    return _apply_transition(db, _fetch(db, alert_id), "IN_PROGRESS", "IN_PROGRESS", actor_name(request))
+    return _apply_transition(
+        db, _fetch(db, alert_id), "IN_PROGRESS", "IN_PROGRESS", actor_name(request)
+    )
 
 
 @router.post("/{alert_id}/assign")
-def assign(alert_id: str, request: Request, payload: dict, db: Session = Depends(get_db)):
+def assign(
+    alert_id: str, request: Request, payload: dict, db: Session = Depends(get_db)
+):
     """Assign to an analyst (spec 3.12). Never trusts client state."""
     if not config.ALERTS_V2_ENABLED:
         return {"status": "disabled", "alert": None}
@@ -305,7 +332,7 @@ def assign(alert_id: str, request: Request, payload: dict, db: Session = Depends
     if not assigned_to:
         raise HTTPException(status_code=422, detail="assigned_to is required")
     row.assigned_to = assigned_to
-    row.assigned_at = datetime.now(timezone.utc)
+    row.assigned_at = datetime.now(UTC)
     row.updated_at = row.assigned_at
     audit.record(
         db,
@@ -324,14 +351,18 @@ def assign(alert_id: str, request: Request, payload: dict, db: Session = Depends
 def resolve(alert_id: str, request: Request, db: Session = Depends(get_db)):
     if not config.ALERTS_V2_ENABLED:
         return {"status": "disabled", "alert": None}
-    return _apply_transition(db, _fetch(db, alert_id), "RESOLVED", "RESOLVED", actor_name(request))
+    return _apply_transition(
+        db, _fetch(db, alert_id), "RESOLVED", "RESOLVED", actor_name(request)
+    )
 
 
 @router.post("/{alert_id}/close")
 def close(alert_id: str, request: Request, db: Session = Depends(get_db)):
     if not config.ALERTS_V2_ENABLED:
         return {"status": "disabled", "alert": None}
-    return _apply_transition(db, _fetch(db, alert_id), "CLOSED", "CLOSED", actor_name(request))
+    return _apply_transition(
+        db, _fetch(db, alert_id), "CLOSED", "CLOSED", actor_name(request)
+    )
 
 
 @router.post("/{alert_id}/reopen")
@@ -339,7 +370,9 @@ def reopen(alert_id: str, request: Request, db: Session = Depends(get_db)):
     """Explicit reopen operation (spec 3.11): CLOSED/RESOLVED/SUPPRESSED -> OPEN."""
     if not config.ALERTS_V2_ENABLED:
         return {"status": "disabled", "alert": None}
-    return _apply_transition(db, _fetch(db, alert_id), "OPEN", "REOPENED", actor_name(request))
+    return _apply_transition(
+        db, _fetch(db, alert_id), "OPEN", "REOPENED", actor_name(request)
+    )
 
 
 @router.post("/{alert_id}/suppress")
@@ -347,25 +380,36 @@ def suppress(alert_id: str, request: Request, db: Session = Depends(get_db)):
     """Manually suppress an active alert (documented, audited)."""
     if not config.ALERTS_V2_ENABLED:
         return {"status": "disabled", "alert": None}
-    return _apply_transition(db, _fetch(db, alert_id), "SUPPRESSED", "SUPPRESSED", actor_name(request))
+    return _apply_transition(
+        db, _fetch(db, alert_id), "SUPPRESSED", "SUPPRESSED", actor_name(request)
+    )
 
 
 @router.post("/{alert_id}/feedback")
-def submit_feedback(alert_id: str, request: Request, payload: dict, db: Session = Depends(get_db)):
+def submit_feedback(
+    alert_id: str, request: Request, payload: dict, db: Session = Depends(get_db)
+):
     """Structured feedback (spec 3.14). Server-side validation of every value."""
     if not config.ALERTS_V2_ENABLED:
         return {"status": "disabled", "feedback": None}
     row = _fetch(db, alert_id)
     feedback_type = str(payload.get("feedback_type") or "").upper()
     if feedback_type not in (
-        "TRUE_POSITIVE", "FALSE_POSITIVE", "BENIGN", "DUPLICATE", "EXPECTED_ACTIVITY", "UNKNOWN",
+        "TRUE_POSITIVE",
+        "FALSE_POSITIVE",
+        "BENIGN",
+        "DUPLICATE",
+        "EXPECTED_ACTIVITY",
+        "UNKNOWN",
     ):
-        raise HTTPException(status_code=422, detail=f"invalid feedback_type {feedback_type!r}")
+        raise HTTPException(
+            status_code=422, detail=f"invalid feedback_type {feedback_type!r}"
+        )
     comment = str(payload.get("comment") or "").strip()
     actor = actor_name(request)
     fb = feedback_mod.submit(db, row.alert_id, feedback_type, actor, comment)
     row.feedback = feedback_type
-    row.updated_at = datetime.now(timezone.utc)
+    row.updated_at = datetime.now(UTC)
     audit.record(
         db,
         alert_id=row.alert_id,

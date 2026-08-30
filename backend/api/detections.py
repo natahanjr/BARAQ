@@ -7,6 +7,7 @@ creates alerts, incidents, risk updates or SOAR actions.
 Like the v2 telemetry API, this surface is inert on the production
 database (``TELEMETRY_V2_ENABLED`` gate + engine-level guard).
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
@@ -64,7 +65,9 @@ def _explain_block(row: DetectionRecord) -> str:
         confidence=row.confidence,
         mitre_tactic=row.mitre_tactic,
         mitre_technique=row.mitre_technique,
-        evidence=tuple(Evidence(e["field"], e["value"], e["reason"]) for e in (row.evidence or [])),
+        evidence=tuple(
+            Evidence(e["field"], e["value"], e["reason"]) for e in (row.evidence or [])
+        ),
         observables=tuple(dict(o) for o in (row.observables or [])),
         status=row.status,
     ).to_explain()

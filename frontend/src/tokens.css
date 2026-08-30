@@ -7,7 +7,7 @@
 
 :root {
   /* ── Typography ─────────────────────────────────────────────────────── */
-  --font-sans: "SF Pro Display", "SF Pro Text", "Inter", system-ui, -apple-system, sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
 
   --text-2xl: 1.5rem;    /* 24px */
@@ -110,6 +110,7 @@
 
 :root {
   color-scheme: dark;
+  accent-color: var(--accent-cyan);
 
   /* ── Backgrounds ──────────────────────────────────────────────────── */
   --bg-app: #080e14;
@@ -123,8 +124,8 @@
   /* ── Foreground / Text ────────────────────────────────────────────── */
   --fg-primary: #e8f0f2;
   --fg-secondary: #8ba3ad;
-  --fg-muted: #5a7482;
-  --fg-faint: #3d5260;
+  --fg-muted: #6e8998;
+  --fg-faint: #6b8494;
   --fg-inverse: #0a141e;
 
   /* ── Borders ──────────────────────────────────────────────────────── */
@@ -138,10 +139,17 @@
   --accent-cyan-muted: rgba(20, 184, 166, 0.15);
   --accent-cyan-subtle: rgba(20, 184, 166, 0.08);
 
-  /* ── Accent: Gold (secondary) ─────────────────────────────────────── */
-  --accent-violet: #eab308;
-  --accent-violet-muted: rgba(234, 179, 8, 0.15);
-  --accent-violet-subtle: rgba(234, 179, 8, 0.08);
+  /* ── Accent: Violet (secondary) ───────────────────────────────────── */
+  --accent-violet: #a78bfa;
+  --accent-violet-muted: rgba(167, 139, 250, 0.15);
+  --accent-violet-subtle: rgba(167, 139, 250, 0.08);
+  --accent-violet-border: rgba(167, 139, 250, 0.3);
+
+  /* ── Accent: Gold (semantic — caution/warning) ────────────────────── */
+  --accent-gold: #eab308;
+  --accent-gold-muted: rgba(234, 179, 8, 0.15);
+  --accent-gold-subtle: rgba(234, 179, 8, 0.08);
+  --accent-gold-border: rgba(234, 179, 8, 0.3);
 
   /* ── Severity Colors ──────────────────────────────────────────────── */
   --severity-critical: #ef4444;
@@ -231,6 +239,7 @@
 
 html.light {
   color-scheme: light;
+  accent-color: var(--accent-cyan);
 
   /* ── Backgrounds ──────────────────────────────────────────────────── */
   --bg-app: #f4f8f9;
@@ -244,8 +253,8 @@ html.light {
   /* ── Foreground / Text ────────────────────────────────────────────── */
   --fg-primary: #0c1a22;
   --fg-secondary: #3d5260;
-  --fg-muted: #6b8494;
-  --fg-faint: #b0c4ce;
+  --fg-muted: #48606e;
+  --fg-faint: #5a7482;
   --fg-inverse: #f4f8f9;
 
   /* ── Borders ──────────────────────────────────────────────────────── */
@@ -259,10 +268,17 @@ html.light {
   --accent-cyan-muted: rgba(13, 148, 136, 0.1);
   --accent-cyan-subtle: rgba(13, 148, 136, 0.05);
 
-  /* ── Accent: Gold (secondary) ─────────────────────────────────────── */
-  --accent-violet: #b45309;
-  --accent-violet-muted: rgba(180, 83, 9, 0.1);
-  --accent-violet-subtle: rgba(180, 83, 9, 0.05);
+  /* ── Accent: Violet (secondary) ───────────────────────────────────── */
+  --accent-violet: #7c3aed;
+  --accent-violet-muted: rgba(124, 58, 237, 0.12);
+  --accent-violet-subtle: rgba(124, 58, 237, 0.06);
+  --accent-violet-border: rgba(124, 58, 237, 0.3);
+
+  /* ── Accent: Gold (semantic — caution/warning) ────────────────────── */
+  --accent-gold: #b45309;
+  --accent-gold-muted: rgba(180, 83, 9, 0.1);
+  --accent-gold-subtle: rgba(180, 83, 9, 0.05);
+  --accent-gold-border: rgba(180, 83, 9, 0.3);
 
   /* ── Severity Colors ──────────────────────────────────────────────── */
   --severity-critical: #dc2626;

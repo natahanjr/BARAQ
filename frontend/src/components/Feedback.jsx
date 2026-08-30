@@ -37,7 +37,7 @@ export function ErrorBanner({ message, onRetry }) {
         <button
           type="button"
           onClick={onRetry}
-          className="rounded-lg border px-4 py-2 text-sm font-medium transition-colors"
+          className="rounded-xl border px-4 py-2 text-sm font-medium transition-colors"
           style={{ borderColor: "var(--error-border, #fecaca)", background: "white", color: "var(--error-text, #991b1b)" }}
         >
           Retry

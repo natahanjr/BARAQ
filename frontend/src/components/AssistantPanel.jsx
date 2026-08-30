@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../api.js";
-import { AssistantIcon, TrashIcon } from "./icons.jsx";
+import { AssistantIcon, TrashIcon, UserIcon } from "./icons.jsx";
 
 export const SUGGESTIONS = [
   "Explain the latest alert",
@@ -70,7 +70,7 @@ const mdComponents = {
             <span className="h-2 w-2 rounded-full bg-red-400/60" />
             <span className="h-2 w-2 rounded-full bg-amber-400/60" />
             <span className="h-2 w-2 rounded-full bg-emerald-400/60" />
-            <span className="ml-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+            <span className="ml-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">
               {className.replace("language-", "")}
             </span>
           </div>
@@ -117,7 +117,7 @@ const mdComponents = {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-cyan-400 underline decoration-cyan-400/30 transition-colors hover:text-cyan-300 hover:decoration-cyan-300/50"
+      className="text-cyan-400 underline decoration-cyan-400/30 transition-all hover:text-cyan-300 hover:decoration-cyan-300/50"
     >
       {children}
     </a>
@@ -140,13 +140,13 @@ function MessageBubble({ message }) {
           }`}
           aria-hidden
         >
-          {isUser ? "🧑‍💻" : <AssistantIcon className="h-4 w-4 text-violet-300" />}
+          {isUser ? <UserIcon className="h-4 w-4 text-cyan-300" /> : <AssistantIcon className="h-4 w-4 text-violet-300" />}
         </span>
         <div
           className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
             isUser
               ? "rounded-tr-sm border border-cyan-500/30 bg-gradient-to-r from-cyan-600/30 to-cyan-500/15 text-cyan-50"
-              : "rounded-tl-sm border border-white/[0.06] bg-white/[0.025] text-slate-200 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.3)]"
+              : "rounded-tl-sm border border-white/[0.06] bg-white/[0.025] transition-all duration-200 text-slate-200 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.3)]"
           }`}
         >
           {isUser ? (
@@ -159,7 +159,7 @@ function MessageBubble({ message }) {
             </div>
           )}
           {message.created_at && (
-            <p className="mt-2 text-right text-[10px] text-slate-500/60">
+            <p className="mt-2 text-right text-[11px] text-slate-500/60">
               {new Date(message.created_at).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -258,7 +258,7 @@ export default function AssistantPanel({ compact = false }) {
                   key={s}
                   type="button"
                   onClick={() => send(s)}
-                  className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-medium text-cyan-400 transition-colors hover:border-cyan-500/50 hover:bg-cyan-500/20"
+                  className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-medium text-cyan-400 transition-all hover:border-cyan-500/50 hover:bg-cyan-500/20"
                 >
                   {s}
                 </button>
@@ -271,7 +271,7 @@ export default function AssistantPanel({ compact = false }) {
 
         {busy && (
           <div className="flex justify-start">
-            <div className="flex items-center gap-3 rounded-2xl rounded-tl-sm border border-white/[0.06] bg-white/[0.025] px-4 py-3 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.3)]">
+            <div className="flex items-center gap-3 rounded-2xl rounded-tl-sm border border-white/[0.06] bg-white/[0.025] transition-all duration-200 px-4 py-3 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.3)]">
               <span className="flex gap-1">
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.2s]" />
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.1s]" />
@@ -308,7 +308,7 @@ export default function AssistantPanel({ compact = false }) {
           placeholder="Ask about threats, alerts, or incidents… (Enter to send)"
           rows={1}
           disabled={busy}
-          className="max-h-28 flex-1 resize-none rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 outline-none transition-all focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10 disabled:opacity-50"
+          className="max-h-28 flex-1 resize-none rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 outline-none transition-all focus:ring-2 focus:ring-[var(--accent-cyan)]/30 focus:border-cyan-500/40 focus:ring-2 focus:ring-cyan-500/10 disabled:opacity-50"
         />
         <button
           type="button"
@@ -324,7 +324,7 @@ export default function AssistantPanel({ compact = false }) {
             onClick={clearConversation}
             disabled={busy || messages.length === 0}
             title="Clear conversation history"
-            className="rounded-xl border border-red-500/25 bg-red-500/[0.08] px-2.5 py-2.5 text-red-300 transition-colors hover:bg-red-500/[0.15] hover:shadow-[0_0_16px_-4px_rgba(239,68,68,0.2)] disabled:opacity-40"
+            className="rounded-xl border border-red-500/25 bg-red-500/[0.08] px-2.5 py-2.5 text-red-300 transition-all hover:bg-red-500/[0.15] hover:shadow-[0_0_16px_-4px_rgba(239,68,68,0.2)] disabled:opacity-40"
           >
             <TrashIcon className="h-4 w-4" />
           </button>

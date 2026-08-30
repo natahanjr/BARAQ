@@ -1,9 +1,9 @@
 """Alert fingerprint tests (spec 3.7)."""
+
 from __future__ import annotations
 
 from backend.alerting.fingerprint import fingerprint
 from backend.detection.contract import make_detection_id
-
 from tests.alerting.helpers import detection
 
 
@@ -18,8 +18,13 @@ def test_deterministic():
 
 
 def test_stable_and_reproducible():
-    first = fingerprint(_d(host="ml-host", user="ml-online-user", source_ip="185.0.0.1"))
-    assert fingerprint(_d(host="ml-host", user="ml-online-user", source_ip="185.0.0.1")) == first
+    first = fingerprint(
+        _d(host="ml-host", user="ml-online-user", source_ip="185.0.0.1")
+    )
+    assert (
+        fingerprint(_d(host="ml-host", user="ml-online-user", source_ip="185.0.0.1"))
+        == first
+    )
 
 
 def test_independent_of_alert_id_and_timestamp():
@@ -37,7 +42,9 @@ def test_different_user_different_fingerprint():
 
 
 def test_different_source_ip_different_fingerprint():
-    assert fingerprint(_d(source_ip="185.0.0.1")) != fingerprint(_d(source_ip="41.0.0.1"))
+    assert fingerprint(_d(source_ip="185.0.0.1")) != fingerprint(
+        _d(source_ip="41.0.0.1")
+    )
 
 
 def test_different_detector_different_fingerprint():

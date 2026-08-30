@@ -1,12 +1,11 @@
 """Alert metrics tests (spec 3.36, 3.37)."""
+
 from __future__ import annotations
 
 from datetime import timedelta
 
 from backend.alerting.engine import process_detection
 from backend.alerting.metrics import metrics
-from backend.alerting.models import AlertRecord
-
 from tests.alerting.helpers import T0, detection, stored_alerts
 
 

@@ -1,10 +1,10 @@
 """Phase 7 incident lifecycle transitions (spec 7.15, 7.16, 7.17, 7.21, 7.48)."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Literal
+from datetime import UTC, datetime
 
-from backend.incidents.contract import INCIDENT_TRANSITIONS, INCIDENT_STATES
+from backend.incidents.contract import INCIDENT_STATES, INCIDENT_TRANSITIONS
 
 
 class InvalidTransitionError(Exception):
@@ -30,7 +30,7 @@ def transition_status(
         "new_status": target,
         "actor": actor,
         "reason": reason,
-        "transitioned_at": datetime.now(timezone.utc).isoformat(),
+        "transitioned_at": datetime.now(UTC).isoformat(),
     }
 
 

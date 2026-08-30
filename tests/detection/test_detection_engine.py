@@ -1,10 +1,10 @@
 """Engine unit tests (Phase 2)."""
+
 from __future__ import annotations
 
 from backend.detection.context import DetectionContext
 from backend.detection.engine import run_detection, run_detections
 from backend.detection.registry import Registry
-
 from tests.detection.helpers import event, logon_failed, logon_success
 
 
@@ -14,8 +14,7 @@ def test_run_detection_pure_no_side_effects(db):
 
     tables = ("alerts", "incidents", "entity_risk")
     before = {
-        t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar()
-        for t in tables
+        t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar() for t in tables
     }
     events = [
         logon_success(1, logon_type=10, source_ip="203.0.113.5"),
@@ -24,8 +23,7 @@ def test_run_detection_pure_no_side_effects(db):
     findings = run_detections(events, DetectionContext(db))
     assert any(f.detector_id == "D001" for f in findings)
     after = {
-        t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar()
-        for t in tables
+        t: db.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar() for t in tables
     }
     assert after == before
     assert db.execute(text('SELECT COUNT(*) FROM "detections"')).scalar() == 0
@@ -70,10 +68,9 @@ def test_persist_refuses_production_db_name(monkeypatch, db):
     """Phase 2.5: persist must refuse the v1 production database by name."""
     import pytest
 
-    import backend.config as config
-    from backend.detection.engine import persist
+    from backend import config
     from backend.detection.contract import DETECTION
-    from tests.detection.helpers import event
+    from backend.detection.engine import persist
 
     monkeypatch.setattr(
         config, "DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:55432/sentinel"

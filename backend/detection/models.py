@@ -3,9 +3,10 @@
 Dedicated ``detections`` table - the legacy v1 alert table is never reused
 by the v2 detection engine. Fully separate from alerts/incidents/risk.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, Float, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -55,10 +56,10 @@ class DetectionRecord(Base):
     status: Mapped[str] = mapped_column(String(16), index=True, default="new")
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     def to_dict(self) -> dict:

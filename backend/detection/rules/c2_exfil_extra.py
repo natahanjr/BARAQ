@@ -4,10 +4,11 @@ Covers proxy/C2 tooling (T1090), application-layer protocol C2 (T1071.001
 via unusual ports), encrypted channels (T1573) and exfiltration to
 alternative protocols (T1048.003) and web services (T1567).
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -46,11 +47,45 @@ _EXFIL_WEB = re.compile(
 
 #: Ports that are common for legitimate traffic; anything else outbound to
 #: an external host from a non-browser process warrants a look.
-_COMMON_PORTS = {21, 22, 25, 53, 80, 110, 123, 143, 443, 445, 853, 993, 995, 3389, 5985, 5986}
-_BROWSER_PROCS = ("chrome.exe", "msedge.exe", "msedgewebview2.exe", "firefox.exe", "iexplore.exe", "brave.exe", "opera.exe")
+_COMMON_PORTS = {
+    21,
+    22,
+    25,
+    53,
+    80,
+    110,
+    123,
+    143,
+    443,
+    445,
+    853,
+    993,
+    995,
+    3389,
+    5985,
+    5986,
+}
+_BROWSER_PROCS = (
+    "chrome.exe",
+    "msedge.exe",
+    "msedgewebview2.exe",
+    "firefox.exe",
+    "iexplore.exe",
+    "brave.exe",
+    "opera.exe",
+)
 #: Communication / collaboration apps that legitimately open many outbound
 #: connections to external hosts (Cloudflare, CDN, WebSocket).
-_COMM_PROCS = ("discord.exe", "slack.exe", "teams.exe", "zoom.exe", "telegram.exe", "signal.exe", "whatsapp.exe", "spotify.exe")
+_COMM_PROCS = (
+    "discord.exe",
+    "slack.exe",
+    "teams.exe",
+    "zoom.exe",
+    "telegram.exe",
+    "signal.exe",
+    "whatsapp.exe",
+    "spotify.exe",
+)
 #: Processes that legitimately open many outbound connections to arbitrary
 #: external hosts/ports (residential proxy agents, VPN/relay daemons, P2P).
 #: Extendable at runtime with BARAQ_TRUSTED_PROCESSES (comma separated).
@@ -78,9 +113,7 @@ def _is_external(ip: str) -> bool:
         return True
     if addr.is_loopback or addr.is_link_local or addr.is_private:
         return False
-    if addr.is_multicast or addr.is_reserved:
-        return False
-    return True
+    return not (addr.is_multicast or addr.is_reserved)
 
 
 class ProxyToolRule(BaseRule):
@@ -101,7 +134,7 @@ class ProxyToolRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _PROXY_TOOL.search(cmdline):
                 continue
@@ -135,7 +168,7 @@ class UnusualPortRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NetworkConnection).where(
                 NetworkConnection.observed_at >= since,
@@ -190,7 +223,7 @@ class EncryptedChannelRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _ENCRYPTED_C2.search(cmdline):
                 continue
@@ -223,7 +256,7 @@ class ExfilAlternativeProtocolRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _EXFIL_ALT.search(cmdline):
                 continue
@@ -256,7 +289,7 @@ class ExfilWebServiceRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _EXFIL_WEB.search(cmdline):
                 continue
@@ -281,7 +314,15 @@ class ExfilWebServiceRule(BaseRule):
             host = (req.host or "").lower()
             if not any(
                 marker in host
-                for marker in ("pastebin", "transfer.sh", "file.io", "0x0.st", "webhook.site", "pipedream", "catbox.moe")
+                for marker in (
+                    "pastebin",
+                    "transfer.sh",
+                    "file.io",
+                    "0x0.st",
+                    "webhook.site",
+                    "pipedream",
+                    "catbox.moe",
+                )
             ):
                 continue
             findings.append(

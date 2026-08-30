@@ -3,10 +3,11 @@
 Flags NTFS alternate-data-stream usage and hidden-attribute toggling in
 command lines - techniques used to conceal payloads and data.
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from backend.detection.rules.base import BaseRule, DetectionResult
 
@@ -39,7 +40,7 @@ class HiddenArtifactsRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
         for cmdline, label, user in self.cmdline_candidates(since):
             indicators: list[str] = []

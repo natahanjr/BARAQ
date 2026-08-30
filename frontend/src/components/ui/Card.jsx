@@ -4,9 +4,9 @@ function Card({ children, className = "", hover = false, padding = true, ...prop
   return (
     <div
       className={[
-        "rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)]",
+        "rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-[var(--duration-normal)]",
         padding && "p-4",
-        hover && "transition-all duration-[var(--duration-normal)] hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-md)]",
+        hover && "hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-md)]",
         className,
       ].join(" ")}
       {...props}
@@ -26,7 +26,7 @@ export function CardHeader({ children, className = "", ...props }) {
 
 export function CardTitle({ children, className = "" }) {
   return (
-    <h3 className={["text-sm font-semibold text-[var(--fg-primary)]", className].join(" ")}>
+    <h3 className={["text-card-title text-[var(--fg-primary)]", className].join(" ")}>
       {children}
     </h3>
   );

@@ -3,6 +3,7 @@
 Every detection must answer "why did BARAQ create this detection?" with
 structured, per-field evidence. A bare "Rule matched" reason is forbidden.
 """
+
 from __future__ import annotations
 
 import ipaddress

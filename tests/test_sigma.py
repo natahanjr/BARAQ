@@ -1,8 +1,9 @@
 """Sigma rule engine tests - parsing, matching, event-ID filtering and
 aggregations against synthetic normalized events."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import yaml
 
@@ -57,8 +58,15 @@ def _write_rules(tmp_path, rules):
     return rules_dir
 
 
-def _event(db, event_id=4688, command_line="", message="", minutes_ago=1,
-           category="Process Creation", integrity=None):
+def _event(
+    db,
+    event_id=4688,
+    command_line="",
+    message="",
+    minutes_ago=1,
+    category="Process Creation",
+    integrity=None,
+):
     raw_json = {"channel": "Security", "facts": {"CommandLine": command_line}}
     if integrity is not None:
         raw_json["data_integrity"] = integrity
@@ -71,7 +79,7 @@ def _event(db, event_id=4688, command_line="", message="", minutes_ago=1,
         risk="Low",
         severity="info",
         message=message,
-        timestamp=datetime.now(timezone.utc) - timedelta(minutes=minutes_ago),
+        timestamp=datetime.now(UTC) - timedelta(minutes=minutes_ago),
         raw_json=raw_json,
     )
     db.add(ev)
@@ -150,11 +158,17 @@ def test_sigma_exception_for_incomplete_process_data(db, tmp_path):
     process data was never captured (data-integrity exception)."""
     rules_dir = _write_rules(tmp_path, [IMAGE_RULE])
     engine = SigmaRuleEngine(db, rules_dir=rules_dir)
-    _event(db, command_line="", integrity={
-        "complete": False,
-        "truncated_fields": ["process_data"],
-        "reasons": ["no process image or command line captured for a process event"],
-    })
+    _event(
+        db,
+        command_line="",
+        integrity={
+            "complete": False,
+            "truncated_fields": ["process_data"],
+            "reasons": [
+                "no process image or command line captured for a process event"
+            ],
+        },
+    )
     assert engine.evaluate(10) == []
 
 
@@ -164,11 +178,17 @@ def test_sigma_exception_allows_non_process_rules(db, tmp_path):
     rules_dir = _write_rules(tmp_path, [AGGREGATION_RULE])
     engine = SigmaRuleEngine(db, rules_dir=rules_dir)
     for _ in range(3):
-        _event(db, command_line="", integrity={
-            "complete": False,
-            "truncated_fields": ["process_data"],
-            "reasons": ["no process image or command line captured for a process event"],
-        })
+        _event(
+            db,
+            command_line="",
+            integrity={
+                "complete": False,
+                "truncated_fields": ["process_data"],
+                "reasons": [
+                    "no process image or command line captured for a process event"
+                ],
+            },
+        )
     results = engine.evaluate(10)
     assert len(results) == 1
     assert "3 matching event(s)" in results[0].evidence
@@ -179,11 +199,17 @@ def test_sigma_demotes_severity_when_process_truncated(db, tmp_path):
     severity is demoted because the evidence is unreliable."""
     rules_dir = _write_rules(tmp_path, [MIMIKATZ_RULE])
     engine = SigmaRuleEngine(db, rules_dir=rules_dir)
-    _event(db, command_line="mimikatz.exe sekurlsa::logonpasswords...", integrity={
-        "complete": False,
-        "truncated_fields": ["CommandLine"],
-        "reasons": ["structured field CommandLine ends mid-value (truncation marker or partial path)"],
-    })
+    _event(
+        db,
+        command_line="mimikatz.exe sekurlsa::logonpasswords...",
+        integrity={
+            "complete": False,
+            "truncated_fields": ["CommandLine"],
+            "reasons": [
+                "structured field CommandLine ends mid-value (truncation marker or partial path)"
+            ],
+        },
+    )
     results = engine.evaluate(10)
     assert len(results) == 1
     assert results[0].severity == "medium"  # demoted from high
@@ -193,9 +219,15 @@ def test_sigma_demotes_severity_when_process_truncated(db, tmp_path):
 def test_sigma_complete_data_keeps_severity(db, tmp_path):
     rules_dir = _write_rules(tmp_path, [MIMIKATZ_RULE])
     engine = SigmaRuleEngine(db, rules_dir=rules_dir)
-    _event(db, command_line=r"c:\tools\mimikatz.exe sekurlsa::logonpasswords", integrity={
-        "complete": True, "truncated_fields": [], "reasons": [],
-    })
+    _event(
+        db,
+        command_line=r"c:\tools\mimikatz.exe sekurlsa::logonpasswords",
+        integrity={
+            "complete": True,
+            "truncated_fields": [],
+            "reasons": [],
+        },
+    )
     results = engine.evaluate(10)
     assert len(results) == 1
     assert results[0].severity == "high"
@@ -262,8 +294,15 @@ def test_sigma_logsource_scopes_rule_to_event_type(db, tmp_path):
 def test_sigma_logsource_scopes_rule_without_eventid(db, tmp_path):
     """A rule with no EventID selection but a process_creation logsource is
     indexed under the process event IDs, not evaluated globally."""
-    rules_dir = _write_rules(tmp_path, [NULL_IMAGE_RULE.replace(
-        "  selection:\n    EventID: 4688\n", "  selection:\n    CommandLine|contains: whoami\n")])
+    rules_dir = _write_rules(
+        tmp_path,
+        [
+            NULL_IMAGE_RULE.replace(
+                "  selection:\n    EventID: 4688\n",
+                "  selection:\n    CommandLine|contains: whoami\n",
+            )
+        ],
+    )
     engine = SigmaRuleEngine(db, rules_dir=rules_dir)
     _event(db, event_id=4625, command_line="whoami")
     assert engine.evaluate(10) == []
@@ -302,10 +341,15 @@ def test_sigma_ipaddress_aliases_to_source_ip(db, tmp_path):
         "facts": {"source_ip": "192.168.1.12", "logon_type": "3"},
     }
     ev = NormalizedEvent(
-        event_id=4625, category="Authentication", source="windows",
-        user="testuser", host="TESTPC", risk="Low", severity="info",
+        event_id=4625,
+        category="Authentication",
+        source="windows",
+        user="testuser",
+        host="TESTPC",
+        risk="Low",
+        severity="info",
         message="failed logon",
-        timestamp=datetime.now(timezone.utc) - timedelta(minutes=1),
+        timestamp=datetime.now(UTC) - timedelta(minutes=1),
         raw_json=raw_json,
     )
     db.add(ev)

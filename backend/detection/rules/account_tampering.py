@@ -5,17 +5,20 @@ account deletion and enable/disable toggling of privileged accounts.
 Complementary to the privilege-escalation rule (account creation and
 group membership); focuses on existing privileged accounts being tampered.
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
 from backend.database.models import NormalizedEvent
 from backend.detection.rules.base import BaseRule, DetectionResult
 
-_ADMIN_NAME = re.compile(r"(^|[\s_.-])(admin|administrator|sysadmin|root)([\s_.-]|$)", re.IGNORECASE)
+_ADMIN_NAME = re.compile(
+    r"(^|[\s_.-])(admin|administrator|sysadmin|root)([\s_.-]|$)", re.IGNORECASE
+)
 
 
 def _is_admin_named(account: str) -> bool:
@@ -39,7 +42,7 @@ class AccountTamperingRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id.in_([4724, 4726, 4738, 4725, 4722]),
@@ -68,21 +71,28 @@ class AccountTamperingRule(BaseRule):
             elif event.event_id == 4726:  # account deleted
                 if not _is_admin_named(target):
                     continue
-                evidence = f"Administrative account '{target}' was deleted by '{event.user}'."
+                evidence = (
+                    f"Administrative account '{target}' was deleted by '{event.user}'."
+                )
             elif event.event_id in (4722, 4725):  # enabled / disabled
                 if not _is_admin_named(target):
                     continue
                 action = "enabled" if event.event_id == 4722 else "disabled"
-                evidence = f"Administrative account '{target}' was {action} by '{event.user}'."
+                evidence = (
+                    f"Administrative account '{target}' was {action} by '{event.user}'."
+                )
             elif not _is_admin_named(target):
                 continue
             else:  # 4738 account modified
                 message = event.message or ""
-                if "user account control" not in message.lower() and "privileges" not in message.lower():
+                if (
+                    "user account control" not in message.lower()
+                    and "privileges" not in message.lower()
+                ):
                     continue
-                evidence = f"Administrative account '{target}' was modified by '{event.user}'."
+                evidence = (
+                    f"Administrative account '{target}' was modified by '{event.user}'."
+                )
 
-            findings.append(
-                self._result(evidence=evidence, event_ids=[event.id])
-            )
+            findings.append(self._result(evidence=evidence, event_ids=[event.id]))
         return findings

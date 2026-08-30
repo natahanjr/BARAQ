@@ -4,10 +4,11 @@ The scheduler calls :func:`purge_old_data` on a regular cadence so the
 database never grows unbounded. Child rows (alert events / notes / actions)
 are removed by the database-level ``ondelete=CASCADE`` foreign keys.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
@@ -49,13 +50,15 @@ _PURGE_TARGETS: list[tuple] = [
 ]
 
 
-def purge_old_data(session: Session, days: int = EVENT_RETENTION_DAYS) -> dict[str, int]:
+def purge_old_data(
+    session: Session, days: int = EVENT_RETENTION_DAYS
+) -> dict[str, int]:
     """Delete every record older than ``days`` (default config value).
 
     Returns a map of ``{table_name: deleted_rows}``. Safe to run repeatedly;
     nothing is deleted when there is nothing old.
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     purged: dict[str, int] = {}
     for model, column in _PURGE_TARGETS:
         purged[model.__tablename__] = int(

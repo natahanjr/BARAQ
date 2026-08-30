@@ -62,7 +62,7 @@ function RiskGauge({ value = 0, size = 120, strokeWidth = 8, className = "" }) {
         <span ref={textRef} className="text-2xl font-bold tabular-nums text-[var(--fg-primary)]">
           {pct}
         </span>
-        <span className="text-[9px] font-bold uppercase tracking-[var(--tracking-widest)]" style={{ color }}>
+        <span className="text-[11px] font-bold uppercase tracking-[var(--tracking-widest)]" style={{ color }}>
           {getLabel(pct)}
         </span>
       </div>

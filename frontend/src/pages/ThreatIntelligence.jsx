@@ -66,21 +66,21 @@ function ThreatIntelligence() {
               </div>
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Reputation</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Reputation</p>
                   <p className="mt-0.5 text-[14px] font-semibold text-[var(--fg-primary)] capitalize">{result.reputation || "unknown"}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Risk Score</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Risk Score</p>
                   <p className="mt-0.5 text-[14px] font-semibold text-[var(--fg-primary)]">{result.risk_score ?? 0}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">First Seen</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">First Seen</p>
                   <p className="mt-0.5 text-[14px] font-semibold text-[var(--fg-primary)]">
                     {result.first_seen ? new Date(result.first_seen).toLocaleDateString() : "\u2014"}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Last Seen</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Last Seen</p>
                   <p className="mt-0.5 text-[14px] font-semibold text-[var(--fg-primary)]">
                     {result.last_seen ? new Date(result.last_seen).toLocaleDateString() : "\u2014"}
                   </p>
@@ -113,7 +113,7 @@ function ThreatIntelligence() {
                 <p className="text-[13px] font-semibold text-[var(--fg-primary)]">{feed.name}</p>
                 <p className="text-[11px] text-[var(--fg-muted)]">Last sync: {feed.lastSync}</p>
               </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[var(--status-healthy-muted)] text-[var(--status-healthy)]">
+              <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-[var(--status-healthy-muted)] text-[var(--status-healthy)]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--status-healthy)]" />
                 {feed.status}
               </span>

@@ -9,6 +9,7 @@ a tamper-evident hash-chained audit stream.
   ``log_action`` through the "baraq.audit" logger; SIEM-side consumers can
   re-verify chain integrity against the database copy.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,7 +17,6 @@ import logging
 import logging.handlers
 import socket
 import time
-from pathlib import Path
 
 from backend.config import (
     LOG_DIR,
@@ -68,7 +68,7 @@ class _Rfc5424SyslogHandler(logging.handlers.SysLogHandler):
                 self, address=(host, port), facility="user"
             )
 
-    def close(self) -> None:  # noqa: D102
+    def close(self) -> None:
         try:
             if getattr(self, "_sock", None) is not None:
                 self._sock.close()
@@ -78,7 +78,7 @@ class _Rfc5424SyslogHandler(logging.handlers.SysLogHandler):
             pass
         logging.Handler.close(self)
 
-    def emit(self, record: logging.LogRecord):  # noqa: D102
+    def emit(self, record: logging.LogRecord):
         try:
             if getattr(self, "socktype", None) == socket.SOCK_STREAM:
                 msg = self.format(record)
@@ -138,8 +138,12 @@ def setup_logging() -> None:
             # complete (the console may stay human-readable).
             syslog.setFormatter(JSONFormatter())
             root.addHandler(syslog)
-            logger.info("Syslog forwarding enabled -> %s:%s (%s)",
-                        SYSLOG_HOST, SYSLOG_PORT, SYSLOG_PROTO)
+            logger.info(
+                "Syslog forwarding enabled -> %s:%s (%s)",
+                SYSLOG_HOST,
+                SYSLOG_PORT,
+                SYSLOG_PROTO,
+            )
         except OSError as exc:
             logger.warning("Syslog forwarder disabled: %s", exc)
 

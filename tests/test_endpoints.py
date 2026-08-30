@@ -1,8 +1,8 @@
 """Test the multi-endpoint ingest API and fleet status."""
+
 from __future__ import annotations
 
 import pytest
-
 from fastapi.testclient import TestClient
 
 
@@ -75,7 +75,9 @@ def test_ingest_host_override_tags_alerts(client):
         assert all(a["host"] == "corp-laptop-42" for a in alerts if a["host"])
 
     ep = next(
-        e for e in client.get("/api/endpoints").json()["items"] if e["agent_id"] == "agent-dev"
+        e
+        for e in client.get("/api/endpoints").json()["items"]
+        if e["agent_id"] == "agent-dev"
     )
     assert ep["host"] == "corp-laptop-42"
 

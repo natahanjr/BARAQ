@@ -8,6 +8,7 @@ timeout, still extendable by an in-window group. CLOSED: terminal - a
 closed finding never silently absorbs new groups; a group that would have
 joined it records CORRELATION_REOPEN_REJECTED instead (spec 5.32).
 """
+
 from __future__ import annotations
 
 from datetime import datetime

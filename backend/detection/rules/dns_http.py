@@ -4,14 +4,14 @@ Flags suspicious outbound application-layer traffic: heavy DNS use toward
 suspicious domains, high-volume/large DNS responses, and HTTP payloads with
 voluminous or high-entropy bodies.
 """
+
 from __future__ import annotations
 
 import math
-import re
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from backend.database.models import DnsQuery, HttpRequest
 from backend.detection.rules.base import BaseRule, DetectionResult
@@ -72,33 +72,37 @@ class DnsHttpExfilRule(BaseRule):
             if q.response_size >= 512:
                 large_responses += 1
 
-        domains = [d for d, c in by_domain.items() if c >= 10]
+        [d for d, c in by_domain.items() if c >= 10]
         bulk_queries = [q for q, c in by_query.items() if c >= DNS_QUERY_THRESHOLD]
-        suspicious_tld = [
-            d for d in by_domain if d.endswith(SUSPICIOUS_TLDS)
-        ]
+        suspicious_tld = [d for d in by_domain if d.endswith(SUSPICIOUS_TLDS)]
 
         if bulk_queries:
-            findings.append(self._result(
-                evidence=f"{len(bulk_queries)} DNS query(ies) repeated >= {DNS_QUERY_THRESHOLD} times: {bulk_queries[:5]}.",
-                event_ids=[],
-                severity="medium",
-                confidence=min(0.9, 0.7 + len(bulk_queries) * 0.02),
-            ))
+            findings.append(
+                self._result(
+                    evidence=f"{len(bulk_queries)} DNS query(ies) repeated >= {DNS_QUERY_THRESHOLD} times: {bulk_queries[:5]}.",
+                    event_ids=[],
+                    severity="medium",
+                    confidence=min(0.9, 0.7 + len(bulk_queries) * 0.02),
+                )
+            )
         if suspicious_tld:
-            findings.append(self._result(
-                evidence=f"DNS queries to suspicious TLDs: {suspicious_tld[:5]}.",
-                event_ids=[],
-                severity="high",
-                confidence=0.8,
-            ))
+            findings.append(
+                self._result(
+                    evidence=f"DNS queries to suspicious TLDs: {suspicious_tld[:5]}.",
+                    event_ids=[],
+                    severity="high",
+                    confidence=0.8,
+                )
+            )
         if large_responses >= 20:
-            findings.append(self._result(
-                evidence=f"{large_responses} oversized DNS responses (>=512 B) within window - possible DNS tunnelling.",
-                event_ids=[],
-                severity="high",
-                confidence=0.7,
-            ))
+            findings.append(
+                self._result(
+                    evidence=f"{large_responses} oversized DNS responses (>=512 B) within window - possible DNS tunnelling.",
+                    event_ids=[],
+                    severity="high",
+                    confidence=0.7,
+                )
+            )
         return findings
 
     def _http_findings(self, since) -> list[DetectionResult]:
@@ -119,14 +123,18 @@ class DnsHttpExfilRule(BaseRule):
             f"Largest: {biggest.method} {biggest.url} ({biggest.response_body_size} bytes) "
             f"from process '{biggest.process}'."
         )
-        findings.append(self._result(
-            evidence=evidence,
-            event_ids=[],
-            severity="high",
-            confidence=0.75,
-        ))
+        findings.append(
+            self._result(
+                evidence=evidence,
+                event_ids=[],
+                severity="high",
+                confidence=0.75,
+            )
+        )
         return findings
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
-        since = datetime.now(timezone.utc) - timedelta(minutes=self.window_minutes or window_minutes)
+        since = datetime.now(UTC) - timedelta(
+            minutes=self.window_minutes or window_minutes
+        )
         return self._dns_findings(since) + self._http_findings(since)

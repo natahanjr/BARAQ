@@ -6,6 +6,7 @@ the two groups share at least one entity key and fall inside the maximum
 correlation window. Deterministic ordering: (earlier first_seen, earlier
 id, later first_seen, later id).
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -46,13 +47,22 @@ def candidate_pairs(summaries: list[dict], now=None) -> list[tuple[dict, dict]]:
         for i in range(len(indexes)):
             for j in range(i + 1, len(indexes)):
                 a, b = indexes[i], indexes[j]
-                earlier, later = (a, b) if summaries[a]["first_seen"] <= summaries[b]["first_seen"] else (b, a)
+                earlier, later = (
+                    (a, b)
+                    if summaries[a]["first_seen"] <= summaries[b]["first_seen"]
+                    else (b, a)
+                )
                 if later - earlier > max_delta:
                     continue
                 pairs.add((earlier, later))
 
-    ordered = sorted(pairs, key=lambda p: (
-        summaries[p[0]]["first_seen"], summaries[p[0]]["id"],
-        summaries[p[1]]["first_seen"], summaries[p[1]]["id"],
-    ))
+    ordered = sorted(
+        pairs,
+        key=lambda p: (
+            summaries[p[0]]["first_seen"],
+            summaries[p[0]]["id"],
+            summaries[p[1]]["first_seen"],
+            summaries[p[1]]["id"],
+        ),
+    )
     return [(summaries[a], summaries[b]) for a, b in ordered]

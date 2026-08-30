@@ -6,7 +6,7 @@ export default function Pagination({ page, totalPages, onChange }) {
   for (let i = start; i <= Math.min(totalPages, start + 4); i += 1) pages.push(i);
 
   const btn =
-    "rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40";
+    "rounded-xl border px-3.5 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40";
   const idle = "border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-700/70";
   const active = "border-cyan-500/40 bg-cyan-500/20 text-cyan-300";
 

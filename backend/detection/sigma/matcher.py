@@ -4,6 +4,7 @@ boolean condition evaluation (and/or/not, parentheses, 'N of ...').
 Event fields are flattened to strings (plus EventID) before matching, so
 Sigma field names and values can be compared with modifiers.
 """
+
 from __future__ import annotations
 
 import base64
@@ -11,9 +12,21 @@ import ipaddress
 import re
 from typing import Any
 
-_VALUE_MODIFIERS = {"contains", "startswith", "endswith", "re", "all", "base64", "cidr", "null", "utf16"}
+_VALUE_MODIFIERS = {
+    "contains",
+    "startswith",
+    "endswith",
+    "re",
+    "all",
+    "base64",
+    "cidr",
+    "null",
+    "utf16",
+}
 
-_TOKEN_RE = re.compile(r"(?:\d+)\s+of|\band\b|\bor\b|\bnot\b|[()]|[^\s()]+", re.IGNORECASE)
+_TOKEN_RE = re.compile(
+    r"(?:\d+)\s+of|\band\b|\bor\b|\bnot\b|[()]|[^\s()]+", re.IGNORECASE
+)
 
 #: Fact-key spellings that should land on the canonical flattened field.
 _ALIAS_KEYS = {
@@ -34,8 +47,15 @@ _ALIAS_KEYS = {
 #: Fields carrying process identity/activity. Rules depending on them cannot
 #: be trusted when the event's process data is incomplete or truncated.
 PROCESS_FIELDS = {
-    "image", "image_path", "new_process", "parent_image", "source_image",
-    "target_image", "image_loaded", "command_line", "script_block",
+    "image",
+    "image_path",
+    "new_process",
+    "parent_image",
+    "source_image",
+    "target_image",
+    "image_loaded",
+    "command_line",
+    "script_block",
 }
 
 
@@ -58,7 +78,8 @@ def event_data_integrity(event) -> dict:
     truncated = [str(f) for f in integrity.get("truncated_fields") or []]
     process_fields = {p.lower().replace("_", "") for p in PROCESS_FIELDS}
     process_bad = [
-        f for f in truncated
+        f
+        for f in truncated
         if f.lower().replace("_", "") in process_fields or f.lower() == "process_data"
     ]
     return {
@@ -84,7 +105,9 @@ def build_event_fields(event) -> dict[str, str]:
     #: ``data_integrity: complete`` or a ``filter`` selection on it.
     integrity = raw_json.get("data_integrity")
     if isinstance(integrity, dict):
-        out["data_integrity"] = "truncated" if integrity.get("truncated_fields") else "complete"
+        out["data_integrity"] = (
+            "truncated" if integrity.get("truncated_fields") else "complete"
+        )
     else:
         out["data_integrity"] = str(integrity or "complete").lower()
     for key, value in facts.items():
@@ -138,7 +161,7 @@ def _match_value(field_value: str, expected: str, modifiers: set[str]) -> bool:
     if "base64" in modifiers:
         try:
             field_value = base64.b64decode(field_value).decode("utf-8", "ignore")
-        except Exception:  # noqa: BLE001
+        except Exception:
             return False
     if "re" in modifiers:
         try:
@@ -147,7 +170,9 @@ def _match_value(field_value: str, expected: str, modifiers: set[str]) -> bool:
             return False
     if "cidr" in modifiers:
         try:
-            return ipaddress.ip_address(field_value) in ipaddress.ip_network(expected, strict=False)
+            return ipaddress.ip_address(field_value) in ipaddress.ip_network(
+                expected, strict=False
+            )
         except ValueError:
             return False
     if "contains" in modifiers:
@@ -166,7 +191,9 @@ def _selection_matches(fields: dict[str, str], selection: Any) -> bool:
         for key, value in selection.items():
             key_parts = str(key).split("|")
             field_name = key_parts[0]
-            modifiers = {m.lower() for m in key_parts[1:] if m.lower() in _VALUE_MODIFIERS}
+            modifiers = {
+                m.lower() for m in key_parts[1:] if m.lower() in _VALUE_MODIFIERS
+            }
             field_value = _lookup(fields, field_name)
             if value is None or "null" in modifiers:
                 # Sigma semantics: ``field: null`` (bare YAML null value or
@@ -194,7 +221,9 @@ def _selection_matches(fields: dict[str, str], selection: Any) -> bool:
     return bool(selection)
 
 
-def _of_matches(names: dict[str, Any], fields: dict[str, str], needed: int, pattern: str) -> bool:
+def _of_matches(
+    names: dict[str, Any], fields: dict[str, str], needed: int, pattern: str
+) -> bool:
     matched = 0
     pattern = pattern.lower()
     for name, selection in names.items():
@@ -267,7 +296,9 @@ class SigmaCondition:
     def _parse_operand(self, token: str) -> bool:
         lower = token.lower()
         if lower == "them":
-            return all(_selection_matches(self._fields, s) for s in self._names.values())
+            return all(
+                _selection_matches(self._fields, s) for s in self._names.values()
+            )
         if lower in self._names:
             return _selection_matches(self._fields, self._names[lower])
         #: The tokenizer joins ``N of`` into a single token; ``N of X``
@@ -279,7 +310,11 @@ class SigmaCondition:
             pattern = self.tokens[self._pos].lower()
             self._pos += 1
             return _of_matches(self._names, self._fields, int(m.group(1)), pattern)
-        if token.isdigit() and self._pos < len(self.tokens) and self._peek().lower() == "of":
+        if (
+            token.isdigit()
+            and self._pos < len(self.tokens)
+            and self._peek().lower() == "of"
+        ):
             self._pos += 1
             pattern = self.tokens[self._pos].lower()
             self._pos += 1

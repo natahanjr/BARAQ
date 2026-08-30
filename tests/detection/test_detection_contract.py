@@ -1,7 +1,8 @@
 """Detection contract unit tests (Phase 2)."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -13,7 +14,7 @@ def make_event(**overrides):
     from backend.telemetry.contract import EVENT
 
     base = {
-        "timestamp": datetime(2026, 8, 17, 12, 0, 0, tzinfo=timezone.utc),
+        "timestamp": datetime(2026, 8, 17, 12, 0, 0, tzinfo=UTC),
         "host": "workstation-42",
         "user": "alice",
         "source": "windows-security",
@@ -26,25 +27,25 @@ def make_event(**overrides):
 
 def make_detection(**overrides):
     event = make_event()
-    base = dict(
-        detector_id="D001",
-        detector_version="1.0.0",
-        event_id=event.fingerprint(),
-        event_ids=(event.fingerprint(),),
-        timestamp=event.timestamp,
-        first_seen=event.timestamp,
-        last_seen=event.timestamp,
-        event_type=event.event_type,
-        host_name=event.host,
-        username=event.user,
-        source_ip="203.0.113.5",
-        title="External Remote RDP Logon",
-        severity="high",
-        confidence=0.9,
-        mitre_tactic="Initial Access",
-        mitre_technique="T1133",
-        evidence=(ev("logon_type", 10, "Remote Interactive Logon"),),
-    )
+    base = {
+        "detector_id": "D001",
+        "detector_version": "1.0.0",
+        "event_id": event.fingerprint(),
+        "event_ids": (event.fingerprint(),),
+        "timestamp": event.timestamp,
+        "first_seen": event.timestamp,
+        "last_seen": event.timestamp,
+        "event_type": event.event_type,
+        "host_name": event.host,
+        "username": event.user,
+        "source_ip": "203.0.113.5",
+        "title": "External Remote RDP Logon",
+        "severity": "high",
+        "confidence": 0.9,
+        "mitre_tactic": "Initial Access",
+        "mitre_technique": "T1133",
+        "evidence": (ev("logon_type", 10, "Remote Interactive Logon"),),
+    }
     base.update(overrides)
     return DETECTION(**base)
 
@@ -83,7 +84,7 @@ def test_detection_id_is_deterministic():
 
 
 def test_detection_id_changes_with_event():
-    other = make_event(timestamp=datetime(2026, 8, 17, 13, 0, 0, tzinfo=timezone.utc))
+    other = make_event(timestamp=datetime(2026, 8, 17, 13, 0, 0, tzinfo=UTC))
     d = make_detection(event_id=other.fingerprint())
     assert d.detection_id != make_detection().detection_id
 

@@ -3,10 +3,11 @@
 Flags Sysmon Event 13 (Registry Value Set / Key Create) operations that
 write to autostart keys (Run, RunOnce, RunServices, StartupApproved).
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -22,7 +23,9 @@ RUN_KEY_HINTS = (
 )
 _RUN_KEY = re.compile("|".join(RUN_KEY_HINTS), re.IGNORECASE)
 
-SUSPICIOUS_DIRS = re.compile(r"\\Temp\\|\\Users\\Public\\|\\AppData\\|\\Downloads\\", re.IGNORECASE)
+SUSPICIOUS_DIRS = re.compile(
+    r"\\Temp\\|\\Users\\Public\\|\\AppData\\|\\Downloads\\", re.IGNORECASE
+)
 
 
 class RegistryRunKeyRule(BaseRule):
@@ -42,7 +45,7 @@ class RegistryRunKeyRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(
                 NormalizedEvent.event_id == 13,

@@ -123,7 +123,7 @@ def build_process_tree(
     ts_min = min(timestamps) - timedelta(minutes=window_minutes)
     ts_max = max(timestamps) + timedelta(minutes=window_minutes)
 
-    hosts = {ev.host for ev in evidence_events if ev.host}
+    {ev.host for ev in evidence_events if ev.host}
 
     # ---- 1) 4688 process-creation events in the window -------------------
     q = select(NormalizedEvent).where(
@@ -134,7 +134,7 @@ def build_process_tree(
     if org:
         q = q.where(NormalizedEvent.org == org)
     else:
-        q = q.where(NormalizedEvent.demo == False)  # noqa: E712
+        q = q.where(NormalizedEvent.demo == False)
     q = q.order_by(NormalizedEvent.timestamp.asc()).limit(MAX_TREE_EVENTS)
     proc_events = session.scalars(q).all()
 
@@ -149,12 +149,14 @@ def build_process_tree(
             snap_q = snap_q.where(ProcessRecord.org == org)
         snap_q = snap_q.order_by(ProcessRecord.observed_at.desc()).limit(1500)
         snapshots = session.scalars(snap_q).all()
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.warning("ProcessRecord fallback unavailable", exc_info=True)
 
     # ---- 3) assemble nodes per host --------------------------------------
     per_host: dict[str, dict[str, PNode]] = {}
-    link_order: list[tuple[str, str, str, str, datetime, bool, str]] = []  # (host, child, parent, parent_name, ts, verified, kind)
+    link_order: list[tuple[str, str, str, str, datetime, bool, str]] = (
+        []
+    )  # (host, child, parent, parent_name, ts, verified, kind)
 
     def ensure_node(host: str, pid: str) -> PNode:
         key = _node_key(pid, host)
@@ -169,9 +171,13 @@ def build_process_tree(
         child_pid = _norm_pid(_fact(facts, "NewProcessId", "ProcessId"))
         if not child_pid:
             continue
-        parent_pid = _norm_pid(_fact(facts, "ProcessId", "ParentProcessId", "ParentPID"))
+        parent_pid = _norm_pid(
+            _fact(facts, "ProcessId", "ParentProcessId", "ParentPID")
+        )
         node = ensure_node(host, child_pid)
-        node.name = str(_fact(facts, "new_process", "NewProcessName", "Image") or node.name or "")
+        node.name = str(
+            _fact(facts, "new_process", "NewProcessName", "Image") or node.name or ""
+        )
         node.path = str(_fact(facts, "NewProcessName", "Image") or node.path or "")
         node.user = ev.user or node.user
         node.cmdline = str(_fact(facts, "CommandLine") or "")
@@ -184,7 +190,9 @@ def build_process_tree(
         if node.cmdline and node.cmdline not in node.cmdlines:
             node.cmdlines.append(node.cmdline)
         if parent_pid:
-            link_order.append((host, child_pid, parent_pid, "", ev.timestamp, True, "pid"))
+            link_order.append(
+                (host, child_pid, parent_pid, "", ev.timestamp, True, "pid")
+            )
 
     # supplement with snapshots (pids that do not collide with event nodes)
     for snap in snapshots:
@@ -225,9 +233,29 @@ def build_process_tree(
         if parent_guid:
             # GUID-first linking: parent_guid names the exact parent process
             # even when PIDs were reused (Sysmon Event 1 identity).
-            link_order.append((host, pid, parent_guid, snap.parent_name or "", snap.observed_at or ts_min, True, "guid"))
+            link_order.append(
+                (
+                    host,
+                    pid,
+                    parent_guid,
+                    snap.parent_name or "",
+                    snap.observed_at or ts_min,
+                    True,
+                    "guid",
+                )
+            )
         elif parent_pid and parent_pid != pid:
-            link_order.append((host, pid, parent_pid, snap.parent_name or "", snap.observed_at or ts_min, True, "pid"))
+            link_order.append(
+                (
+                    host,
+                    pid,
+                    parent_pid,
+                    snap.parent_name or "",
+                    snap.observed_at or ts_min,
+                    True,
+                    "pid",
+                )
+            )
 
     # ---- 4) resolve parent links + name-based fallback --------------------
     for host, nodes in per_host.items():
@@ -239,7 +267,15 @@ def build_process_tree(
                 by_name.setdefault(node.name.lower(), []).append(node)
             if getattr(node, "guid", ""):
                 by_guid[node.guid] = node
-        for link_host, child_pid, parent_ref, parent_name, _ts, verified, kind in link_order:
+        for (
+            link_host,
+            child_pid,
+            parent_ref,
+            parent_name,
+            _ts,
+            verified,
+            kind,
+        ) in link_order:
             if link_host != host:
                 continue
             child = by_pid.get(child_pid)
@@ -264,9 +300,11 @@ def build_process_tree(
             # name-based fallback: earlier node with the same parent name
             if parent_name:
                 candidates = [
-                    n for n in by_name.get(parent_name.lower(), [])
+                    n
+                    for n in by_name.get(parent_name.lower(), [])
                     if n.pid != child.pid
-                    and (n.last_seen or child.first_seen) <= (child.first_seen or n.last_seen)
+                    and (n.last_seen or child.first_seen)
+                    <= (child.first_seen or n.last_seen)
                 ]
                 if candidates:
                     best = min(candidates, key=lambda n: (n.last_seen or datetime.min))
@@ -287,7 +325,8 @@ def build_process_tree(
                 node.seed = True
 
         roots = [
-            n for n in nodes.values()
+            n
+            for n in nodes.values()
             if not n.parent_pid or n.parent_pid not in {x.pid for x in nodes.values()}
         ]
         if not roots:
@@ -314,7 +353,12 @@ def build_process_tree(
             "root": best_root.to_dict() if best_root else None,
             "chain": [n.to_dict() for n in chain],
             "aftermath": [n.to_dict() for n in aftermath],
-            "nodes": [n.to_dict() for n in sorted(nodes.values(), key=lambda n: n.first_seen or datetime.min)],
+            "nodes": [
+                n.to_dict()
+                for n in sorted(
+                    nodes.values(), key=lambda n: n.first_seen or datetime.min
+                )
+            ],
             "seed_pids": sorted(seeds),
             "seed_found": bool(seed_nodes),
             "node_count": len(nodes),
@@ -381,10 +425,7 @@ def _chain_to(root: PNode, nodes: dict[str, PNode], seeds: list[PNode]) -> list[
 def _aftermath(nodes: dict[str, PNode], seeds: list[PNode]) -> list[PNode]:
     """Direct children of seed processes (what ran after the trigger)."""
     seed_pids = {s.pid for s in seeds}
-    return [
-        n for n in nodes.values()
-        if n.parent_pid in seed_pids
-    ][:25]
+    return [n for n in nodes.values() if n.parent_pid in seed_pids][:25]
 
 
 def _empty_tree(reason: str) -> dict:

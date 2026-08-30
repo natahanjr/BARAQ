@@ -5,6 +5,7 @@ NOT an attack chain and NOT a risk verdict (spec 4.1, 4.35): titles are
 behavioral, confidence is a deterministic grouping confidence, and the
 group never escalates severity (4.28).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -90,13 +91,17 @@ class BehaviorGroup:
 
     def __post_init__(self) -> None:
         if not self.behavior_group_id.startswith("BG-"):
-            raise ValueError(f"behavior_group_id must look like BG-000001, got {self.behavior_group_id!r}")
+            raise ValueError(
+                f"behavior_group_id must look like BG-000001, got {self.behavior_group_id!r}"
+            )
         if self.status not in GROUP_STATUSES:
             raise ValueError(f"invalid group status {self.status!r}")
         if self.highest_severity not in GROUP_SEVERITIES:
             raise ValueError(f"invalid highest_severity {self.highest_severity!r}")
         if not 0.0 <= self.confidence <= 1.0:
-            raise ValueError(f"group confidence must be within 0.000-1.000, got {self.confidence}")
+            raise ValueError(
+                f"group confidence must be within 0.000-1.000, got {self.confidence}"
+            )
         lower = self.title.lower()
         if any(phrase in lower for phrase in BANNED_TITLE_PHRASES):
             raise ValueError(

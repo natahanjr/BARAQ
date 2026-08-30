@@ -1,8 +1,8 @@
 """Prometheus metrics endpoint tests."""
+
 from __future__ import annotations
 
 import pytest
-
 from fastapi.testclient import TestClient
 
 
@@ -66,8 +66,11 @@ def _seed_fleet(db):
     normalizer = Normalizer()
     for i in range(4):
         rec = {
-            "source": "eventlog", "channel": "Security", "event_id": 4625,
-            "timestamp": _ts(-1 - i * 0.1).isoformat(), "user": "administrator",
+            "source": "eventlog",
+            "channel": "Security",
+            "event_id": 4625,
+            "timestamp": _ts(-1 - i * 0.1).isoformat(),
+            "user": "administrator",
             "message": f"An account failed to log on. Account Name: administrator ({i}).",
             "raw": {"source_ip": "192.168.99.77", "logon_type": 3},
         }
@@ -76,8 +79,11 @@ def _seed_fleet(db):
         norm["host"] = f"host-{i % 2}"
         db.add(NormalizedEvent(**norm))
     rec = {
-        "source": "eventlog", "channel": "Security", "event_id": 4688,
-        "timestamp": _ts(-0.5).isoformat(), "user": "bob",
+        "source": "eventlog",
+        "channel": "Security",
+        "event_id": 4688,
+        "timestamp": _ts(-0.5).isoformat(),
+        "user": "bob",
         "message": "Process terminated.",
         "raw": {"command_line": "cmd.exe"},
     }
@@ -85,11 +91,18 @@ def _seed_fleet(db):
     norm["org"] = "univ-b"
     norm["host"] = "host-x"
     db.add(NormalizedEvent(**norm))
-    db.add(Alert(
-        name="Brute Force", severity="high", status="open",
-        mitre_id="T1110", org="univ-a", host="host-0",
-        evidence="12 failed logons", rule="brute_force",
-    ))
+    db.add(
+        Alert(
+            name="Brute Force",
+            severity="high",
+            status="open",
+            mitre_id="T1110",
+            org="univ-a",
+            host="host-0",
+            evidence="12 failed logons",
+            rule="brute_force",
+        )
+    )
     db.commit()
 
 
@@ -110,4 +123,4 @@ def test_metrics_alerts_labeled_by_org_and_open_gauge_per_org(client, db):
 
     assert 'baraq_alerts_total{org="univ-a",severity="high",status="open"}' in body
     assert 'baraq_open_alerts{org="univ-a"}' in body
-    assert 'baraq_open_alerts_total 1' in body
+    assert "baraq_open_alerts_total 1" in body

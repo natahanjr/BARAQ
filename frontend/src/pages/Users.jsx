@@ -134,19 +134,19 @@ function Users() {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Card className="p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Users</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Users</p>
           <p className="mt-1 text-2xl font-bold text-[var(--fg-primary)]">{users.length}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Pending</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Pending</p>
           <p className="mt-1 text-2xl font-bold text-[var(--severity-high)]">{users.filter((u) => u.registration_status === "pending").length}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Audit Events</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Audit Events</p>
           <p className="mt-1 text-2xl font-bold text-[var(--fg-primary)]">{audit.length}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">2FA Enabled</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">2FA Enabled</p>
           <p className="mt-1 text-2xl font-bold text-[var(--status-healthy)]">{users.filter((u) => u.totp_enabled).length}</p>
         </Card>
       </div>
@@ -273,7 +273,7 @@ function Users() {
               <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="username" required pattern="[a-zA-Z0-9_.-]+" className="w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-4 py-2.5 text-[13px] text-[var(--fg-primary)] outline-none focus:border-[var(--accent-cyan)]/40" />
               <input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="full name (optional)" className="w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-4 py-2.5 text-[13px] text-[var(--fg-primary)] outline-none focus:border-[var(--accent-cyan)]/40" />
               <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="password (min 8 chars)" required minLength={8} className="w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-4 py-2.5 text-[13px] text-[var(--fg-primary)] outline-none focus:border-[var(--accent-cyan)]/40" />
-              <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-4 py-2.5 text-[13px] text-[var(--fg-primary)] outline-none focus:border-[var(--accent-cyan)]/40">
+              <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="form-select w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-4 py-2.5 text-[13px] text-[var(--fg-primary)] outline-none focus:border-[var(--accent-cyan)]/40">
                 <option value="analyst">Analyst</option>
                 <option value="admin">Admin</option>
               </select>

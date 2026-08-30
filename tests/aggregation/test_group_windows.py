@@ -1,12 +1,15 @@
 """Phase 4 window tests (spec 4.13, 4.14)."""
+
 from datetime import timedelta
 
-import backend.config as config
+from backend import config
 from backend.aggregation.engine import process_alerts
 from backend.aggregation.windows import within_window
-
-from tests.aggregation.helpers import GROUP_T0, dt, fabricate_alerts, make_alerts, stored_groups
-from tests.alerting.helpers import detection
+from tests.aggregation.helpers import (
+    GROUP_T0,
+    fabricate_alerts,
+    stored_groups,
+)
 
 
 def test_within_window_math():
@@ -22,9 +25,9 @@ def test_sliding_window_three_alerts_one_group(db):
     alerts = fabricate_alerts(
         db,
         [
-            dict(detector_id="D003", minutes_ago=20.0),
-            dict(detector_id="D003", minutes_ago=10.0),
-            dict(detector_id="D003", minutes_ago=0.0),
+            {"detector_id": "D003", "minutes_ago": 20.0},
+            {"detector_id": "D003", "minutes_ago": 10.0},
+            {"detector_id": "D003", "minutes_ago": 0.0},
         ],
     )
     process_alerts(db, alerts, now=GROUP_T0)
@@ -38,8 +41,8 @@ def test_outside_window_makes_new_group(db):
     alerts = fabricate_alerts(
         db,
         [
-            dict(minutes_ago=0.0),
-            dict(minutes_ago=90.0),  # 1.5h later, beyond the 15-min auth window
+            {"minutes_ago": 0.0},
+            {"minutes_ago": 90.0},  # 1.5h later, beyond the 15-min auth window
         ],
     )
     process_alerts(db, alerts, now=GROUP_T0)

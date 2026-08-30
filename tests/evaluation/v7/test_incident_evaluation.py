@@ -1,4 +1,5 @@
 """Phase 7 incident evaluation corpus run (spec 7.40)."""
+
 from __future__ import annotations
 
 from backend.incidents.evaluation import run_evaluation
@@ -16,5 +17,3 @@ def test_scenario_ids_are_unique():
     ids = [s["id"] for s in SCENARIOS]
     assert len(ids) == len(set(ids))
     assert all(s["id"].startswith("INC-") for s in SCENARIOS)
-
-

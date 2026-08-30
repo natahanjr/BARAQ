@@ -5,9 +5,10 @@ distribution, reduction ratio, assignment rate and over/under-grouping
 counters (from the labeled evaluation corpus - never a fake accuracy
 percentage, spec 4.41). Every rate exposes its sample size.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -17,11 +18,11 @@ from backend.alerting.models import AlertRecord
 
 
 def metrics(db: Session, now: datetime | None = None) -> dict:
-    now = now or datetime.now(timezone.utc)
-    groups = list(db.scalars(select(BehaviorGroupRecord).order_by(BehaviorGroupRecord.id)).all())
-    total_alerts = db.scalars(
-        select(func.count()).select_from(AlertRecord)
-    ).one()
+    now = now or datetime.now(UTC)
+    groups = list(
+        db.scalars(select(BehaviorGroupRecord).order_by(BehaviorGroupRecord.id)).all()
+    )
+    total_alerts = db.scalars(select(func.count()).select_from(AlertRecord)).one()
     grouped_alerts = db.scalars(
         select(func.count()).select_from(BehaviorGroupMember)
     ).one()

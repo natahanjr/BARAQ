@@ -1,7 +1,8 @@
 """Data-quality validation + auto-repair (corrupted event data)."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from backend.collectors import quality as quality_mod
 from backend.collectors import repair as repair_mod
@@ -14,7 +15,9 @@ from backend.database.models import DataQualitySnapshot, NormalizedEvent
 # ---------------------------------------------------------------------------
 def test_debris_process_name_flagged():
     assert validation.is_corrupted_facts({"new_process": "C"})[0] is True
-    assert validation.is_corrupted_facts({"new_process": "C"})[1].startswith("new_process")
+    assert validation.is_corrupted_facts({"new_process": "C"})[1].startswith(
+        "new_process"
+    )
     assert validation.is_corrupted_facts({"NewProcessName": "\\"})[0] is True
     assert validation.is_corrupted_facts({"image_path": "g"})[0] is True
     assert validation.is_corrupted_facts({"creator_process": "F"})[0] is True
@@ -22,14 +25,29 @@ def test_debris_process_name_flagged():
 
 def test_short_stub_flagged_but_full_paths_valid():
     assert validation.is_corrupted_facts({"new_process": "ab"})[0] is True
-    assert validation.is_corrupted_facts({"new_process": "C:\\Windows\\System32\\cmd.exe"})[0] is False
-    assert validation.is_corrupted_facts({"image_path": "C:\\Program Files\\App\\tool.exe"})[0] is False
+    assert (
+        validation.is_corrupted_facts(
+            {"new_process": "C:\\Windows\\System32\\cmd.exe"}
+        )[0]
+        is False
+    )
+    assert (
+        validation.is_corrupted_facts(
+            {"image_path": "C:\\Program Files\\App\\tool.exe"}
+        )[0]
+        is False
+    )
 
 
 def test_short_command_line_flagged_but_real_cmdline_valid():
     assert validation.is_corrupted_facts({"command_line": "-"})[0] is True
     assert validation.is_corrupted_facts({"command_line": "--"})[0] is True
-    assert validation.is_corrupted_facts({"command_line": "C:\\Windows\\System32\\cmd.exe /c whoami"})[0] is False
+    assert (
+        validation.is_corrupted_facts(
+            {"command_line": "C:\\Windows\\System32\\cmd.exe /c whoami"}
+        )[0]
+        is False
+    )
     assert validation.is_corrupted_facts({"script_block": "Write-Output x"})[0] is False
 
 
@@ -40,13 +58,28 @@ def test_missing_values_not_corruption():
 
 
 def test_normalized_user_empty_is_corrupted_but_dash_ok():
-    assert validation.normalized_is_corrupted({"user": "", "raw_json": {"facts": {}}})[0] is True
-    assert validation.normalized_is_corrupted({"user": "-", "raw_json": {"facts": {}}})[0] is False
-    assert validation.normalized_is_corrupted({"user": "HAARAPHEL\\Haaraphel", "raw_json": {"facts": {}}})[0] is False
+    assert (
+        validation.normalized_is_corrupted({"user": "", "raw_json": {"facts": {}}})[0]
+        is True
+    )
+    assert (
+        validation.normalized_is_corrupted({"user": "-", "raw_json": {"facts": {}}})[0]
+        is False
+    )
+    assert (
+        validation.normalized_is_corrupted(
+            {"user": "HAARAPHEL\\Haaraphel", "raw_json": {"facts": {}}}
+        )[0]
+        is False
+    )
 
 
 def test_structured_record_validation():
-    good = {"source": "process", "name": "cmd.exe", "path": "C:\\Windows\\System32\\cmd.exe"}
+    good = {
+        "source": "process",
+        "name": "cmd.exe",
+        "path": "C:\\Windows\\System32\\cmd.exe",
+    }
     assert validation.structured_record_is_corrupted(good)[0] is False
     bad = {"source": "process", "name": "C", "path": "C:\\Windows\\System32\\cmd.exe"}
     assert validation.structured_record_is_corrupted(bad)[0] is True
@@ -57,7 +90,10 @@ def test_structured_record_validation():
 def test_raw_record_structural_validation():
     assert validation.validate_raw_record("nope")[0] is False
     assert validation.validate_raw_record({"event_id": "abc"})[0] is False
-    assert validation.validate_raw_record({"source": "eventlog", "event_id": 4688})[0] is True
+    assert (
+        validation.validate_raw_record({"source": "eventlog", "event_id": 4688})[0]
+        is True
+    )
     assert validation.validate_raw_record({"source": "process"})[0] is True
 
 
@@ -179,8 +215,11 @@ def test_clear_log_skipped_off_windows(monkeypatch):
 def test_run_repair_full_sequence(db, monkeypatch):
     _reset_repair()
     monkeypatch.setattr(repair_mod, "is_windows", lambda: False)
-    monkeypatch.setattr(repair_mod, "_retrain_model",
-                        lambda: {"step": "retrain ML", "status": "ok", "detail": "stub"})
+    monkeypatch.setattr(
+        repair_mod,
+        "_retrain_model",
+        lambda: {"step": "retrain ML", "status": "ok", "detail": "stub"},
+    )
     result = repair_mod.run_repair(db, "test")
     assert result["triggered"] is True
     steps = {s["step"]: s for s in result["steps"]}
@@ -193,8 +232,11 @@ def test_run_repair_full_sequence(db, monkeypatch):
 def test_repair_cooldown_blocks_second_run(db, monkeypatch):
     _reset_repair()
     monkeypatch.setattr(repair_mod, "is_windows", lambda: False)
-    monkeypatch.setattr(repair_mod, "_retrain_model",
-                        lambda: {"step": "retrain ML", "status": "ok", "detail": "stub"})
+    monkeypatch.setattr(
+        repair_mod,
+        "_retrain_model",
+        lambda: {"step": "retrain ML", "status": "ok", "detail": "stub"},
+    )
     repair_mod.run_repair(db, "first")
     second = repair_mod.run_repair(db, "second")
     assert second["triggered"] is False
@@ -204,10 +246,14 @@ def test_repair_cooldown_blocks_second_run(db, monkeypatch):
 def test_repair_windows_failure_does_not_abort(db, monkeypatch):
     _reset_repair()
     monkeypatch.setattr(repair_mod, "is_windows", lambda: True)
-    monkeypatch.setattr(repair_mod, "_run",
-                        lambda cmd, timeout=60: (5, "access denied"))
-    monkeypatch.setattr(repair_mod, "_retrain_model",
-                        lambda: {"step": "retrain ML", "status": "ok", "detail": "stub"})
+    monkeypatch.setattr(
+        repair_mod, "_run", lambda cmd, timeout=60: (5, "access denied")
+    )
+    monkeypatch.setattr(
+        repair_mod,
+        "_retrain_model",
+        lambda: {"step": "retrain ML", "status": "ok", "detail": "stub"},
+    )
     result = repair_mod.run_repair(db, "perm test")
     assert result["triggered"] is True
     assert result["success"] is False
@@ -226,7 +272,11 @@ def test_data_quality_api(db, monkeypatch):
     monkeypatch.setattr(
         "backend.collectors.repair.run_repair",
         lambda db, reason="manual", clear_logs=True, restart_service=True, retrain=True: {
-            "triggered": True, "reason": reason, "success": True, "steps": [], "started_at": "now",
+            "triggered": True,
+            "reason": reason,
+            "success": True,
+            "steps": [],
+            "started_at": "now",
         },
     )
     quality_mod.quality.reset()
@@ -242,7 +292,9 @@ def test_data_quality_api(db, monkeypatch):
         assert r.status_code == 200
         assert "items" in r.json()
 
-        r = client.post("/api/system/data-quality/repair", json={"reason": "manual test"})
+        r = client.post(
+            "/api/system/data-quality/repair", json={"reason": "manual test"}
+        )
         assert r.status_code == 200
         assert r.json()["triggered"] is True
 
@@ -270,26 +322,53 @@ def test_health_includes_data_quality():
 def test_ml_loader_skips_corrupted_events(db):
     from backend.ml.anomaly import _load_behavior_features
 
-    db.add(NormalizedEvent(
-        event_id=4688, category="Process", risk="Medium", risk_score=40,
-        severity="medium", source="eventlog", user="Haaraphel",
-        host="host1", message="x",
-        timestamp=datetime.now(timezone.utc),
-        data_integrity="complete",
-        raw_json={"facts": {"new_process": "C"}},
-    ))
+    db.add(
+        NormalizedEvent(
+            event_id=4688,
+            category="Process",
+            risk="Medium",
+            risk_score=40,
+            severity="medium",
+            source="eventlog",
+            user="Haaraphel",
+            host="host1",
+            message="x",
+            timestamp=datetime.now(UTC),
+            data_integrity="complete",
+            raw_json={"facts": {"new_process": "C"}},
+        )
+    )
     db.commit()
-    X = _load_behavior_features(db, datetime.now(timezone.utc) - timedelta(hours=24), {4688})
+    X = _load_behavior_features(db, datetime.now(UTC) - timedelta(hours=24), {4688})
     assert X.shape[0] == 0
 
 
 def test_orm_event_is_corrupted_from_stored_row(db):
     from types import SimpleNamespace
 
-    assert validation.orm_event_is_corrupted(SimpleNamespace(
-        raw_json={"facts": {"new_process": "C"}}, user="x", data_integrity="complete"))[0] is True
-    assert validation.orm_event_is_corrupted(SimpleNamespace(
-        raw_json={"facts": {"new_process": "C:\\Windows\\System32\\cmd.exe"}},
-        user="x", data_integrity="complete"))[0] is False
-    assert validation.orm_event_is_corrupted(SimpleNamespace(
-        raw_json={}, user="x", data_integrity="corrupted"))[0] is True
+    assert (
+        validation.orm_event_is_corrupted(
+            SimpleNamespace(
+                raw_json={"facts": {"new_process": "C"}},
+                user="x",
+                data_integrity="complete",
+            )
+        )[0]
+        is True
+    )
+    assert (
+        validation.orm_event_is_corrupted(
+            SimpleNamespace(
+                raw_json={"facts": {"new_process": "C:\\Windows\\System32\\cmd.exe"}},
+                user="x",
+                data_integrity="complete",
+            )
+        )[0]
+        is False
+    )
+    assert (
+        validation.orm_event_is_corrupted(
+            SimpleNamespace(raw_json={}, user="x", data_integrity="corrupted")
+        )[0]
+        is True
+    )

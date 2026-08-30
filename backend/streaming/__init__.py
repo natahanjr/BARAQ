@@ -23,6 +23,7 @@ Design considerations:
 * Alert records are forwarded with the same schema as events + alert fields
   so a downstream SIEM can pivot between them on ``baraq.type``.
 """
+
 from __future__ import annotations
 
 import json
@@ -30,7 +31,7 @@ import logging
 import queue
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.config import (
     ELASTICSEARCH_INDEX,
@@ -59,8 +60,12 @@ SCHEMA_HISTORY = [
     {
         "version": 1,
         "fields": [
-            "baraq.type", "@timestamp", "baraq.schema_version",
-            "baraq.org", "baraq.source", "event fields (id, event_id, ...)",
+            "baraq.type",
+            "@timestamp",
+            "baraq.schema_version",
+            "baraq.org",
+            "baraq.source",
+            "event fields (id, event_id, ...)",
             "alert fields (alert_id, severity, risk_score, evidence, ...)",
         ],
         "notes": "Initial versioned format (baraq.* envelope keys).",
@@ -87,7 +92,7 @@ _SINK_OP_TIMEOUT = 6.0
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 def _stamp(record: dict) -> dict:
@@ -156,6 +161,7 @@ def _flush_loop() -> None:
                 break
         _dispatch(batch)
 
+
 def _run_bounded(fn, timeout: float):
     """Run ``fn()`` on a daemon worker with a hard wall-clock budget.
 
@@ -169,7 +175,7 @@ def _run_bounded(fn, timeout: float):
     def _target():
         try:
             result["value"] = fn()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             result["error"] = exc
 
     thread = threading.Thread(target=_target, daemon=True, name="baraq-sink")
@@ -204,13 +210,15 @@ def _dispatch(batch: list[dict]) -> None:
             sink["fails"] = 0
             sink["oops"] = None
             _sent_counts[name] = _sent_counts.get(name, 0) + len(batch)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             sink["fails"] = sink.get("fails", 0) + 1
             sink["oops"] = str(exc)[:200]
             if sink["fails"] >= _MAX_SINK_FAILURES:
                 logger.warning(
                     "Sink %s failed %d times in a row (%s); suspending until next init retry",
-                    name, sink["fails"], exc,
+                    name,
+                    sink["fails"],
+                    exc,
                 )
                 _sinks.pop(name, None)
                 #: Dead-letter the batch so a wedged downstream never loses
@@ -220,7 +228,9 @@ def _dispatch(batch: list[dict]) -> None:
             else:
                 logger.warning(
                     "Sink %s failed (attempt %d): %s",
-                    name, sink["fails"], exc,
+                    name,
+                    sink["fails"],
+                    exc,
                 )
 
 
@@ -248,7 +258,6 @@ def _get_dlq_dir() -> str:
 
 
 def _dead_letter(sink: str, record: dict, error: str) -> None:
-    import os
     from pathlib import Path
 
     try:
@@ -263,7 +272,7 @@ def _dead_letter(sink: str, record: dict, error: str) -> None:
         }
         with open(target, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(line) + "\n")
-    except Exception:  # noqa: BLE001 - DLQ must never crash the flush worker
+    except Exception:
         logger.exception("DLQ write failed for sink %s", sink)
 
 
@@ -275,9 +284,10 @@ def dlq_status() -> dict:
 def replay(hours: int = 24, org: str = "") -> dict:
     """Re-publish normalized events from the database through the sinks
     (roadmap 3.2 replay). Pulls from the primary DB, never the replica."""
+    from sqlalchemy import select
+
     from backend.database.connection import SessionLocal
     from backend.database.models import NormalizedEvent
-    from sqlalchemy import select
 
     enqueued = 0
     with SessionLocal() as db:
@@ -285,7 +295,7 @@ def replay(hours: int = 24, org: str = "") -> dict:
         if hours:
             from datetime import timedelta
 
-            since_ts = datetime.now(timezone.utc) - timedelta(hours=hours)
+            since_ts = datetime.now(UTC) - timedelta(hours=hours)
         stmt = select(NormalizedEvent)
         if org:
             stmt = stmt.where(NormalizedEvent.org == org)
@@ -375,9 +385,10 @@ def _init_kafka() -> None:
             "kind": "kafka",
             "send": lambda batch, p=producer: [
                 p.send(KAFKA_TOPIC, json.dumps(r).encode("utf-8")) for r in batch
-            ] or None,
+            ]
+            or None,
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Kafka producer init failed: %s", exc)
 
 
@@ -405,7 +416,7 @@ def _init_redis() -> None:
             return pipe.execute()
 
         _sinks["redis"] = {"kind": "redis", "send": _send_redis}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Redis client init failed: %s", exc)
 
 
@@ -438,7 +449,7 @@ def _init_elasticsearch() -> None:
             return es.bulk(body=body)
 
         _sinks["elasticsearch"] = {"kind": "elasticsearch", "send": _send_es}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Elasticsearch client init failed: %s", exc)
 
 

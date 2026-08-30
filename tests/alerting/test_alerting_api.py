@@ -1,14 +1,13 @@
 """Alert API tests (spec 3.20-3.24, 3.41)."""
+
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, timedelta
 
-import pytest
 from fastapi.testclient import TestClient
 
 from backend.alerting.engine import process_detection
 from backend.main import app
-
 from tests.alerting.helpers import T0, detection
 
 API = "/api/alerts-v2"
@@ -54,7 +53,10 @@ def test_list_filters(db):
     _seed(db, host="ml-host", severity="high")
     _seed(
         db,
-        detector_id="D002", mitre="T1110", host="finance-host", severity="medium",
+        detector_id="D002",
+        mitre="T1110",
+        host="finance-host",
+        severity="medium",
     )
     with client() as c:
         assert c.get(API, params={"severity": "high"}).json()["total"] == 1
@@ -155,7 +157,7 @@ def test_metrics_endpoint(db):
 
 
 def test_suppression_endpoints(db):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     with client() as c:
         r = c.post(f"{API}/suppressions", json={"reason": "maint"})
@@ -164,9 +166,7 @@ def test_suppression_endpoints(db):
             f"{API}/suppressions",
             json={
                 "reason": "approved maintenance",
-                "expires_at": (
-                    datetime.now(timezone.utc) + timedelta(hours=2)
-                ).isoformat(),
+                "expires_at": (datetime.now(UTC) + timedelta(hours=2)).isoformat(),
                 "scope": {"detector_id": "D001", "host": "ml-host"},
             },
         )
@@ -181,10 +181,14 @@ def test_suppression_endpoints(db):
 def test_suppressed_detection_no_visible_alert(db):
     from backend.alerting.suppression import create_rule
 
-    create_rule(db, policy_id="SUP-1", reason="approved maintenance",
-                expires_at=T0 + timedelta(hours=2),
-                scope={"detector_id": "D001", "host": "workstation-42"},
-                now=T0)
+    create_rule(
+        db,
+        policy_id="SUP-1",
+        reason="approved maintenance",
+        expires_at=T0 + timedelta(hours=2),
+        scope={"detector_id": "D001", "host": "workstation-42"},
+        now=T0,
+    )
     db.commit()
     alert = process_detection(db, detection(), now=T0)
     assert alert is None
@@ -199,7 +203,7 @@ def test_unknown_alert_404(db):
 
 
 def test_gate_disables_api(monkeypatch, db):
-    import backend.config as config
+    from backend import config
 
     monkeypatch.setattr(config, "ALERTS_V2_ENABLED", False)
     _seed(db)

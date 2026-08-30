@@ -1,7 +1,9 @@
 """Streaming pipeline: schema stamping, dead-letter queue, replay (roadmap 3.2)."""
+
 from __future__ import annotations
 
 import json
+from datetime import UTC
 
 import pytest
 
@@ -25,7 +27,11 @@ def test_records_stamped_with_schema_version():
 
 
 def test_dlq_captures_failed_sink_batch(tmp_path):
-    streaming._dispatch.cache_clear() if hasattr(streaming._dispatch, "cache_clear") else None
+    (
+        streaming._dispatch.cache_clear()
+        if hasattr(streaming._dispatch, "cache_clear")
+        else None
+    )
     batch = [{"event_id": 1}, {"event_id": 2}]
     streaming._sinks["kafka"] = {
         "kind": "kafka",
@@ -56,16 +62,19 @@ def test_replay_dlq_requeues_records(tmp_path):
 
 
 def test_replay_enqueues_from_database():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from backend.database.connection import SessionLocal
     from backend.database.models import NormalizedEvent
 
     with SessionLocal() as db:
         ev = NormalizedEvent(
-            source="replay-test", event_id=1, category="test",
-            severity="low", message="replay me",
-            timestamp=datetime.now(timezone.utc),
+            source="replay-test",
+            event_id=1,
+            category="test",
+            severity="low",
+            message="replay me",
+            timestamp=datetime.now(UTC),
         )
         db.add(ev)
         db.commit()

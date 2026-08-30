@@ -1,10 +1,10 @@
 """Cross-platform secret vault: DPAPI (Windows) + Fernet (others) backends."""
+
 import json
-import os
 
 import pytest
 
-import backend.vault as vault
+from backend import vault
 
 
 @pytest.fixture

@@ -7,6 +7,7 @@ channel/source, computes the corruption rate and maps it to a health status
 ``data_quality_snapshots`` table for the history endpoint and triggers the
 repair engine when the rate crosses the CRITICAL threshold.
 """
+
 from __future__ import annotations
 
 import threading
@@ -45,7 +46,9 @@ class QualityTracker:
     def record(self, channel: str, ok: bool, reason: str = "") -> None:
         """Record one validation outcome for a channel/source."""
         with self._lock:
-            self._entries.append((time.time(), channel or "unknown", bool(ok), reason[:200]))
+            self._entries.append(
+                (time.time(), channel or "unknown", bool(ok), reason[:200])
+            )
             cutoff = time.time() - self.window_minutes * 60
             self._entries = [e for e in self._entries if e[0] >= cutoff]
 
@@ -73,7 +76,8 @@ class QualityTracker:
         per_channel: dict[str, dict] = {}
         for _, channel, ok, reason in window:
             entry = per_channel.setdefault(
-                channel, {"total": 0, "valid": 0, "corrupted": 0, "corruption_rate": 0.0}
+                channel,
+                {"total": 0, "valid": 0, "corrupted": 0, "corruption_rate": 0.0},
             )
             entry["total"] += 1
             if ok:
@@ -83,7 +87,9 @@ class QualityTracker:
                 if reason:
                     reasons[reason] += 1
         for entry in per_channel.values():
-            entry["corruption_rate"] = round(entry["corrupted"] / entry["total"], 4) if entry["total"] else 0.0
+            entry["corruption_rate"] = (
+                round(entry["corrupted"] / entry["total"], 4) if entry["total"] else 0.0
+            )
         return {
             "window_minutes": minutes or self.window_minutes,
             "total": total,

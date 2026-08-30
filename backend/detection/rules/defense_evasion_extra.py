@@ -5,17 +5,17 @@ Covers disabling security products (T1562.001), firewall changes
 weaken defenses (T1112), indicator removal / log tampering (T1070) and
 legitimate-signature abuse (T1553 / T1564 hidden attributes).
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
-
-from backend.database.models import NormalizedEvent
 from backend.detection.rules.base import BaseRule, DetectionResult
 
-_SUSPICIOUS_DIRS = re.compile(r"\\Temp\\|\\Users\\Public\\|\\AppData\\|\\Downloads\\", re.IGNORECASE)
+_SUSPICIOUS_DIRS = re.compile(
+    r"\\Temp\\|\\Users\\Public\\|\\AppData\\|\\Downloads\\", re.IGNORECASE
+)
 
 _DISABLE_AV = re.compile(
     r"\b(?:Stop-Service|sc(?:\.exe)?\s+stop|Set-Service\s+-Status\s+Stopped)\b[^\n]*"
@@ -67,7 +67,7 @@ class DisableDefenderRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _DISABLE_AV.search(cmdline):
                 continue
@@ -100,7 +100,7 @@ class DisableFirewallRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _DISABLE_FIREWALL.search(cmdline):
                 continue
@@ -133,7 +133,7 @@ class DisableAuditRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _DISABLE_AUDIT.search(cmdline):
                 continue
@@ -166,7 +166,7 @@ class HiddenFileAttributeRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _HIDE_ATTRIBUTES.search(cmdline):
                 continue
@@ -199,7 +199,7 @@ class DisableSystemRestoreRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _DISABLE_REMOTE.search(cmdline):
                 continue

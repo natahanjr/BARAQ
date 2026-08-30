@@ -28,7 +28,7 @@ export function FilterBar({ filters = [], activeFilters = {}, onChange, onClear,
           >
             {filter.label}
             {(activeFilters[filter.key]?.length) && (
-              <span className="text-[10px] opacity-70">({activeFilters[filter.key].length})</span>
+              <span className="text-[11px] opacity-70">({activeFilters[filter.key].length})</span>
             )}
             <svg className="h-3 w-3 opacity-50" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M4 6l4 4 4-4" />
@@ -37,7 +37,7 @@ export function FilterBar({ filters = [], activeFilters = {}, onChange, onClear,
           {openDropdown === filter.key && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
-              <div className="absolute top-full left-0 z-20 mt-1 min-w-[160px] rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-[var(--shadow-lg)] py-1 animate-in">
+              <div className="absolute top-full left-0 z-20 mt-1 min-w-[160px] rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 shadow-[var(--shadow-lg)] py-1 animate-in">
                 {filter.options.map((opt) => (
                   <button
                     key={opt.value}

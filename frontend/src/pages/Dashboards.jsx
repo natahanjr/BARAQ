@@ -17,7 +17,7 @@ function PanelCard({ panel }) {
     return (
       <div className="flex h-full flex-col items-center justify-center p-4">
         <span className="text-[36px] font-bold text-[var(--accent-violet)]">{panel.count ?? 0}</span>
-        <span className="mt-1 text-[10px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Events</span>
+        <span className="mt-1 text-[11px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Events</span>
       </div>
     );
   }
@@ -29,7 +29,7 @@ function PanelCard({ panel }) {
           <thead>
             <tr>
               {columns.map((col) => (
-                <th key={col} className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">
+                <th key={col} className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">
                   {col}
                 </th>
               ))}

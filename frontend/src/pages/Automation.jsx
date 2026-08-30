@@ -77,7 +77,7 @@ function Automation() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)]">SOAR</p>
-          <h1 className="mt-1 text-[28px] font-bold tracking-tight text-[var(--fg-primary)]">Automation</h1>
+          <h1 className="mt-1 text-page-title text-[var(--fg-primary)]">Automation</h1>
           <p className="mt-0.5 text-[13px] text-[var(--fg-muted)]">Playbooks, execution history, and response orchestration</p>
         </div>
         <Button size="sm" onClick={() => setShowCreate(true)}>+ New Playbook</Button>
@@ -93,7 +93,7 @@ function Automation() {
         ].map((s) => (
           <div
             key={s.label}
-            className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 transition-all duration-300 hover:border-[var(--border-strong)] hover:shadow-lg"
+            className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-300 p-5 hover:border-[var(--border-strong)] hover:shadow-lg"
           >
             <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-40" style={{ background: s.color }} />
             <div className="relative flex items-start justify-between">
@@ -123,7 +123,7 @@ function Automation() {
       {tab === "playbooks" && (
         <div className="space-y-3">
           {playbooks.length === 0 ? (
-            <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-12 text-center">
+            <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-12 text-center">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-cyan-muted)]">
                 <span className="text-2xl">{"\u2699\uFE0F"}</span>
               </div>
@@ -135,7 +135,7 @@ function Automation() {
             playbooks.map((pb) => (
               <div
                 key={pb.id}
-                className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 transition-all duration-300 hover:border-[var(--border-strong)] hover:shadow-lg"
+                className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-300 p-5 hover:border-[var(--border-strong)] hover:shadow-lg"
               >
                 {/* Subtle top-left glow */}
                 <div className="absolute -left-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br from-[var(--accent-cyan)]/[0.04] to-transparent blur-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
@@ -155,7 +155,7 @@ function Automation() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold ${pb.enabled ? "bg-[var(--status-healthy)]/[0.10] text-[var(--status-healthy)]" : "bg-[var(--fg-muted)]/[0.10] text-[var(--fg-muted)]"}`}>
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${pb.enabled ? "bg-[var(--status-healthy)]/[0.10] text-[var(--status-healthy)]" : "bg-[var(--fg-muted)]/[0.10] text-[var(--fg-muted)]"}`}>
                         <span className={`h-1.5 w-1.5 rounded-full ${pb.enabled ? "bg-[var(--status-healthy)]" : "bg-[var(--fg-muted)]"}`} />
                         {pb.enabled ? "Active" : "Disabled"}
                       </span>
@@ -167,17 +167,17 @@ function Automation() {
                   {(pb.triggers?.severity?.length > 0 || pb.triggers?.tactics?.length > 0) && (
                     <div className="mt-3.5 flex flex-wrap gap-1.5 pl-12">
                       {(pb.triggers?.severity || []).map((s) => (
-                        <span key={s} className="rounded-full bg-[var(--severity-medium)]/[0.08] px-2 py-0.5 text-[10px] font-semibold text-[var(--severity-medium)] ring-1 ring-[var(--severity-medium)]/20">
+                        <span key={s} className="rounded-full bg-[var(--severity-medium)]/[0.08] px-2 py-0.5 text-[11px] font-semibold text-[var(--severity-medium)] ring-1 ring-[var(--severity-medium)]/20">
                           {s}
                         </span>
                       ))}
                       {(pb.triggers?.tactics || []).map((t) => (
-                        <span key={t} className="rounded-full bg-[var(--accent-cyan)]/[0.08] px-2 py-0.5 text-[10px] font-semibold text-[var(--accent-cyan)] ring-1 ring-[var(--accent-cyan)]/20">
+                        <span key={t} className="rounded-full bg-[var(--accent-cyan)]/[0.08] px-2 py-0.5 text-[11px] font-semibold text-[var(--accent-cyan)] ring-1 ring-[var(--accent-cyan)]/20">
                           {t}
                         </span>
                       ))}
                       {pb.triggers?.min_risk_level && pb.triggers.min_risk_level !== "LOW" && (
-                        <span className="rounded-full bg-[var(--severity-high)]/[0.08] px-2 py-0.5 text-[10px] font-semibold text-[var(--severity-high)] ring-1 ring-[var(--severity-high)]/20">
+                        <span className="rounded-full bg-[var(--severity-high)]/[0.08] px-2 py-0.5 text-[11px] font-semibold text-[var(--severity-high)] ring-1 ring-[var(--severity-high)]/20">
                           {"\u2265"} {pb.triggers.min_risk_level}
                         </span>
                       )}
@@ -193,9 +193,9 @@ function Automation() {
                           const cfg = ACTIONS.find((ac) => ac.id === action);
                           return (
                             <div key={i} className="flex items-center gap-2">
-                              {i > 0 && <span className="text-[10px] text-[var(--fg-faint)]">{"\u2192"}</span>}
+                              {i > 0 && <span className="text-[11px] text-[var(--fg-faint)]">{"\u2192"}</span>}
                               <span
-                                className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[10px] font-semibold transition-colors"
+                                className="inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-semibold transition-colors"
                                 style={{
                                   borderColor: `${cfg?.color || "var(--border-default)"}22`,
                                   background: `${cfg?.color || "var(--border-default)"}08`,
@@ -222,7 +222,7 @@ function Automation() {
       {tab === "runs" && (
         <div className="space-y-3">
           {runs.length === 0 ? (
-            <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-12 text-center">
+            <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-12 text-center">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-violet-muted)]">
                 <span className="text-2xl">{"\u26A1"}</span>
               </div>
@@ -235,7 +235,7 @@ function Automation() {
               return (
                 <div
                   key={run.id}
-                  className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-5 py-4 transition-all duration-200 hover:border-[var(--border-strong)] hover:shadow-md"
+                  className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 px-5 py-4 hover:border-[var(--border-strong)] hover:shadow-md"
                 >
                   <div className="flex items-center justify-between gap-4">
                     {/* Left: playbook name + actions */}
@@ -255,7 +255,7 @@ function Automation() {
                     {/* Right: status + time */}
                     <div className="flex items-center gap-4 shrink-0">
                       <div className="text-right">
-                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold ${st.bg} ${st.text}`}>
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${st.bg} ${st.text}`}>
                           {st.label}
                         </span>
                         <p className="mt-1 text-[11px] text-[var(--fg-muted)]" title={run.started_at}>
@@ -275,7 +275,7 @@ function Automation() {
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowCreate(false)}>
           <div
-            className="w-full max-w-lg mx-4 rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)]/95 p-6 shadow-2xl backdrop-blur-xl"
+            className="w-full max-w-lg mx-4 rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200/95 p-6 shadow-2xl backdrop-blur-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
@@ -308,7 +308,7 @@ function Automation() {
                   required
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="mt-1.5 w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2.5 text-[13px] text-[var(--fg-primary)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
+                  className="mt-1.5 w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-2.5 text-[13px] text-[var(--fg-primary)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20"
                   placeholder="e.g., Auto-Block Malicious IPs"
                 />
               </div>
@@ -318,7 +318,7 @@ function Automation() {
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   rows={2}
-                  className="mt-1.5 w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-inset)] px-3.5 py-2.5 text-[13px] text-[var(--fg-primary)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20 resize-none"
+                  className="mt-1.5 w-full rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200 px-3.5 py-2.5 text-[13px] text-[var(--fg-primary)] transition-colors focus:border-[var(--accent-cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/20 resize-none"
                   placeholder="Describe what this playbook does..."
                 />
               </div>

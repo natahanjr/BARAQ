@@ -1,4 +1,5 @@
 """Threat-intel API: enrich indicators on demand or from an alert's evidence."""
+
 from __future__ import annotations
 
 import logging
@@ -44,8 +45,15 @@ def refresh_feeds(request: Request, db: Session = Depends(get_db)):
     from backend.intel.feeds import refresh_feeds as run_refresh
 
     summary = run_refresh(db)
-    log_action(db, actor_name(request), "intel.refresh", "feeds", "all",
-               f"Threat-intel feed refresh: {len(summary['feeds'])} feed(s)", client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "intel.refresh",
+        "feeds",
+        "all",
+        f"Threat-intel feed refresh: {len(summary['feeds'])} feed(s)",
+        client_ip(request),
+    )
     return summary
 
 
@@ -85,7 +93,9 @@ def alert_intel(
 
         actors = upsert_actors(db, get_graph_store(), items)
     except Exception as exc:
-        logger.warning("Threat-actor attribution failed for alert %s: %s", alert_id, exc)
+        logger.warning(
+            "Threat-actor attribution failed for alert %s: %s", alert_id, exc
+        )
     return {
         "alert_id": alert_id,
         "alert_name": alert.name,
@@ -107,11 +117,19 @@ def save_verdict(
     immediately (authoritative analyst input wins over provider feeds).
     """
     from backend.database.models import ThreatIntelRecord
-    from backend.threatintel import _DOMAIN_RE, _HASH_RE, _IPV4_RE
+    from backend.threatintel import _DOMAIN_RE, _IPV4_RE
 
     indicator = body.indicator.strip().lower()
-    kind = "ip" if _IPV4_RE.match(indicator) else "domain" if _DOMAIN_RE.match(indicator) else "hash"
-    row = db.query(ThreatIntelRecord).filter(ThreatIntelRecord.indicator == indicator).one_or_none()
+    kind = (
+        "ip"
+        if _IPV4_RE.match(indicator)
+        else "domain" if _DOMAIN_RE.match(indicator) else "hash"
+    )
+    row = (
+        db.query(ThreatIntelRecord)
+        .filter(ThreatIntelRecord.indicator == indicator)
+        .one_or_none()
+    )
     if row is None:
         row = ThreatIntelRecord(indicator=indicator, kind=kind)
         db.add(row)
@@ -122,6 +140,13 @@ def save_verdict(
     row.sources = (row.sources or []) + ["analyst"]
     db.commit()
     db.refresh(row)
-    log_action(db, actor_name(request), "intel.save", "indicator", indicator,
-               "Analyst marked indicator malicious", client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "intel.save",
+        "indicator",
+        indicator,
+        "Analyst marked indicator malicious",
+        client_ip(request),
+    )
     return row.to_dict()

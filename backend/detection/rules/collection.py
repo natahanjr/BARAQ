@@ -3,14 +3,12 @@
 Covers clipboard capture (T1115), screen capture (T1113), archive
 collection (T1560.001) and data from local systems (T1005).
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
-
-from backend.database.models import NormalizedEvent
 from backend.detection.rules.base import BaseRule, DetectionResult
 
 _CLIPBOARD = re.compile(
@@ -54,7 +52,7 @@ class ClipboardCaptureRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _CLIPBOARD.search(cmdline):
                 continue
@@ -87,7 +85,7 @@ class ScreenCaptureRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _SCREEN_CAPTURE.search(cmdline):
                 continue
@@ -120,7 +118,7 @@ class ArchiveCollectionRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _ARCHIVE.search(cmdline):
                 continue
@@ -153,7 +151,7 @@ class LocalDataCollectionRule(BaseRule):
 
     def evaluate(self, window_minutes: int) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
-        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
             if not _LOCAL_DATA.search(cmdline):
                 continue

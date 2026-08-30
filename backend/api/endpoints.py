@@ -10,11 +10,12 @@ The same channel carries remote agent control: analysts queue commands
 polls ``GET /api/commands/pending`` on its next cycle, executes them and
 reports the outcome to ``POST /api/commands/{id}/result``.
 """
+
 from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -27,7 +28,7 @@ from backend.audit import client_ip, log_action
 from backend.config import AGENT_KEYS, agent_org
 from backend.database.connection import get_db
 from backend.database.models import AgentCommand, Endpoint, NormalizedEvent, Verdict
-from backend.security import actor_name, tenant_scope, require_admin, require_auth
+from backend.security import actor_name, require_admin, require_auth, tenant_scope
 
 logger = logging.getLogger("baraq.api.endpoints")
 router = APIRouter(
@@ -85,8 +86,12 @@ def _refresh_health(endpoint: Endpoint) -> None:
     """Recompute health_status from last_seen (ok/stale/offline)."""
     from backend.config import AGENT_OFFLINE_SECONDS, AGENT_STALE_SECONDS
 
-    now = datetime.now(timezone.utc)
-    age = (now - endpoint.last_seen).total_seconds() if endpoint.last_seen else float("inf")
+    now = datetime.now(UTC)
+    age = (
+        (now - endpoint.last_seen).total_seconds()
+        if endpoint.last_seen
+        else float("inf")
+    )
     if age <= AGENT_STALE_SECONDS:
         endpoint.health_status = "ok"
     elif age <= AGENT_OFFLINE_SECONDS:
@@ -115,10 +120,8 @@ def ingest(
     try:
         from backend.config import INGEST_ASYNC_DETECT
 
-        result = run_pipeline(
-            db, body.records, org=org, detect=not INGEST_ASYNC_DETECT
-        )
-    except Exception as exc:  # noqa: BLE001
+        result = run_pipeline(db, body.records, org=org, detect=not INGEST_ASYNC_DETECT)
+    except Exception as exc:
         logger.exception("Ingest from agent %s failed", agent_id)
         raise HTTPException(500, f"Ingest pipeline failed: {exc}")
 
@@ -135,7 +138,7 @@ def ingest(
         db.add(endpoint)
     endpoint.host = host
     endpoint.org = org
-    endpoint.last_seen = datetime.now(timezone.utc)
+    endpoint.last_seen = datetime.now(UTC)
     endpoint.records_total += len(body.records)
     endpoint.events_total += result["saved_events"]
     endpoint.alerts_total += result["alerts_created"]
@@ -152,7 +155,11 @@ def ingest(
 
     logger.info(
         "Agent %s (%s) org=%s ingested %d records -> %d alerts",
-        agent_id, host, org or "(system)", len(body.records), result["alerts_created"],
+        agent_id,
+        host,
+        org or "(system)",
+        len(body.records),
+        result["alerts_created"],
     )
     return {"agent_id": agent_id, "host": host, "org": org, **result}
 
@@ -171,9 +178,7 @@ def list_endpoints(
         stmt = stmt.where(Endpoint.org == scope)
     if tag:
         stmt = stmt.where(Endpoint.tags.ilike(f"%{tag}%"))
-    rows = db.scalars(
-        stmt.order_by(Endpoint.last_seen.desc()).limit(limit)
-    ).all()
+    rows = db.scalars(stmt.order_by(Endpoint.last_seen.desc()).limit(limit)).all()
     for ep in rows:
         _refresh_health(ep)
     if health:
@@ -243,8 +248,15 @@ def set_agent_tags(
     tags = ",".join(sorted({t for t in body.tags.split(",") if t}))
     endpoint.tags = tags
     db.commit()
-    log_action(db, actor_name(request), "endpoint.tags", "agent", agent_id,
-               f"tags -> {tags or '(none)'}", client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "endpoint.tags",
+        "agent",
+        agent_id,
+        f"tags -> {tags or '(none)'}",
+        client_ip(request),
+    )
     return endpoint.to_dict()
 
 
@@ -321,9 +333,22 @@ def queue_command(
     db.add(command)
     db.commit()
     _apply_command_side_effects(db, command)
-    log_action(db, actor_name(request), "command.queue", "agent", agent_id,
-               f"{body.action.value} {target} -> command #{command.id}", client_ip(request))
-    logger.info("Queued %s %s for agent %s (command #%s)", body.action.value, target, agent_id, command.id)
+    log_action(
+        db,
+        actor_name(request),
+        "command.queue",
+        "agent",
+        agent_id,
+        f"{body.action.value} {target} -> command #{command.id}",
+        client_ip(request),
+    )
+    logger.info(
+        "Queued %s %s for agent %s (command #%s)",
+        body.action.value,
+        target,
+        agent_id,
+        command.id,
+    )
     return command.to_dict()
 
 
@@ -371,7 +396,9 @@ def list_commands(
 
 
 @router.get("/commands/pending", dependencies=[Depends(require_agent)])
-def pending_commands(agent_id: str = Depends(require_agent), db: Session = Depends(get_db)):
+def pending_commands(
+    agent_id: str = Depends(require_agent), db: Session = Depends(get_db)
+):
     rows = db.scalars(
         select(AgentCommand)
         .where(AgentCommand.agent_id == agent_id, AgentCommand.status == "pending")
@@ -393,16 +420,19 @@ def report_result(
         raise HTTPException(404, "Command not found for this agent")
     command.status = body.status
     command.detail = body.detail
-    command.executed_at = datetime.now(timezone.utc)
+    command.executed_at = datetime.now(UTC)
     db.commit()
     _apply_command_side_effects(db, command)
-    logger.info("Agent %s executed command #%s -> %s", agent_id, command_id, body.status)
+    logger.info(
+        "Agent %s executed command #%s -> %s", agent_id, command_id, body.status
+    )
     return command.to_dict()
 
 
 # =====================================================================
 # Analyst feedback loop (ML ground truth)
 # =====================================================================
+
 
 class VerdictCreate(BaseModel):
     event_id: int = Field(..., ge=1)
@@ -426,9 +456,7 @@ def record_verdict(
     event = db.get(NormalizedEvent, body.event_id)
     if event is None:
         raise HTTPException(404, "No such event")
-    row = db.scalars(
-        select(Verdict).where(Verdict.event_id == body.event_id)
-    ).first()
+    row = db.scalars(select(Verdict).where(Verdict.event_id == body.event_id)).first()
     if row is None:
         row = Verdict(
             event_id=body.event_id,
@@ -447,11 +475,15 @@ def record_verdict(
         from backend.ml.anomaly import _behavior_of, get_detector
 
         get_detector().apply_feedback(body.verdict, _behavior_of(event.event_id))
-    except Exception:  # noqa: BLE001 - feedback must never break the verdict
+    except Exception:
         pass
     log_action(
-        db, actor_name(request), "verdict.record",
-        "event", body.event_id, f"{body.verdict} - {body.note or 'no note'}",
+        db,
+        actor_name(request),
+        "verdict.record",
+        "event",
+        body.event_id,
+        f"{body.verdict} - {body.note or 'no note'}",
         client_ip(request),
     )
     return row.to_dict()
@@ -476,12 +508,16 @@ def list_verdicts(
         )
     rows = db.scalars(stmt).all()
     event_ids = [v.event_id for v in rows]
-    events = {
-        e.id: e
-        for e in db.scalars(
-            select(NormalizedEvent).where(NormalizedEvent.id.in_(event_ids))
-        )
-    } if event_ids else {}
+    events = (
+        {
+            e.id: e
+            for e in db.scalars(
+                select(NormalizedEvent).where(NormalizedEvent.id.in_(event_ids))
+            )
+        }
+        if event_ids
+        else {}
+    )
     items = []
     for v in rows:
         item = v.to_dict()

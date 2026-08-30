@@ -73,7 +73,7 @@ function SystemAdminPanel() {
           ["Uptime", <UptimeTimer uptimeSeconds={status.uptime_seconds || 0} />, "live", "var(--fg-primary)"],
         ].map(([label, value, sub, color]) => (
           <Card key={label} className="p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">{label}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">{label}</p>
             <p className="mt-1 font-mono text-[15px] font-bold" style={{ color }}>{value}</p>
             <p className="mt-0.5 text-[11px] text-[var(--fg-muted)]">{sub}</p>
           </Card>
@@ -118,21 +118,21 @@ function SystemAdminPanel() {
         <CardContent className="space-y-3">
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-[var(--radius-md)] bg-[var(--bg-inset)] px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Status</p>
+              <p className="text-[11px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Status</p>
               <p className="mt-0.5 text-[13px] font-semibold text-[var(--fg-primary)]">{dq?.current?.status ?? "—"}</p>
             </div>
             <div className="rounded-[var(--radius-md)] bg-[var(--bg-inset)] px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Corruption Rate</p>
+              <p className="text-[11px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Corruption Rate</p>
               <p className="mt-0.5 text-[13px] font-semibold text-[var(--fg-primary)]">{dq?.current?.corruption_rate != null ? `${(dq.current.corruption_rate * 100).toFixed(1)}%` : "—"}</p>
             </div>
             <div className="rounded-[var(--radius-md)] bg-[var(--bg-inset)] px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Valid / Corrupted</p>
+              <p className="text-[11px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Valid / Corrupted</p>
               <p className="mt-0.5 text-[13px] font-semibold text-[var(--fg-primary)]">{dq?.current ? `${dq.current.valid} / ${dq.current.corrupted}` : "—"}</p>
             </div>
           </div>
           {dq?.current?.reasons && Object.keys(dq.current.reasons).length > 0 && (
             <div className="rounded-[var(--radius-md)] bg-[var(--bg-inset)] px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)] mb-1">Top Reasons</p>
+              <p className="text-[11px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)] mb-1">Top Reasons</p>
               {Object.entries(dq.current.reasons).slice(0, 3).map(([reason, count]) => (
                 <div key={reason} className="flex justify-between text-[12px]"><span className="text-[var(--fg-secondary)]">{reason}</span><span className="font-mono text-[var(--fg-muted)]">{count}</span></div>
               ))}

@@ -83,19 +83,19 @@ function Endpoints() {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Card className="p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Total Agents</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Total Agents</p>
           <p className="mt-1 text-2xl font-bold text-[var(--fg-primary)]">{endpoints.length}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Online</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Online</p>
           <p className="mt-1 text-2xl font-bold text-[var(--status-healthy)]">{onlineCount}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Offline</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Offline</p>
           <p className="mt-1 text-2xl font-bold text-[var(--severity-critical)]">{endpoints.length - onlineCount}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Commands</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Commands</p>
           <p className="mt-1 text-2xl font-bold text-[var(--fg-primary)]">{commands.length}</p>
         </Card>
       </div>
@@ -124,25 +124,25 @@ function Endpoints() {
                   <span className="truncate font-mono text-[13px] font-semibold text-[var(--fg-primary)]">{ep.hostname}</span>
                   <Badge severity={online ? "info" : "critical"} size="sm">{online ? "ONLINE" : "OFFLINE"}</Badge>
                 </div>
-                <p className="mt-1 truncate font-mono text-[10px] text-[var(--fg-muted)]">{ep.agent_id}</p>
+                <p className="mt-1 truncate font-mono text-[11px] text-[var(--fg-muted)]">{ep.agent_id}</p>
                 {ep.org && <Badge severity="low" size="sm">{ep.org}</Badge>}
 
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <div className="rounded-[var(--radius-md)] bg-[var(--bg-inset)] px-2 py-1.5">
                     <p className="text-[12px] font-bold text-[var(--accent-cyan)]">{ep.records}</p>
-                    <p className="text-[9px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">records</p>
+                    <p className="text-[11px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">records</p>
                   </div>
                   <div className="rounded-[var(--radius-md)] bg-[var(--bg-inset)] px-2 py-1.5">
                     <p className="text-[12px] font-bold text-[var(--fg-primary)]">{ep.events}</p>
-                    <p className="text-[9px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">events</p>
+                    <p className="text-[11px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">events</p>
                   </div>
                   <div className="rounded-[var(--radius-md)] bg-[var(--bg-inset)] px-2 py-1.5">
                     <p className="text-[12px] font-bold text-[var(--severity-high)]">{ep.alerts}</p>
-                    <p className="text-[9px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">alerts</p>
+                    <p className="text-[11px] uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">alerts</p>
                   </div>
                 </div>
 
-                <p className="mt-2 text-[10px] text-[var(--fg-muted)]">
+                <p className="mt-2 text-[11px] text-[var(--fg-muted)]">
                   Last seen {new Date(ep.last_seen).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </p>
 
@@ -181,7 +181,7 @@ function Endpoints() {
                     type="button"
                     onClick={() => { setCmdAgent(ep.agent_id); setCmdAction("block_ip"); setCmdTarget(""); setCmdNote(""); }}
                     disabled={!online}
-                    className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-3 py-2 text-[11px] font-semibold text-[var(--fg-secondary)] transition-colors hover:border-[var(--accent-cyan)]/30 hover:text-[var(--accent-cyan)] disabled:opacity-40"
+                    className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-3 py-2 text-[11px] font-semibold text-[var(--fg-secondary)] transition-all hover:border-[var(--accent-cyan)]/30 hover:text-[var(--accent-cyan)] disabled:opacity-40"
                   >
                     Send Command
                   </button>

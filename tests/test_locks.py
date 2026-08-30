@@ -1,4 +1,5 @@
 """Single-instance lock semantics (PostgreSQL advisory locks)."""
+
 import pytest
 from sqlalchemy import create_engine
 

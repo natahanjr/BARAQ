@@ -11,6 +11,7 @@ cleanup) and user-approved. Run with::
     python -m tools.realtime.campaign --run-id campaign_20260806_a --steps all
     python -m tools.realtime.campaign --run-id campaign_20260806_a --steps process-encoded
 """
+
 from __future__ import annotations
 
 import argparse
@@ -21,9 +22,8 @@ import socket
 import subprocess
 import sys
 import tempfile
-import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -37,19 +37,25 @@ class SimulationError(RuntimeError):
 class _Sim:
     """Ground truth for one launched simulation."""
 
-    def __init__(self, sim_id: str, behavior: str, process_name: str, marker: str,
-                 targets: list[str] | None = None):
+    def __init__(
+        self,
+        sim_id: str,
+        behavior: str,
+        process_name: str,
+        marker: str,
+        targets: list[str] | None = None,
+    ):
         self.sim_id = sim_id
         self.behavior = behavior
         self.process_name = process_name
         self.marker = marker
         self.targets = targets or []
-        self.started_at = datetime.now(timezone.utc)
+        self.started_at = datetime.now(UTC)
         self.finished_at: datetime | None = None
         self.rc: int | None = None
 
     def finish(self, rc: int | None) -> None:
-        self.finished_at = datetime.now(timezone.utc)
+        self.finished_at = datetime.now(UTC)
         self.rc = rc
 
     def to_dict(self) -> dict:
@@ -76,7 +82,10 @@ def _marker_payload(marker: str) -> str:
 def _run_sim(args: list[str], timeout: int = 90) -> tuple[int, str]:
     try:
         proc = subprocess.run(
-            args, capture_output=True, text=True, timeout=timeout,
+            args,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         return proc.returncode, (proc.stdout or "")[:200]
@@ -107,12 +116,14 @@ def sim_login_spray(marker: str) -> tuple[list[str], str]:
     """Failed-login spray via net use against localhost shares (4625s)."""
     script = []
     for i in range(6):
-        share = f"\\\\localhost\\IPC$"
+        share = "\\\\localhost\\IPC$"
         # PS-correct suppression: `>nul` is cmd syntax and makes PS try to open
         # `nul` as a device file (Failing), aborting `net use` BEFORE the logon
         # attempt. `> $null 2>&1` keeps the failure silent but still logs an
         # actual failed network logon (Event 4625).
-        script.append(f"net use {share} /user:campaign_user_{marker} wrong-pass-{i} > $null 2>&1")
+        script.append(
+            f"net use {share} /user:campaign_user_{marker} wrong-pass-{i} > $null 2>&1"
+        )
     script.append(f"echo {marker}")
     ps = ["powershell", "-NoProfile", "-Command", "; ".join(script)]
     return ps, "powershell.exe"
@@ -160,7 +171,9 @@ _SIMS = {
 }
 
 
-def run_campaign(run_id: str, steps: list[str] | None = None, marker: str | None = None) -> dict:
+def run_campaign(
+    run_id: str, steps: list[str] | None = None, marker: str | None = None
+) -> dict:
     """Run the selected simulations, recording ground truth to JSON."""
     CAMPAIGNS_DIR.mkdir(parents=True, exist_ok=True)
     marker = marker or uuid.uuid4().hex[:8]
@@ -171,7 +184,9 @@ def run_campaign(run_id: str, steps: list[str] | None = None, marker: str | None
 
     results: list[dict] = []
     for step in steps:
-        sim = _Sim(sim_id=step, behavior=step.split("-")[0], process_name="", marker=marker)
+        sim = _Sim(
+            sim_id=step, behavior=step.split("-")[0], process_name="", marker=marker
+        )
         try:
             args, sim.process_name = _SIMS[step](marker)
             rc, out = _run_sim(args)

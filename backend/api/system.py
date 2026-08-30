@@ -1,4 +1,5 @@
 """System / collection / ML control endpoints."""
+
 from __future__ import annotations
 
 import logging
@@ -20,7 +21,7 @@ from backend.config import (
     SECURITY_LOG_CHANNELS,
     SYSMON_CHANNELS,
 )
-from backend.database.connection import get_db, init_db
+from backend.database.connection import get_db
 from backend.ml.anomaly import get_detector
 from backend.security import require_admin, require_auth
 
@@ -46,13 +47,13 @@ def run_detection(
     ``demo`` tags the produced alerts as demo/test data (excluded from the
     production queue). Returns ``(findings, created_alerts)``.
     """
+    from backend.detection.alerting import AlertingService
     from backend.detection.cursor import (
         CURSOR_LOCK,
         get_cursor,
         max_event_id,
         set_cursor,
     )
-    from backend.detection.alerting import AlertingService
     from backend.detection.rules_engine import RulesEngine
 
     with CURSOR_LOCK:
@@ -109,13 +110,13 @@ def run_detection_for_orgs(
     arrives between two tenants' passes is still evaluated exactly once.
     Returns ``(findings, created_alerts)``.
     """
+    from backend.detection.alerting import AlertingService
     from backend.detection.cursor import (
         CURSOR_LOCK,
         get_cursor,
         max_event_id,
         set_cursor,
     )
-    from backend.detection.alerting import AlertingService
     from backend.detection.rules_engine import RulesEngine
 
     findings: list = []
@@ -127,7 +128,9 @@ def run_detection_for_orgs(
         try:
             for org in orgs:
                 engine = RulesEngine(db, org=org)
-                org_findings = engine.run(window_minutes=window_minutes, since_id=cursor)
+                org_findings = engine.run(
+                    window_minutes=window_minutes, since_id=cursor
+                )
                 base = [f for f in org_findings if f.rule != "correlation_engine"]
                 findings.extend(base)
                 alerting = AlertingService(db)
@@ -141,7 +144,9 @@ def run_detection_for_orgs(
                 corr_findings = correlation.evaluate(window_minutes=window_minutes)
                 if corr_findings:
                     findings.extend(corr_findings)
-                    created.extend(alerting.handle_findings(corr_findings, org=org, demo=demo))
+                    created.extend(
+                        alerting.handle_findings(corr_findings, org=org, demo=demo)
+                    )
         finally:
             if prev_demo is None:
                 db.info.pop("baraq_demo", None)
@@ -174,7 +179,6 @@ def run_pipeline(
     console explicitly runs in demo mode.
     """
     from backend.analyzers.normalizer import Normalizer
-    from backend.analyzers.normalizer import Normalizer
     from backend.database.models import (
         DnsQuery,
         EmailMessage,
@@ -186,8 +190,7 @@ def run_pipeline(
         UsbDevice,
         VulnFinding,
     )
-    from backend.detection.alerting import AlertingService
-    from backend.detection.rules_engine import RulesEngine, enrich_result
+    from backend.detection.rules_engine import enrich_result
 
     normalizer = Normalizer()
     saved_events = 0
@@ -228,100 +231,136 @@ def run_pipeline(
                 or (raw.get("parent_image") or "").rsplit("\\", 1)[-1]
                 or ""
             )
-            db.add(ProcessRecord(
-                pid=record["pid"], ppid=record.get("ppid", 0),
-                name=record.get("name", ""), path=record.get("path", ""),
-                command_line=raw.get("cmdline", ""),
-                parent_name=parent_name, user=record.get("user", ""),
-                guid=raw.get("process_guid", ""),
-                parent_guid=raw.get("parent_process_guid", ""),
-                is_new=record.get("is_new", False),
-                observed_at=Normalizer._safe_ts(record.get("timestamp")),
-                org=org,
-                demo=demo,
-            ))
+            db.add(
+                ProcessRecord(
+                    pid=record["pid"],
+                    ppid=record.get("ppid", 0),
+                    name=record.get("name", ""),
+                    path=record.get("path", ""),
+                    command_line=raw.get("cmdline", ""),
+                    parent_name=parent_name,
+                    user=record.get("user", ""),
+                    guid=raw.get("process_guid", ""),
+                    parent_guid=raw.get("parent_process_guid", ""),
+                    is_new=record.get("is_new", False),
+                    observed_at=Normalizer._safe_ts(record.get("timestamp")),
+                    org=org,
+                    demo=demo,
+                )
+            )
             saved_processes += 1
         elif source == "network":
-            db.add(NetworkConnection(
-                pid=record.get("pid", 0), process=record.get("process", ""),
-                local_ip=record.get("local_ip", ""), local_port=record.get("local_port", 0),
-                remote_ip=record.get("remote_ip", ""), remote_port=record.get("remote_port", 0),
-                state=record.get("state", ""), is_listening=record.get("is_listening", False),
-                bytes_sent=record.get("bytes_sent", 0), bytes_recv=record.get("bytes_recv", 0),
-                duration_seconds=record.get("duration_seconds", 0.0),
-                observed_at=Normalizer._safe_ts(record.get("timestamp")),
-                org=org,
-                demo=demo,
-            ))
+            db.add(
+                NetworkConnection(
+                    pid=record.get("pid", 0),
+                    process=record.get("process", ""),
+                    local_ip=record.get("local_ip", ""),
+                    local_port=record.get("local_port", 0),
+                    remote_ip=record.get("remote_ip", ""),
+                    remote_port=record.get("remote_port", 0),
+                    state=record.get("state", ""),
+                    is_listening=record.get("is_listening", False),
+                    bytes_sent=record.get("bytes_sent", 0),
+                    bytes_recv=record.get("bytes_recv", 0),
+                    duration_seconds=record.get("duration_seconds", 0.0),
+                    observed_at=Normalizer._safe_ts(record.get("timestamp")),
+                    org=org,
+                    demo=demo,
+                )
+            )
             saved_connections += 1
         elif source == "dns":
-            db.add(DnsQuery(
-                process=record.get("process", ""), pid=record.get("pid", 0),
-                query=record.get("query", ""), response=record.get("response", ""),
-                response_size=record.get("response_size", 0),
-                observed_at=Normalizer._safe_ts(record.get("timestamp")),
-                org=org,
-                demo=demo,
-            ))
+            db.add(
+                DnsQuery(
+                    process=record.get("process", ""),
+                    pid=record.get("pid", 0),
+                    query=record.get("query", ""),
+                    response=record.get("response", ""),
+                    response_size=record.get("response_size", 0),
+                    observed_at=Normalizer._safe_ts(record.get("timestamp")),
+                    org=org,
+                    demo=demo,
+                )
+            )
             saved_dns += 1
         elif source == "http":
-            db.add(HttpRequest(
-                process=record.get("process", ""), pid=record.get("pid", 0),
-                method=record.get("method", "GET"), url=record.get("url", ""),
-                host=record.get("host", ""), status_code=record.get("status_code", 0),
-                request_body_size=record.get("request_body_size", 0),
-                response_body_size=record.get("response_body_size", 0),
-                observed_at=Normalizer._safe_ts(record.get("timestamp")),
-                org=org,
-                demo=demo,
-            ))
+            db.add(
+                HttpRequest(
+                    process=record.get("process", ""),
+                    pid=record.get("pid", 0),
+                    method=record.get("method", "GET"),
+                    url=record.get("url", ""),
+                    host=record.get("host", ""),
+                    status_code=record.get("status_code", 0),
+                    request_body_size=record.get("request_body_size", 0),
+                    response_body_size=record.get("response_body_size", 0),
+                    observed_at=Normalizer._safe_ts(record.get("timestamp")),
+                    org=org,
+                    demo=demo,
+                )
+            )
             saved_http += 1
         elif source == "email":
-            db.add(EmailMessage(
-                sender=record.get("sender", ""), recipient=record.get("recipient", ""),
-                subject=record.get("subject", ""), body=record.get("body", ""),
-                attachment_types=record.get("attachment_types", ""),
-                ip_address=record.get("ip_address", ""),
-                received_at=Normalizer._safe_ts(record.get("timestamp")),
-                org=org,
-                demo=demo,
-            ))
+            db.add(
+                EmailMessage(
+                    sender=record.get("sender", ""),
+                    recipient=record.get("recipient", ""),
+                    subject=record.get("subject", ""),
+                    body=record.get("body", ""),
+                    attachment_types=record.get("attachment_types", ""),
+                    ip_address=record.get("ip_address", ""),
+                    received_at=Normalizer._safe_ts(record.get("timestamp")),
+                    org=org,
+                    demo=demo,
+                )
+            )
             saved_emails += 1
         elif source == "usb":
-            db.add(UsbDevice(
-                device_name=record.get("device_name", ""), device_id=record.get("device_id", ""),
-                vendor=record.get("vendor", ""), serial=record.get("serial", ""),
-                inserted_at=Normalizer._safe_ts(record.get("timestamp")),
-                org=org,
-                demo=demo,
-            ))
+            db.add(
+                UsbDevice(
+                    device_name=record.get("device_name", ""),
+                    device_id=record.get("device_id", ""),
+                    vendor=record.get("vendor", ""),
+                    serial=record.get("serial", ""),
+                    inserted_at=Normalizer._safe_ts(record.get("timestamp")),
+                    org=org,
+                    demo=demo,
+                )
+            )
             saved_usb += 1
         elif source == "malware":
-            db.add(FileScan(
-                file_path=record.get("file_path", ""), file_name=record.get("file_name", ""),
-                sha256=record.get("sha256", ""), md5=record.get("md5", ""),
-                size=record.get("size", 0), signed=record.get("signed", False),
-                is_malicious=record.get("is_malicious", False),
-                signature_name=record.get("signature_name", ""),
-                scanned_at=Normalizer._safe_ts(record.get("timestamp")),
-                org=org,
-                demo=demo,
-            ))
+            db.add(
+                FileScan(
+                    file_path=record.get("file_path", ""),
+                    file_name=record.get("file_name", ""),
+                    sha256=record.get("sha256", ""),
+                    md5=record.get("md5", ""),
+                    size=record.get("size", 0),
+                    signed=record.get("signed", False),
+                    is_malicious=record.get("is_malicious", False),
+                    signature_name=record.get("signature_name", ""),
+                    scanned_at=Normalizer._safe_ts(record.get("timestamp")),
+                    org=org,
+                    demo=demo,
+                )
+            )
             saved_files += 1
         elif source == "vuln":
-            db.add(VulnFinding(
-                host=record.get("host", ""),
-                product=record.get("product", ""),
-                version=record.get("version", ""),
-                cve_id=record.get("cve_id", ""),
-                cvss=float(record.get("cvss", 0.0) or 0.0),
-                severity=record.get("severity", "medium"),
-                description=record.get("description", ""),
-                remediation=record.get("remediation", ""),
-                found_at=Normalizer._safe_ts(record.get("timestamp")),
-                org=org,
-                demo=demo,
-            ))
+            db.add(
+                VulnFinding(
+                    host=record.get("host", ""),
+                    product=record.get("product", ""),
+                    version=record.get("version", ""),
+                    cve_id=record.get("cve_id", ""),
+                    cvss=float(record.get("cvss", 0.0) or 0.0),
+                    severity=record.get("severity", "medium"),
+                    description=record.get("description", ""),
+                    remediation=record.get("remediation", ""),
+                    found_at=Normalizer._safe_ts(record.get("timestamp")),
+                    org=org,
+                    demo=demo,
+                )
+            )
             saved_vulns += 1
         else:
             normalized = normalizer.normalize(record)
@@ -366,7 +405,7 @@ def run_pipeline(
             for alert in created:
                 record_alert(alert.to_dict(include_events=True))
                 streamed += 1
-        except Exception:  # noqa: BLE001 - streaming must never break collection
+        except Exception:
             logger.debug("Stream forwarding skipped", exc_info=True)
 
     # Entity graph: keep the intelligence graph fresh with cheap targeted
@@ -375,7 +414,7 @@ def run_pipeline(
         from backend.graph import get_graph_store, ingest_batch
 
         ingest_batch(db, get_graph_store(), records, created)
-    except Exception:  # noqa: BLE001 - graph must never break collection
+    except Exception:
         logger.debug("Graph ingest skipped", exc_info=True)
 
     return {
@@ -401,7 +440,10 @@ def collect_once(db: Session = Depends(get_db)):
     manager = CollectorManager()
     records = manager.collect()
     if not records:
-        return {"message": "No new live records; install pywin32 for full event log access.", "pipeline": None}
+        return {
+            "message": "No new live records; install pywin32 for full event log access.",
+            "pipeline": None,
+        }
     result = run_pipeline(db, records)
     return {"message": "Collection completed", "pipeline": result}
 
@@ -457,7 +499,7 @@ def ml_train(
 ):
     from backend.ml.tasks import train_in_background, training_active
 
-    window = f"full history" if hours is None else f"last {hours}h"
+    window = "full history" if hours is None else f"last {hours}h"
     if async_mode:
         scheduled = train_in_background(hours=hours, force=force)
         return {
@@ -465,7 +507,8 @@ def ml_train(
             "force": force,
             "window": window,
             "message": (
-                f"Background training started ({window})." if scheduled
+                f"Background training started ({window})."
+                if scheduled
                 else "A training run is already in progress."
             ),
             "training": training_active(),
@@ -493,9 +536,7 @@ def ml_status():
     # MODEL STATE, not contradictory fragments ("ATTENTION" + "no stream
     # samples"). Health = trained + fresh + not drifted; drift is the
     # hardest failure (the model no longer matches live traffic).
-    if not status["trained_at"]:
-        state = "CRITICAL"
-    elif status["drift"]:
+    if not status["trained_at"] or status["drift"]:
         state = "CRITICAL"
     elif status["stale"] or not status["ready"]:
         state = "WARNING"
@@ -504,20 +545,24 @@ def ml_status():
 
     scored_events = 0
     try:
+        from sqlalchemy import func
+
         from backend.database.connection import SessionLocal
         from backend.database.models import NormalizedEvent
-        from sqlalchemy import func
 
         db = SessionLocal()
         try:
-            scored_events = db.scalar(
-                select(func.count(NormalizedEvent.id)).where(
-                    NormalizedEvent.ml_score.isnot(None)
+            scored_events = (
+                db.scalar(
+                    select(func.count(NormalizedEvent.id)).where(
+                        NormalizedEvent.ml_score.isnot(None)
+                    )
                 )
-            ) or 0
+                or 0
+            )
         finally:
             db.close()
-    except Exception:  # noqa: BLE001 - health endpoint must never 500
+    except Exception:
         pass
 
     return {
@@ -596,7 +641,9 @@ def ml_explain_alert(alert_id: int, db: Session = Depends(get_db)):
     from backend.database.models import Alert
     from backend.ml.explain import explain_alert
 
-    alert = db.get(Alert, alert_id, options=[selectinload(Alert.events).selectinload("*")])
+    alert = db.get(
+        Alert, alert_id, options=[selectinload(Alert.events).selectinload("*")]
+    )
     if not alert:
         from fastapi import HTTPException
 
@@ -739,12 +786,12 @@ def update_check(db: Session = Depends(get_db)):
     manifest: dict | None = None
     try:
         if source.startswith(("http://", "https://")):
-            with urlopen(source, timeout=10) as resp:  # noqa: S310 - admin-configured URL
+            with urlopen(source, timeout=10) as resp:
                 raw = resp.read()
         else:
             raw = Path(source).read_bytes()
         manifest = json.loads(raw)
-    except Exception as exc:  # noqa: BLE001 - update checks must never break the API
+    except Exception as exc:
         return {
             "update_available": False,
             "current": APP_VERSION,
@@ -756,7 +803,7 @@ def update_check(db: Session = Depends(get_db)):
     sha256 = str(manifest.get("sha256", ""))
     if url and sha256:
         try:
-            with urlopen(url, timeout=30) as resp:  # noqa: S310 - admin-configured URL
+            with urlopen(url, timeout=30) as resp:
                 actual = hashlib.sha256(resp.read()).hexdigest()
             if actual.lower() != sha256.lower():
                 return {
@@ -765,7 +812,7 @@ def update_check(db: Session = Depends(get_db)):
                     "latest": latest,
                     "error": "manifest hash mismatch - download corrupted",
                 }
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             return {
                 "update_available": False,
                 "current": APP_VERSION,
@@ -802,7 +849,9 @@ def data_quality(db: Session = Depends(get_db)):
 
 
 @router.get("/data-quality/history")
-def data_quality_history(limit: int = Query(50, ge=1, le=500), db: Session = Depends(get_db)):
+def data_quality_history(
+    limit: int = Query(50, ge=1, le=500), db: Session = Depends(get_db)
+):
     """Persisted quality snapshots (oldest first) for trend review."""
     from backend.collectors.quality import snapshot_history
 
@@ -839,7 +888,13 @@ def data_quality_repair(
         restart_service=body.restart_service,
         retrain=body.retrain,
     )
-    log_action(db, actor_name(request), "data_quality.repair", "system", "data-quality",
-               f"{body.reason or 'manual'} | triggered={result.get('triggered')}",
-               client_ip(request))
+    log_action(
+        db,
+        actor_name(request),
+        "data_quality.repair",
+        "system",
+        "data-quality",
+        f"{body.reason or 'manual'} | triggered={result.get('triggered')}",
+        client_ip(request),
+    )
     return result

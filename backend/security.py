@@ -11,13 +11,13 @@ The agent channel uses its own ``X-Agent-Key`` scheme and is exempt from this
 middleware. When auth is disabled (``BARAQ_AUTH_ENABLED=0``) every caller is
 treated as ``admin`` so local development and the test suite keep working.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import Depends, Header, HTTPException, Request
-from sqlalchemy import select
 
 from backend.auth import verify_token
 from backend.config import API_KEYS, AUTH_ENABLED, ENFORCE_ADMIN_MFA
@@ -29,12 +29,16 @@ logger = logging.getLogger("baraq.auth")
 API_KEY_HEADER = "X-API-Key"
 
 
-def authenticate(x_api_key: str | None = Header(default=None, alias=API_KEY_HEADER)) -> str:
+def authenticate(
+    x_api_key: str | None = Header(default=None, alias=API_KEY_HEADER)
+) -> str:
     """Resolve the caller's role from the API key (or admin when disabled)."""
     if not AUTH_ENABLED:
         return "admin"
     if not x_api_key:
-        raise HTTPException(status_code=401, detail="Missing API key (X-API-Key header)")
+        raise HTTPException(
+            status_code=401, detail="Missing API key (X-API-Key header)"
+        )
     role = API_KEYS.get(x_api_key.strip())
     if not role:
         raise HTTPException(status_code=401, detail="Invalid API key")
@@ -132,6 +136,7 @@ def require_role(*roles: str, allow_pending_password_change: bool = False) -> Ca
     via ``/api/auth/settings/change-password`` (which uses
     ``allow_pending_password_change=True``).
     """
+
     def _dependency(request: Request, db=Depends(get_db)):
         if not AUTH_ENABLED:
             return "admin"
@@ -183,6 +188,7 @@ def require_role(*roles: str, allow_pending_password_change: bool = False) -> Ca
                 detail=f"Requires role(s): {', '.join(roles)}",
             )
         return key or "unknown"
+
     return _dependency
 
 
@@ -207,9 +213,7 @@ def require_auth_enroll_mfa(request: Request, db=Depends(get_db)):
     if payload:
         user = db.get(User, payload.get("uid"))
         if not user or not user.is_active:
-            raise HTTPException(
-                status_code=401, detail="Invalid or expired session"
-            )
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
         return user.username
     key = request.headers.get(API_KEY_HEADER)
     role = API_KEYS.get((key or "").strip()) if key else None
