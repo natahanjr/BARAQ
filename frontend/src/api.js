@@ -232,7 +232,7 @@ export const api = {
   },
   networkStats: () => request("/api/network/stats"),
   ipGeo: (ip) => request(`/api/network/geo?ip=${encodeURIComponent(ip)}`),
-  suppressions: () => request("/api/alerts/suppressions"),
+  suppressions: () => request("/api/alerts/suppressions/list"),
   eventStatistics: () => request("/api/events/statistics"),
 
   datasetStatus: () => request("/api/telemetry/dataset"),
