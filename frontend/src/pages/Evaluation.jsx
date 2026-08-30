@@ -51,6 +51,9 @@ export default function Evaluation() {
   const [history, setHistory] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [fullDb, setFullDb] = useState(null);
+  const [fullDbBusy, setFullDbBusy] = useState(false);
+  const [fullDbError, setFullDbError] = useState("");
 
   const load = () => {
     api
@@ -77,12 +80,26 @@ export default function Evaluation() {
     }
   };
 
+  const runFullDb = async () => {
+    setFullDbBusy(true);
+    setFullDbError("");
+    setFullDb(null);
+    try {
+      const result = await api.evaluationFullDB();
+      setFullDb(result);
+    } catch (e) {
+      setFullDbError(e.message);
+    } finally {
+      setFullDbBusy(false);
+    }
+  };
+
   const runs = latest?.items ?? [];
   const overall = latest?.overall;
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6">
+      <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-[24px] font-bold tracking-[-0.03em] text-white">
@@ -92,21 +109,151 @@ export default function Evaluation() {
               Accuracy metrics for all detection scenarios
             </p>
           </div>
-          <button
-            type="button"
-            onClick={run}
-            disabled={busy}
-            className="rounded-xl border border-cyan-500/25 bg-cyan-500/[0.08] px-6 py-2.5 text-[13px] font-semibold text-cyan-400 transition-all hover:bg-cyan-500/[0.15] hover:shadow-[0_0_20px_-4px_rgba(0,240,255,0.2)] disabled:opacity-50"
-          >
-            {busy ? "Running evaluation..." : "Run Detection Evaluation"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={runFullDb}
+              disabled={fullDbBusy}
+              className="rounded-xl border border-violet-500/25 bg-violet-500/[0.08] px-6 py-2.5 text-[13px] font-semibold text-violet-400 transition-all hover:bg-violet-500/[0.15] hover:shadow-[0_0_20px_-4px_rgba(139,92,246,0.2)] disabled:opacity-50"
+            >
+              {fullDbBusy ? "Evaluating full DB..." : "Run Full DB Evaluation"}
+            </button>
+            <button
+              type="button"
+              onClick={run}
+              disabled={busy}
+              className="rounded-xl border border-cyan-500/25 bg-cyan-500/[0.08] px-6 py-2.5 text-[13px] font-semibold text-cyan-400 transition-all hover:bg-cyan-500/[0.15] hover:shadow-[0_0_20px_-4px_rgba(0,240,255,0.2)] disabled:opacity-50"
+            >
+              {busy ? "Running evaluation..." : "Run Scenario Evaluation"}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+      {/* Full DB Evaluation Results */}
+      {(fullDb || fullDbBusy || fullDbError) && (
+        <div className="rounded-3xl border border-violet-500/20 bg-violet-500/[0.03] transition-all duration-200 p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-violet-400" />
+            <h2 className="text-[15px] font-semibold text-white">Full Database Evaluation</h2>
+          </div>
+          <p className="text-xs text-slate-400">
+            Runs detection against ALL {fullDb?.total_events?.toLocaleString() || "..."} events
+            in the production database. Ground truth from verdicts + inferred labels.
+          </p>
+
+          {fullDbBusy && (
+            <div className="flex items-center gap-3 py-8 text-slate-400">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
+              <span className="text-sm">Evaluating all events in the database...</span>
+            </div>
+          )}
+
+          {fullDbError && <ErrorBanner message={fullDbError} />}
+
+          {fullDb && !fullDbBusy && (
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[
+                  ["Total Events", fullDb.total_events?.toLocaleString(), "text-white"],
+                  ["Attack Events", fullDb.attack_events?.toLocaleString(), "text-red-400"],
+                  ["Benign Events", fullDb.benign_events?.toLocaleString(), "text-emerald-400"],
+                  ["ML Scored", fullDb.ml_scored_events?.toLocaleString(), "text-violet-400"],
+                ].map(([label, value, color]) => (
+                  <div key={label} className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500/70">{label}</p>
+                    <p className={`mt-1 text-lg font-bold ${color}`}>{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+                {[
+                  ["Accuracy", `${(fullDb.overall.accuracy * 100).toFixed(2)}%`, "text-emerald-400"],
+                  ["Precision", `${(fullDb.overall.precision * 100).toFixed(2)}%`, "text-cyan-400"],
+                  ["Recall", `${(fullDb.overall.recall * 100).toFixed(2)}%`, "text-sky-400"],
+                  ["F1-score", `${(fullDb.overall.f1_score * 100).toFixed(2)}%`, "text-violet-400"],
+                  ["FP rate", `${(fullDb.overall.false_positive_rate * 100).toFixed(2)}%`, "text-amber-400"],
+                  ["Eval time", `${fullDb.detection_time_ms?.toFixed(0)} ms`, "text-slate-200"],
+                ].map(([label, value, color]) => (
+                  <div key={label} className="rounded-2xl border border-violet-500/10 bg-white/[0.025] p-5 text-center">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500/70">{label}</p>
+                    <p className={`mt-2 text-2xl font-bold ${color}`}>{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500/70 mb-3">Confusion Matrix</p>
+                <div className="grid grid-cols-2 gap-3 max-w-md">
+                  <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-3 text-center">
+                    <p className="text-[10px] text-emerald-400/70">True Positives</p>
+                    <p className="text-xl font-bold text-emerald-400">{fullDb.overall.true_positives?.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-center">
+                    <p className="text-[10px] text-red-400/70">False Positives</p>
+                    <p className="text-xl font-bold text-red-400">{fullDb.overall.false_positives?.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-xl bg-slate-500/10 border border-slate-500/20 p-3 text-center">
+                    <p className="text-[10px] text-slate-400/70">True Negatives</p>
+                    <p className="text-xl font-bold text-slate-400">{fullDb.overall.true_negatives?.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-center">
+                    <p className="text-[10px] text-amber-400/70">False Negatives</p>
+                    <p className="text-xl font-bold text-amber-400">{fullDb.overall.false_negatives?.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+
+              {fullDb.per_event_class?.length > 0 && (
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500/70 mb-3">Per Event Class Breakdown</p>
+                  <div className="overflow-x-auto">
+                    <table className="data-table w-full">
+                      <thead>
+                        <tr className="border-b border-white/[0.06] text-[10px] uppercase tracking-wider text-slate-500/70">
+                          <th className="px-3 py-2 text-left">Event</th>
+                          <th className="px-3 py-2 text-left">Count</th>
+                          <th className="px-3 py-2 text-left">TP</th>
+                          <th className="px-3 py-2 text-left">FP</th>
+                          <th className="px-3 py-2 text-left">TN</th>
+                          <th className="px-3 py-2 text-left">FN</th>
+                          <th className="px-3 py-2 text-left">Accuracy</th>
+                          <th className="px-3 py-2 text-left">F1</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {fullDb.per_event_class.map((row) => (
+                          <tr key={row.event_id} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
+                            <td className="px-3 py-2 text-xs font-medium text-slate-300">{row.event_name}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-slate-400">{row.total}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-emerald-400">{row.tp}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-red-400">{row.fp}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-slate-400">{row.tn}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-amber-400">{row.fn}</td>
+                            <td className="px-3 py-2">
+                              <MetricCell value={row.accuracy} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <MetricCell value={row.f1_score} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
         <p className="text-xs leading-relaxed text-slate-400">
-          Runs the 5 attack scenarios plus a normal baseline through the full detection pipeline in
-          an isolated temporary database — never touches production data.
+          <strong>Full DB Evaluation</strong> runs detection against ALL events in the production database
+          for real-world accuracy metrics. <strong>Scenario Evaluation</strong> tests 5 attack scenarios
+          in an isolated temp database — never touches production data.
         </p>
       </div>
 
@@ -114,7 +261,7 @@ export default function Evaluation() {
 
       {!latest && !error && <Loading label="Loading evaluation results" />}
       {latest && runs.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025] py-16 text-center">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 py-16 text-center">
           <span className="text-4xl">🧪</span>
           <h3 className="mt-4 text-sm font-semibold text-white">No evaluation run yet</h3>
           <p className="mt-1 text-[13px] text-slate-400">
@@ -149,7 +296,7 @@ export default function Evaluation() {
               ].map(([label, value, color]) => (
                 <div
                   key={label}
-                  className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-5 text-center"
+                  className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-5 text-center"
                 >
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500/70">
                     {label}
@@ -160,7 +307,7 @@ export default function Evaluation() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
             <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400">
               <span className="h-1 w-1 rounded-full bg-cyan-400" />
               Per-Scenario Results
@@ -168,7 +315,7 @@ export default function Evaluation() {
             <div className="overflow-x-auto">
               <table className="data-table w-full">
                 <thead>
-                  <tr className="border-b border-white/[0.06] text-[10px] uppercase tracking-[0.08em] text-slate-500/70">
+                  <tr className="border-b border-white/[0.06] text-[11px] uppercase tracking-[0.08em] text-slate-500/70">
                     <th className="px-4 py-3 text-left">Scenario</th>
                     <th className="px-4 py-3 text-left">Samples</th>
                     <th className="px-4 py-3 text-left">TP</th>
@@ -184,7 +331,7 @@ export default function Evaluation() {
                 </thead>
                 <tbody>
                   {runs.map((r) => (
-                    <tr key={r.id} className="border-b border-white/[0.04] transition-colors hover:bg-white/[0.02]">
+                    <tr key={r.id} className="border-b border-white/[0.04] transition-all hover:bg-white/[0.02]">
                       <td className="px-4 py-2.5 text-xs font-medium text-slate-300">
                         {SCENARIO_LABELS[r.scenario] || r.scenario}
                       </td>
@@ -206,7 +353,7 @@ export default function Evaluation() {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
               <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400">
                 <span className="h-1 w-1 rounded-full bg-cyan-400" />
                 Per-scenario precision & recall
@@ -236,7 +383,7 @@ export default function Evaluation() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
               <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400">
                 <span className="h-1 w-1 rounded-full bg-cyan-400" />
                 Detection time per scenario
@@ -262,7 +409,7 @@ export default function Evaluation() {
           </div>
 
           {history && history.items.length > 0 && (
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] transition-all duration-200 p-6">
               <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-400">
                 <span className="h-1 w-1 rounded-full bg-cyan-400" />
                 Run history (last {history.items.length})
