@@ -147,10 +147,16 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
           y: 200 + Math.random() * 100,
           risk: 0,
           connections: 0,
+          suspiciousPorts: 0,
+          totalBytes: 0,
         });
       }
       const srcNode = nodeMap.get(src);
       srcNode.connections = (srcNode.connections || 0) + 1;
+      srcNode.totalBytes = (srcNode.totalBytes || 0) + (conn.bytes_sent || 0) + (conn.bytes_recv || 0);
+      if (conn.remote_port && [4444, 1337, 31337, 6667, 6666, 443].includes(conn.remote_port)) {
+        srcNode.suspiciousPorts = (srcNode.suspiciousPorts || 0) + 1;
+      }
 
       // Destination node
       if (!nodeMap.has(dst)) {
@@ -162,14 +168,21 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
           y: 200 + Math.random() * 100,
           risk: 0,
           connections: 0,
+          suspiciousPorts: 0,
+          totalBytes: 0,
         });
       }
       const dstNode = nodeMap.get(dst);
       dstNode.connections = (dstNode.connections || 0) + 1;
+      dstNode.totalBytes = (dstNode.totalBytes || 0) + (conn.bytes_sent || 0) + (conn.bytes_recv || 0);
+      if (conn.remote_port && [4444, 1337, 31337, 6667, 6666, 443].includes(conn.remote_port)) {
+        dstNode.suspiciousPorts = (dstNode.suspiciousPorts || 0) + 1;
+      }
 
-      // Edge
+      // Edge — use port+state as part of key to avoid dedup
+      const edgeKey = `${src}-${dst}-${conn.remote_port || "0"}-${conn.state || "TCP"}`;
       edgeList.push({
-        id: `${src}-${dst}`,
+        id: edgeKey,
         source: src,
         target: dst,
         label: `${conn.state || "TCP"} ${conn.remote_port || ""}`,
@@ -178,6 +191,15 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
         bytes: (conn.bytes_sent || 0) + (conn.bytes_recv || 0),
         connection: conn,
       });
+    });
+
+    // Compute risk per node
+    nodeMap.forEach((nd) => {
+      if (nd.type === "internet") { nd.risk = 0; return; }
+      const connScore = Math.min(40, (nd.connections || 0) * 3);
+      const suspScore = (nd.suspiciousPorts || 0) * 12;
+      const byteScore = (nd.totalBytes || 0) > 10 * 1024 * 1024 ? 20 : (nd.totalBytes || 0) > 1 * 1024 * 1024 ? 10 : 0;
+      nd.risk = Math.min(100, connScore + suspScore + byteScore);
     });
 
     return { nodes: Array.from(nodeMap.values()), edges: edgeList };
@@ -211,6 +233,7 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
     if (nd.risk >= 80) return "var(--severity-critical)";
     if (nd.risk >= 60) return "var(--severity-high)";
     if (nd.risk >= 40) return "var(--severity-medium)";
+    if (!isPrivateIP(nd.id)) return "var(--accent-cyan)";
     return "var(--status-healthy)";
   };
 
@@ -235,6 +258,7 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
   };
 
   const nodeMap = new Map(layoutNodes.map((nd) => [nd.id, nd]));
+  const maxBytes = useMemo(() => Math.max(...edges.map((e) => e.bytes || 0), 1), [edges]);
 
   return (
     <div className="relative w-full overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-inset)] transition-all duration-200" style={{ height: 420 }}>
@@ -282,7 +306,6 @@ function NetworkTopology({ connections, onNodeClick, onConnectionClick }) {
             const tgt = nodeMap.get(edge.target);
             if (!src || !tgt) return null;
             const bytes = edge.bytes || 0;
-            const maxBytes = Math.max(...edges.map((e) => e.bytes || 0), 1);
             const width = 1 + Math.min(5, (bytes / maxBytes) * 5);
             const isUpload = (edge.connection?.bytes_sent || 0) >= (edge.connection?.bytes_recv || 0);
             const edgeColor = bytes > 0 ? (isUpload ? "var(--severity-high)" : "var(--accent-cyan)") : "var(--border-default)";
@@ -775,6 +798,8 @@ function HTTPTable({ requests }) {
             <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Host</th>
             <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Path</th>
             <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Status</th>
+            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Req Size</th>
+            <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Res Size</th>
             <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[var(--tracking-widest)] text-[var(--fg-muted)] border-b border-[var(--border-subtle)]">Process</th>
           </tr>
         </thead>
@@ -790,12 +815,18 @@ function HTTPTable({ requests }) {
                   </span>
                 </td>
                 <td className="px-4 py-3 font-mono text-[12px] text-[var(--fg-secondary)] max-w-[200px] truncate">{r.host || "\u2014"}</td>
-                <td className="px-4 py-3 font-mono text-[11px] text-[var(--fg-muted)] max-w-[180px] truncate">{r.path || "/"}</td>
+                <td className="px-4 py-3 font-mono text-[11px] text-[var(--fg-muted)] max-w-[180px] truncate" title={r.url || r.path || "/"}>{r.path || r.url || "/"}</td>
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-bold" style={{ color: statusColor }}>
                     <span className="h-1.5 w-1.5 rounded-full" style={{ background: statusColor }} />
                     {r.status_code || "\u2014"}
                   </span>
+                </td>
+                <td className="px-4 py-3 text-[11px] font-mono text-[var(--fg-muted)] tabular-nums">
+                  {r.request_body_size ? fmtBytes(r.request_body_size) : <span className="text-[var(--fg-faint)]">\u2014</span>}
+                </td>
+                <td className="px-4 py-3 text-[11px] font-mono text-[var(--fg-muted)] tabular-nums">
+                  {r.response_body_size ? fmtBytes(r.response_body_size) : <span className="text-[var(--fg-faint)]">\u2014</span>}
                 </td>
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--fg-secondary)] max-w-[140px]">
@@ -1115,7 +1146,7 @@ function AnalyticsView({ stats, connections }) {
  * IP Investigation View (stays within Network Analyzer)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function IPInvestigation({ ip, connections, dnsQueries, httpRequests, onClose, navigate, toast }) {
+function IPInvestigation({ ip, connections, dnsQueries, httpRequests, onClose, navigate, toast, onSelectConnection }) {
   const relatedConns = useMemo(() => connections.filter((c) => c.local_ip === ip || c.remote_ip === ip), [connections, ip]);
   const relatedDns = useMemo(() => dnsQueries.filter((d) => d.response === ip || d.query?.includes(ip)), [dnsQueries, ip]);
   const relatedHttp = useMemo(() => httpRequests.filter((h) => h.host === ip || h.host?.includes(ip)), [httpRequests, ip]);
@@ -1212,7 +1243,7 @@ function IPInvestigation({ ip, connections, dnsQueries, httpRequests, onClose, n
 
       {activeTab === "connections" && (
         <div className="rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-card)] overflow-hidden">
-          <ConnectionTable connections={relatedConns} onSelect={(c) => setSelectedEdge({ connection: c })} />
+          <ConnectionTable connections={relatedConns} onSelect={(c) => onSelectConnection?.({ connection: c })} />
         </div>
       )}
       {activeTab === "dns" && (
@@ -1342,6 +1373,7 @@ export default function NetworkAnalyzer() {
         onClose={() => { setInvestigateIp(null); navigate("/network"); }}
         navigate={navigate}
         toast={toast}
+        onSelectConnection={setSelectedEdge}
       />
     );
   }
@@ -1399,7 +1431,7 @@ export default function NetworkAnalyzer() {
           </select>
           <button
             onClick={() => {
-              const data = connections.map((c) => ({
+              const data = filteredConnections.map((c) => ({
                 local: `${c.local_ip}:${c.local_port}`, remote: `${c.remote_ip}:${c.remote_port}`,
                 state: c.state, sent: c.bytes_sent, recv: c.bytes_recv, process: c.process, org: c.org || "", observed: c.observed_at,
               }));
