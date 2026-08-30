@@ -87,3 +87,10 @@ def latest(db: Session = Depends(get_db)):
         .order_by(EvaluationRun.id)
     ).all()
     return {"items": [r.to_dict() for r in runs], "overall": overall.to_dict()}
+
+
+@router.post("/full-db", dependencies=[Depends(require_admin)])
+def run_full_db(use_ml: bool = True, db: Session = Depends(get_db)):
+    """Evaluate detection accuracy against ALL events in the production DB."""
+    from backend.evaluation.full_db import run_full_db_evaluation
+    return run_full_db_evaluation(db, use_ml=use_ml)
