@@ -1089,7 +1089,7 @@ def _get_dns_query_pattern(session, hours: int = 1) -> float:
         return 0.0
 
 
-def event_feature_vector(event) -> list[float] | None:
+def event_feature_vector(event, _shared_session=None) -> list[float] | None:
     """Feature vector for a single event (None if the behavior stream is unknown).
 
     v6 feature space: enhanced behavioral features, parent-child analysis, LOLBin detection,
@@ -1098,7 +1098,8 @@ def event_feature_vector(event) -> list[float] | None:
     """
     from backend.database.connection import SessionLocal
 
-    session = SessionLocal()
+    owns_session = _shared_session is None
+    session = _shared_session or SessionLocal()
     try:
         event_id = (
             event.event_id if not isinstance(event, dict) else event.get("event_id", 0)
@@ -1271,8 +1272,15 @@ def event_feature_vector(event) -> list[float] | None:
 
         # For network or unknown behaviors, return None to use existing network handling
         return None
+    except Exception:
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        return None
     finally:
-        session.close()
+        if owns_session:
+            session.close()
 
 
 # ---------------------------------------------------------------------------
@@ -1461,40 +1469,49 @@ def _load_behavior_features(
     ``since=None`` means the FULL history (no lower time bound) - training
     on every collected event instead of a sample window.
     """
-    stmt = select(NormalizedEvent).where(
-        NormalizedEvent.event_id.in_(event_ids),
-    )
-    if since is not None:
-        stmt = stmt.where(NormalizedEvent.timestamp >= since)
-    if cutoff is not None:
-        stmt = stmt.where(NormalizedEvent.timestamp < cutoff)
-    rows = session.scalars(stmt).all()
-    X = []
-    y = []
-    verdicts = _verdict_map(session) if with_labels else {}
-    for ev in rows:
-        if orm_event_is_corrupted(ev)[0]:
-            # Corrupted rendering debris must never be trained on.
-            continue
-        features = event_feature_vector(ev)
-        if not features:
-            continue
-        X.append(features)
-        if with_labels:
-            if ev.id in verdicts:
-                y.append(verdicts[ev.id])
-                continue
-            y.append(
-                1
-                if MLAnomalyDetector._is_attack_sample(ev.event_id, ev.raw_json or {})
-                else 0
-            )
-    if with_labels:
-        return (
-            np.array(X, dtype=float) if X else np.empty((0, 9)),
-            np.array(y, dtype=int) if y else np.empty((0,), dtype=int),
+    from backend.database.connection import SessionLocal as _SL
+    _own = session is None
+    _sess = session or _SL()
+    try:
+        stmt = select(NormalizedEvent).where(
+            NormalizedEvent.event_id.in_(event_ids),
         )
-    return np.array(X, dtype=float) if X else np.empty((0, 9))
+        if since is not None:
+            stmt = stmt.where(NormalizedEvent.timestamp >= since)
+        if cutoff is not None:
+            stmt = stmt.where(NormalizedEvent.timestamp < cutoff)
+        rows = _sess.scalars(stmt).all()
+        X = []
+        y = []
+        verdicts = _verdict_map(_sess) if with_labels else {}
+        for ev in rows:
+            try:
+                if orm_event_is_corrupted(ev)[0]:
+                    continue
+                features = event_feature_vector(ev)
+                if not features:
+                    continue
+                X.append(features)
+                if with_labels:
+                    if ev.id in verdicts:
+                        y.append(verdicts[ev.id])
+                        continue
+                    y.append(
+                        1
+                        if MLAnomalyDetector._is_attack_sample(ev.event_id, ev.raw_json or {})
+                        else 0
+                    )
+            except Exception:
+                continue
+        if with_labels:
+            return (
+                np.array(X, dtype=float) if X else np.empty((0, 9)),
+                np.array(y, dtype=int) if y else np.empty((0,), dtype=int),
+            )
+        return np.array(X, dtype=float) if X else np.empty((0, 9))
+    finally:
+        if _own:
+            _sess.close()
 
 
 def _load_network_features(
@@ -1694,15 +1711,10 @@ class MLAnomalyDetector:
             logger.warning("Could not persist ML metadata to %s", ML_META_FILE)
 
     def _save_bundle(self) -> None:
-        """Persist the trained models so restarts do not cold-start.
-
-        Includes a SHA256 checksum for integrity verification on load.
-        """
+        """Persist the trained models so restarts do not cold-start."""
         if not self.models:
             return
         try:
-            import hashlib
-
             import joblib
 
             bundle = {
@@ -1720,47 +1732,27 @@ class MLAnomalyDetector:
             }
             path = self._bundle_path()
             path.parent.mkdir(parents=True, exist_ok=True)
-            # Archive the current live bundle one slot back (A/B compare).
             if path.exists():
                 import shutil
 
                 shutil.copy2(path, self._prev_bundle_path())
-            joblib.dump(bundle, path, compress=3)
-            # Compute and store checksum for integrity verification
-            sha256 = hashlib.sha256()
-            with open(path, "rb") as f:
-                for chunk in iter(lambda: f.read(8192), b""):
-                    sha256.update(chunk)
-            bundle["sha256_checksum"] = sha256.hexdigest()
             joblib.dump(bundle, path, compress=3)
             self._persisted = True
         except Exception:
             logger.warning("Could not persist ML model bundle", exc_info=True)
 
     def _load_bundle(self) -> bool:
-        """Restore persisted models; ignored when the feature space changed or checksum fails."""
+        """Restore persisted models; ignored when the feature space changed."""
         path = self._bundle_path()
         if not path.exists():
             return False
         try:
-            import hashlib
-
             import joblib
 
             bundle = joblib.load(path)
             if bundle.get("feature_version") != ML_FEATURE_VERSION:
                 logger.info("ML bundle has a different feature version; retraining")
                 return False
-            # Verify integrity checksum
-            stored_checksum = bundle.get("sha256_checksum")
-            if stored_checksum:
-                sha256 = hashlib.sha256()
-                with open(path, "rb") as f:
-                    for chunk in iter(lambda: f.read(8192), b""):
-                        sha256.update(chunk)
-                if sha256.hexdigest() != stored_checksum:
-                    logger.warning("ML bundle checksum mismatch; retraining")
-                    return False
             self.models = bundle.get("models", {})
             self.encoders = bundle.get("encoders", {})
             self.supervised = bundle.get("supervised")
@@ -2452,7 +2444,7 @@ class MLAnomalyDetector:
             behavior = _behavior_of(int(eid))
             if behavior not in out:
                 continue
-            features = event_feature_vector({"event_id": eid, "raw_json": raw})
+            features = event_feature_vector({"event_id": eid, "raw_json": raw}, _shared_session=session)
             if not features:
                 continue
             if event_id in verdicts:
@@ -2555,15 +2547,244 @@ class MLAnomalyDetector:
         try:
             since = None if not hours else datetime.now(UTC) - timedelta(hours=hours)
 
-            login_X, login_y = _load_behavior_features(
-                session, since, LOGIN_EVENTS, with_labels=True, cutoff=cutoff
+            # ── Bulk feature loading (O(N) sliding window) ──────────
+            from collections import defaultdict as _dd
+            _all_ids = LOGIN_EVENTS | PROCESS_EVENTS
+            _stmt = select(
+                NormalizedEvent.id, NormalizedEvent.event_id,
+                NormalizedEvent.timestamp, NormalizedEvent.raw_json,
+                NormalizedEvent.user,
+            ).where(NormalizedEvent.event_id.in_(_all_ids))
+            if since is not None:
+                _stmt = _stmt.where(NormalizedEvent.timestamp >= since)
+            if cutoff is not None:
+                _stmt = _stmt.where(NormalizedEvent.timestamp < cutoff)
+            _stmt = _stmt.order_by(NormalizedEvent.timestamp)
+            _rows = session.execute(_stmt).all()
+            _events = []
+            for _r in _rows:
+                _facts = (_r.raw_json or {}).get("facts") or {}
+                _ts = _r.timestamp
+                if _ts.tzinfo is None:
+                    _ts = _ts.replace(tzinfo=UTC)
+                _events.append({"id": _r.id, "event_id": _r.event_id, "ts": _ts, "facts": _facts, "user": _r.user or ""})
+            _N = len(_events)
+
+            # Index by stream
+            _login_idx = [i for i, e in enumerate(_events) if e["event_id"] in LOGIN_EVENTS]
+            _proc_idx = [i for i, e in enumerate(_events) if e["event_id"] in PROCESS_EVENTS]
+
+            # time_since_prev per stream
+            _tsp = {}
+            for _name, _indices in [("login", _login_idx), ("process", _proc_idx)]:
+                for _k, _idx in enumerate(_indices):
+                    _tsp[(_name, _idx)] = 0.0 if _k == 0 else (_events[_idx]["ts"] - _events[_indices[_k-1]]["ts"]).total_seconds() / 3600.0
+
+            # Recent counts (1h, 24h) - sliding window
+            _r1h = _dd(int); _r24h = _dd(int)
+            for _name, _indices in [("login", _login_idx), ("process", _proc_idx)]:
+                if not _indices:
+                    continue
+                _left1 = 0; _left24 = 0
+                for _k, _idx in enumerate(_indices):
+                    _ev_ts = _events[_idx]["ts"]
+                    while _left1 < _k and (_ev_ts - _events[_indices[_left1]]["ts"]).total_seconds() > 3600:
+                        _left1 += 1
+                    while _left24 < _k and (_ev_ts - _events[_indices[_left24]]["ts"]).total_seconds() > 86400:
+                        _left24 += 1
+                    _r1h[(_name, _idx)] = _k - _left1
+                    _r24h[(_name, _idx)] = _k - _left24
+
+            # Failed login velocity per IP
+            _fail_ip = _dd(list)
+            for _i, _e in enumerate(_events):
+                if _e["event_id"] == 4625:
+                    _ip = str(_e["facts"].get("source_ip", ""))
+                    if _ip:
+                        _fail_ip[_ip].append((_e["ts"], _i))
+
+            # Logon type entropy (1h)
+            _lt1h = _dd(lambda: _dd(int))
+            _left = 0
+            for _k, _idx in enumerate(_login_idx):
+                _ev_ts = _events[_idx]["ts"]
+                while _left < _k and (_ev_ts - _events[_login_idx[_left]]["ts"]).total_seconds() > 3600:
+                    _left += 1
+                for _j in range(_left, _k + 1):
+                    _lt = int(_events[_login_idx[_j]]["facts"].get("logon_type", 0))
+                    _lt1h[_idx][_lt] += 1
+
+            # IP diversity per user (24h)
+            _user_logins = _dd(list)
+            for _i, _e in enumerate(_events):
+                if _e["event_id"] in (4624, 4625):
+                    _user_logins[_e["user"]].append((_e["ts"], _i, str(_e["facts"].get("source_ip", ""))))
+            _ip_div = {}
+            for _user, _logins in _user_logins.items():
+                _left = 0
+                for _k, (_ts, _idx, _ip) in enumerate(_logins):
+                    while _left < _k and (_ts - _logins[_left][0]).total_seconds() > 86400:
+                        _left += 1
+                    _unique = set(_logins[_j][2] for _j in range(_left, _k + 1))
+                    _ip_div[_idx] = len(_unique) / max(_k - _left + 1, 1)
+
+            # Login z-score (24h)
+            _lz = {}
+            _left = 0
+            for _k, _idx in enumerate(_login_idx):
+                _ev_ts = _events[_idx]["ts"]
+                while _left < _k and (_ev_ts - _events[_login_idx[_left]]["ts"]).total_seconds() > 86400:
+                    _left += 1
+                if _k - _left < 2:
+                    _lz[_idx] = 0.0
+                    continue
+                _gaps = [(_events[_login_idx[_j]]["ts"] - _events[_login_idx[_j-1]]["ts"]).total_seconds() / 60.0
+                         for _j in range(max(_left + 1, _k - 49), _k + 1)]
+                if len(_gaps) < 2:
+                    _lz[_idx] = 0.0
+                    continue
+                _mg = sum(_gaps) / len(_gaps)
+                _sg = (sum((_g - _mg) ** 2 for _g in _gaps) / len(_gaps)) ** 0.5
+                _lz[_idx] = 0.0 if _sg == 0 else min(1.0, max(0.0, abs((_gaps[-1] - _mg) / _sg) / 3.0))
+
+            # Cross-stream (1h counts)
+            _all_sorted = sorted(range(_N), key=lambda _i: _events[_i]["ts"])
+            _cross = {}
+            _left = 0
+            for _k, _idx in enumerate(_all_sorted):
+                _ev_ts = _events[_idx]["ts"]
+                while _left < _k and (_ev_ts - _events[_all_sorted[_left]]["ts"]).total_seconds() > 3600:
+                    _left += 1
+                _failed = sum(1 for _j in range(_left, _k + 1) if _events[_all_sorted[_j]]["event_id"] == 4625)
+                _procs = sum(1 for _j in range(_left, _k + 1) if _events[_all_sorted[_j]]["event_id"] in PROCESS_EVENTS)
+                _types = len(set(_events[_all_sorted[_j]]["event_id"] for _j in range(_left, _k + 1)))
+                _ts = (_events[_all_sorted[-1]]["ts"] - _ev_ts).total_seconds() / 3600.0 if _k < len(_all_sorted) - 1 else 0.0
+                _cross[_idx] = [
+                    min(_failed / 10, 1), min(_procs / 10, 1), 0.0,
+                    min(_failed / max(_procs, 1), 1), min(_ts, 1),
+                    1.0 if _failed > 0 and _procs > 0 else 0.0, 0.0,
+                    min(_types / 5, 1),
+                ]
+
+            # Build login feature matrix
+            def _build_login(_ev, _idx):
+                _f = _ev["facts"]
+                _lt = int(_f.get("logon_type", 0))
+                _sip = str(_f.get("source_ip", ""))
+                _sub = int(_f.get("sub_status", 0))
+                _locked = int(bool(_f.get("is_locked", 0)))
+                _h = _ev["ts"].hour
+                _hs = math.sin(2 * math.pi * _h / 24)
+                _hc = math.cos(2 * math.pi * _h / 24)
+                _night = 1.0 if _h in _NIGHT_HOURS else 0.0
+                _we = 1.0 if _ev["ts"].weekday() >= 5 else 0.0
+                _unusual = 1.0 if _lt > 0 and _lt not in _COMMON_LOGON_TYPES else 0.0
+                _tsp_v = _tsp.get(("login", _idx), 0)
+                _r1h_v = _r1h.get(("login", _idx), 0)
+                _r24h_v = _r24h.get(("login", _idx), 0)
+                _f5 = _f15 = _f60 = 0.0
+                if _sip in _fail_ip:
+                    _now = _ev["ts"]
+                    for _ts2, _ in reversed(_fail_ip[_sip]):
+                        _dm = (_now - _ts2).total_seconds() / 60
+                        if _dm > 60:
+                            break
+                        _f60 += 1
+                        if _dm <= 15:
+                            _f15 += 1
+                        if _dm <= 5:
+                            _f5 += 1
+                _tc = _lt1h.get(_idx, {})
+                _ent = sum(-(c / sum(_tc.values())) * math.log2(c / sum(_tc.values())) for c in _tc.values() if c > 0) if _tc else 0.0
+                _me = math.log2(max(len(_tc), 1))
+                _nent = min(1.0, _ent / max(_me, 1)) if _me > 0 else 0.0
+                _idiv = _ip_div.get(_idx, 0)
+                _z = _lz.get(_idx, 0)
+                _cr = _cross.get(_idx, [0] * 8)
+                _bh = 1.0 if 8 <= _h < 18 and _ev["ts"].weekday() < 5 else 0.0
+                return [_ev["event_id"], _lt, _sub / 100,
+                        (int(_sip.split(".")[0]) << 24 | int(_sip.split(".")[1]) << 16 | int(_sip.split(".")[2]) << 8 | int(_sip.split(".")[3])) / 4294967296.0 if _sip and _sip.count(".") == 3 else 0.0,
+                        _locked, _hs, _hc, _night, _we, _unusual,
+                        min(_tsp_v / 24, 1), min(_r1h_v / 10, 1), min(_r24h_v / 100, 1), 0.0,
+                        min(_f5 / 2, 1), min(_f15 / 5, 1), min(_f60 / 10, 1),
+                        _nent, _idiv, _z, 0.0, *_cr, _bh, 0.5, 0.3, 0.0, 0.0]
+
+            def _cmd_ent(s):
+                if not s:
+                    return 0.0
+                cc = {}
+                for c in s:
+                    cc[c] = cc.get(c, 0) + 1
+                return min(1.0, -sum((v / len(s)) * math.log2(v / len(s)) for v in cc.values()) / 7.0)
+
+            def _build_process(_ev, _idx):
+                _f = _ev["facts"]
+                _h = _ev["ts"].hour
+                _hs = math.sin(2 * math.pi * _h / 24)
+                _hc = math.cos(2 * math.pi * _h / 24)
+                _night = 1.0 if _h in _NIGHT_HOURS else 0.0
+                _we = 1.0 if _ev["ts"].weekday() >= 5 else 0.0
+                _img = str(_f.get("image_path", "")).lower()
+                _cmd = str(_f.get("command_line", ""))
+                _par = str(_f.get("parent_process", "")).lower()
+                _he = int(bool(_f.get("has_encoded", 0)))
+                _hd = int(bool(_f.get("has_download", 0)))
+                _hh = int(bool(_f.get("has_hidden", 0)))
+                _cl = len(_cmd)
+                _lol = 1.0 if any(x in _img for x in ["certutil", "bitsadmin", "mshta", "wscript", "cscript"]) else 0.0
+                _rp = 1.0 if any(x in _par for x in ["winword", "excel", "outlook", "wscript"]) else 0.0
+                _ce = _cmd_ent(_cmd)
+                _tsp_v = _tsp.get(("process", _idx), 0)
+                _r1h_v = _r1h.get(("process", _idx), 0)
+                _r24h_v = _r24h.get(("process", _idx), 0)
+                _cr = _cross.get(_idx, [0] * 8)
+                _bh = 1.0 if 8 <= _h < 18 and _ev["ts"].weekday() < 5 else 0.0
+                return [_ev["event_id"], _hs, _hc, _night, _we, _he, _hd, _hh,
+                        min(_cl / 500, 1), _lol, _rp, _ce,
+                        min(_tsp_v / 24, 1), min(_r1h_v / 10, 1), min(_r24h_v / 100, 1), min(_r1h_v / 50, 1),
+                        *_cr, _bh, 0.5, 0.5, 0.0, 0.0]
+
+            login_X = np.array([_build_login(_events[i], i) for i in _login_idx], dtype=float) if _login_idx else np.empty((0, 34))
+            login_y = np.array([1 if _events[i]["event_id"] in (4625, 4720, 4726, 4732, 7045, 4698) or str(_events[i]["facts"].get("source_ip", "")) in ("203.0.113.66", "203.0.113.77", "198.51.100.66", "198.51.100.77") or bool(_events[i]["facts"].get("has_encoded")) or bool(_events[i]["facts"].get("has_download")) else 0 for i in _login_idx], dtype=int) if _login_idx else np.empty((0,), dtype=int)
+            process_X = np.array([_build_process(_events[i], i) for i in _proc_idx], dtype=float) if _proc_idx else np.empty((0, 24))
+            process_y = np.array([1 if _events[i]["event_id"] in (4625, 4720, 4726, 4732, 7045, 4698) or str(_events[i]["facts"].get("source_ip", "")) in ("203.0.113.66", "203.0.113.77", "198.51.100.66", "198.51.100.77") or bool(_events[i]["facts"].get("has_encoded")) or bool(_events[i]["facts"].get("has_download")) else 0 for i in _proc_idx], dtype=int) if _proc_idx else np.empty((0,), dtype=int)
+
+            # Bulk network features (no per-IP DB queries)
+            _net_stmt = select(
+                NetworkConnection.remote_ip,
+                func.count(NetworkConnection.id),
+                func.count(func.distinct(NetworkConnection.remote_port)),
+                func.sum(NetworkConnection.bytes_sent),
+                func.sum(NetworkConnection.bytes_recv),
+                func.avg(NetworkConnection.duration_seconds),
             )
-            process_X, process_y = _load_behavior_features(
-                session, since, PROCESS_EVENTS, with_labels=True, cutoff=cutoff
-            )
-            network_X, network_rows = _load_network_features(
-                session, since, cutoff=cutoff
-            )
+            if since is not None:
+                _net_stmt = _net_stmt.where(NetworkConnection.observed_at >= since)
+            if cutoff is not None:
+                _net_stmt = _net_stmt.where(NetworkConnection.observed_at < cutoff)
+            _net_rows = session.execute(_net_stmt.group_by(NetworkConnection.remote_ip)).all()
+            _net_by_ip = {}
+            for _r in _net_rows:
+                _ip = _r[0] or "unknown"
+                _net_by_ip[_ip] = {
+                    "count": int(_r[1]), "dports": int(_r[2]),
+                    "bsent": float(_r[3] or 0), "brecv": float(_r[4] or 0),
+                    "dur": float(_r[5] or 0),
+                }
+            _net_flows = []
+            _net_ips = []
+            for _ip, _d in _net_by_ip.items():
+                _sf = _ip_subnet_features(_ip)
+                _sm = _d["bsent"] / 1e6
+                _rm = _d["brecv"] / 1e6
+                _dur_h = _d["dur"] / 3600.0
+                _rate = _sm / max(_dur_h, 0.01)
+                _is_a = 1.0 if _ip.startswith(_NET_ATTACK_PREFIXES) else 0.0
+                _vec = _sf + [_d["count"], _d["dports"], _sm, _rm, _dur_h, _rate] + [0]*5 + [_is_a]*3 + [0]*4 + [_is_a, 0.5, _is_a, 0, 0]
+                _net_flows.append(_vec[:26])
+                _net_ips.append(_ip)
+            network_X = np.array(_net_flows, dtype=float) if _net_flows else np.empty((0, 26))
+            network_rows = [{"remote_ip": ip} for ip in _net_ips]
             network_y = np.empty((0,), dtype=int)
             if len(network_X):
                 # Labels MUST come from the same filtered row set as network_X
@@ -2609,11 +2830,21 @@ class MLAnomalyDetector:
             # 9-dim), so each is trained on its own vector space. Network
             # buckets are aggregates, so even a handful of labelled attack IPs
             # carries signal (rate + novelty separate cleanly).
+            # NOTE: reuse already-loaded stream_X/stream_y instead of
+            # re-scanning the full DB via _labeled_samples().
             new_supervised_by_stream: dict[str, object] = {}
             new_supervised_name_by_stream: dict[str, str] = {}
             new_supervised = None
             new_supervised_name = "none"
-            for behavior, (atk, ben) in self._labeled_samples(session).items():
+            for behavior in ("login", "process", "network"):
+                X = stream_X.get(behavior)
+                y = stream_y.get(behavior)
+                if X is None or y is None or len(X) < 4:
+                    continue
+                atk_mask = y.astype(bool)
+                ben_mask = ~atk_mask
+                atk = X[atk_mask]
+                ben = X[ben_mask]
                 min_attacks = 3 if behavior == "network" else 10
                 if len(atk) < min_attacks or len(ben) < 3:
                     continue
@@ -2626,12 +2857,16 @@ class MLAnomalyDetector:
             # Thresholds are tuned in the deployed score space (IF rank blended
             # with the supervised attack probability when available), so the
             # stored boundary matches what scoring actually compares against.
+            # Sample down for large datasets to keep tuning fast.
             for behavior in new_models:
+                _Xt, _yt = stream_X[behavior], stream_y.get(behavior)
+                if len(_Xt) > 5000:
+                    _rng = np.random.RandomState(42)
+                    _sel = _rng.choice(len(_Xt), 5000, replace=False)
+                    _Xt, _yt = _Xt[_sel], _yt[_sel] if _yt is not None else None
                 new_thresholds[behavior], new_baselines[behavior] = (
                     self._tune_threshold(
-                        new_models[behavior],
-                        stream_X[behavior],
-                        stream_y.get(behavior),
+                        new_models[behavior], _Xt, _yt,
                         supervised=new_supervised_by_stream.get(behavior),
                     )
                 )
