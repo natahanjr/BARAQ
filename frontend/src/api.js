@@ -96,6 +96,14 @@ async function request(path, options = {}) {
   if (res.status === 401) {
     window.dispatchEvent(new CustomEvent("baraq:logout"));
   }
+  if (res.status === 429) {
+    let retryAfter = 5;
+    try {
+      const body = await res.json();
+      retryAfter = body.retry_after_seconds || 5;
+    } catch { /* ignore */ }
+    throw new Error(`Rate limited. Retry after ${retryAfter}s`);
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try {
