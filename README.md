@@ -5,7 +5,7 @@
 > Self-hosted Windows endpoint SOC: telemetry collection, hybrid rule + ML detection, MITRE ATT&CK mapping, investigation, SOAR automation, threat intelligence, and AI-assisted analysis — all on a single machine or scaled to agent/server fleets.
 
 [![Python Package](https://github.com/natahanjr/BARAQ/actions/workflows/python-package.yml/badge.svg)](https://github.com/natahanjr/BARAQ/actions/workflows/python-package.yml)
-[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.13%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React%2018-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
@@ -20,12 +20,12 @@
 |---|---|
 | Deployment | Self-hosted (local or fleet) |
 | Primary Endpoint | Windows 10/11 |
-| Detection | 100 native rules + Sigma + ML + correlation chains |
+| Detection | 100 native rules + 2,512 Sigma rules + ML + 11 correlation chains |
 | Framework | MITRE ATT&CK (14 tactic groups) |
 | Investigation | Alerts + incidents + entity graph + AI analysis |
-| Automation | SOAR playbooks (block, isolate, disable, escalate) |
-| Intelligence | IOC enrichment (AbuseIPDB, OTX, VirusTotal + 6 more) |
-| AI | Local AI-assisted alert analysis and investigation |
+| Automation | SOAR playbooks (block, isolate, disable, kill, quarantine) + manual response actions |
+| Intelligence | IOC enrichment (AbuseIPDB, OTX, ThreatFox, URLhaus, MalwareBazaar, FindIP, isbadip, FFraud + more) |
+| AI | Local AI-assisted alert analysis with RAG (similar resolved incidents) |
 | Research | ML evaluation framework + attack simulation |
 | API | FastAPI / OpenAPI with RBAC |
 | Security | 2FA, RBAC, LDAP/OIDC SSO, encryption at rest, audit chain |
@@ -53,8 +53,7 @@
 
 - Attack-chain reconstruction with kill-chain steps, incident timeline, related events ±30 min, and network context.
 - **Entity graph** — hosts, users, IPs, and processes linked in a graph (Postgres or Neo4j backend) with threat-actor attribution clustering.
-- **Pipe-based search language** over events and alerts — `stats`, `top`, `rare`, `table`, `fields`, `sort`, `where`, `limit`, `timechart`, `transaction`; full reference in [`docs/search_language.md`](docs/search_language.md).
-- Saved searches and custom dashboards with live panel rendering.
+- **Pipe-based search language** over events and alerts — `stats`, `top`, `rare`, `table`, `fields`, `sort`, `where`, `limit`, `timechart`, `transaction`; full reference in [`docs/search_language.md`](docs/search_language.md). API available at `POST /api/search`.
 
 ### Automation
 
@@ -63,7 +62,7 @@
 
 ### Intelligence
 
-- **IOC enrichment** — AbuseIPDB, AlienVault OTX, VirusTotal, ThreatFox, URLhaus, MalwareBazaar, FindIP, isbadip.com, FFraud.com — DB-cached, on-demand or auto-enriched from alert evidence.
+- **IOC enrichment** — AbuseIPDB, AlienVault OTX, ThreatFox, URLhaus, MalwareBazaar, FindIP, isbadip.com, FFraud.com — DB-cached, on-demand or auto-enriched from alert evidence. All 9 providers in a 3-tier loop (cache → free → premium).
 - Analyst verdict overrides feed back into ML retraining.
 
 ### Machine Learning
@@ -138,9 +137,9 @@ Windows Endpoint
 ### Requirements
 
 - **Windows 10/11** (target: Windows 11, Intel i5, minimum 8GB RAM, any SSD)
-- **Python 3.11+** (tested with 3.14)
+- **Python 3.13+** (tested with 3.13.15)
 - **Node.js 18+** (tested with 24) — only for building the dashboard
-- Optional: PostgreSQL (default uses SQLite; required for fleet deployments)
+- **PostgreSQL 16+** on `127.0.0.1:5432` (required — no SQLite fallback)
 
 ### One-Click Launch
 
@@ -255,8 +254,8 @@ BARAQ is built as a modular platform. Developers can extend:
 | **Processing** | Event normalization (Event ID / Category / User / Risk / Timestamp / Host) with numeric risk scoring (0-100) per event |
 | **Rule-Based Detection** | 100 native rules covering all 14 MITRE ATT&CK tactic groups, each mapped with confidence + remediation, plus a Sigma engine running the community rule set (2,512 rules, pulled via `scripts/sigma_pull.py`) |
 | **Correlation Rules** | 11 declarative YAML correlation chains — multi-stage, multi-source joins across alert stages and raw telemetry on the same entity |
-| **Search** | Pipe-based search language over events and alerts — filters, free text, `stats`, `top`, `rare`, `table`, `fields`, `sort`, `where`, `limit`, `timechart`, `transaction`; relative/ISO time windows |
-| **Saved Searches & Dashboards** | One-click saved hunt queries with custom panels (table / count / top-N / trend) rendered live |
+| **Search** | Pipe-based search language over events and alerts — filters, free text, `stats`, `top`, `rare`, `table`, `fields`, `sort`, `where`, `limit`, `timechart`, `transaction`; relative/ISO time windows (API: `POST /api/search`) |
+| **Saved Searches & Dashboards** | One-click saved hunt queries with custom panels (table / count / top-N / trend) rendered live via API |
 | **Risk-Based Alerting** | Entity risk engine — every alert feeds user/host/IP risk scores with MITRE-weighted contributions, decay over time, HIGH/CRITICAL escalation alerts, and a live tuning UI |
 | **SOAR Automation** | Playbooks (trigger conditions → ordered actions) that fire automatically from the detection pipeline, with run log and manual test/run |
 | **Alert Aggregation** | Rule-level deduplication (one open alert per signature) with repeat-trigger severity escalation |
@@ -268,8 +267,8 @@ BARAQ is built as a modular platform. Developers can extend:
 | **Investigation** | Attack-chain reconstruction, incident timeline, related events, network context, AI explanations, entity graph investigation with threat-actor attribution |
 | **Incidents & Case Management** | Group alerts into incidents, link evidence, add analyst comments, drive alerts through a workflow state machine with analyst verdicts |
 | **Vulnerability Scanning** | Local software inventory → CVE matching engine → findings correlated with MITRE T1190 |
-| **Threat Intelligence** | IOC enrichment from 9 providers — AbuseIPDB, AlienVault OTX, VirusTotal, ThreatFox, URLhaus, MalwareBazaar, FindIP, isbadip.com, FFraud.com |
-| **AI Assistant** | Local rule/TF-IDF engine — explains alerts, summarizes incidents, recommends remediation, analyzes entities with graph + threat-intel evidence, and grounds answers in similar resolved incidents (RAG) |
+| **Threat Intelligence** | IOC enrichment from 9 providers — AbuseIPDB, AlienVault OTX, ThreatFox, URLhaus, MalwareBazaar, FindIP, isbadip.com, FFraud.com |
+| **AI Assistant** | Local rule/TF-IDF engine with RAG — explains alerts by grounding answers in similar resolved incidents, summarizes incidents, recommends remediation, analyzes entities with graph + threat-intel evidence |
 | **Real-Time Alerting** | Webhook + SMTP notifications on high/critical alerts, Windows toast alerts, live dashboard updates via WebSocket push |
 | **Streaming Pipeline** | Forward normalized events/alerts to Apache Kafka, Redis Streams, Elasticsearch |
 | **Reporting** | Executive & technical reports exported as PDF, HTML, JSON, CSV |
@@ -318,9 +317,9 @@ BARAQ is built as a modular platform. Developers can extend:
 
 | Layer | Technology |
 |---|---|
-| Backend | Python 3.11+, FastAPI, uvicorn, SQLAlchemy |
+| Backend | Python 3.13+, FastAPI, uvicorn, SQLAlchemy, psycopg3 |
 | Frontend | React 18, Tailwind CSS 4, Recharts, WebSocket live updates |
-| Database | PostgreSQL (fleet) · SQLite (local) |
+| Database | PostgreSQL 16+ (required — no SQLite fallback) |
 | Detection | 100 native MITRE-mapped rules · SigmaHQ rule engine (2,512 rules) · 11 YAML correlation chains · Isolation Forest / Random Forest / XGBoost |
 | Integration | Kafka · Redis Streams · Elasticsearch · Prometheus + Grafana · LDAP/AD · OIDC (Entra ID / Keycloak) |
 | Security | RBAC · TOTP 2FA · AES-256-GCM at rest · DPAPI vault · tamper-evident SHA-256 audit chain · CSRF + rate limiting |
@@ -427,9 +426,8 @@ python scripts\seed_demo.py
 
 3. **Open Alerts** — review detections; click any alert for MITRE mapping, evidence, and recommended action.
 4. **Open Investigation** — select an alert and inspect its attack chain; use AI explanation.
-5. **Open Search** — try `event_id=4625 | top 10 user` or `| timechart span=1d count by user`.
-6. **Open Dashboards** — the seeded SOC Overview renders live panels from saved searches.
-7. **Open Automation** — review playbook runs and entity risk tuning.
+5. **Try the Search API** — `POST /api/search` with `{"query": "event_id=4625 | top 10 user"}` (full reference: [`docs/search_language.md`](docs/search_language.md)).
+6. **Open Automation** — review playbook runs and entity risk tuning.
 
 ### Collect real host telemetry
 
@@ -696,7 +694,7 @@ python -m pytest tests -v
 ## Verifying the Installation
 
 ```cmd
-verify_install.cmd
+scripts\verify_install.cmd
 ```
 
 Performs a 6-point audit: service/task registration, PostgreSQL reachability, API health, admin login, secrets vault integrity, and MFA challenge flow.
@@ -712,6 +710,17 @@ Performs a 6-point audit: service/task registration, PostgreSQL reachability, AP
 | ML trained on synthetic corpus | Mitigated | Day-1 bootstrap is synthetic by design; scheduler retrains on real telemetry; `BARAQ_ML_ALLOW_BOOTSTRAP=0` refuses synthetic model |
 | Vault not enforced off-Windows | Fixed | AES-256-GCM (Fernet) on non-Windows; `BARAQ_VAULT_ENFORCED=1` fails closed |
 | Multi-node / HA | Partial | Single-writer HA via distributed lock + stateless API replicas; active-active detection requires distributed rewrite |
+
+### Frontend pages not yet implemented (backend API exists)
+
+The following features have working backend APIs but no dedicated frontend page:
+
+| Feature | API Endpoint | Status |
+|---|---|---|
+| Pipe-based Search | `POST /api/search` | API works — no Search page in dashboard |
+| Entity Graph | `GET /api/entities/graph` | API works — referenced in Investigation page, no standalone page |
+| Vulnerability Scanning | `POST /api/vulnscan/run` | Backend engine + inventory collector exist — no Scan page |
+| Sigma Rule Management | `scripts/sigma_pull.py` | CLI tool works — no in-app management UI |
 
 ---
 
