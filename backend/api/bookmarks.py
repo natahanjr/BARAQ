@@ -2,11 +2,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from database import get_db
-from database.models import Bookmark
-from auth import get_current_user
+from backend.database.connection import get_db
+from backend.database.models import Bookmark
+from backend.security import require_auth
 
-router = APIRouter(prefix="/api/bookmarks", tags=["bookmarks"])
+router = APIRouter(prefix="/api/bookmarks", tags=["bookmarks"], dependencies=[Depends(require_auth)])
 
 
 class BookmarkCreate(BaseModel):
@@ -26,14 +26,9 @@ class BookmarkResponse(BaseModel):
     created_at: str
 
 
-@router.post("", response_model=BookmarkResponse)
-async def create_bookmark(body: BookmarkCreate, user=Depends(get_current_user), db=Depends(get_db)):
-    existing = db.query(Bookmark).filter_by(
-        user_id=user.id, entity_type=body.entity_type, entity_id=body.entity_id
-    ).first()
-    if existing:
-        raise HTTPException(400, "Already bookmarked")
-    bm = Bookmark(user_id=user.id, entity_type=body.entity_type, entity_id=body.entity_id,
+@router.post("")
+async def create_bookmark(body: BookmarkCreate, db=Depends(get_db)):
+    bm = Bookmark(user_id=1, entity_type=body.entity_type, entity_id=body.entity_id,
                   note=body.note, tags=body.tags)
     db.add(bm)
     db.commit()
@@ -41,17 +36,17 @@ async def create_bookmark(body: BookmarkCreate, user=Depends(get_current_user), 
     return bm
 
 
-@router.get("", response_model=list[BookmarkResponse])
-async def list_bookmarks(entity_type: Optional[str] = None, user=Depends(get_current_user), db=Depends(get_db)):
-    q = db.query(Bookmark).filter_by(user_id=user.id)
+@router.get("")
+async def list_bookmarks(entity_type: Optional[str] = None, db=Depends(get_db)):
+    q = db.query(Bookmark)
     if entity_type:
         q = q.filter_by(entity_type=entity_type)
     return q.order_by(Bookmark.created_at.desc()).all()
 
 
 @router.delete("/{bookmark_id}")
-async def delete_bookmark(bookmark_id: int, user=Depends(get_current_user), db=Depends(get_db)):
-    bm = db.query(Bookmark).filter_by(id=bookmark_id, user_id=user.id).first()
+async def delete_bookmark(bookmark_id: int, db=Depends(get_db)):
+    bm = db.query(Bookmark).filter_by(id=bookmark_id).first()
     if not bm:
         raise HTTPException(404, "Bookmark not found")
     db.delete(bm)
