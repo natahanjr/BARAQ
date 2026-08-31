@@ -1024,7 +1024,9 @@ def health():
             "message": "Database connection successful",
         }
     except Exception as e:
-        checks["database"] = {"status": "error", "message": str(e)}
+        import logging as _log
+        _log.getLogger("baraq.health").warning("Health DB check failed: %s", e)
+        checks["database"] = {"status": "error", "message": "Database connection failed"}
         overall_status = "error"
         status_code = 503
 
@@ -1043,9 +1045,11 @@ def health():
                 if overall_status == "ok":
                     overall_status = "warning"
         except Exception as e:
+            import logging as _log
+            _log.getLogger("baraq.health").warning("ML model check failed: %s", e)
             checks["ml_model"] = {
                 "status": "warning",
-                "message": f"ML model check skipped: {e}",
+                "message": "ML model check skipped",
             }
             if overall_status == "ok":
                 overall_status = "warning"
