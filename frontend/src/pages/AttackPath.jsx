@@ -92,7 +92,7 @@ function AttackPath() {
                   className={inputCls}
                 />
               </div>
-              <Button type="submit" size="sm" disabled={loading || !entryTactic}>
+              <Button type="submit" size="sm" disabled={loading || !entryTactic} aria-label="Predict attack path">
                 {loading ? "Predicting..." : "Predict Attack Path"}
               </Button>
             </form>
