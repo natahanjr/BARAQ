@@ -1022,6 +1022,14 @@ for router in (
 app.mount("/reports", StaticFiles(directory=REPORT_DIR), name="reports")
 
 
+def _safe_exc_msg(exc: Exception, max_len: int = 120) -> str:
+    """Return a truncated, safe string of an exception for logging only."""
+    raw = str(exc)
+    if len(raw) > max_len:
+        return raw[:max_len] + "..."
+    return raw
+
+
 @app.get("/api/health")
 def health():
     """Readiness endpoint: checks critical dependencies.
@@ -1042,7 +1050,7 @@ def health():
         }
     except Exception as e:
         import logging as _log
-        _log.getLogger("baraq.health").warning("Health DB check failed: %s", e)
+        _log.getLogger("baraq.health").warning("Health DB check failed: %s", _safe_exc_msg(e))
         checks["database"] = {"status": "error", "message": "Database connection failed"}
         overall_status = "error"
         status_code = 503
@@ -1063,7 +1071,7 @@ def health():
                     overall_status = "warning"
         except Exception as e:
             import logging as _log
-            _log.getLogger("baraq.health").warning("ML model check failed: %s", e)
+            _log.getLogger("baraq.health").warning("ML model check failed: %s", _safe_exc_msg(e))
             checks["ml_model"] = {
                 "status": "warning",
                 "message": "ML model check skipped",
