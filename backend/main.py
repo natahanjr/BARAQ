@@ -1134,6 +1134,12 @@ def health():
             "status": status_for_rate(rate),
             "corruption_rate": round(rate, 4),
         },
+        "feature_flags": {
+            "telemetry_v2": config.TELEMETRY_V2_ENABLED,
+            "alerts_v2": config.ALERTS_V2_ENABLED,
+            "correlation": config.CORRELATION_ENABLED,
+            "risk": config.RISK_ENABLED,
+        },
     }
 
     if status_code == 200:
