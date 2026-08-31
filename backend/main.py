@@ -814,7 +814,13 @@ async def api_gates(request: Request, call_next):
                 status_code=429,
                 headers={"Retry-After": str(retry_after)},
             )
-    return await call_next(request)
+    response = await call_next(request)
+    try:
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+    except Exception:
+        pass
+    return response
 
 
 # ---------------------------------------------------------------------------
