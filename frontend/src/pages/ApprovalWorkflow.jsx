@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Loading, ErrorBanner } from "../components/Feedback.jsx";
+import { ErrorBanner } from "../components/Feedback.jsx";
 import { PageHeader, Card, CardHeader, CardTitle, CardContent, Badge, Button } from "../components/ui/index.js";
 
 const inputCls = "w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-4 py-2.5 text-[13px] text-[var(--fg-primary)] outline-none focus:border-[var(--accent-cyan)]/40";
@@ -153,7 +153,13 @@ function ApprovalWorkflow() {
         </Card>
       )}
 
-      {!requests && !error && <Loading label="Loading approval requests" />}
+      {!requests && !error && (
+        <div className="space-y-3">
+          {[1, 2].map((i) => (
+            <div key={i} className="h-24 animate-pulse rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)]" />
+          ))}
+        </div>
+      )}
 
       {requests && (
         <div className="space-y-5">
