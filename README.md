@@ -226,6 +226,6 @@ Contributions welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 
-Copyright © 2026 Natahan — RazForge. All rights reserved.
+Copyright © 2026 Natahan — RazForge Lab. All rights reserved.
 
 Licensed under the [RazForge Source-Available License](LICENSE.md).
