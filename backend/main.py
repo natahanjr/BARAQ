@@ -775,8 +775,11 @@ def _rate_allowed(request: Request, identity: str) -> tuple[bool, int]:
         window_start, count = now, 0
     if count >= API_RATE_BURST:
         if len(_rate_buckets) > 10_000:
-            _rate_buckets.clear()
-        return False, int(_RATE_WINDOW_SECONDS - (now - window_start)) + 1
+            stale_threshold = now - _RATE_WINDOW_SECONDS
+            _rate_buckets = {
+                k: v for k, v in _rate_buckets.items() if v[0] > stale_threshold
+            }
+        return False, max(1, int(_RATE_WINDOW_SECONDS - (now - window_start)) + 1)
     _rate_buckets[identity] = (window_start, count + 1)
     return True, 0
 
