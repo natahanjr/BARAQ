@@ -34,25 +34,9 @@
 
 ## Screenshots
 
-| Login | SOC Dashboard |
-|---|---|
-| ![Login](docs/screenshots/log%20in.png) | ![SOC Dashboard](docs/screenshots/dashboard.png) |
-
-| Security Alerts | Live Telemetry |
-|---|---|
-| ![Security Alerts](docs/screenshots/Security%20Alerts.png) | ![Telemetry](docs/screenshots/Telemetry.png) |
-
-| Threat Investigation | AI Assistant |
-|---|---|
-| ![Threat Investigation](docs/screenshots/Threat%20Investigation.png) | ![AI Assistant](docs/screenshots/AI%20Assistant.png) |
-
-| Incidents | Entity Graph |
-|---|---|
-| ![Incidents](docs/screenshots/Incidents.png) | ![Entity Graph](docs/screenshots/Entity%20Graph.png) |
-
-| ML Evaluation | Settings |
-|---|---|
-| ![ML Evaluation](docs/screenshots/ML%20Evaluation.png) | ![Settings](docs/screenshots/Settings.png) |
+| SOC Dashboard | Security Alerts | Threat Investigation |
+|---|---|---|
+| ![SOC Dashboard](docs/screenshots/dashboard.png) | ![Security Alerts](docs/screenshots/Security%20Alerts.png) | ![Threat Investigation](docs/screenshots/Threat%20Investigation.png) |
 
 ---
 
