@@ -394,13 +394,21 @@ class Settings(BaseSettings):
             )
         return self
 
-    @field_validator("tls_cert_file", "tls_key_file")
-    @classmethod
-    def tls_paths_must_exist_if_enabled(cls, v: str, info) -> str:
+    @model_validator(mode="after")
+    def tls_paths_must_exist_if_enabled(self) -> "Settings":
         """If TLS is enabled, the certificate and key files must exist."""
-        # We cannot check the TLS_ENABLED flag here because validators don't have access to other fields easily.
-        # We'll do this check in the application startup instead.
-        return v
+        if self.tls_enabled:
+            from pathlib import Path
+
+            for path_str, label in [
+                (self.tls_cert_file, "tls_cert_file"),
+                (self.tls_key_file, "tls_key_file"),
+            ]:
+                if not path_str or not Path(path_str).is_file():
+                    raise ValueError(
+                        f"TLS enabled but {label} not found: {path_str}"
+                    )
+        return self
 
 
 @lru_cache
