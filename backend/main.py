@@ -92,6 +92,10 @@ from backend.observability import setup_observability
 
 setup_observability()
 
+from backend import config
+logger.info("BARAQ starting — env=%s, debug=%s, telemetry_v2=%s, alerts_v2=%s, correlation=%s, risk=%s",
+    config.BARAQ_ENV, not config.IS_PRODUCTION, config.TELEMETRY_V2_ENABLED, config.ALERTS_V2_ENABLED, config.CORRELATION_ENABLED, config.RISK_ENABLED)
+
 
 def _seed_admin_user() -> None:
     """Create the bootstrap admin account if the users table is empty."""
