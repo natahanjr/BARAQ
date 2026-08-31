@@ -119,6 +119,8 @@ def _seed_admin_user() -> None:
         db.add(admin)
         db.commit()
         logger.info("Seeded bootstrap admin user '%s'", ADMIN_USERNAME)
+        logger.debug("Admin user '%s' created with role='admin', must_change_password=%s",
+                      ADMIN_USERNAME, ADMIN_PASSWORD == DEFAULT_ADMIN_PASSWORD)
     except Exception:
         db.rollback()
         raise
