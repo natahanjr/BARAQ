@@ -377,7 +377,7 @@ class SigmaRuleEngine(BaseRule):
                 # (e.g. a coding agent's own Temp directory) never alert,
                 # regardless of which Sigma rule they trip.
                 if is_trusted_agent_activity(event.message, *fields.values()):
-                    logger.info(
+                    logger.debug(
                         "FP-suppressed (trusted agent path): rule '%s' on " "event %s",
                         rule.title,
                         event.id,
@@ -387,7 +387,7 @@ class SigmaRuleEngine(BaseRule):
                 # commonly match on event type alone (e.g. WMI events for
                 # Defender security intelligence updates).
                 if any(p.search(event.message or "") for p in _FP_MESSAGE_PATTERNS):
-                    logger.info(
+                    logger.debug(
                         "FP-suppressed (benign Windows operation): rule '%s' "
                         "on event %s: %s",
                         rule.title,

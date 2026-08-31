@@ -382,7 +382,7 @@ class AlertingService:
             # cases where an unknown-reputation process is involved.
             if _is_dev_workflow_fp(facts, result.rule):
                 type(self).suppressed_fp_count += 1
-                logger.info(
+                logger.debug(
                     "FP-suppressed (dev workflow): rule=%s subject=%s "
                     "parents=%s signals=%s evidence=%s",
                     result.rule,
@@ -456,7 +456,7 @@ class AlertingService:
                         guard_match.event_count or 0, len(result.event_ids)
                     )
                     type(self).suppressed_fp_count += 1
-                    logger.info(
+                    logger.debug(
                         "Reopen-guard: %s re-triggered but alert #%s stays "
                         "closed (analyst decision, guard %sh)",
                         result.rule,

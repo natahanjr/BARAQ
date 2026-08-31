@@ -342,7 +342,10 @@ class RulesEngine:
                             rule, "recommendation", ""
                         ) or get_recommendation(f.mitre_id)
                 findings.extend(rule_findings)
-                logger.info("Rule %s: %d finding(s)", rule.rule_id, len(rule_findings))
+                if rule_findings:
+                    logger.warning("Rule %s: %d finding(s)", rule.rule_id, len(rule_findings))
+                else:
+                    logger.debug("Rule %s: 0 finding(s)", rule.rule_id)
             except Exception as exc:
                 logger.exception("Rule %s failed: %s", rule.rule_id, exc)
                 self.session.rollback()

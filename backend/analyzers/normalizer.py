@@ -572,7 +572,7 @@ class Normalizer:
         # surface a clear error so operators can act on the lossy source.
         truncated_fields, truncation_reasons = self.detect_truncation(record, facts)
         if truncated_fields:
-            logger.error(
+            logger.debug(
                 "Data integrity: event %s (%s) from source '%s' is incomplete - "
                 "truncated field(s): %s. Reasons: %s",
                 event_id,
