@@ -1,3 +1,4 @@
+"""Attack Path Prediction API — adversary movement prediction."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from backend.security import require_auth
@@ -29,20 +30,28 @@ class BlastRadiusBody(BaseModel):
 
 @router.post("/predict")
 async def predict(body: PredictBody):
+    """Predict the most likely next attacker steps based on MITRE ATT&CK transitions."""
     if body.entry_tactic not in VALID_TACTICS:
         raise HTTPException(
             400,
             f"Invalid entry_tactic '{body.entry_tactic}'. "
             f"Valid tactics: {', '.join(sorted(VALID_TACTICS))}"
         )
-    tactics = list(set([body.entry_tactic] + body.compromised_tactics))
-    path = _predictor.build_attack_path(body.entry_tactic, tactics)
-    return path.model_dump()
+    try:
+        tactics = list(set([body.entry_tactic] + body.compromised_tactics))
+        path = _predictor.build_attack_path(body.entry_tactic, tactics)
+        return path.model_dump()
+    except Exception as e:
+        raise HTTPException(500, f"Prediction failed: {type(e).__name__}")
 
 
 @router.post("/blast-radius")
 async def blast_radius(body: BlastRadiusBody):
+    """Calculate the blast radius (impact scope) for a compromised entity."""
     if not body.entity.strip():
         raise HTTPException(400, "Entity cannot be empty")
-    result = _analyzer.calculate(body.entity, body.entity_type, body.connections)
-    return result.model_dump()
+    try:
+        result = _analyzer.calculate(body.entity, body.entity_type, body.connections)
+        return result.model_dump()
+    except Exception as e:
+        raise HTTPException(500, f"Blast radius calculation failed: {type(e).__name__}")
