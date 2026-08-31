@@ -397,6 +397,11 @@ def init_db() -> None:
         conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts (status)"
         )
+        # Composite index for the most common alert list query pattern:
+        # filters by org + demo + status, sorts by created_at DESC
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_alerts_list ON alerts (org, demo, status, created_at DESC)"
+        )
         # Composite entity-graph indexes: the BFS resolves neighbours via
         # (src_kind, src_name) / (dst_kind, dst_name) pairs - the single-column
         # indexes alone turn an entity subgraph query into a full scan.
