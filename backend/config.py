@@ -783,14 +783,19 @@ HOST = "127.0.0.1"
 PORT = 8001
 #: HTTPS port used by `start.bat secure` (and the LAN/HTTPS launcher).
 TLS_PORT = 8443
-CORS_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:8001",
-    "http://127.0.0.1:8001",
-]
+_cors_raw = os.environ.get("BARAQ_CORS_ORIGINS", "")
+CORS_ORIGINS = (
+    [o.strip() for o in _cors_raw.split(",") if o.strip()]
+    if _cors_raw
+    else [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8001",
+        "http://127.0.0.1:8001",
+    ]
+)
 
 # --------------------------------------------------------------------------
 # Transport security (TLS)
