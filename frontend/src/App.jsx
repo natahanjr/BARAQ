@@ -31,6 +31,16 @@ const MLDetection = lazy(() => import("./pages/MLDetection.jsx"));
 const ThreatIntelligence = lazy(() => import("./pages/ThreatIntelligence.jsx"));
 const DataExport = lazy(() => import("./pages/DataExport.jsx"));
 
+// V0.9-V1.4 new pages
+const Bookmarks = lazy(() => import("./pages/Bookmarks.jsx"));
+const ApprovalWorkflow = lazy(() => import("./pages/ApprovalWorkflow.jsx"));
+const ComplianceGap = lazy(() => import("./pages/ComplianceGap.jsx"));
+const AttackPath = lazy(() => import("./pages/AttackPath.jsx"));
+const UEBA = lazy(() => import("./pages/UEBA.jsx"));
+const InsiderThreat = lazy(() => import("./pages/InsiderThreat.jsx"));
+const FleetConfig = lazy(() => import("./pages/FleetConfig.jsx"));
+const MitreGapReport = lazy(() => import("./pages/MitreGapReport.jsx"));
+
 function Loading() {
   return (
     <div className="flex h-[50vh] items-center justify-center">
@@ -74,6 +84,14 @@ function AppRoutes() {
         <Route path="users" element={<Suspense fallback={<Loading />}><Users /></Suspense>} />
         <Route path="settings" element={<Suspense fallback={<Loading />}><Settings /></Suspense>} />
         <Route path="agent-setup" element={<Suspense fallback={<Loading />}><AgentSetup /></Suspense>} />
+        <Route path="bookmarks" element={<Suspense fallback={<Loading />}><Bookmarks /></Suspense>} />
+        <Route path="approval" element={<Suspense fallback={<Loading />}><ApprovalWorkflow /></Suspense>} />
+        <Route path="compliance-gap" element={<Suspense fallback={<Loading />}><ComplianceGap /></Suspense>} />
+        <Route path="attack-path" element={<Suspense fallback={<Loading />}><AttackPath /></Suspense>} />
+        <Route path="ueba" element={<Suspense fallback={<Loading />}><UEBA /></Suspense>} />
+        <Route path="insider-threat" element={<Suspense fallback={<Loading />}><InsiderThreat /></Suspense>} />
+        <Route path="fleet-config" element={<Suspense fallback={<Loading />}><FleetConfig /></Suspense>} />
+        <Route path="mitre-gap" element={<Suspense fallback={<Loading />}><MitreGapReport /></Suspense>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

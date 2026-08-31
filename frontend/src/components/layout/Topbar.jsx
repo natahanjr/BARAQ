@@ -28,6 +28,14 @@ const PAGE_TITLES = {
   "/settings": "Settings",
   "/agent-setup": "Agent Setup",
   "/rba": "Entity Risk",
+  "/bookmarks": "Bookmarks",
+  "/approval": "Approval Workflow",
+  "/compliance-gap": "Compliance Gap",
+  "/attack-path": "Attack Path",
+  "/ueba": "UEBA",
+  "/insider-threat": "Insider Threat",
+  "/fleet-config": "Fleet Config",
+  "/mitre-gap": "MITRE Gap Report",
 };
 
 function Topbar({ activeAlerts, criticalAlerts, openIncidents, onOpenShortcuts, onOpenCommandPalette }) {

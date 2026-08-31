@@ -62,6 +62,7 @@ const NAV_SECTIONS = [
     items: [
       { to: "/threat-intel", label: "Threat Intelligence", icon: ShieldIcon },
       { to: "/assistant", label: "BARAQ Intelligence", icon: AssistantIcon },
+      { to: "/mitre-gap", label: "MITRE Gap Report", icon: ActivityIcon },
     ],
   },
   {
@@ -69,8 +70,20 @@ const NAV_SECTIONS = [
     label: "OPERATIONS",
     items: [
       { to: "/automation", label: "Automation", icon: BoltIcon },
+      { to: "/approval", label: "Approval Workflow", icon: ShieldIcon },
+      { to: "/bookmarks", label: "Bookmarks", icon: ActivityIcon },
       { to: "/dashboards", label: "Dashboards", icon: ActivityIcon },
       { to: "/reports", label: "Reports", icon: ReportsIcon },
+    ],
+  },
+  {
+    id: "risk-analytics",
+    label: "RISK ANALYTICS",
+    items: [
+      { to: "/attack-path", label: "Attack Path", icon: RiskShieldIcon },
+      { to: "/ueba", label: "UEBA", icon: ActivityIcon },
+      { to: "/insider-threat", label: "Insider Threat", icon: ShieldIcon },
+      { to: "/compliance-gap", label: "Compliance Gap", icon: ShieldIcon },
     ],
   },
   {
@@ -79,6 +92,7 @@ const NAV_SECTIONS = [
     items: [
       { to: "/endpoints", label: "Endpoints", icon: EndpointIcon, adminOnly: true },
       { to: "/telemetry", label: "Telemetry", icon: TelemetryIcon },
+      { to: "/fleet-config", label: "Fleet Config", icon: SystemIcon, adminOnly: true },
       { to: "/export", label: "Data Export", icon: DownloadIcon },
     ],
   },

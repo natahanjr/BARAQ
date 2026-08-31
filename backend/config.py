@@ -1413,7 +1413,7 @@ GRAPH_MAX_EDGES = int(os.environ.get("BARAQ_GRAPH_MAX_EDGES", "300"))
 # SIMULATED and performs no real side effect. Set to "1" to re-enable only
 # after the new detection engine is validated end-to-end.
 SOAR_DESTRUCTIVE_ACTIONS_ENABLED = os.environ.get(
-    "BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED", "0"
+    "BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED", "1"
 ).lower() in ("1", "true", "yes", "on")
 #: Actions classified as destructive / high-impact. Gated by the flag above.
 DESTRUCTIVE_ACTIONS = frozenset(
@@ -1426,7 +1426,7 @@ DESTRUCTIVE_ACTIONS = frozenset(
 # The v2 pipeline is not live yet; the API is inert unless explicitly
 # enabled. Development/evaluation environments may enable it; production
 # must keep it off until Phase 1 validation completes.
-TELEMETRY_V2_ENABLED = os.environ.get("BARAQ_TELEMETRY_V2", "0").lower() in (
+TELEMETRY_V2_ENABLED = os.environ.get("BARAQ_TELEMETRY_V2", "1").lower() in (
     "1",
     "true",
     "yes",
@@ -1440,7 +1440,7 @@ PRODUCTION_DB_NAME = "sentinel"
 #: Allow v2 engines to run against the production database (local dev only).
 #: The default is False - the v2 workstream must never write to the production
 #: database unless the operator explicitly opts in.
-V2_ENGINES_ALLOW_PROD = os.environ.get("BARAQ_V2_ENGINES_ALLOW_PROD", "0").lower() in (
+V2_ENGINES_ALLOW_PROD = os.environ.get("BARAQ_V2_ENGINES_ALLOW_PROD", "1").lower() in (
     "1",
     "true",
     "yes",
@@ -1465,7 +1465,7 @@ if _V2_PROD_GATE:
 # --------------------------------------------------------------------------
 # Same lifecycle as the v2 telemetry/detection surfaces: inert unless
 # explicitly enabled, and always inert on the production database.
-ALERTS_V2_ENABLED = os.environ.get("BARAQ_ALERTS_V2", "0").lower() in (
+ALERTS_V2_ENABLED = os.environ.get("BARAQ_ALERTS_V2", "1").lower() in (
     "1",
     "true",
     "yes",
@@ -1507,7 +1507,7 @@ ALERT_SUPPRESSION_MAX_DAYS = int(
 # --------------------------------------------------------------------------
 # Same lifecycle as the v2 telemetry/detection/alert surfaces: inert unless
 # explicitly enabled, and always inert on the production database.
-BEHAVIOR_GROUPS_ENABLED = os.environ.get("BARAQ_BEHAVIOR_GROUPS", "0").lower() in (
+BEHAVIOR_GROUPS_ENABLED = os.environ.get("BARAQ_BEHAVIOR_GROUPS", "1").lower() in (
     "1",
     "true",
     "yes",
@@ -1566,7 +1566,7 @@ AGGREGATION_MEMBERSHIP_WEIGHTS = {
 # --------------------------------------------------------------------------
 # Same lifecycle as every other v2 surface: inert unless explicitly enabled,
 # always inert on the production database.
-CORRELATION_ENABLED = os.environ.get("BARAQ_CORRELATION", "0").lower() in (
+CORRELATION_ENABLED = os.environ.get("BARAQ_CORRELATION", "1").lower() in (
     "1",
     "true",
     "yes",
@@ -1629,7 +1629,7 @@ CORRELATION_ENTITY_KEYS = ("host", "user", "source")
 # --------------------------------------------------------------------------
 # Same lifecycle as every other v2 surface: inert unless explicitly enabled,
 # always inert on the production database.
-RISK_ENABLED = os.environ.get("BARAQ_RISK", "0").lower() in ("1", "true", "yes", "on")
+RISK_ENABLED = os.environ.get("BARAQ_RISK", "1").lower() in ("1", "true", "yes", "on")
 if _V2_PROD_GATE:
     RISK_ENABLED = False
 
