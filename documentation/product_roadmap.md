@@ -334,3 +334,79 @@ Administration
 
 Don't expose every internal subsystem as a top-level menu item.
 The analyst thinks in terms of **work**, not software architecture.
+
+---
+
+## Future Work Roadmap
+
+### V2.1 — Multi-Tenancy & Enterprise
+- [ ] Multi-tenant isolation (data, users, alerts per tenant)
+- [ ] Tenant provisioning & lifecycle management
+- [ ] Cross-tenant threat intelligence sharing
+- [ ] Enterprise SSO (SAML 2.0, OIDC)
+- [ ] Hierarchical RBAC (Tenant Admin → SOC Lead → Analyst → Read-Only)
+- [ ] Tenant-level dashboards & reporting
+- [ ] Data residency controls
+
+### V2.2 — Advanced Threat Hunting
+- [ ] Hypothesis-driven threat hunting workflows
+- [ ] Saved hunt templates
+- [ ] Query builder for custom telemetry searches
+- [ ] Hunt result annotation & sharing
+- [ ] IOC pivot hunting (follow an indicator across all entities)
+- [ ] Behavioral baseline deviation alerts
+- [ ] Threat hunt coverage reporting
+
+### V2.3 — Compliance & Reporting
+- [ ] Compliance frameworks (PCI-DSS, HIPAA, SOC 2, ISO 27001)
+- [ ] Automated compliance evidence collection
+- [ ] Compliance gap analysis
+- [ ] Executive summary reports
+- [ ] Scheduled report delivery (email, webhook)
+- [ ] Audit log export
+- [ ] Risk posture dashboard
+
+### V2.4 — Integration Ecosystem
+- [ ] SIEM forwarding (CEF, LEEF, Syslog)
+- [ ] Ticketing integrations (Jira, ServiceNow, PagerDuty)
+- [ ] SOAR platform connectors (Cortex XSOAR, Splunk SOAR)
+- [ ] Cloud provider integrations (AWS CloudTrail, Azure AD, GCP Audit)
+- [ ] Endpoint platform connectors (CrowdStrike, SentinelOne, Defender)
+- [ ] Webhook & custom integration framework
+- [ ] API key management & rate limiting per integration
+
+### V2.5 — Fleet Management & Agent Intelligence
+- [ ] Agent deployment automation (GPO, SCCM, Intune)
+- [ ] Agent configuration profiles
+- [ ] Agent health monitoring & alerting
+- [ ] Remote agent commands
+- [ ] Agent log collection & forwarding
+- [ ] Agent performance metrics
+- [ ] Automatic agent updates
+
+### V2.6 — Advanced ML & Analytics
+- [ ] User & Entity Behavior Analytics (UEBA)
+- [ ] Lateral movement detection
+- [ ] Data exfiltration detection
+- [ ] Insider threat detection
+- [ ] Attack path prediction
+- [ ] Blast radius analysis
+- [ ] ML model marketplace (share detection models)
+
+### V2.7 — Security Orchestration
+- [ ] Visual playbook builder
+- [ ] Playbook versioning & rollback
+- [ ] Custom action development framework
+- [ ] Response action marketplace
+- [ ] Incident workflow automation
+- [ ] SLA enforcement automation
+- [ ] Cross-platform response orchestration
+
+### V3.0 — BARAQ Enterprise
+- [ ] High-availability deployment
+- [ ] Horizontal scaling (multi-node)
+- [ ] Data replication & disaster recovery
+- [ ] Geographic data distribution
+- [ ] Performance SLA monitoring
+- [ ] Enterprise support portal
+- [ ] Professional services toolkit
