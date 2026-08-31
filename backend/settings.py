@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -376,15 +376,23 @@ class Settings(BaseSettings):
 
     @field_validator("ml_rule_weight", "ml_detection_weight")
     @classmethod
-    def weights_must_sum_to_one(cls, v: float, info) -> float:
-        """Ensure ML rule and detection weights sum to approximately 1.0."""
-        # This validator is called for each field, so we need to check the other value.
-        # We'll do a simple check: if both are set, their sum should be 1.0.
-        # Note: This is a simplified check; in practice, we might want to adjust one if the other changes.
-        # For now, we just validate that each is between 0 and 1.
+    def weights_must_be_valid(cls, v: float, info) -> float:
+        """Ensure each ML weight is between 0.0 and 1.0."""
         if not 0.0 <= v <= 1.0:
             raise ValueError("Weight must be between 0.0 and 1.0")
         return v
+
+    @model_validator(mode="after")
+    def weights_must_sum_to_one(self) -> "Settings":
+        """Cross-field validation: ML weights must sum to approximately 1.0."""
+        total = self.ml_rule_weight + self.ml_detection_weight
+        if abs(total - 1.0) > 0.01:
+            raise ValueError(
+                f"ml_rule_weight ({self.ml_rule_weight}) + ml_detection_weight "
+                f"({self.ml_detection_weight}) must sum to approximately 1.0 "
+                f"(got {total:.3f})"
+            )
+        return self
 
     @field_validator("tls_cert_file", "tls_key_file")
     @classmethod
