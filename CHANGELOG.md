@@ -4,6 +4,30 @@ All notable changes to BARAQ are documented in this
 file. The format is based on [Keep a Changelog](https://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] - 2026-08-31 — "Gap Analysis Completion"
+
+### Added
+- **Memory profiling**: `backend/profiling/resource_profiler.py` — memory/CPU/IO snapshots, import profiling, API endpoint profiling
+- **Ingestion & API benchmarks**: `backend/profiling/benchmarks.py` — throughput measurement, p50/p95/p99 latency
+- **Investigation bookmarks**: `Bookmark` model + `api/bookmarks.py` — CRUD for alert/incident/event favorites
+- **SOAR approval workflow**: `response/approval.py` + `api/approval.py` — multi-step approval with single/multi-approver support
+- **Cloud connectors**: `integrations/cloud/` — abstraction layer for AWS CloudTrail, Azure Monitor, GCP Audit Log
+- **EDR connectors**: `integrations/edr/` — abstraction layer for CrowdStrike Falcon, SentinelOne
+- **External SOAR connectors**: `integrations/soar/` — abstraction layer for Cortex XSOAR, Splunk SOAR
+- **Attack path prediction**: `ml/attack_path.py` — MITRE tactic transition matrix, predictive next-step modeling, blast radius
+- **UEBA**: `ml/ueba.py` — per-user baseline profiling, anomaly detection (unusual hours, new hosts, volume spikes)
+- **Insider threat scoring**: `ml/insider_threat.py` — indicator-based risk scoring with recommended actions
+- **Blast radius analysis**: `risk/blast_radius.py` — automated impact scope calculation for users/hosts
+- **MITRE gap analysis**: `mitre/gap_analysis.py` — automated detection coverage report
+- **Multi-framework compliance**: `compliance/frameworks.py` — SOC2, ISO 27001, NIST CSF control templates
+- **Compliance gap analysis**: `compliance/gap_analysis.py` — framework-specific gap checking
+- **Query optimization**: `database/optimization.py` — slow query detection, recommended indexes
+- **Fleet log fetch**: `fleet/log_fetch.py` — remote log collection commands
+- **Fleet config profiles**: `fleet/config_profiles.py` — multi-profile agent configuration management
+- **53 new tests** across 15 test files
+
+---
+
 ## [Unreleased]
 
 ### Added
