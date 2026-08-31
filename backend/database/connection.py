@@ -450,3 +450,14 @@ def get_session():
 def get_db():
     """FastAPI dependency alias."""
     yield from get_session()
+
+
+def check_database_health() -> dict:
+    """Check database connectivity and return health status."""
+    try:
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+        return {"status": "ok", "message": "Database connection successful"}
+    except Exception as e:
+        logger.warning("Database health check failed: %s", e)
+        return {"status": "error", "message": "Database connection failed"}
