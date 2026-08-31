@@ -795,6 +795,8 @@ def _rate_allowed(request: Request, identity: str) -> tuple[bool, int]:
 @app.middleware("http")
 async def api_gates(request: Request, call_next):
     """IP ACLs (403) and API rate limiting (429) before authentication."""
+    if request.method == "OPTIONS":
+        logger.debug("CORS preflight: %s %s", request.method, request.url.path)
     path = request.url.path
     if path.startswith("/api/") and not path.startswith(
         ("/api/health", "/api/auth/login")
