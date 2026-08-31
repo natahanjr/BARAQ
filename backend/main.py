@@ -957,6 +957,14 @@ class _BodyTooLargeError(Exception):
     """Raised by the receive wrapper when a streamed body exceeds the cap."""
 
 
+@app.exception_handler(_BodyTooLargeError)
+async def _body_too_large_handler(request, exc):
+    return JSONResponse(
+        {"detail": f"Request body exceeds {MAX_REQUEST_BYTES} bytes"},
+        status_code=413,
+    )
+
+
 for router in (
     dashboard.router,
     alerts.router,
