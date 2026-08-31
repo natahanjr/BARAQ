@@ -100,8 +100,7 @@ def _seed_admin_user() -> None:
     from backend.auth import hash_password
     from backend.database.models import User
 
-    db = SessionLocal()
-    try:
+    with SessionLocal() as db:
         if db.scalar(select(User).limit(1)):
             return
         admin = User(
@@ -115,8 +114,6 @@ def _seed_admin_user() -> None:
         db.add(admin)
         db.commit()
         logger.info("Seeded bootstrap admin user '%s'", ADMIN_USERNAME)
-    finally:
-        db.close()
 
 
 _scheduler_thread: threading.Thread | None = None
