@@ -25,7 +25,11 @@ async def list_profiles():
 
 @router.post("/profiles")
 async def create_profile(body: ProfileBody):
-    profile = _manager.create_profile(body.name, body.settings, body.description)
+    if not body.name.strip():
+        raise HTTPException(400, "Profile name cannot be empty")
+    if len(body.name) > 64:
+        raise HTTPException(400, "Profile name must be 64 characters or less")
+    profile = _manager.create_profile(body.name.strip(), body.settings, body.description)
     return profile.model_dump()
 
 
