@@ -29,6 +29,7 @@ const DetectionRules = lazy(() => import("./pages/DetectionRules.jsx"));
 const MITREAttack = lazy(() => import("./pages/MITREAttack.jsx"));
 const MLDetection = lazy(() => import("./pages/MLDetection.jsx"));
 const ThreatIntelligence = lazy(() => import("./pages/ThreatIntelligence.jsx"));
+const DataExport = lazy(() => import("./pages/DataExport.jsx"));
 
 function Loading() {
   return (
@@ -69,6 +70,7 @@ function AppRoutes() {
         <Route path="reports" element={<Suspense fallback={<Loading />}><Reports /></Suspense>} />
         <Route path="endpoints" element={<Suspense fallback={<Loading />}><Endpoints /></Suspense>} />
         <Route path="telemetry" element={<Suspense fallback={<Loading />}><Telemetry /></Suspense>} />
+        <Route path="export" element={<Suspense fallback={<Loading />}><DataExport /></Suspense>} />
         <Route path="users" element={<Suspense fallback={<Loading />}><Users /></Suspense>} />
         <Route path="settings" element={<Suspense fallback={<Loading />}><Settings /></Suspense>} />
         <Route path="agent-setup" element={<Suspense fallback={<Loading />}><AgentSetup /></Suspense>} />

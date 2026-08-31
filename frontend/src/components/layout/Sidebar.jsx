@@ -23,6 +23,7 @@ import {
   SunIcon,
   MoonIcon,
   LogoutIcon,
+  DownloadIcon,
 } from "../icons.jsx";
 import { CountBadge, StatusDot } from "../ui/index.js";
 import BARAQLogo from "../BARAQLogo.jsx";
@@ -78,6 +79,7 @@ const NAV_SECTIONS = [
     items: [
       { to: "/endpoints", label: "Endpoints", icon: EndpointIcon, adminOnly: true },
       { to: "/telemetry", label: "Telemetry", icon: TelemetryIcon },
+      { to: "/export", label: "Data Export", icon: DownloadIcon },
     ],
   },
   {

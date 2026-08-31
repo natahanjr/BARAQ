@@ -100,8 +100,8 @@ _ADDITIVE_MIGRATIONS = {
         ("responded_at", "TIMESTAMPTZ"),
     ],
     "network_connections": [
-        ("bytes_sent", "INTEGER DEFAULT 0"),
-        ("bytes_recv", "INTEGER DEFAULT 0"),
+        ("bytes_sent", "BIGINT DEFAULT 0"),
+        ("bytes_recv", "BIGINT DEFAULT 0"),
         ("duration_seconds", "REAL DEFAULT 0"),
         ("org", "VARCHAR(64) DEFAULT ''"),
         ("demo", "BOOLEAN DEFAULT 0"),

@@ -105,7 +105,10 @@ class NetworkCollector(BaseCollector):
     def _pid_io(self, pid: int) -> tuple[int, int]:
         try:
             io = psutil.Process(pid).io_counters()
-            return int(io.bytes_sent or 0), int(io.bytes_recv or 0)
+            # Windows psutil uses write_bytes/read_bytes, not bytes_sent/bytes_recv
+            sent = getattr(io, "bytes_sent", None) or getattr(io, "write_bytes", 0)
+            recv = getattr(io, "bytes_recv", None) or getattr(io, "read_bytes", 0)
+            return int(sent or 0), int(recv or 0)
         except Exception:
             return 0, 0
 

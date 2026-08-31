@@ -340,6 +340,8 @@ export const api = {
     request(`/api/intel/alert/${id}?${refresh ? "refresh=true" : ""}`),
   intelMarkMalicious: (indicator) =>
     request("/api/intel/save", { method: "POST", body: JSON.stringify({ indicator }) }),
+  intelFeeds: () => request("/api/intel/feeds"),
+  intelRefreshFeeds: () => request("/api/intel/feeds/refresh", { method: "POST" }),
   mlStatus: () => request("/api/system/ml/status"),
   mlExplainAlert: (alertId, timeout = 60000) =>
     request(`/api/system/ml/explain/alert/${alertId}`, { signal: AbortSignal.timeout(timeout) }),
@@ -398,4 +400,15 @@ export const api = {
   updateDashboard: (id, body) => request(`/api/saved/dashboards/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteDashboard: (id) => request(`/api/saved/dashboards/${id}`, { method: "DELETE" }),
   renderDashboard: (id) => request(`/api/saved/dashboards/${id}/render` + qsSuffix(demoParams())),
+
+  exportTypes: () => request("/api/export/types"),
+  exportData: (dataType, params = {}) => {
+    const qs = new URLSearchParams({ format: params.format || "csv", limit: params.limit || 10000 });
+    if (params.since) qs.set("since", params.since);
+    if (params.severity) qs.set("severity", params.severity);
+    if (params.status) qs.set("status", params.status);
+    if (params.search) qs.set("search", params.search);
+    if (params.offset) qs.set("offset", params.offset);
+    return `/api/export/${dataType}?${qs.toString()}`;
+  },
 };

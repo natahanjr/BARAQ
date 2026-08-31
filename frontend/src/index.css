@@ -765,6 +765,13 @@ textarea:focus-visible {
   min-width: 640px;
 }
 
+/* ── Custom scrollbar for analysis panels ───────────────────────────── */
+.custom-scrollbar { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
+.custom-scrollbar::-webkit-scrollbar { width: 5px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
 /* ── Print styles ─────────────────────────────────────────────────────── */
 @media print {
   aside, header, footer, .no-print { display: none !important; }

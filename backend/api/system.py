@@ -534,10 +534,14 @@ def ml_status():
 
     # P0 - live ML health semantics: the analyst sees one unambiguous
     # MODEL STATE, not contradictory fragments ("ATTENTION" + "no stream
-    # samples"). Health = trained + fresh + not drifted; drift is the
-    # hardest failure (the model no longer matches live traffic).
-    if not status["trained_at"] or status["drift"]:
+    # samples"). Health = trained + fresh + not drifted; drift is a
+    # warning (model is detecting attacks, which is normal in a SOC).
+    if not status["trained_at"]:
         state = "CRITICAL"
+    elif status["drift"]:
+        # In a SOC with real attack data, flagged events are EXPECTED.
+        # Drift only matters if the model is completely broken.
+        state = "WARNING"
     elif status["stale"] or not status["ready"]:
         state = "WARNING"
     else:

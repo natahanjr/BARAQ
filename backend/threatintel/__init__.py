@@ -23,8 +23,13 @@ import re
 from typing import Any
 
 from backend.config import (
+    THREAT_INTEL_ABUSECH_KEY,
     THREAT_INTEL_ABUSEIPDB_KEY,
+    THREAT_INTEL_CENSYS_KEY,
+    THREAT_INTEL_FINDIP_KEY,
+    THREAT_INTEL_GREYNOISE_KEY,
     THREAT_INTEL_OTX_KEY,
+    THREAT_INTEL_SHODAN_KEY,
     THREAT_INTEL_TIMEOUT,
     THREAT_INTEL_VT_KEY,
 )
@@ -302,6 +307,395 @@ def _vt(indicators: list[str]) -> dict[str, Any] | None:
                         "label": f"VT: {malicious} engines flag IP",
                         "confidence": min(0.99, 0.6 + malicious * 0.03),
                     }
+        except Exception:
+            continue
+    return None
+
+
+def _shodan(ip_str: str) -> dict[str, Any] | None:
+    """Shodan IP lookup - internet device search and port scanning data."""
+    if not THREAT_INTEL_SHODAN_KEY:
+        return None
+    raw = _http_json(
+        f"https://api.shodan.io/shodan/host/{ip_str}?key={THREAT_INTEL_SHODAN_KEY}",
+        timeout=THREAT_INTEL_TIMEOUT,
+    )
+    if not raw:
+        return None
+    try:
+        import json
+        data = json.loads(raw)
+        ports = data.get("ports", [])
+        vulns = data.get("vulns", [])
+        org = data.get("org", "Unknown")
+        os_info = data.get("os") or "Unknown"
+        if vulns:
+            return {
+                "category": "malicious",
+                "label": f"Shodan: {len(vulns)} vuln(s) on {len(ports)} ports ({org})",
+                "confidence": min(0.95, 0.6 + len(vulns) * 0.05),
+            }
+        if ports and len(ports) > 5:
+            return {
+                "category": "suspicious",
+                "label": f"Shodan: {len(ports)} open ports ({org}, {os_info})",
+                "confidence": 0.5,
+            }
+        if org:
+            return {
+                "category": "unknown",
+                "label": f"Shodan: {org} ({os_info})",
+                "confidence": 0.3,
+            }
+    except Exception:
+        pass
+    return None
+
+
+def _greynoise(ip_str: str) -> dict[str, Any] | None:
+    """GreyNoise IP lookup - mass scanning and internet noise detection."""
+    if not THREAT_INTEL_GREYNOISE_KEY:
+        return None
+    raw = _http_json(
+        f"https://api.greynoise.io/v3/community/{ip_str}",
+        headers={"key": THREAT_INTEL_GREYNOISE_KEY},
+        timeout=THREAT_INTEL_TIMEOUT,
+    )
+    if not raw:
+        return None
+    try:
+        import json
+        data = json.loads(raw)
+        classification = data.get("classification", "unknown")
+        noise = data.get("noise", False)
+        riot = data.get("riot", False)
+        if classification == "malicious":
+            return {
+                "category": "malicious",
+                "label": f"GreyNoise: malicious scanner (noise={noise}, riot={riot})",
+                "confidence": 0.9,
+            }
+        if classification == "unknown" and noise:
+            return {
+                "category": "suspicious",
+                "label": f"GreyNoise: mass scanning activity detected",
+                "confidence": 0.6,
+            }
+        if classification == "benign" or riot:
+            return {
+                "category": "benign",
+                "label": f"GreyNoise: known service (riot={riot})",
+                "confidence": 0.8,
+            }
+    except Exception:
+        pass
+    return None
+
+
+def _censys(indicator: str) -> dict[str, Any] | None:
+    """Censys search - certificate transparency and host discovery."""
+    if not THREAT_INTEL_CENSYS_KEY:
+        return None
+    kind = "hosts" if _IPV4_RE.match(indicator) else "hosts"
+    parts = THREAT_INTEL_CENSYS_KEY.split(":", 1)
+    if len(parts) != 2:
+        return None
+    import base64
+    auth = base64.b64encode(f"{parts[0]}:{parts[1]}".encode()).decode()
+    raw = _http_json(
+        f"https://search.censys.io/api/v2/{kind}/{indicator}",
+        headers={"Authorization": f"Basic {auth}"},
+        timeout=THREAT_INTEL_TIMEOUT,
+    )
+    if not raw:
+        return None
+    try:
+        import json
+        data = json.loads(raw).get("result", {})
+        services = data.get("services", [])
+        if len(services) > 10:
+            return {
+                "category": "suspicious",
+                "label": f"Censys: {len(services)} exposed services",
+                "confidence": 0.5,
+            }
+        if services:
+            svc_names = [s.get("service_name", "?") for s in services[:5]]
+            return {
+                "category": "unknown",
+                "label": f"Censys: services {', '.join(svc_names)}",
+                "confidence": 0.3,
+            }
+    except Exception:
+        pass
+    return None
+
+
+def _findip(ip_str: str) -> dict[str, Any] | None:
+    """FindIP - unlimited free IP reputation with threat detection (no rate limits)."""
+    if not THREAT_INTEL_FINDIP_KEY:
+        return None
+    raw = _http_json(
+        f"https://api.findip.net/v2/ip/{ip_str}",
+        headers={"Authorization": f"Bearer {THREAT_INTEL_FINDIP_KEY}"},
+        timeout=THREAT_INTEL_TIMEOUT,
+    )
+    if not raw:
+        return None
+    try:
+        import json
+        data = json.loads(raw)
+        intel = data.get("intelligence", {})
+        threat = intel.get("threat", {})
+        is_malicious = threat.get("is_malicious", False)
+        risk_score = threat.get("risk_score", 0)
+        categories = threat.get("categories", [])
+        if is_malicious or risk_score > 70:
+            cats = ", ".join(categories[:3]) if categories else "threat detected"
+            return {
+                "category": "malicious",
+                "label": f"FindIP: risk {risk_score}/100 ({cats})",
+                "confidence": min(0.95, 0.5 + risk_score / 200.0),
+            }
+        if risk_score > 40:
+            return {
+                "category": "suspicious",
+                "label": f"FindIP: risk {risk_score}/100",
+                "confidence": 0.5,
+            }
+        if intel.get("is_tor") or intel.get("is_proxy") or intel.get("is_vpn"):
+            kind = "Tor" if intel.get("is_tor") else "proxy" if intel.get("is_proxy") else "VPN"
+            return {
+                "category": "suspicious",
+                "label": f"FindIP: {kind} exit node (risk {risk_score}/100)",
+                "confidence": 0.6,
+            }
+    except Exception:
+        pass
+    return None
+
+
+def _ipdetails(ip_str: str) -> dict[str, Any] | None:
+    """IPDetails.io - unlimited free IP geolocation and threat intelligence (no rate limits)."""
+    raw = _http_json(
+        f"https://api.ipdetails.io/json/{ip_str}",
+        timeout=THREAT_INTEL_TIMEOUT,
+    )
+    if not raw:
+        return None
+    try:
+        import json
+        data = json.loads(raw)
+        threat = data.get("threat", {})
+        is_malicious = threat.get("is_malicious", False)
+        risk_score = threat.get("risk_score", 0)
+        categories = threat.get("categories", [])
+        if is_malicious or risk_score > 70:
+            cats = ", ".join(categories[:3]) if categories else "threat detected"
+            return {
+                "category": "malicious",
+                "label": f"IPDetails: risk {risk_score}/100 ({cats})",
+                "confidence": min(0.95, 0.5 + risk_score / 200.0),
+            }
+        if risk_score > 40:
+            return {
+                "category": "suspicious",
+                "label": f"IPDetails: risk {risk_score}/100",
+                "confidence": 0.5,
+            }
+        is_hosting = data.get("network", {}).get("is_hosting", False)
+        if is_hosting:
+            org = data.get("network", {}).get("org", "Unknown")
+            return {
+                "category": "unknown",
+                "label": f"IPDetails: hosting provider ({org})",
+                "confidence": 0.3,
+            }
+    except Exception:
+        pass
+    return None
+
+
+def _isbadip(indicator: str) -> dict[str, Any] | None:
+    """isbadip.com - unlimited free IP/domain reputation (no key needed, no rate limits)."""
+    import urllib.request
+    req = urllib.request.Request(
+        f"https://api.isbadip.com/api/v1/host/{indicator}",
+        headers={"Accept": "application/json", "User-Agent": "Baraq-SOC/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
+            raw = resp.read().decode("utf-8")
+        import json
+        data = json.loads(raw)
+        is_malicious = data.get("malicious", False)
+        confidence = data.get("confidence")
+        threat = data.get("threat", {})
+        categories = threat.get("categories", [])
+        sources = threat.get("sources", [])
+        score = threat.get("score", 0)
+        if is_malicious:
+            src_names = ", ".join(sources[:3]) if sources else "multiple feeds"
+            cats = ", ".join(categories[:3]) if categories else "threat"
+            conf_map = {"low": 0.6, "medium": 0.75, "high": 0.9}
+            conf = conf_map.get(str(confidence), 0.7)
+            return {
+                "category": "malicious",
+                "label": f"isbadip: {cats} ({src_names})",
+                "confidence": conf,
+            }
+    except Exception:
+        pass
+    return None
+
+
+def _ffraud(indicator: str) -> dict[str, Any] | None:
+    """FFraud.com - unlimited free IP fraud intelligence (no key needed, no rate limits)."""
+    import urllib.request
+    if not _IPV4_RE.match(indicator):
+        return None
+    req = urllib.request.Request(
+        f"https://api.ffraud.com/public/ip/{indicator}",
+        headers={"Accept": "application/json", "User-Agent": "Baraq-SOC/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
+            raw = resp.read().decode("utf-8")
+        import json
+        data = json.loads(raw)
+        fraud_score = data.get("fraud_score", 0)
+        is_abuser = data.get("is_abuser", False)
+        is_tor = data.get("tor", False)
+        is_vpn = data.get("vpn", False)
+        is_proxy = data.get("proxy", False)
+        if fraud_score > 70 or is_abuser:
+            flags = []
+            if is_tor:
+                flags.append("Tor")
+            if is_vpn:
+                flags.append("VPN")
+            if is_proxy:
+                flags.append("proxy")
+            flag_str = f" ({', '.join(flags)})" if flags else ""
+            return {
+                "category": "malicious",
+                "label": f"FFraud: score {fraud_score}/100{flag_str}",
+                "confidence": min(0.95, 0.5 + fraud_score / 200.0),
+            }
+        if fraud_score > 40:
+            return {
+                "category": "suspicious",
+                "label": f"FFraud: score {fraud_score}/100",
+                "confidence": 0.5,
+            }
+    except Exception:
+        pass
+    return None
+
+
+def _threatfox(indicators: list[str]) -> dict[str, Any] | None:
+    """ThreatFox IOC lookup - malware IOC sharing by abuse.ch (requires Auth-Key)."""
+    if not THREAT_INTEL_ABUSECH_KEY:
+        return None
+    import json as _json
+    import urllib.request
+    for indicator in indicators:
+        body = _json.dumps({"query": "search_ioc", "search_term": indicator, "exact_match": True}).encode()
+        req = urllib.request.Request(
+            "https://threatfox-api.abuse.ch/api/v1/",
+            data=body,
+            headers={"Content-Type": "application/json", "Auth-Key": THREAT_INTEL_ABUSECH_KEY},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
+                raw = resp.read().decode("utf-8")
+            data = _json.loads(raw)
+            if data.get("query_status") == "no_result":
+                continue
+            results = data.get("data", [])
+            if results:
+                first = results[0]
+                malware = first.get("malware", "unknown")
+                confidence = int(first.get("confidence_level", 50))
+                return {
+                    "category": "malicious",
+                    "label": f"ThreatFox: {malware} (confidence {confidence}%)",
+                    "confidence": min(0.95, confidence / 100.0),
+                }
+        except Exception:
+            continue
+    return None
+
+
+def _urlhaus(indicators: list[str]) -> dict[str, Any] | None:
+    """URLhaus malicious URL lookup - by abuse.ch (requires Auth-Key for full access)."""
+    import json as _json
+    import urllib.request
+    headers = {"Content-Type": "application/json"}
+    if THREAT_INTEL_ABUSECH_KEY:
+        headers["Auth-Key"] = THREAT_INTEL_ABUSECH_KEY
+    for indicator in indicators:
+        body = _json.dumps({"host": indicator}).encode()
+        req = urllib.request.Request(
+            "https://urlhaus-api.abuse.ch/v1/host/",
+            data=body,
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
+                raw = resp.read().decode("utf-8")
+            data = _json.loads(raw)
+            status = data.get("query_status", "")
+            if status == "no_results":
+                continue
+            url_count = int(data.get("urls_online", 0))
+            if url_count > 0:
+                return {
+                    "category": "malicious",
+                    "label": f"URLhaus: {url_count} malicious URL(s) hosted",
+                    "confidence": min(0.95, 0.6 + url_count * 0.02),
+                }
+        except Exception:
+            continue
+    return None
+
+
+def _malwarebazaar(indicators: list[str]) -> dict[str, Any] | None:
+    """MalwareBazaar sample lookup - by abuse.ch (requires Auth-Key for full access)."""
+    import json as _json
+    import urllib.request
+    headers = {"Content-Type": "application/json"}
+    if THREAT_INTEL_ABUSECH_KEY:
+        headers["Auth-Key"] = THREAT_INTEL_ABUSECH_KEY
+    for indicator in indicators:
+        if not _HASH_RE.match(indicator):
+            continue
+        body = _json.dumps({"query": "get_info", "hash": indicator}).encode()
+        req = urllib.request.Request(
+            "https://mb-api.abuse.ch/api/v1/",
+            data=body,
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
+                raw = resp.read().decode("utf-8")
+            data = _json.loads(raw)
+            status = data.get("query_status", "")
+            if status == "hash_not_found":
+                continue
+            results = data.get("data", [])
+            if results:
+                first = results[0]
+                malware_name = first.get("signature", "unknown")
+                file_type = first.get("file_type", "unknown")
+                return {
+                    "category": "malicious",
+                    "label": f"MalwareBazaar: {malware_name} ({file_type})",
+                    "confidence": 0.95,
+                }
         except Exception:
             continue
     return None

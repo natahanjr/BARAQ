@@ -23,6 +23,7 @@ const PAGE_TITLES = {
   "/reports": "Reports",
   "/endpoints": "Endpoints",
   "/telemetry": "Telemetry",
+  "/export": "Data Export",
   "/users": "Users & Audit",
   "/settings": "Settings",
   "/agent-setup": "Agent Setup",

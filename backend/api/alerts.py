@@ -18,6 +18,7 @@ from backend.database.connection import get_db
 from backend.database.models import Alert, AlertAction, AlertEventLink, AnalystNote
 from backend.detection.workflow import can_transition, is_valid_state, next_states
 from backend.reports.generator import generate_report
+from backend.response.actions import block_ip, unblock_ip, kill_process, isolate_host, unisolate_host, quarantine_file, disable_account
 from backend.security import actor_name, require_admin, require_auth, tenant_scope
 
 logger = logging.getLogger("baraq.api.alerts")
@@ -606,10 +607,7 @@ def _extract_target(alert: Alert, action: str) -> str:
 def _execute_action(action: str, target: str) -> tuple[str, str]:
     """Execute a response action; returns (status, detail).
 
-    Actions are idempotent and logged. ``block_ip`` and ``kill_process``
-    are stubbed as safe, reversible operations by default - the operator
-    can wire these to their firewall/EDR. ``escalate`` and ``acknowledge``
-    are pure bookkeeping.
+    Uses real Windows-native commands for system actions.
     """
     if action == "acknowledge":
         return "success", "Alert acknowledged by analyst."
@@ -619,30 +617,22 @@ def _execute_action(action: str, target: str) -> tuple[str, str]:
         return "success", f"Alert escalated for '{target}'."
     if action == "block_ip":
         if not target:
-            return (
-                "success",
-                "No source IP present in the alert evidence - nothing to block.",
-            )
-        # Safe-by-default stub. Replace with a firewall/EDR API call.
-        return "success", f"Blocked source IP {target} (firewall rule applied)."
+            return "failed", "No source IP present in the alert evidence - nothing to block."
+        return block_ip(target)
     if action == "quarantine":
-        return "success", f"Quarantined affected target '{target or 'host'}'."
+        if target:
+            return quarantine_file(target)
+        return "success", f"Quarantined affected host '{target or 'host'}'."
     if action == "kill_process":
         if not target:
             return "failed", "No process identified in the alert evidence to terminate."
-        return "success", f"Terminated process '{target}'."
+        return kill_process(target)
     if action == "isolate":
-        return (
-            "success",
-            f"Isolated endpoint '{target or 'host'}' (network containment applied).",
-        )
+        return isolate_host(target or "localhost")
     if action == "disable_account":
         if not target:
-            return (
-                "success",
-                "No account identified in the alert evidence - nothing to disable.",
-            )
-        return "success", f"Disabled account '{target}' and forced MFA re-enrolment."
+            return "failed", "No account identified in the alert evidence - nothing to disable."
+        return disable_account(target)
     return "failed", "Unknown action."
 
 

@@ -18,7 +18,17 @@ from backend.threatintel import (
     _HASH_RE,
     _IPV4_RE,
     _abuseipdb,
+    _censys,
+    _ffraud,
+    _findip,
+    _greynoise,
+    _ipdetails,
+    _isbadip,
+    _malwarebazaar,
     _otx,
+    _shodan,
+    _threatfox,
+    _urlhaus,
     _vt,
     classify_indicator,
 )
@@ -144,25 +154,57 @@ def lookup_indicator(
 
     # 4) Online providers (only for missing or non-benign indicators)
     if not offline and result["category"] != "benign":
-        for provider in (_abuseipdb, _otx, _vt):
-            verdict = (
-                provider([indicator])
-                if provider in (_otx, _vt)
-                else provider(indicator)
-            )
+        # Unlimited IP-only providers (no rate limits, highest priority)
+        unlimited_ip_providers = (_findip, _ipdetails, _isbadip, _ffraud)
+        # Key-gated IP-only providers
+        key_gated_ip_providers = (_abuseipdb, _shodan, _greynoise, _censys)
+        # List-based providers (accept any indicator type)
+        list_providers = (_otx, _vt, _threatfox, _urlhaus, _malwarebazaar)
+
+        # Try unlimited providers first (no key needed)
+        for provider in unlimited_ip_providers:
+            if not (_IPV4_RE.match(indicator) or _DOMAIN_RE.match(indicator)):
+                continue
+            verdict = provider(indicator)
             if not verdict:
                 continue
-            if (
-                verdict.get("category") == "malicious"
-                or result["category"] == "unknown"
-            ):
+            if verdict.get("category") == "malicious" or result["category"] == "unknown":
                 result["category"] = verdict.get("category", result["category"])
                 result["label"] = verdict.get("label", result["label"])
-                result["confidence"] = max(
-                    result["confidence"], verdict.get("confidence", 0.6)
-                )
+                result["confidence"] = max(result["confidence"], verdict.get("confidence", 0.6))
             result["sources"].append(provider.__name__.lstrip("_"))
-            break
+            if verdict.get("category") == "malicious":
+                break
+
+        # Try key-gated providers (only for IPs)
+        for provider in key_gated_ip_providers:
+            if result["category"] == "malicious":
+                break
+            if not (_IPV4_RE.match(indicator)):
+                continue
+            verdict = provider(indicator)
+            if not verdict:
+                continue
+            if verdict.get("category") == "malicious" or result["category"] == "unknown":
+                result["category"] = verdict.get("category", result["category"])
+                result["label"] = verdict.get("label", result["label"])
+                result["confidence"] = max(result["confidence"], verdict.get("confidence", 0.6))
+            result["sources"].append(provider.__name__.lstrip("_"))
+            if verdict.get("category") == "malicious":
+                break
+
+        # Try list-based providers
+        for provider in list_providers:
+            if result["category"] == "malicious":
+                break
+            verdict = provider([indicator])
+            if not verdict:
+                continue
+            if verdict.get("category") == "malicious" or result["category"] == "unknown":
+                result["category"] = verdict.get("category", result["category"])
+                result["label"] = verdict.get("label", result["label"])
+                result["confidence"] = max(result["confidence"], verdict.get("confidence", 0.6))
+            result["sources"].append(provider.__name__.lstrip("_"))
 
     # Persist cache
     if row is None:

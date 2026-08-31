@@ -6,6 +6,7 @@ import json
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Float,
@@ -509,8 +510,8 @@ class NetworkConnection(Base):
     remote_port: Mapped[int] = mapped_column(Integer, default=0)
     state: Mapped[str] = mapped_column(String(32), default="")
     is_listening: Mapped[bool] = mapped_column(Boolean, default=False)
-    bytes_sent: Mapped[int] = mapped_column(Integer, default=0)
-    bytes_recv: Mapped[int] = mapped_column(Integer, default=0)
+    bytes_sent: Mapped[int] = mapped_column(BigInteger, default=0)
+    bytes_recv: Mapped[int] = mapped_column(BigInteger, default=0)
     duration_seconds: Mapped[float] = mapped_column(Float, default=0.0)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     org: Mapped[str] = mapped_column(String(64), default="", index=True)

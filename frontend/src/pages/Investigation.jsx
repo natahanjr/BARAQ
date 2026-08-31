@@ -709,103 +709,241 @@ function StoryTimeline({ timeline }) {
   );
 }
 
+const SECTION_ICONS = {
+  "what this alert likely means": (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  ),
+  "mitre att&ck mapping": (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+    </svg>
+  ),
+  "detection": (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+    </svg>
+  ),
+  "investigation": (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  ),
+  "containment": (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  ),
+  "why it's labeled": (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  ),
+  "pro tips": (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" />
+    </svg>
+  ),
+  "bottom line": (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  ),
+};
+
+const SECTION_COLORS = {
+  "what this alert likely means": "from-amber-500/10 to-orange-500/5 border-amber-500/20 text-amber-600",
+  "mitre att&ck mapping": "from-red-500/10 to-rose-500/5 border-red-500/20 text-red-600",
+  "detection": "from-emerald-500/10 to-green-500/5 border-emerald-500/20 text-emerald-600",
+  "investigation": "from-blue-500/10 to-cyan-500/5 border-blue-500/20 text-blue-600",
+  "containment": "from-purple-500/10 to-violet-500/5 border-purple-500/20 text-purple-600",
+  "why it's labeled": "from-rose-500/10 to-pink-500/5 border-rose-500/20 text-rose-600",
+  "pro tips": "from-cyan-500/10 to-teal-500/5 border-cyan-500/20 text-cyan-600",
+  "bottom line": "from-emerald-500/10 to-green-500/5 border-emerald-500/20 text-emerald-600",
+};
+
+function getSectionColor(title) {
+  const lower = title.toLowerCase();
+  for (const [key, val] of Object.entries(SECTION_COLORS)) {
+    if (lower.includes(key)) return val;
+  }
+  return "from-violet-500/10 to-indigo-500/5 border-violet-500/20 text-violet-600";
+}
+
+function getSectionIcon(title) {
+  const lower = title.toLowerCase();
+  for (const [key, val] of Object.entries(SECTION_ICONS)) {
+    if (lower.includes(key)) return val;
+  }
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
+    </svg>
+  );
+}
+
+function fmtInline(s) {
+  const parts = [];
+  let rest = s;
+  let key = 0;
+  while (rest) {
+    const boldMatch = rest.match(/\*\*(.+?)\*\*/);
+    const codeMatch = rest.match(/`(.+?)`/);
+    if (boldMatch && (!codeMatch || boldMatch.index <= codeMatch.index)) {
+      if (boldMatch.index > 0) parts.push(<span key={key++}>{rest.slice(0, boldMatch.index)}</span>);
+      parts.push(<strong key={key++} className="font-semibold text-[var(--fg-primary)]">{boldMatch[1]}</strong>);
+      rest = rest.slice(boldMatch.index + boldMatch[0].length);
+    } else if (codeMatch) {
+      if (codeMatch.index > 0) parts.push(<span key={key++}>{rest.slice(0, codeMatch.index)}</span>);
+      parts.push(<code key={key++} className="rounded-md bg-[var(--bg-inset)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--accent-violet)]">{codeMatch[1]}</code>);
+      rest = rest.slice(codeMatch.index + codeMatch[0].length);
+    } else {
+      parts.push(<span key={key++}>{rest}</span>);
+      break;
+    }
+  }
+  return parts;
+}
+
 function AIAnalysisContent({ text }) {
   if (!text) return null;
 
   const lines = text.split("\n");
   const sections = [];
   let current = null;
+  let pendingTable = null;
 
-  for (const line of lines) {
-    if (line.startsWith("### ")) {
-      if (current) sections.push(current);
-      current = { title: line.slice(4).trim(), items: [], type: "section" };
-    } else if (line.startsWith("## ")) {
-      if (current) sections.push(current);
-      current = { title: line.slice(3).trim(), items: [], type: "section" };
-    } else if (line.startsWith("> ")) {
-      if (!current) current = { title: "", items: [], type: "section" };
-      current.items.push({ kind: "quote", text: line.slice(2).trim() });
-    } else if (line.startsWith("- ") || line.startsWith("* ")) {
-      if (!current) current = { title: "", items: [], type: "section" };
-      current.items.push({ kind: "bullet", text: line.slice(2).trim() });
-    } else if (line.match(/^\d+\.\s/)) {
-      if (!current) current = { title: "", items: [], type: "section" };
-      current.items.push({ kind: "numbered", text: line.replace(/^\d+\.\s/, "").trim() });
-    } else if (line.trim()) {
-      if (!current) current = { title: "", items: [], type: "section" };
-      current.items.push({ kind: "text", text: line.trim() });
+  const flushTable = () => {
+    if (pendingTable && current) {
+      current.items.push({ kind: "table", rows: pendingTable });
+      pendingTable = null;
     }
-  }
-  if (current) sections.push(current);
-
-  const fmtInline = (s) => {
-    const parts = [];
-    let rest = s;
-    let key = 0;
-    while (rest) {
-      const boldMatch = rest.match(/\*\*(.+?)\*\*/);
-      const codeMatch = rest.match(/`(.+?)`/);
-      let next = null;
-      if (boldMatch && (!codeMatch || boldMatch.index <= codeMatch.index)) {
-        if (boldMatch.index > 0) parts.push(<span key={key++}>{rest.slice(0, boldMatch.index)}</span>);
-        parts.push(<strong key={key++} className="font-semibold text-[var(--fg-primary)]">{boldMatch[1]}</strong>);
-        rest = rest.slice(boldMatch.index + boldMatch[0].length);
-      } else if (codeMatch) {
-        if (codeMatch.index > 0) parts.push(<span key={key++}>{rest.slice(0, codeMatch.index)}</span>);
-        parts.push(<code key={key++} className="rounded bg-[var(--bg-inset)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--accent-violet)]">{codeMatch[1]}</code>);
-        rest = rest.slice(codeMatch.index + codeMatch[0].length);
-      } else {
-        parts.push(<span key={key++}>{rest}</span>);
-        break;
-      }
-    }
-    return parts;
   };
 
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("### ")) {
+      flushTable();
+      if (current) sections.push(current);
+      current = { title: trimmed.slice(4).trim(), items: [], type: "section" };
+    } else if (trimmed.startsWith("## ")) {
+      flushTable();
+      if (current) sections.push(current);
+      current = { title: trimmed.slice(3).trim(), items: [], type: "section" };
+    } else if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+      if (!current) current = { title: "", items: [], type: "section" };
+      const cells = trimmed.split("|").slice(1, -1).map((c) => c.trim());
+      if (cells.every((c) => /^[-:]+$/.test(c))) {
+        continue;
+      }
+      if (!pendingTable) pendingTable = [];
+      pendingTable.push(cells);
+    } else {
+      flushTable();
+      if (trimmed.startsWith("> ")) {
+        if (!current) current = { title: "", items: [], type: "section" };
+        current.items.push({ kind: "quote", text: trimmed.slice(2).trim() });
+      } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+        if (!current) current = { title: "", items: [], type: "section" };
+        current.items.push({ kind: "bullet", text: trimmed.slice(2).trim() });
+      } else if (trimmed.match(/^\d+\.\s/)) {
+        if (!current) current = { title: "", items: [], type: "section" };
+        current.items.push({ kind: "numbered", text: trimmed.replace(/^\d+\.\s/, "").trim() });
+      } else if (trimmed) {
+        if (!current) current = { title: "", items: [], type: "section" };
+        current.items.push({ kind: "text", text: trimmed });
+      }
+    }
+  }
+  flushTable();
+  if (current) sections.push(current);
+
   return (
-    <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
-      {sections.map((sec, i) => (
-        <div key={i}>
-          {sec.title && (
-            <div className="flex items-center gap-2 mb-2.5">
-              <div className="h-px flex-1 bg-gradient-to-r from-[var(--accent-violet)]/20 to-transparent" />
-              <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--accent-violet)] shrink-0">{sec.title}</h4>
-              <div className="h-px flex-1 bg-gradient-to-l from-[var(--accent-violet)]/20 to-transparent" />
+    <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1 custom-scrollbar">
+      {sections.map((sec, i) => {
+        const colorClass = getSectionColor(sec.title);
+        const icon = getSectionIcon(sec.title);
+
+        return (
+          <div key={i} className={`rounded-2xl border bg-gradient-to-br ${colorClass} backdrop-blur-sm overflow-hidden transition-all duration-300`}>
+            {sec.title ? (
+              <div className="flex items-center gap-2.5 px-4 py-3">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/50 dark:bg-black/20">
+                  {icon}
+                </div>
+                <h4 className="text-[13px] font-bold uppercase tracking-wide">{sec.title}</h4>
+              </div>
+            ) : (
+              <div className="h-0" />
+            )}
+            <div className={`${sec.title ? "px-4 pb-4" : "p-4"} space-y-2`}>
+              {sec.items.map((item, j) => {
+                if (item.kind === "quote") {
+                  return (
+                    <div key={j} className="rounded-xl border-l-[3px] border-current/30 bg-white/40 dark:bg-black/15 px-3 py-2.5 backdrop-blur-sm">
+                      <p className="text-[12px] leading-relaxed text-[var(--fg-secondary)]">{fmtInline(item.text)}</p>
+                    </div>
+                  );
+                }
+                if (item.kind === "bullet") {
+                  return (
+                    <div key={j} className="flex items-start gap-2.5 rounded-lg bg-white/30 dark:bg-black/10 px-3 py-2 backdrop-blur-sm">
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" />
+                      <p className="text-[12px] leading-relaxed text-[var(--fg-secondary)]">{fmtInline(item.text)}</p>
+                    </div>
+                  );
+                }
+                if (item.kind === "numbered") {
+                  return (
+                    <div key={j} className="flex items-start gap-2.5 rounded-lg bg-white/30 dark:bg-black/10 px-3 py-2 backdrop-blur-sm">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-current/20 text-[10px] font-bold">
+                        {j + 1}
+                      </span>
+                      <p className="text-[12px] leading-relaxed text-[var(--fg-secondary)]">{fmtInline(item.text)}</p>
+                    </div>
+                  );
+                }
+                if (item.kind === "table") {
+                  const [header, ...body] = item.rows;
+                  return (
+                    <div key={j} className="rounded-xl overflow-hidden border border-current/10 bg-white/40 dark:bg-black/15 backdrop-blur-sm">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[11px]">
+                          <thead>
+                            <tr className="bg-current/[0.06]">
+                              {header.map((cell, ci) => (
+                                <th key={ci} className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[var(--fg-primary)] whitespace-nowrap">
+                                  {fmtInline(cell)}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-current/[0.06]">
+                            {body.map((row, ri) => (
+                              <tr key={ri} className="hover:bg-current/[0.03] transition-colors">
+                                {row.map((cell, ci) => (
+                                  <td key={ci} className="px-3 py-2 text-[var(--fg-secondary)] whitespace-nowrap">
+                                    {fmtInline(cell)}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <p key={j} className="text-[12px] leading-relaxed text-[var(--fg-secondary)]">{fmtInline(item.text)}</p>
+                );
+              })}
             </div>
-          )}
-          <div className="space-y-1.5">
-            {sec.items.map((item, j) => {
-              if (item.kind === "quote") {
-                return (
-                  <div key={j} className="rounded-[var(--radius-2xl)] border-l-2 border-[var(--accent-violet)]/40 bg-[var(--accent-violet)]/[0.06] px-3 py-2">
-                    <p className="text-[12px] leading-relaxed text-[var(--fg-secondary)]">{fmtInline(item.text)}</p>
-                  </div>
-                );
-              }
-              if (item.kind === "bullet") {
-                return (
-                  <div key={j} className="flex items-start gap-2 pl-1">
-                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[var(--accent-violet)]" />
-                    <p className="text-[12px] leading-relaxed text-[var(--fg-secondary)]">{fmtInline(item.text)}</p>
-                  </div>
-                );
-              }
-              if (item.kind === "numbered") {
-                return (
-                  <div key={j} className="flex items-start gap-2.5 pl-1">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent-violet)]/20 text-[10px] font-semibold text-[var(--accent-violet)]">
-                      {j + 1}
-                    </span>
-                    <p className="text-[12px] leading-relaxed text-[var(--fg-secondary)]">{fmtInline(item.text)}</p>
-                  </div>
-                );
-              }
-              return <p key={j} className="text-[12px] leading-relaxed text-[var(--fg-secondary)]">{fmtInline(item.text)}</p>;
-            })}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -1208,21 +1346,30 @@ export default function Investigation() {
             )}
 
             {explanation && (
-              <div className="rounded-[var(--radius-2xl)] border border-[var(--accent-violet)]/20 bg-gradient-to-br from-[var(--accent-violet)]/[0.06] via-[var(--bg-surface)] to-indigo-500/[0.04] p-6 shadow-xl shadow-[var(--accent-violet)]/[0.03]">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-500 shadow-lg shadow-violet-500/25">
-                    <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                      <path d="M2 17l10 5 10-5" />
-                      <path d="M2 12l10 5 10-5" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="text-[15px] font-semibold text-[var(--fg-primary)]">BARAQ AI Analysis</h3>
-                    <p className="text-[11px] text-[var(--fg-muted)]">AI-powered investigation summary</p>
+              <div className="rounded-[var(--radius-2xl)] border border-[var(--accent-violet)]/15 bg-gradient-to-br from-[var(--accent-violet)]/[0.04] via-[var(--bg-surface)] to-indigo-500/[0.03] shadow-xl shadow-[var(--accent-violet)]/[0.02] overflow-hidden">
+                <div className="relative px-6 pt-5 pb-4 border-b border-[var(--accent-violet)]/10">
+                  <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-indigo-500/5" />
+                  <div className="relative flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-600 shadow-lg shadow-violet-500/30">
+                      <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                        <path d="M2 17l10 5 10-5" />
+                        <path d="M2 12l10 5 10-5" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-[15px] font-bold text-[var(--fg-primary)] tracking-tight">BARAQ AI Analysis</h3>
+                      <p className="text-[11px] text-[var(--fg-muted)] mt-0.5">AI-powered investigation summary</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 rounded-full bg-violet-500/10 px-3 py-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse" />
+                      <span className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider">AI Generated</span>
+                    </div>
                   </div>
                 </div>
-                <AIAnalysisContent text={explanation} />
+                <div className="p-5">
+                  <AIAnalysisContent text={explanation} />
+                </div>
               </div>
             )}
           </div>

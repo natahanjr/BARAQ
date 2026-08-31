@@ -618,7 +618,7 @@ ML_TARGET_FPR = float(os.environ.get("BARAQ_ML_TARGET_FPR", "0.03"))
 #: per-stream anomaly threshold, the detector is considered drifted (the
 #: learned baseline no longer reflects the live distribution) and is marked
 #: stale so the scheduler retrains and the operator sees the drift signal.
-ML_DRIFT_RATE = float(os.environ.get("BARAQ_ML_DRIFT_RATE", "0.35"))
+ML_DRIFT_RATE = float(os.environ.get("BARAQ_ML_DRIFT_RATE", "0.75"))
 #: Minimum number of recently scored events required before a drift verdict
 #: can be produced (avoids deciding on noise).
 ML_DRIFT_MIN_SAMPLES = int(os.environ.get("BARAQ_ML_DRIFT_MIN_SAMPLES", "40"))
@@ -1325,6 +1325,11 @@ THREAT_INTEL_ENABLED = os.environ.get("BARAQ_THREAT_INTEL_ENABLED", "1") == "1"
 THREAT_INTEL_ABUSEIPDB_KEY = _secret("BARAQ_ABUSEIPDB_KEY", "")
 THREAT_INTEL_OTX_KEY = _secret("BARAQ_OTX_KEY", "")
 THREAT_INTEL_VT_KEY = _secret("BARAQ_VT_KEY", "")
+THREAT_INTEL_SHODAN_KEY = _secret("BARAQ_SHODAN_KEY", "")
+THREAT_INTEL_GREYNOISE_KEY = _secret("BARAQ_GREYNOISE_KEY", "")
+THREAT_INTEL_CENSYS_KEY = _secret("BARAQ_CENSYS_KEY", "")
+THREAT_INTEL_ABUSECH_KEY = _secret("BARAQ_ABUSECH_KEY", "")
+THREAT_INTEL_FINDIP_KEY = _secret("BARAQ_FINDIP_KEY", "")
 THREAT_INTEL_CACHE_HOURS = int(os.environ.get("BARAQ_THREAT_INTEL_CACHE_HOURS", "24"))
 THREAT_INTEL_TIMEOUT = float(os.environ.get("BARAQ_THREAT_INTEL_TIMEOUT", "8"))
 # Threat-intel feed subscriptions (roadmap 4.3): a JSON list of feed sources

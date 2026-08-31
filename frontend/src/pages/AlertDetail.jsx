@@ -78,6 +78,7 @@ export default function AlertDetail() {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState({});
   const [warned, setWarning] = useState({});
+  const [confirmAction, setConfirmAction] = useState(null);
   const [intel, setIntel] = useState(null);
   const [intelLoading, setIntelLoading] = useState(false);
   const [marking, setMarking] = useState(null);
@@ -139,10 +140,26 @@ export default function AlertDetail() {
   };
 
   const runSoar = async (action) => {
-    if (warned[action]) return;
-    if (!window.confirm(`Run "${action}" against this alert (host: ${alert.host || "?"})?`)) return;
-    setWarning((prev) => ({ ...prev, [action]: true })); setRunning((prev) => ({ ...prev, [action]: true })); setError(""); setNotice("");
+    if (warned[action]) {
+      setWarning((prev) => ({ ...prev, [action]: false }));
+    } else {
+      setConfirmAction(action);
+      return;
+    }
+    setRunning((prev) => ({ ...prev, [action]: true })); setError(""); setNotice("");
     try { const res = await api.takeAction(alert.id, action); const label = soarButtons.find((b) => b.key === action)?.label || action; setNotice(`${label} \u2192 ${res.status}: ${res.detail || res.target || "done"}`); await load(); } catch (e) { setError(e.message); } finally { setRunning((prev) => ({ ...prev, [action]: false })); }
+  };
+
+  const confirmSoar = () => {
+    const action = confirmAction;
+    setConfirmAction(null);
+    if (!action) return;
+    setWarning((prev) => ({ ...prev, [action]: true }));
+    setRunning((prev) => ({ ...prev, [action]: true })); setError(""); setNotice("");
+    api.takeAction(alert.id, action)
+      .then((res) => { const label = soarButtons.find((b) => b.key === action)?.label || action; setNotice(`${label} \u2192 ${res.status}: ${res.detail || res.target || "done"}`); load(); })
+      .catch((e) => setError(e.message))
+      .finally(() => setRunning((prev) => ({ ...prev, [action]: false })));
   };
 
   const markMalicious = async (indicator) => {
@@ -625,6 +642,32 @@ export default function AlertDetail() {
       <div className="flex justify-center pt-4">
         <p className="text-xs font-medium text-slate-500/50">BARAQ &middot; Real-Time Endpoint Security Operations</p>
       </div>
+
+      {/* SOAR Confirmation Modal */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setConfirmAction(null)}>
+          <div className="mx-4 w-full max-w-md rounded-3xl border border-white/10 bg-[#0f1420] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/15">
+              <svg className="h-6 w-6 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </div>
+            <h3 className="text-[15px] font-bold text-white">Confirm {soarButtons.find((b) => b.key === confirmAction)?.label || confirmAction}</h3>
+            <p className="mt-2 text-[13px] text-slate-400">
+              This will execute a <span className="font-semibold text-amber-400">real system action</span> on <span className="font-mono text-white">{alert.host || "this host"}</span>. This action cannot be undone.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button onClick={() => setConfirmAction(null)} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-[13px] font-semibold text-slate-300 transition-colors hover:bg-white/10">
+                Cancel
+              </button>
+              <button onClick={confirmSoar} className="flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2.5 text-[13px] font-bold text-white shadow-lg shadow-amber-500/25 transition-all hover:shadow-xl hover:shadow-amber-500/30 hover:scale-[1.02] active:scale-[0.98]">
+                Execute Action
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

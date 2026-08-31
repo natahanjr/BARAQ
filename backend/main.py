@@ -32,6 +32,7 @@ from backend.api import (
     endpoints,
     evaluation,
     events,
+    export,
     graph,
     hunting,
     incidents,
@@ -983,6 +984,7 @@ for router in (
     behavior_groups.router,
     correlations.router,
     risk.router,
+    export.router,
 ):
     app.include_router(router)
 
