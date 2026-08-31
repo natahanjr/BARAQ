@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Loading, ErrorBanner } from "../components/Feedback.jsx";
+import { ErrorBanner } from "../components/Feedback.jsx";
 import { PageHeader, Card, Badge, Button } from "../components/ui/index.js";
 
 const ENTITY_TYPES = ["alert", "incident", "event"];
@@ -76,7 +76,13 @@ function Bookmarks() {
 
       {error && <ErrorBanner message={error} onRetry={load} />}
 
-      {!bookmarks && !error && <Loading label="Loading bookmarks" />}
+      {!bookmarks && !error && (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 animate-pulse rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)]" />
+          ))}
+        </div>
+      )}
 
       {bookmarks && (
         <>
