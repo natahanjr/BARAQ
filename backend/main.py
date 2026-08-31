@@ -837,6 +837,7 @@ async def api_gates(request: Request, call_next):
 # ---------------------------------------------------------------------------
 _PUBLIC_PREFIXES = (
     "/api/health",
+    "/api/version",
     "/api/auth/login",
     "/api/auth/register",
     "/api/auth/mfa/verify",
@@ -1170,6 +1171,12 @@ def liveness():
     This is a lightweight endpoint that does not check dependencies.
     """
     return {"status": "ok"}
+
+
+@app.get("/api/version")
+def version():
+    """Public version endpoint: returns the current build version."""
+    return {"version": "0.13.0", "build": "v6-phase2"}
 
 
 @app.get("/metrics")
