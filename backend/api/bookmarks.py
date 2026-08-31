@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+from sqlalchemy.exc import IntegrityError
 from backend.database.connection import get_db
 from backend.database.models import Bookmark
 from backend.security import require_auth
@@ -16,22 +17,30 @@ class BookmarkCreate(BaseModel):
     tags: list[str] = []
 
 
-class BookmarkResponse(BaseModel):
-    id: int
-    user_id: int
-    entity_type: str
-    entity_id: int
-    note: Optional[str]
-    tags: list[str]
-    created_at: str
-
-
 @router.post("")
 async def create_bookmark(body: BookmarkCreate, db=Depends(get_db)):
+    existing = db.query(Bookmark).filter_by(
+        user_id=1, entity_type=body.entity_type, entity_id=body.entity_id
+    ).first()
+    if existing:
+        existing.note = body.note or existing.note
+        existing.tags = body.tags or existing.tags
+        db.commit()
+        db.refresh(existing)
+        return existing
     bm = Bookmark(user_id=1, entity_type=body.entity_type, entity_id=body.entity_id,
                   note=body.note, tags=body.tags)
     db.add(bm)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = db.query(Bookmark).filter_by(
+            user_id=1, entity_type=body.entity_type, entity_id=body.entity_id
+        ).first()
+        if existing:
+            return existing
+        raise HTTPException(409, "Bookmark already exists")
     db.refresh(bm)
     return bm
 
