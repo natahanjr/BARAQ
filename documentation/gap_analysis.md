@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-31
 **Last updated:** 2026-08-31
-**Overall:** ~130 items EXISTS, ~13 PARTIAL, 0 MISSING
+**Overall:** ~130 items EXISTS, 0 PARTIAL, 0 MISSING
 
 ---
 
@@ -11,80 +11,95 @@
 | Status | Count |
 |--------|-------|
 | EXISTS | ~130 |
-| PARTIAL | ~13 |
+| PARTIAL | 0 ✅ |
 | MISSING | 0 ✅ |
 
----
-
-## ✅ MISSING Items (All Completed)
-
-| # | Area | Item | Status | Commit |
-|---|------|------|--------|--------|
-| 1 | Core | Memory profiling tests | ✅ DONE | `profiling/resource_profiler.py` |
-| 2 | Investigation | Bookmarks in investigation | ✅ DONE | `api/bookmarks.py` + `Bookmark` model |
-| 3 | SOAR | Formal approval workflow | ✅ DONE | `response/approval.py` + `api/approval.py` |
-| 4 | Integrations | Cloud provider connectors (AWS/Azure/GCP) | ✅ DONE | `integrations/cloud/` abstraction |
-| 5 | Integrations | Endpoint platform connectors (CrowdStrike/SentinelOne) | ✅ DONE | `integrations/edr/` abstraction |
-| 6 | Integrations | External SOAR connectors (XSOAR/Splunk SOAR) | ✅ DONE | `integrations/soar/` abstraction |
-| 7 | ML | Attack path prediction | ✅ DONE | `ml/attack_path.py` |
-| 8 | Compliance | Multi-framework compliance (SOC2/ISO27001/NIST) | ✅ DONE | `compliance/frameworks.py` |
+**All gap analysis items completed.**
 
 ---
 
-## PARTIAL Items (Need Enrichment)
+## ✅ Previously MISSING Items (All Completed in `506bc90`)
 
-| # | Area | Item | What Exists | What's Missing |
-|---|------|------|-------------|----------------|
-| 1 | MITRE | Gap analysis report | Frontend page exists | Automated report: which techniques have no detection |
-| 2 | SOAR | Evidence collection | Process tree + timeline | Dedicated forensic bundle action |
-| 3 | Compliance | Gap analysis | Basic data inventory | Framework-specific gap checking |
-| 4 | Fleet | Log collection | Telemetry ships | Remote log fetch command |
-| 5 | ML | UEBA | Entity risk + ML anomaly per user | Formal UEBA baseline profiling per user |
-| 6 | ML | Insider threat | Risk escalation + behavioral anomaly | Dedicated insider threat scoring/classification |
-| 7 | ML | Blast radius | Entity graph shows relationships | Automated blast radius calculation |
-| 8 | Scale | Ingestion test | 100K generator script | Formal throughput benchmark |
-| 9 | Scale | Alert volume test | Evaluation tests exist | Dedicated stress test |
-| 10 | Scale | Query optimization | Indexes exist | Documented optimization suite |
-| 11 | Scale | API latency | Detection latency tracked | Dedicated API latency benchmark |
-| 12 | Compliance | Scheduled compliance reports | Scheduled reports exist | Compliance-specific scheduling |
-| 13 | Fleet | Config profiles | Per-host config via script | Multi-profile config management |
+| # | Area | Item | Files |
+|---|------|------|-------|
+| 1 | Core | Memory profiling tests | `profiling/resource_profiler.py` |
+| 2 | Investigation | Bookmarks in investigation | `api/bookmarks.py` + `Bookmark` model |
+| 3 | SOAR | Formal approval workflow | `response/approval.py` + `api/approval.py` |
+| 4 | Integrations | Cloud provider connectors | `integrations/cloud/{base,aws,azure,gcp}.py` |
+| 5 | Integrations | Endpoint platform connectors | `integrations/edr/{base,crowdstrike,sentinelone}.py` |
+| 6 | Integrations | External SOAR connectors | `integrations/soar/{base,xsoar,splunk}.py` |
+| 7 | ML | Attack path prediction | `ml/attack_path.py` |
+| 8 | Compliance | Multi-framework compliance | `compliance/frameworks.py` |
 
 ---
 
-## TODO — Priority Order
+## ✅ Previously PARTIAL Items (All Completed in `839bb2a`)
 
-### P0 — Critical (Blocks product readiness)
+| # | Area | Item | Files |
+|---|------|------|-------|
+| 1 | MITRE | Gap analysis report | `mitre/gap_analysis.py` |
+| 2 | SOAR | Evidence collection | Built into `response/approval.py` workflow |
+| 3 | Compliance | Gap analysis | `compliance/gap_analysis.py` |
+| 4 | Fleet | Log collection | `fleet/log_fetch.py` |
+| 5 | ML | UEBA | `ml/ueba.py` |
+| 6 | ML | Insider threat | `ml/insider_threat.py` |
+| 7 | ML | Blast radius | `risk/blast_radius.py` |
+| 8 | Scale | Ingestion test | `profiling/benchmarks.py` |
+| 9 | Scale | Alert volume test | Built into `profiling/benchmarks.py` |
+| 10 | Scale | Query optimization | `database/optimization.py` |
+| 11 | Scale | API latency | Built into `profiling/benchmarks.py` |
+| 12 | Compliance | Scheduled compliance reports | Built into `compliance/gap_analysis.py` |
+| 13 | Fleet | Config profiles | `fleet/config_profiles.py` |
+
+---
+
+## New Test Coverage
+
+| Test File | Tests |
+|-----------|-------|
+| `test_profiling.py` | 4 |
+| `test_attack_path.py` | 6 |
+| `test_compliance_frameworks.py` | 5 |
+| `test_approval.py` | 4 |
+| `test_cloud_connectors.py` | 3 |
+| `test_edr_connectors.py` | 2 |
+| `test_soar_connectors.py` | 2 |
+| `test_mitre_gap.py` | 2 |
+| `test_ueba.py` | 4 |
+| `test_insider_threat.py` | 4 |
+| `test_blast_radius.py` | 4 |
+| `test_benchmarks.py` | 2 |
+| `test_query_optimization.py` | 3 |
+| `test_fleet_features.py` | 5 |
+| `test_compliance_gap.py` | 3 |
+| **Total** | **53** |
+
+---
+
+## TODO — Remaining Work (Feature Enrichment)
+
+### P1 — High
 
 | # | Task | Status |
 |---|------|--------|
-| 1 | End-to-end attack scenario test: pick one attack, run through full pipeline | TODO |
-| 2 | Formal ingestion throughput benchmark (100/1K/10K events/sec) | TODO |
-| 3 | API latency benchmark suite | TODO |
+| 1 | End-to-end attack scenario test | TODO |
+| 2 | Full SOAR approval UI in frontend | TODO |
+| 3 | UEBA frontend dashboard | TODO |
+| 4 | Insider threat frontend view | TODO |
 
-### P1 — High (Core quality)
-
-| # | Task | Status |
-|---|------|--------|
-| 4 | MITRE gap analysis automated report | TODO |
-| 5 | SOAR forensic evidence collection action | TODO |
-| 6 | UEBA baseline profiling per user | TODO |
-| 7 | Insider threat dedicated scoring | TODO |
-| 8 | Automated blast radius calculation | TODO |
-
-### P2 — Medium (Feature completeness)
+### P2 — Medium
 
 | # | Task | Status |
 |---|------|--------|
-| 9 | Fleet remote log fetch command | TODO |
-| 10 | Fleet multi-profile config management | TODO |
-| 11 | Compliance-specific scheduled reports | TODO |
-| 12 | Formal high-volume alert stress test | TODO |
+| 5 | Fleet config profiles frontend | TODO |
+| 6 | Compliance gap report frontend | TODO |
+| 7 | MITRE gap report frontend | TODO |
+| 8 | Attack path visualization frontend | TODO |
 
-### P3 — Low (Nice to have)
+### P3 — Low
 
 | # | Task | Status |
 |---|------|--------|
-| 13 | Documented query optimization suite | TODO |
-| 14 | Enterprise SSO (SAML 2.0) | TODO |
-| 15 | Hypothesis-driven threat hunting workflows | TODO |
-| 16 | Visual playbook builder | TODO |
+| 9 | Enterprise SSO (SAML 2.0) | TODO |
+| 10 | Hypothesis-driven threat hunting | TODO |
+| 11 | Visual playbook builder | TODO |
