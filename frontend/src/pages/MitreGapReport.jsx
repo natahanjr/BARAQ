@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { api } from "../api.js";
-import { Loading, ErrorBanner } from "../components/Feedback.jsx";
+import { ErrorBanner } from "../components/Feedback.jsx";
 import { PageHeader, Card, CardHeader, CardTitle, CardContent, Badge } from "../components/ui/index.js";
 
 function ProgressBar({ value, color = "var(--accent-cyan)" }) {
@@ -67,7 +67,16 @@ function MitreGapReport() {
       />
 
       {error && <ErrorBanner message={error} onRetry={load} />}
-      {!data && !error && <Loading label="Loading gap report" />}
+      {!data && !error && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-16 animate-pulse rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)]" />
+            ))}
+          </div>
+          <div className="h-8 animate-pulse rounded-full bg-[var(--bg-surface)]" />
+        </div>
+      )}
 
       {data && stats && (
         <>
