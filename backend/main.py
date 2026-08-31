@@ -100,7 +100,8 @@ def _seed_admin_user() -> None:
     from backend.auth import hash_password
     from backend.database.models import User
 
-    with SessionLocal() as db:
+    db = SessionLocal()
+    try:
         if db.scalar(select(User).limit(1)):
             return
         admin = User(
@@ -114,6 +115,11 @@ def _seed_admin_user() -> None:
         db.add(admin)
         db.commit()
         logger.info("Seeded bootstrap admin user '%s'", ADMIN_USERNAME)
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 _scheduler_thread: threading.Thread | None = None
@@ -773,9 +779,8 @@ def _rate_allowed(request: Request, identity: str) -> tuple[bool, int]:
     if count >= API_RATE_BURST:
         if len(_rate_buckets) > 10_000:
             stale_threshold = now - _RATE_WINDOW_SECONDS
-            _rate_buckets = {
-                k: v for k, v in _rate_buckets.items() if v[0] > stale_threshold
-            }
+            for k in [k for k, v in _rate_buckets.items() if v[0] <= stale_threshold]:
+                del _rate_buckets[k]
         return False, max(1, int(_RATE_WINDOW_SECONDS - (now - window_start)) + 1)
     _rate_buckets[identity] = (window_start, count + 1)
     return True, 0
@@ -785,7 +790,9 @@ def _rate_allowed(request: Request, identity: str) -> tuple[bool, int]:
 async def api_gates(request: Request, call_next):
     """IP ACLs (403) and API rate limiting (429) before authentication."""
     path = request.url.path
-    if path.startswith("/api/") and not path.startswith("/api/health"):
+    if path.startswith("/api/") and not path.startswith(
+        ("/api/health", "/api/auth/login")
+    ):
         if not _ip_allowed(request):
             return JSONResponse(
                 {"detail": "Client IP not permitted"},
