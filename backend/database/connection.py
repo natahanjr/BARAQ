@@ -190,9 +190,7 @@ def _readonly_engine():
     if not READONLY_DATABASE_URL:
         return None
     return create_engine(
-        normalize_database_url(
-            settings.database_url
-        ),  # Note: using the same database URL for now; if we want a separate read replica, we would need a different setting.
+        normalize_database_url(READONLY_DATABASE_URL),
         echo=settings.echo_sql,
         pool_pre_ping=True,
         pool_size=settings.db_pool_size,
