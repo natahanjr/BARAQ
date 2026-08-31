@@ -21,17 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [3.0.0] - 2026-08-31 — "Documentation & ML Strategy"
+## [0.12.0] - 2026-08-31 — "Documentation & ML Strategy"
 
 ### Changed
 - README rewritten — concise (743→180 lines), points to documentation for details
-- ML strategy document rewritten to v3.0 (ensemble stacking, 120K+ dataset, drift detection, cross-stream Markov)
-- All 11 documentation files updated to v3.0 (100 rules, 9 TI providers, SOAR actions, data export, ML-enhanced)
+- ML strategy document rewritten (ensemble stacking, 120K+ dataset, drift detection, cross-stream Markov)
+- All 11 documentation files updated (100 rules, 9 TI providers, SOAR actions, data export, ML-enhanced)
 - Removed all "Apple" references from documentation and comments
 
 ---
 
-## [2.5.0] - 2026-08-30 — "Dataset & Evaluation"
+## [0.11.0] - 2026-08-30 — "Dataset & Evaluation"
 
 ### Added
 - **Dataset adapter framework**: OTRF SecurityDatasets, BOTSv1, BOTES adapters (`backend/ml/dataset_adapters/`)
@@ -50,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [2.4.0] - 2026-08-29 — "Frontend Redesign"
+## [0.10.0] - 2026-08-29 — "Frontend Redesign"
 
 ### Added
 - **Design token system**: Deep Teal + Gold theme with CSS custom properties
@@ -65,7 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [2.3.0] - 2026-08-28 — "ML v5/v6 Feature Engineering"
+## [0.9.0] - 2026-08-28 — "ML Feature Engineering"
 
 ### Added
 - **Ensemble stacking meta-learner**: logistic regression combining IF + supervised + Markov predictions (`backend/ml/ensemble.py`)
@@ -85,7 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [2.2.0] - 2026-08-25 — "False Positive Hardening"
+## [0.8.0] - 2026-08-25 — "False Positive Hardening"
 
 ### Added
 - **Trusted-agent FP filter**: `backend/detection/fp_filters.py` allowlist module
@@ -105,7 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [2.1.0] - 2026-08-24 — "Platform Foundation"
+## [0.7.0] - 2026-08-24 — "Platform Foundation"
 
 ### Added
 - **PostgreSQL persistence layer**: SQLAlchemy models, session engine, additive migrations
@@ -123,7 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [2.0.0] - 2026-08-17 — "Incident Management"
+## [0.6.0] - 2026-08-17 — "Incident Management"
 
 ### Added
 - **Incident Management**: 8 eligibility policies, deterministic SHA256 fingerprint, lifecycle, suppression, SLA
@@ -132,7 +132,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.5.0] - 2026-08-16 — "Alert & Detection Engine"
+## [0.5.0] - 2026-08-16 — "Alert & Detection Engine"
 
 ### Added
 - **Alert Management**: deterministic fingerprint, eligibility policies, dedup windows, lifecycle, suppression
@@ -140,7 +140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.4.0] - 2026-08-15 — "Platform Hardening"
+## [0.4.0] - 2026-08-15 — "Platform Hardening"
 
 ### Added
 - **CI/CD**: Dockerfile, compose.yml, GHCR image, Kubernetes blue-green
@@ -151,7 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.3.0] - 2026-08-14 — "Search, Risk & Intelligence"
+## [0.3.0] - 2026-08-14 — "Search, Risk & Intelligence"
 
 ### Added
 - **Search-parity phase**: pipe-based search engine, saved searches + dashboards
@@ -163,7 +163,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.2.0] - 2026-08-13 — "Detection & Investigation Core"
+## [0.2.0] - 2026-08-13 — "Detection & Investigation Core"
 
 ### Added
 - **Alerting roadmap**: severity/risk consistency, context engine, FP analysis, analyst verdicts
@@ -173,21 +173,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.1.0] - 2026-08-11 — "BARAQ Naming Alignment"
+## [0.1.1] - 2026-08-11 — "BARAQ Naming Alignment"
 
 ### Changed
 - Environment variables, agent keys, scripts, and documentation unified under BARAQ name
 
 ---
 
-## [1.0.0] - 2026-08-05 — "PostgreSQL-First"
+## [0.1.0] - 2026-08-05 — "PostgreSQL-First"
 
 ### Changed
 - PostgreSQL-only migration; SQLite fallback removed
 
 ---
 
-## [0.1.0] - 2026-07-30 — "Initial Release"
+## [0.0.1] - 2026-07-30 — "Initial Release"
 
 ### Added
 - Initial release: agent-based endpoint telemetry, hybrid rule-based + ML detection engine, MITRE ATT&CK mapping, hybrid risk scoring, SOC dashboard, multi-tenant support, evaluation framework
