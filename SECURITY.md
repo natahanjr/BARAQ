@@ -11,6 +11,7 @@ coordinated disclosure process.
 |---|---|
 | Latest release (tagged `v*` on GitHub) | Actively supported |
 | `main` branch | Pre-release — bugs fixed on best effort |
+| `feat/v6-phase2-supervised-enhancements` | Active development branch |
 | Older releases | No longer maintained — upgrade required |
 
 ## Reporting a Vulnerability
@@ -93,6 +94,9 @@ Implemented and verified in the current codebase:
   forwarding for SIEM ingestion
 - **Brute-force protection** — login rate limiting (5 failures / IP / 5 minutes)
 - **Input validation** — enum/bounds validation on API inputs; pagination limits
+- **SOAR action security** — all Windows-native response actions (block IP, kill process, quarantine, disable account, isolate host) require UAC elevation via `Start-Process -Verb RunAs`; confirmation modal prevents accidental execution
+- **Data export security** — CSV/JSON exports require authenticated API key or session; exports are scoped to the user's organization (multi-tenant isolation)
+- **Threat intel security** — abuse.ch provider keys stored DPAPI-encrypted; rate limiting prevents abuse of third-party provider APIs
 
 ## Dependencies
 

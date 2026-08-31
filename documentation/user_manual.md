@@ -1,7 +1,7 @@
 # BARAQ — User Manual
 
 **Document:** Operator Guide
-**Version:** 2.0 (hybrid risk scoring + evaluation framework)
+**Version:** 3.0 (100 rules + Sigma, 9 threat intel, SOAR, data export, ML-enhanced)
 **Audience:** SOC analyst / system administrator operating the platform
 
 ---
@@ -15,13 +15,18 @@ BARAQ is a lightweight SOC platform that runs entirely on a single Windows 11 la
 ## 2. Quick Start
 
 ### 2.1 Prerequisites
-- Windows 11, Python 3.11+, Node.js 18+ (frontend only)
+- Windows 11, Python 3.13+, Node.js 18+ (frontend only)
+- PostgreSQL 16+ on `127.0.0.1:5432` (required — no SQLite fallback)
 - Backend dependencies: `pip install -r requirements.txt`
 - Frontend dependencies: `cd frontend && npm install`
 
 ### 2.2 Start the backend
 ```powershell
-uvicorn backend.main:app --host 127.0.0.1 --port 8000
+.\start.bat
+```
+Or manually:
+```powershell
+uvicorn backend.main:app --host 127.0.0.1 --port 8001
 ```
 The background scheduler begins collecting host telemetry and running detection every 15 seconds automatically.
 
@@ -30,7 +35,7 @@ The background scheduler begins collecting host telemetry and running detection 
 cd frontend
 npm run dev
 ```
-Open **http://localhost:5173**.
+Open **http://localhost:5173**. The Vite dev proxy forwards `/api` → `http://127.0.0.1:8001`.
 
 ---
 
@@ -65,35 +70,63 @@ Open **http://localhost:5173**.
 - **Incident timeline**: visual sequence of surrounding events (Failed Login → Account Locked → ... → Alert Created).
 - **Related events** within ±30 minutes of the first evidence event.
 - **Network context** table for reconnaissance (T1046) alerts.
-- **AI explanation** button: one-click natural-language analysis of the alert.
+- **AI explanation** button: one-click natural-language analysis of the alert, displayed in a redesigned section with color-coded cards for severity, MITRE, IOCs, and recommendations. The analysis card includes an "AI Generated" badge and uses markdown table rendering for structured data.
 
-### 3.5 Events
+### 3.5 MITRE ATT&CK
+- Full ATT&CK matrix with 23 mapped techniques and 47 total techniques in the knowledge base.
+- Clickable technique cards showing detection count, severity, and affected hosts.
+- ML detection status bar (trained/stale/drift warning).
+- Filter by tactic; search by technique ID or name.
+
+### 3.7 Events
 - Searchable/filterable table of normalized events: time, event ID, category, user, risk, ML anomaly flag, message.
 - Filters: event ID (e.g. 4625), user, category, ML anomalies only.
 
-### 3.6 Processes & Network
+### 3.8 Processes & Network
 - **Processes**: PID, parent PID, image, user, "NEW" flag for new processes.
-- **Network connections**: process, local/remote address:port, state, LISTEN flag.
+- **Network connections**: process, local/remote address:port, state, LISTEN flag, bytes sent/received (BIGINT — no overflow for large transfers).
 
-### 3.7 AI Assistant
+### 3.9 Threat Intelligence
+- **9 integrated providers**: isbadip.com, FFraud.com, AlienVault OTX, ThreatFox, URLhaus, MalwareBazaar, AbuseIPDB, FindIP, IPDetails.io
+- 3-tier provider loop: local cache → free providers → premium (abuse.ch)
+- Professional source cards with provider status, response format, and query parameters
+- No consumer language — designed for security analysts
+
+### 3.10 SOAR Actions
+- **Block IP**: Windows Firewall rule via `netsh advfirewall`
+- **Kill Process**: `taskkill /F /PID` native Windows process termination
+- **Quarantine File**: Moves files to `C:\BaraqQuarantine` with metadata
+- **Disable Account**: `net user /active:no` native Windows command
+- **Isolate Host**: Windows Firewall policy blocking all inbound/outbound
+- All actions require UAC elevation (uses `Start-Process -Verb RunAs` when not running as admin)
+- Confirmation modal with Apple-style design before executing any action
+
+### 3.11 Data Export
+- Export any data type as CSV or JSON: events, alerts, processes, network, reports, incidents, evaluation runs, audit logs, assistant messages, endpoints, threat intel, dashboard snapshots, detection verdicts, sigma rules
+- Live row counts per data type
+- Filter by severity, status, search, date range
+- Streaming download for large datasets
+
+### 3.12 AI Assistant
 - Chat with the local security assistant: explain alerts, summarize incidents, recommend remediation.
-- Suggested prompts are provided; chat history persists (stored in SQLite).
+- Suggested prompts are provided; chat history persists in PostgreSQL.
 
-### 3.8 Reports
+### 3.13 Reports
 - Choose **Executive** (security score, threat summary, risk level) or **Technical** (evidence, timeline, MITRE mappings, recommendations).
 - Export as **PDF, HTML, JSON, or CSV**.
 - Generated reports appear in the list with paths; files land in `reports/`.
 
-### 3.9 Evaluation
+### 3.14 Evaluation
 - **Run detection evaluation**: runs brute force, PowerShell, privilege escalation, persistence, port scan + baseline through the full pipeline in an **isolated temporary database** (production data untouched).
 - Results table per scenario: samples, TP/FP/TN/FN, **accuracy, precision, recall, F1-score, false-positive rate, detection time**.
 - Overall metrics cards + per-scenario F1/recall and detection-time charts + run history.
 
-### 3.10 System
-- App status: version, database, collection state, uptime.
+### 3.15 System
+- App status: version, database (PostgreSQL), collection state, uptime.
 - **Collection & simulation**: run the full attack suite or a single scenario, or collect live host data.
-- **Machine learning**: train the Isolation Forest model, analyze recent events, view model status.
+- **Machine learning**: 3-layer detection system — Isolation Forest + XGBoost/RandomForest + Hybrid Risk Fusion (60% rules + 40% ML) + ensemble stacking meta-learner.
 - Live KPI panel.
+- **ML Status**: trained/stale/drift warning, 1300+ feature vectors from 129,170 events.
 
 ---
 
@@ -102,9 +135,10 @@ Open **http://localhost:5173**.
 1. **Populate data** → System page → *Run simulation* (full suite) or *Collect live host data*.
 2. **Triage** → Alerts page → filter by severity → open each alert.
 3. **Investigate** → Alert Detail → read evidence and MITRE mapping → *Open investigation* → AI explanation → review attack chain.
-4. **Respond** → set status (investigating / resolved), add analyst notes.
-5. **Report** → Reports page → generate Executive PDF for stakeholders; Technical JSON/HTML for the engineering record.
-6. **Monitor** → Dashboard page (auto-refreshes) and train the ML model from System page as events accumulate.
+4. **Respond** → set status (investigating / resolved), add analyst notes, run SOAR actions (Block IP, Kill Process, Quarantine File, Disable Account, Isolate Host).
+5. **Export** → Data Export page → export events/alerts/processes as CSV or JSON for external analysis.
+6. **Report** → Reports page → generate Executive PDF for stakeholders; Technical JSON/HTML for the engineering record.
+7. **Monitor** → Dashboard page (auto-refreshes) and train the ML model from System page as events accumulate.
 
 ---
 
@@ -136,9 +170,10 @@ py -m backend.pipeline --collect
 | `PORT_SCAN_DISTINCT_PORTS` | 20 | Ports probed before recon alert |
 | `DETECTION_WINDOW_MINUTES` | 10 | Correlation window for rules |
 | `ML_CONTAMINATION` | 0.05 | IF anomaly rate |
+| `ML_DRIFT_RATE` | 0.75 | Drift detection threshold (WARNING state) |
 | `SECURITY_SCORE_PENALTY` | 14/8/4/1 | Score deduction per severity |
 
-Environment variables: `BARAQ_INTERVAL`, `BARAQ_DATABASE_URL`, `BARAQ_AI_API_URL`, `BARAQ_AI_API_KEY`, `BARAQ_AI_MODEL`.
+Environment variables: `BARAQ_INTERVAL`, `BARAQ_DATABASE_URL` (PostgreSQL), `BARAQ_AI_API_URL`, `BARAQ_AI_API_KEY`, `BARAQ_AI_MODEL`, `BARAQ_ABUSECH_KEY` (abuse.ch provider key).
 
 ---
 
@@ -160,9 +195,13 @@ Environment variables: `BARAQ_INTERVAL`, `BARAQ_DATABASE_URL`, `BARAQ_AI_API_URL
 
 | Artifact | Path |
 |---|---|
-| SQLite database | `database/baraq.db` |
+| PostgreSQL database | `sentinel` (port 5432) |
+| ML model | `database/model_meta.json`, `database/model.bundle.joblib` |
 | Generated reports | `reports/` |
 | Logs | `logs/server.out.log`, `logs/server.err.log` |
 | MITRE data | `backend/mitre/techniques.json` |
-| Tests | `tests/` |
+| Sigma rules | `backend/detection/sigma_rules/` (2,512 rules) |
+| Threat intel cache | `database/threat_intel_cache.json` |
+| Quarantine | `C:\BaraqQuarantine` |
+| Tests | `tests/` (1,300+ tests) |
 | Documentation | `documentation/` |

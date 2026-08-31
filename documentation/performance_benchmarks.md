@@ -1,8 +1,8 @@
 # BARAQ — Performance Benchmarking
 
 **Document:** Throughput, Latency and Resource Footprint on the Target Laptop
-**Version:** 2.0
-**Date:** 2026-08-13
+**Version:** 3.0 (PostgreSQL, 100 rules + Sigma, ML-enhanced)
+**Date:** 2026-08-31
 
 ---
 
@@ -24,10 +24,10 @@ All timings below are measured with the built-in evaluation harness and
 python -m pytest tests/test_evaluation.py -v
 
 # Hold-out evaluation reports detection_time_ms per layer:
-curl.exe -X POST http://127.0.0.1:8000/api/evaluation/holdout -H "X-API-Key: baraq-dev-admin" -H "Content-Type: application/json" -d "{\"with_ml\": false, \"use_real_baseline\": true}"
+curl.exe -X POST http://127.0.0.1:8001/api/evaluation/holdout -H "X-API-Key: baraq-dev-admin" -H "Content-Type: application/json" -d "{\"with_ml\": false, "use_real_baseline": true}"
 
 # ML train + inference timing
-curl.exe -X POST http://127.0.0.1:8000/api/system/ml/train -H "X-API-Key: baraq-dev-admin"
+curl.exe -X POST http://127.0.0.1:8001/api/system/ml/train -H "X-API-Key: baraq-dev-admin"
 ```
 
 ---

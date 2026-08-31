@@ -252,7 +252,7 @@ Collectors stay Windows-native on the endpoints; the Linux image never runs them
 
 ```powershell
 docker compose --profile api up -d --build
-curl.exe http://localhost:8000/api/system/status
+curl.exe http://localhost:8001/api/system/status
 ```
 
 `BARAQ_DATABASE_URL` inside the container defaults to the host PostgreSQL

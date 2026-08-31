@@ -1,8 +1,8 @@
 # BARAQ — Database Schema
 
 **Document:** Database Schema & ER Reference
-**Version:** 2.0 (adds hybrid risk fields + evaluation runs)
-**Engine:** SQLite (`database/baraq.db`) via SQLAlchemy 2.0 ORM
+**Version:** 3.0 (PostgreSQL, 47+ tables, BIGINT network bytes, SOAR/export/incident models)
+**Engine:** PostgreSQL (`sentinel` database, port 5432) via psycopg3 + SQLAlchemy 2.0 ORM
 **Models:** `backend/database/models.py`
 
 ---
@@ -10,13 +10,24 @@
 ## 1. Entity Overview
 
 ```
-events ────< alert_events >──── alerts ────< analyst_notes
+users
+normalized_events ────< alert_events >──── alerts ────< analyst_notes
                │                              │
                │                              └── evaluation_runs (independent)
 processes
-network_connections
+network_connections (BIGINT bytes_sent/bytes_recv)
 dashboard_snapshots
 assistant_messages
+reports
+incidents ────< incident_links >──── alerts
+           ────< incident_comments
+audit_log
+detection_verdicts
+reputation_cache
+saved_searches ────< search_panels
+sigma_rules
+endpoints ────< agent_commands
+threat_intel_cache
 ```
 
 > **Migration:** existing BARAQ databases are upgraded automatically at
@@ -112,6 +123,8 @@ Observed TCP connection or listening socket.
 | remote_port | INTEGER | Remote port |
 | state | TEXT(32) | ESTABLISHED / LISTEN / SYN_SENT ... |
 | is_listening | BOOLEAN | True for LISTEN sockets |
+| bytes_sent | BIGINT | Bytes sent (Windows `write_bytes` — no overflow) |
+| bytes_recv | BIGINT | Bytes received (Windows `read_bytes` — no overflow) |
 | observed_at | DATETIME, idx | UTC |
 
 ### 2.6 `dashboard_snapshots` — DashboardSnapshot

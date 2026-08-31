@@ -1,8 +1,8 @@
 # BARAQ — Red-Team Validation
 
 **Document:** Independent Detection Validation Against Realistic Attacks
-**Version:** 1.1
-**Date:** 2026-08-08
+**Version:** 2.0 (100 rules + Sigma, 9 threat intel, SOAR actions)
+**Date:** 2026-08-31
 
 ---
 

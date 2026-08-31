@@ -50,7 +50,7 @@ pip install -r requirements.txt
 .\start.bat
 ```
 
-The project requires PostgreSQL 14+ and Python 3.10+. See
+The project requires PostgreSQL 14+ and Python 3.13+. See
 [`README.md`](README.md) and [`documentation/`](documentation/) for platform
 details, including the Linux collector and Windows service setup.
 
@@ -105,6 +105,10 @@ venv\Scripts\python -m pytest tests -q
 New detection logic should include a fixture in `tests/fixtures.py` plus an
 assertion that the expected alert is produced. When changing database schema,
 add an Alembic migration and a test in `tests/test_migrations.py`.
+
+The test suite currently has **1,300+ tests** covering detection rules, API
+endpoints, collectors, pipeline, ML, threat intel, SOAR actions, data export,
+authentication, and evaluation framework.
 
 ## Documentation
 

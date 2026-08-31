@@ -2,7 +2,7 @@
 
 **BARAQ: An Intelligent Lightweight Security Operations Center Framework for Real-Time Windows Endpoint Threat Detection and Incident Analysis**
 
-Version 1.0.0 · FastAPI backend + React dashboard · local-first, opt-in network exposure.
+Version 3.0 · FastAPI backend + React dashboard · local-first, opt-in network exposure.
 
 This single master guide covers the whole product: **system overview**, **architecture**, **deployment & operations**, and a **step-by-step user / analyst guide**. It replaces the need to consult several documents and is accurate against the current codebase.
 
@@ -226,7 +226,7 @@ All tunables live in **`backend/config.py`**, overridable via environment variab
 
 - Detection window (`DETECTION_WINDOW_MINUTES` = 10), bruteforce threshold (5 failed logons), port-scan threshold (20 distinct ports / 120 s)
 - Alert escalation (`ALERT_ESCALATE_AFTER` = 5 retriggers), severity ladder (`low→medium→high→critical`), alert throttling (max 5 new/rule/5 min)
-- ML training (`ML_TRAIN_MIN_SAMPLES` = 30, contamination 0.05), target FPR (`ML_TARGET_FPR`=3%), drift guard (`ML_DRIFT_RATE`=0.35)
+- ML training (`ML_TRAIN_MIN_SAMPLES` = 30, contamination 0.05), target FPR (`ML_TARGET_FPR`=3%), drift guard (`ML_DRIFT_RATE`=0.75)
 - Hybrid weights: rule 0.6 / ML 0.4; risk levels MEDIUM 40 / HIGH 65 / CRITICAL 85
 - Security score start 100, penalties per severity (critical 14, high 8, medium 4, low 1)
 

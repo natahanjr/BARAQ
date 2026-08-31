@@ -1,8 +1,8 @@
 # BARAQ — System Architecture
 
 **Document:** Architecture Overview
-**Version:** 2.0 (upgraded: hybrid risk scoring + ML + evaluation framework)
-**Scope:** BARAQ v1.1 prototype (single Windows 11 laptop)
+**Version:** 3.0 (100 rules + Sigma, 9 threat intel, SOAR, data export, ML-enhanced)
+**Scope:** BARAQ v3.0 (single Windows 11 laptop, PostgreSQL backend)
 
 ---
 
@@ -13,9 +13,9 @@
                     │              WINDOWS 11 HOST               │
                     │                                            │
                     │   ┌────────────────────────────────────┐   │
-                    │   │        BARAQ Backend         │   │
-                    │   │        (FastAPI / Uvicorn)         │   │
-                    │   │              :8000                 │   │
+│   │        BARAQ Backend         │   │
+│   │        (FastAPI / Uvicorn)         │   │
+│   │              :8001                 │   │
                     │   └───────────────┬────────────────────┘   │
                     │                   │                        │
                     │   ┌───────────────▼────────────────────┐   │
@@ -33,8 +33,8 @@
                     │        ▼                     ▼             │
                     │  ┌─────────────┐      ┌──────────────┐     │
                     │  │ Rule-Based  │      │  ML Engine   │     │
-                    │  │ Detection   │      │  IF / RF /   │     │
-                    │  │ (5 rules)   │      │  XGBoost     │     │
+                    │  │ Detection   │      │  IF / XGB /  │     │
+                    │  │(100+S rules)│      │  Meta-learner│     │
                     │  └──────┬──────┘      └──────┬───────┘     │
                     │         └─────────┬──────────┘             │
                     │                   ▼                        │
@@ -96,8 +96,8 @@ Host: <hostname>        Message: <normalized text>     Raw: <original record>
 Risk mapping: event ID → risk level; severity derived per category (Authentication/Recon = medium+...). All events are persisted via `NormalizedEvent` and flagged `is_anomaly` by the ML layer.
 
 ### 2.3 Threat Detection & Analysis (`backend/detection/`, `backend/ml/`, `backend/risk/`)
-- **Rules Engine** (`rules_engine.py`) instantiates the five rules and runs each against the current corpus within a correlation window (default 10 minutes).
-- **Rules** (`detection/rules/`):
+- **Rules Engine** (`rules_engine.py`) runs 100 native detection rules + 2,512 Sigma rules against the current corpus within a correlation window (default 10 minutes).
+- **Native Rules** (`detection/rules/`):
 
 | Rule | Detection logic | MITRE |
 |---|---|---|
@@ -140,11 +140,11 @@ Risk mapping: event ID → risk level; severity derived per category (Authentica
 ### 2.4 MITRE ATT&CK (`backend/mitre/`)
 `attack.py` + `techniques.json` provide technique name, tactic, and recommended response for every mapped technique (T1046, T1059.001, T1068, T1110, T1547, plus T1078, T1036, T1497, T1005, T1027, T1040, T1555 fallbacks).
 
-### 2.5 Local Database (`backend/database/`)
-SQLite at `database/baraq.db` via SQLAlchemy 2.0. Seven tables (see `database_schema.md`). Retention default 30 days.
+### 2.5 Database (`backend/database/`)
+PostgreSQL via psycopg3 + SQLAlchemy 2.0. 47+ tables including: `users`, `normalized_events`, `alerts`, `alert_events`, `analyst_notes`, `processes`, `network_connections` (BIGINT bytes), `dashboard_snapshots`, `evaluation_runs`, `assistant_messages`, `reports`, `incidents`, `incident_links`, `incident_comments`, `audit_log`, `detection_verdicts`, `reputation_cache`, `saved_searches`, `search_panels`, `sigma_rules`, `endpoints`, `agent_commands`, `threat_intel_cache`, and more. Retention default 30 days.
 
 ### 2.6 SOC Dashboard (`frontend/`)
-React 18 + Tailwind CSS 4 + Recharts, served by Vite on port 5173. Talks to the backend exclusively through the Vite dev proxy (`/api` → `127.0.0.1:8000`), so no CORS issues and no configuration. Pages: Dashboard, Alerts, Alert Detail, Investigation, Events, Processes & Network, AI Assistant, Reports, System.
+React 18 + Tailwind CSS 4 + Recharts, served by Vite on port 5173. Talks to the backend exclusively through the Vite dev proxy (`/api` → `127.0.0.1:8001`), so no CORS issues and no configuration. Pages: Dashboard, Alerts, Alert Detail, Investigation, Events, Processes & Network, Threat Intelligence, MITRE ATT&CK, AI Assistant, Reports, Evaluation, System, Data Export.
 
 ### 2.7 Report Generation (`backend/reports/`)
 `generator.py` builds an executive or technical report context from live DB analytics; `exporters.py` renders PDF (ReportLab), HTML, JSON, and CSV into `reports/`. Metadata stored in the `reports` table.
@@ -153,13 +153,29 @@ React 18 + Tailwind CSS 4 + Recharts, served by Vite on port 5173. Talks to the 
 `assistant.py` implements a fully local engine (intent matching + TF-IDF keyword retrieval against a threat knowledge base in `knowledge.py`). It can explain alerts, summarize incidents, recommend remediation, and produce analyst notes. Optional: delegate to the BARAQ AI endpoint via `BARAQ_AI_API_URL` env vars.
 
 ### 2.9 Evaluation Framework (`backend/evaluation/`)
-Runs the five attack scenarios + baseline through the complete pipeline (normalize → persist → rules → alert) inside an **isolated temporary SQLite database** (production data is never touched), then computes per-scenario and overall detection metrics:
+Runs the five attack scenarios + baseline through the complete pipeline (normalize → persist → rules → alert) inside an **isolated temporary database** (production data is never touched), then computes per-scenario and overall detection metrics:
 
 - Accuracy, precision, recall, F1-score, false-positive rate, detection time (ms).
 
 Results persist to `evaluation_runs` for reporting and history. Exposed via `/api/evaluation/*` and the **Evaluation** page in the dashboard.
 
-### 2.10 Data Layer Migrations (`backend/database/connection.py`)
+### 2.10 SOAR Actions (`backend/response/`)
+Real Windows-native security response actions executed via PowerShell:
+- **Block IP**: `netsh advfirewall firewall add rule` — adds inbound deny rule
+- **Kill Process**: `taskkill /F /PID` — force-terminates process
+- **Quarantine File**: moves file to `C:\BaraqQuarantine` with metadata JSON
+- **Disable Account**: `net user /active:no` — disables local Windows account
+- **Isolate Host**: `netsh advfirewall set allprofiles firewallpolicy blockinbound,blockoutbound` — blocks all traffic
+- All actions require UAC elevation via `Start-Process -Verb RunAs`
+
+### 2.11 Threat Intelligence (`backend/threatintel/`)
+9 integrated providers in a 3-tier loop:
+1. **Local cache** (1-hour TTL) → 2. **Free providers** (isbadip, FFraud, AlienVault OTX, AbuseIPDB, FindIP, IPDetails.io) → 3. **Premium providers** (ThreatFox, URLhaus, MalwareBazaar — require `BARAQ_ABUSECH_KEY`)
+
+### 2.12 Data Export (`backend/api/export.py`)
+Universal CSV/JSON export for all 15 data types: events, alerts, processes, network, reports, incidents, evaluation runs, audit logs, assistant messages, endpoints, threat intel, dashboard snapshots, detection verdicts, sigma rules, and alerts with evidence. Supports streaming for large datasets.
+
+### 2.13 Data Layer Migrations (`backend/database/connection.py`)
 `init_db()` performs additive in-place migrations on existing SQLite files (new columns on `events`/`alerts`, new tables), so upgrading an older BARAQ database is seamless.
 
 ---
@@ -171,17 +187,21 @@ Collectors → raw records
    ↓
 Normalizer → NormalizedEvent (risk 0-100) / ProcessRecord / NetworkConnection
    ↓
-RulesEngine.evaluate(window) → DetectionResults
+RulesEngine.evaluate(window) → 100 native rules + 2,512 Sigma rules → DetectionResults
    ↓
-MITRE enrichment (technique, tactic, recommendation)
+MITRE enrichment (technique, tactic, recommendation) + Threat Intel lookups (9 providers)
    ↓
 Hybrid Risk Scoring → Alert (risk_score, risk_level, detection_method)
    ↓
-ML analyze → event ml_score / is_anomaly (feeds future hybrid scores)
+ML analyze → event ml_score / is_anomaly (feeds future hybrid scores) + drift detection
    ↓
 Dashboard analytics (KPIs, timelines, distributions, user behavior)
    ↓
 Dashboard UI (REST)  ·  Report generator (PDF/HTML/JSON/CSV)  ·  Evaluation framework
+   ↓
+SOAR actions (Block IP, Kill Process, Quarantine, Disable Account, Isolate Host)
+   ↓
+Data Export (CSV/JSON for all data types)
 ```
 
 ---
@@ -218,14 +238,15 @@ Dashboard UI (REST)  ·  Report generator (PDF/HTML/JSON/CSV)  ·  Evaluation fr
 | `GET /api/evaluation/results` · `GET /api/evaluation/latest` | Evaluation history / latest run |
 | `GET /api/system/status` | App status + KPIs + uptime |
 
-Interactive docs: `http://127.0.0.1:8000/docs`.
+Interactive docs: `http://127.0.0.1:8001/docs`.
 
 ---
 
 ## 5. Resource Footprint (low-resource design)
 
-- **DB:** SQLite file, no server process.
+- **DB:** PostgreSQL on port 5432 (local or fleet-scale).
 - **Scheduler:** single background thread, 15 s interval.
-- **ML:** Isolation Forest — small in-memory model, trained on local data, no GPU.
+- **ML:** 3-layer system — Isolation Forest + XGBoost/RandomForest + ensemble stacking meta-learner. Trained on local data, no GPU.
 - **AI assistant:** local rule/TF-IDF engine; no LLM required by default.
-- **Expected footprint:** < 300 MB RAM total for backend + dashboard during normal operation on an i5 / 12 GB laptop.
+- **Sigma rules:** 2,512 YAML rules loaded on startup, cached in memory.
+- **Expected footprint:** < 400 MB RAM total for backend + dashboard during normal operation on an i5 / 12 GB laptop.
