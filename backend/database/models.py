@@ -859,6 +859,21 @@ class AnalystNote(Base):
     alert: Mapped[Alert] = relationship(back_populates="notes")
 
 
+class Bookmark(Base):
+    __tablename__ = "bookmarks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    entity_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    note: Mapped[str] = mapped_column(Text, nullable=True)
+    tags: Mapped[list] = mapped_column(JSONColumnType, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    __table_args__ = (UniqueConstraint("user_id", "entity_type", "entity_id", name="uq_bookmark_entity"),)
+
+
 class AssistantMessage(Base):
     """Chat history for the AI security assistant."""
 
