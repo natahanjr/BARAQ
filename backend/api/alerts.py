@@ -179,16 +179,13 @@ def feedback_stats(request: Request, db: Session = Depends(get_db)):
 
     scope = tenant_scope(request)
 
-    verdicts = db.scalars(select(AlertVerdict)).all()
-    alerts = {a.id: a for a in db.scalars(select(Alert)).all()}
+    verdicts_q = select(AlertVerdict)
+    alerts_q = select(Alert)
     if scope:
-        verdicts = [
-            v
-            for v in verdicts
-            if alerts.get(v.alert_id) and alerts[v.alert_id].org == scope
-        ]
-        filtered_ids = {v.alert_id for v in verdicts}
-        alerts = {a_id: a for a_id, a in alerts.items() if a_id in filtered_ids}
+        verdicts_q = verdicts_q.join(Alert, AlertVerdict.alert_id == Alert.id).where(Alert.org == scope)
+        alerts_q = alerts_q.where(Alert.org == scope)
+    verdicts = db.scalars(verdicts_q).all()
+    alerts = {a.id: a for a in db.scalars(alerts_q).all()}
 
     by_rule: dict[str, dict] = {}
     for v in verdicts:
