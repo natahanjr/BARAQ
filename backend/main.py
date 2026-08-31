@@ -785,9 +785,7 @@ def _rate_allowed(request: Request, identity: str) -> tuple[bool, int]:
 async def api_gates(request: Request, call_next):
     """IP ACLs (403) and API rate limiting (429) before authentication."""
     path = request.url.path
-    if path.startswith("/api/") and not path.startswith(
-        ("/api/health", "/api/auth/login")
-    ):
+    if path.startswith("/api/") and not path.startswith("/api/health"):
         if not _ip_allowed(request):
             return JSONResponse(
                 {"detail": "Client IP not permitted"},
