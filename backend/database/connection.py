@@ -262,7 +262,7 @@ def _demo_partition(orm_execute_state) -> None:
     seen: set = set()
 
     def walk(node, depth: int = 0) -> None:
-        if node is None or depth > 8:
+        if node is None or depth > 16:
             return
         if id(node) in seen:
             return
