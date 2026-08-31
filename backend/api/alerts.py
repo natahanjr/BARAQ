@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import UTC
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Literal
 
@@ -256,8 +256,6 @@ def submit_verdict(
     (rule + host + user) so the workflow stops alerting. All verdicts feed
     the ML feedback weights via the detector's feedback loop.
     """
-    from datetime import datetime
-
     from backend.database.models import AlertVerdict
     from backend.detection.suppression import create as create_suppression
     from backend.ml.anomaly import get_detector
