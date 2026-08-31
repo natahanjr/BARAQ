@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Loading, ErrorBanner } from "../components/Feedback.jsx";
+import { ErrorBanner } from "../components/Feedback.jsx";
 import { PageHeader, Card, CardHeader, CardTitle, CardContent, Badge } from "../components/ui/index.js";
 
 function BaselineDetail({ user }) {
@@ -62,7 +62,13 @@ function UEBA() {
       <div className="grid gap-5 lg:grid-cols-2">
         <div>
           <h2 className="mb-3 text-[14px] font-semibold text-[var(--fg-primary)]">User Baselines</h2>
-          {!baselines && !error && <Loading label="Loading baselines" />}
+          {!baselines && !error && (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-14 animate-pulse rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)]" />
+              ))}
+            </div>
+          )}
           {baselines && baselines.length === 0 && (
             <Card className="py-10 text-center">
               <p className="text-[13px] text-[var(--fg-muted)]">No baselines established yet</p>
@@ -108,7 +114,13 @@ function UEBA() {
 
         <div>
           <h2 className="mb-3 text-[14px] font-semibold text-[var(--fg-primary)]">Anomaly Detection</h2>
-          {!anomalies && !error && <Loading label="Loading anomalies" />}
+          {!anomalies && !error && (
+            <div className="space-y-2">
+              {[1, 2].map((i) => (
+                <div key={i} className="h-20 animate-pulse rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)]" />
+              ))}
+            </div>
+          )}
           {anomalies && anomalies.length === 0 && (
             <Card className="py-10 text-center">
               <p className="text-[13px] text-[var(--fg-muted)]">No anomalies detected</p>
