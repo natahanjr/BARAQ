@@ -402,11 +402,3 @@ The analyst thinks in terms of **work**, not software architecture.
 - [ ] SLA enforcement automation
 - [ ] Cross-platform response orchestration
 
-### V3.0 — BARAQ Enterprise
-- [ ] High-availability deployment
-- [ ] Horizontal scaling (multi-node)
-- [ ] Data replication & disaster recovery
-- [ ] Geographic data distribution
-- [ ] Performance SLA monitoring
-- [ ] Enterprise support portal
-- [ ] Professional services toolkit
