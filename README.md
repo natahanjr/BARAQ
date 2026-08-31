@@ -10,7 +10,7 @@
 [![React](https://img.shields.io/badge/React%2018-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![MITRE ATT&CK](https://img.shields.io/badge/MITRE%20ATT%26CK-mapped-red)](https://attack.mitre.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-RazForge%20Source--Available-blue.svg)](LICENSE.md)
 
 ---
 
@@ -226,4 +226,6 @@ Contributions welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE)
+Copyright © 2026 Natahan — RazForge. All rights reserved.
+
+Licensed under the [RazForge Source-Available License](LICENSE.md).

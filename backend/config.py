@@ -796,6 +796,8 @@ CORS_ORIGINS = (
         "http://127.0.0.1:8001",
     ]
 )
+if not CORS_ORIGINS:
+    CORS_ORIGINS = ["http://localhost:5173"]
 
 # --------------------------------------------------------------------------
 # Transport security (TLS)
