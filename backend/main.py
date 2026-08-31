@@ -735,6 +735,10 @@ async def security_headers(request: Request, call_next):
 
 #: In-memory fixed-window rate tracker: client -> (window_start, count).
 #: Stale windows are pruned lazily when the table grows (cheap dict ops).
+#: Max size is unbounded but a lazy sweep triggers when entries exceed 10,000
+#: (on each burst-rejected request); any entry older than _RATE_WINDOW_SECONDS
+#: is removed, keeping memory usage proportional to active clients rather than
+#: total unique IPs.
 _RATE_WINDOW_SECONDS = 60
 _rate_buckets: dict[str, list] = {}
 
