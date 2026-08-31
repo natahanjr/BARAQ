@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { api } from "../api.js";
-import { Loading, ErrorBanner } from "../components/Feedback.jsx";
+import { ErrorBanner } from "../components/Feedback.jsx";
 import { PageHeader, Card, CardHeader, CardTitle, CardContent, Badge } from "../components/ui/index.js";
 
 const THREAT_LEVELS = {
@@ -143,7 +143,13 @@ function InsiderThreat() {
         </span>
       </div>
 
-      {!users && !error && <Loading label="Loading threat scores" />}
+      {!users && !error && (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 animate-pulse rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)]" />
+          ))}
+        </div>
+      )}
 
       {users && filtered.length === 0 && (
         <Card className="flex flex-col items-center justify-center py-16 text-center">
