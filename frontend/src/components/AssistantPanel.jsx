@@ -14,7 +14,7 @@ export const SUGGESTIONS = [
 ];
 
 /* ------------------------------------------------------------------ */
-/* Apple-style markdown renderers                                     */
+/* Modern markdown renderers                                     */
 /* ------------------------------------------------------------------ */
 const mdComponents = {
   h1: ({ children }) => (

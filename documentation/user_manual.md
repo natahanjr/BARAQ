@@ -99,7 +99,7 @@ Open **http://localhost:5173**. The Vite dev proxy forwards `/api` → `http://1
 - **Disable Account**: `net user /active:no` native Windows command
 - **Isolate Host**: Windows Firewall policy blocking all inbound/outbound
 - All actions require UAC elevation (uses `Start-Process -Verb RunAs` when not running as admin)
-- Confirmation modal with Apple-style design before executing any action
+- Confirmation modal with modern design before executing any action
 
 ### 3.11 Data Export
 - Export any data type as CSV or JSON: events, alerts, processes, network, reports, incidents, evaluation runs, audit logs, assistant messages, endpoints, threat intel, dashboard snapshots, detection verdicts, sigma rules
