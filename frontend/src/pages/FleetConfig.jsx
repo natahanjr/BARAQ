@@ -98,8 +98,8 @@ function FleetConfig() {
   const load = () => {
     setError("");
     api
-      .request("/api/fleet/profiles")
-      .then((data) => setProfiles(data.items || data))
+      .get("/api/fleet/profiles")
+      .then((data) => setProfiles(Array.isArray(data) ? data : data.items || []))
       .catch((e) => setError(e.message));
   };
 
@@ -111,12 +111,9 @@ function FleetConfig() {
     setError("");
     setMessage("");
     try {
-      await api.request("/api/fleet/profiles", {
-        method: "POST",
-        body: JSON.stringify({
-          name: form.name.trim(),
-          settings: form.settings.trim() ? JSON.parse(form.settings) : {},
-        }),
+      await api.post("/api/fleet/profiles", {
+        name: form.name.trim(),
+        settings: form.settings.trim() ? JSON.parse(form.settings) : {},
       });
       setMessage("Profile created");
       setForm({ name: "", settings: "" });
@@ -132,7 +129,7 @@ function FleetConfig() {
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this profile?")) return;
     try {
-      await api.request(`/api/fleet/profiles/${id}`, { method: "DELETE" });
+      await api.del(`/api/fleet/profiles/${id}`);
       load();
     } catch (err) {
       setError(err.message);
@@ -141,10 +138,7 @@ function FleetConfig() {
 
   const handleAssign = async (profileId, host) => {
     try {
-      await api.request(`/api/fleet/profiles/${profileId}/assign`, {
-        method: "POST",
-        body: JSON.stringify({ host }),
-      });
+      await api.post(`/api/fleet/profiles/${profileId}/assign`, { host_id: host });
       load();
     } catch (err) {
       setError(err.message);
@@ -153,10 +147,7 @@ function FleetConfig() {
 
   const handleUnassign = async (profileId, host) => {
     try {
-      await api.request(`/api/fleet/profiles/${profileId}/unassign`, {
-        method: "POST",
-        body: JSON.stringify({ host }),
-      });
+      await api.post(`/api/fleet/profiles/${profileId}/unassign`, { host_id: host });
       load();
     } catch (err) {
       setError(err.message);

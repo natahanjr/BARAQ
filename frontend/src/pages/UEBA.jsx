@@ -31,8 +31,8 @@ function UEBA() {
   const load = () => {
     setError("");
     Promise.allSettled([
-      api.request("/api/ueba/baselines"),
-      api.request("/api/ueba/anomalies"),
+      api.get("/api/ueba/baselines"),
+      api.get("/api/ueba/anomalies"),
     ]).then(([b, a]) => {
       if (b.status === "fulfilled") setBaselines(b.value.items || b.value);
       else setError(b.reason.message);

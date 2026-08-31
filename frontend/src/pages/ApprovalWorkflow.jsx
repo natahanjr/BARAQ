@@ -49,8 +49,8 @@ function ApprovalWorkflow() {
   const load = () => {
     setError("");
     api
-      .request("/api/approvals")
-      .then((data) => setRequests(data.items || data))
+      .get("/api/approval/pending")
+      .then((data) => setRequests(Array.isArray(data) ? data : data.items || []))
       .catch((e) => setError(e.message));
   };
 
@@ -60,10 +60,11 @@ function ApprovalWorkflow() {
     setBusy(true);
     setError("");
     try {
-      await api.request(`/api/approvals/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status }),
-      });
+      if (status === "approved") {
+        await api.post(`/api/approval/${id}/approve`, {});
+      } else {
+        await api.post(`/api/approval/${id}/reject`, {});
+      }
       load();
     } catch (e) {
       setError(e.message);
@@ -78,13 +79,11 @@ function ApprovalWorkflow() {
     setError("");
     setMessage("");
     try {
-      await api.request("/api/approvals", {
-        method: "POST",
-        body: JSON.stringify({
-          action_type: form.action_type.trim(),
-          params: form.params.trim() ? JSON.parse(form.params) : {},
-          justification: form.justification.trim(),
-        }),
+      await api.post("/api/approval/request", {
+        action_type: form.action_type.trim(),
+        action_params: form.params.trim() ? JSON.parse(form.params) : {},
+        justification: form.justification.trim(),
+        requested_by: "admin",
       });
       setMessage("Approval request submitted");
       setForm({ action_type: "", params: "", justification: "" });

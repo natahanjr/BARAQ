@@ -22,6 +22,7 @@ from backend.api import (
     alerts,
     approval,
     assistant,
+    attack_path_api,
     auth,
     automation,
     bookmarks,
@@ -35,13 +36,16 @@ from backend.api import (
     evaluation,
     events,
     export,
+    fleet_api,
     graph,
     hunting,
     incidents,
     incidents_v2,
+    insider_threat_api,
     integrations,
     intel,
     investigation,
+    mitre_gap_api,
     ml_dataset_import,
     rba,
     realtime,
@@ -51,6 +55,7 @@ from backend.api import (
     search,
     system,
     telemetry,
+    ueba_api,
 )
 from backend.auth import verify_token
 from backend.config import (
@@ -989,6 +994,11 @@ for router in (
     correlations.router,
     risk.router,
     export.router,
+    ueba_api.router,
+    insider_threat_api.router,
+    fleet_api.router,
+    mitre_gap_api.router,
+    attack_path_api.router,
 ):
     app.include_router(router)
 

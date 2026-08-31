@@ -13,9 +13,22 @@ class ApproveBody(BaseModel):
     reason: str = ""
 
 
+@router.get("/pending")
+async def list_pending_approvals():
+    return workflow.list_pending()
+
+
 @router.post("/request")
 async def create_approval_request(body: ApprovalRequest):
     record = workflow.create_request(body)
+    return record
+
+
+@router.get("/{request_id}")
+async def get_approval_status(request_id: str):
+    record = workflow.get_status(request_id)
+    if not record:
+        raise HTTPException(404, "Request not found")
     return record
 
 
@@ -35,16 +48,3 @@ async def reject_request(request_id: str, body: ApproveBody):
         return record
     except ValueError as e:
         raise HTTPException(400, str(e))
-
-
-@router.get("/{request_id}")
-async def get_approval_status(request_id: str):
-    record = workflow.get_status(request_id)
-    if not record:
-        raise HTTPException(404, "Request not found")
-    return record
-
-
-@router.get("/pending")
-async def list_pending_approvals():
-    return workflow.list_pending()

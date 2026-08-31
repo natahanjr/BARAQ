@@ -79,8 +79,8 @@ function InsiderThreat() {
   const load = () => {
     setError("");
     api
-      .request("/api/insider-threat/scores")
-      .then((data) => setUsers(data.items || data))
+      .get("/api/insider-threat/scores")
+      .then((data) => setUsers(Array.isArray(data) ? data : data.items || []))
       .catch((e) => setError(e.message));
   };
 

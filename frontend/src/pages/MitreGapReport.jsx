@@ -22,7 +22,7 @@ function MitreGapReport() {
   const load = () => {
     setError("");
     api
-      .request("/api/mitre/gap-report")
+      .get("/api/mitre/gap-report")
       .then(setData)
       .catch((e) => setError(e.message));
   };

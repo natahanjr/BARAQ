@@ -11,7 +11,7 @@ function BookmarkRow({ bookmark, onDelete }) {
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      await api.request(`/api/bookmarks/${bookmark.id}`, { method: "DELETE" });
+      await api.del(`/api/bookmarks/${bookmark.id}`);
       onDelete(bookmark.id);
     } catch {
       setDeleting(false);
@@ -49,7 +49,7 @@ function Bookmarks() {
   const load = () => {
     setError("");
     api
-      .request("/api/bookmarks")
+      .get("/api/bookmarks")
       .then((data) => setBookmarks(data.items || data))
       .catch((e) => setError(e.message));
   };

@@ -32,7 +32,7 @@ function ComplianceGap() {
     setError("");
     setData(null);
     api
-      .request(`/api/compliance/gap?framework=${framework}`)
+      .get(`/api/compliance/report?framework=${framework}`)
       .then(setData)
       .catch((e) => setError(e.message));
   };

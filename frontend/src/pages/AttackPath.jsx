@@ -21,12 +21,9 @@ function AttackPath() {
     setError("");
     setPrediction(null);
     try {
-      const data = await api.request("/api/attack-path/predict", {
-        method: "POST",
-        body: JSON.stringify({
-          entry_tactic: entryTactic.trim(),
-          compromised_tactics: compromised.split(",").map((s) => s.trim()).filter(Boolean),
-        }),
+      const data = await api.post("/api/attack-path/predict", {
+        entry_tactic: entryTactic.trim(),
+        compromised_tactics: compromised.split(",").map((s) => s.trim()).filter(Boolean),
       });
       setPrediction(data);
     } catch (err) {
@@ -43,9 +40,8 @@ function AttackPath() {
     setError("");
     setBlastRadius(null);
     try {
-      const data = await api.request("/api/attack-path/blast-radius", {
-        method: "POST",
-        body: JSON.stringify({ entity: blastEntity.trim() }),
+      const data = await api.post("/api/attack-path/blast-radius", {
+        entity: blastEntity.trim(),
       });
       setBlastRadius(data);
     } catch (err) {
