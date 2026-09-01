@@ -105,12 +105,21 @@ def log_action(
                     "prev_hash": prev_hash,
                 }
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            # Syslog forwarder failure is non-fatal but the chain itself
+            # IS already on disk above; this branch only covers the
+            # external transport.
+            record_failure(f"syslog forwarder: {exc}")
         return entry
     except Exception as exc:
-        logger.warning("Audit log write failed: %s", exc)
-        db.rollback()
+        # Chain write failed: roll back, increment the failure counter
+        # at ERROR level so the operator can see this in logs, and
+        # surface it via /api/system/audit/health.
+        record_failure(exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass
         return None
 
 
