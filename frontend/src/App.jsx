@@ -133,7 +133,9 @@ function App() {
     <ThemeProvider>
       <AuthProvider>
         <ToastProvider>
-          <AppRoutes />
+          <ErrorBoundary>
+            <AppRoutes />
+          </ErrorBoundary>
         </ToastProvider>
       </AuthProvider>
     </ThemeProvider>
