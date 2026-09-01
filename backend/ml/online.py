@@ -483,6 +483,7 @@ class OnlineLearner:
                 pre_scores = self.detector.models[stream].decision_function(X)
                 pre_update_scores[stream] = float(np.mean(pre_scores))
             except Exception:
+                logger.debug("pre-update score failed for %s", stream, exc_info=True)
                 pre_update_scores[stream] = 0.0
 
             try:
@@ -514,7 +515,7 @@ class OnlineLearner:
                 self.detector._save_meta()
                 self.detector._save_bundle()
             except Exception:
-                logger.debug("Failed to persist online update", exc_info=True)
+                logger.warning("Failed to persist online update", exc_info=True)
 
         return {
             "status": "ok",
