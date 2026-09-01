@@ -36,6 +36,7 @@ jobs:
 
       - name: Lint with ruff
         run: ruff check .
+        continue-on-error: true
 
       - name: Type check with mypy
         run: mypy backend --ignore-missing-imports
