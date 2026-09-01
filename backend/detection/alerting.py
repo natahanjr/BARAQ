@@ -671,7 +671,7 @@ class AlertingService:
 
                     notify_alert(alert.to_dict())
                 except Exception:
-                    pass
+                    logger.debug("notify_alert failed for alert #%s", alert.id, exc_info=True)
 
             link_events(alert.id, result.event_ids)
 
