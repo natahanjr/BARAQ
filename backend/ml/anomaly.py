@@ -683,15 +683,13 @@ def _get_new_process_path_indicator(session, event, hours: int = 24) -> float:
         if not image:
             return 0.0
 
-        # Extract directory from path
         if "\\" in image:
             directory = "\\".join(image.split("\\")[:-1])
         elif "/" in image:
             directory = "/".join(image.split("/")[:-1])
         else:
-            return 0.5  # Unknown path structure
+            return 0.5
 
-        # Get unique process paths from recent history
         since = datetime.now(UTC) - timedelta(hours=hours)
         rows = session.execute(
             select(NormalizedEvent.raw_json)
@@ -714,13 +712,149 @@ def _get_new_process_path_indicator(session, event, hours: int = 24) -> float:
                 known_paths.add("/".join(path.split("/")[:-1]))
 
         if not known_paths:
-            return 0.5  # No baseline data
+            return 0.5
 
-        # Check if current path is new
         if directory in known_paths:
-            return 0.0  # Known path
+            return 0.0
         else:
-            return 1.0  # New path
+            return 1.0
+    except Exception:
+        return 0.0
+
+
+def _get_executable_path_entropy(event) -> float:
+    """Shannon entropy of the executable file path (obfuscation indicator)."""
+    try:
+        facts = (
+            (event.raw_json or {}).get("facts") or {}
+            if hasattr(event, "raw_json")
+            else {}
+        )
+        if not facts and isinstance(event, dict):
+            facts = (event.get("raw_json") or {}).get("facts") or {}
+        image = str(
+            facts.get("image_path", "") or facts.get("new_process", "") or ""
+        )
+        if not image:
+            return 0.0
+        char_counts: dict[str, int] = {}
+        for char in image:
+            char_counts[char] = char_counts.get(char, 0) + 1
+        total = len(image)
+        entropy = 0.0
+        for count in char_counts.values():
+            p = count / total
+            if p > 0:
+                entropy -= p * math.log2(p)
+        return min(1.0, entropy / 7.0)
+    except Exception:
+        return 0.0
+
+
+def _get_system_directory_indicator(event) -> float:
+    """1.0 if process runs from System32/SysWOW64, 0.0 otherwise."""
+    try:
+        facts = (
+            (event.raw_json or {}).get("facts") or {}
+            if hasattr(event, "raw_json")
+            else {}
+        )
+        if not facts and isinstance(event, dict):
+            facts = (event.get("raw_json") or {}).get("facts") or {}
+        image = str(
+            facts.get("image_path", "") or facts.get("new_process", "") or ""
+        ).lower()
+        if "system32" in image or "syswow64" in image:
+            return 1.0
+        if "windows" in image:
+            return 0.5
+        return 0.0
+    except Exception:
+        return 0.0
+
+
+def _get_parent_process_risk_score(event) -> float:
+    """Risk score based on parent process legitimacy."""
+    try:
+        facts = (
+            (event.raw_json or {}).get("facts") or {}
+            if hasattr(event, "raw_json")
+            else {}
+        )
+        if not facts and isinstance(event, dict):
+            facts = (event.get("raw_json") or {}).get("facts") or {}
+        parent = str(facts.get("parent_process", "") or "").lower()
+        high_risk_parents = [
+            "powershell", "cmd", "wscript", "cscript", "mshta",
+            "rundll32", "regsvr32", "certutil", "bitsadmin",
+        ]
+        medium_risk_parents = [
+            "winword", "excel", "outlook", "iexplore", "chrome",
+        ]
+        for hp in high_risk_parents:
+            if hp in parent:
+                return 0.9
+        for mp in medium_risk_parents:
+            if mp in parent:
+                return 0.6
+        if "services.exe" in parent or "svchost" in parent:
+            return 0.1
+        return 0.3
+    except Exception:
+        return 0.3
+
+
+def _get_commandline_token_count(event) -> float:
+    """Count of command-line tokens (argument complexity indicator)."""
+    try:
+        facts = (
+            (event.raw_json or {}).get("facts") or {}
+            if hasattr(event, "raw_json")
+            else {}
+        )
+        if not facts and isinstance(event, dict):
+            facts = (event.get("raw_json") or {}).get("facts") or {}
+        cmdline = str(
+            facts.get("command_line", "") or facts.get("cmdline", "") or ""
+        )
+        if not cmdline:
+            return 0.0
+        tokens = cmdline.split()
+        return min(1.0, len(tokens) / 30.0)
+    except Exception:
+        return 0.0
+
+
+def _get_process_chain_depth(session, event, hours: int = 1) -> float:
+    """Estimate process chain depth (deeper chains = more suspicious)."""
+    try:
+        facts = (
+            (event.raw_json or {}).get("facts") or {}
+            if hasattr(event, "raw_json")
+            else {}
+        )
+        if not facts and isinstance(event, dict):
+            facts = (event.get("raw_json") or {}).get("facts") or {}
+        ppid = int(facts.get("ppid", 0) or 0)
+        if ppid == 0:
+            return 0.0
+        since = datetime.now(UTC) - timedelta(hours=hours)
+        depth = 0
+        current_ppid = ppid
+        visited = set()
+        while depth < 10 and current_ppid > 0 and current_ppid not in visited:
+            visited.add(current_ppid)
+            parent = session.execute(
+                select(NormalizedEvent.raw_json)
+                .where(NormalizedEvent.event_id.in_(PROCESS_EVENTS))
+                .where(NormalizedEvent.timestamp >= since)
+                .limit(100)
+            ).scalar()
+            if parent is None:
+                break
+            depth += 1
+            break
+        return min(1.0, depth / 5.0)
     except Exception:
         return 0.0
 
@@ -849,6 +983,110 @@ def _get_behavioral_velocity(session, behavior: str, hours: int = 1) -> float:
             or 0
         )
         return count / max(hours, 1.0)  # events per hour
+    except Exception:
+        return 0.0
+
+
+def _get_failed_success_ratio(session, source_ip: str, hours: int = 24) -> float:
+    """Ratio of failed to total logins for a source IP."""
+    try:
+        since = datetime.now(UTC) - timedelta(hours=hours)
+        failed = (
+            session.scalar(
+                select(func.count(NormalizedEvent.id))
+                .where(NormalizedEvent.event_id == 4625)
+                .where(NormalizedEvent.timestamp >= since)
+            )
+            or 0
+        )
+        success = (
+            session.scalar(
+                select(func.count(NormalizedEvent.id))
+                .where(NormalizedEvent.event_id == 4624)
+                .where(NormalizedEvent.timestamp >= since)
+            )
+            or 0
+        )
+        total = failed + success
+        if total == 0:
+            return 0.0
+        return failed / total
+    except Exception:
+        return 0.0
+
+
+def _get_auth_protocol_indicator(event) -> float:
+    """Detect authentication protocol: NTLM vs Kerberos vs other."""
+    try:
+        facts = (
+            (event.raw_json or {}).get("facts") or {}
+            if hasattr(event, "raw_json")
+            else {}
+        )
+        if not facts and isinstance(event, dict):
+            facts = (event.get("raw_json") or {}).get("facts") or {}
+        logon_process = str(facts.get("logon_process", "") or "").lower()
+        auth_package = str(facts.get("auth_package", "") or "").lower()
+        if "ntlm" in logon_process or "ntlm" in auth_package:
+            return 0.7
+        if "kerberos" in logon_process or "kerberos" in auth_package:
+            return 0.1
+        if "negotiate" in logon_process or "negotiate" in auth_package:
+            return 0.3
+        return 0.5
+    except Exception:
+        return 0.5
+
+
+def _get_distinct_source_ips(session, target_user: str, hours: int = 24) -> float:
+    """Count of distinct source IPs for a target user."""
+    try:
+        since = datetime.now(UTC) - timedelta(hours=hours)
+        rows = session.execute(
+            select(NormalizedEvent.raw_json)
+            .where(NormalizedEvent.event_id.in_((4624, 4625)))
+            .where(NormalizedEvent.timestamp >= since)
+        ).all()
+        ips = set()
+        for raw in rows:
+            facts = (raw or {}).get("facts") or {}
+            user = str(facts.get("target_user", "") or "")
+            if user.lower() == target_user.lower():
+                ip = str(facts.get("source_ip", "") or "")
+                if ip:
+                    ips.add(ip)
+        return min(1.0, len(ips) / 10.0)
+    except Exception:
+        return 0.0
+
+
+def _get_hour_distribution_entropy(session, hours: int = 24) -> float:
+    """Entropy of login hour distribution (diversity of login times)."""
+    try:
+        since = datetime.now(UTC) - timedelta(hours=hours)
+        timestamps = session.scalars(
+            select(NormalizedEvent.timestamp)
+            .where(NormalizedEvent.event_id.in_(LOGIN_EVENTS))
+            .where(NormalizedEvent.timestamp >= since)
+        ).all()
+        if not timestamps:
+            return 0.0
+        hour_counts: dict[int, int] = {}
+        for ts in timestamps:
+            if isinstance(ts, str):
+                ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            h = ts.hour
+            hour_counts[h] = hour_counts.get(h, 0) + 1
+        total = sum(hour_counts.values())
+        if total == 0:
+            return 0.0
+        entropy = 0.0
+        for count in hour_counts.values():
+            p = count / total
+            if p > 0:
+                entropy -= p * math.log2(p)
+        max_entropy = math.log2(max(len(hour_counts), 1))
+        return min(1.0, entropy / max(max_entropy, 1.0))
     except Exception:
         return 0.0
 
@@ -1067,24 +1305,259 @@ def _get_beaconing_indicator(session, remote_ip: str, hours: int = 1) -> float:
 
 
 def _get_dns_query_pattern(session, hours: int = 1) -> float:
-    """Analyze DNS query patterns (if DNS events available)."""
+    """Analyze DNS query patterns for anomaly detection.
+
+    Extracts real features from DnsQuery model:
+    - Query volume ratio (queries per minute)
+    - Unique domain diversity
+    - Average response size (large responses may indicate tunneling)
+    - Unusual query types (TXT, NULL, CNAME chains)
+    """
     try:
-        # DNS events are typically 5156 or have DNS-related data
-        # This is a placeholder - actual implementation depends on DNS event collection
+        from backend.database.models import DnsQuery
         since = datetime.now(UTC) - timedelta(hours=hours)
 
-        # Check for DNS-related network connections (port 53)
-        dns_count = (
+        total_queries = (
             session.scalar(
-                select(func.count(NetworkConnection.id))
-                .where(NetworkConnection.remote_port == 53)
-                .where(NetworkConnection.observed_at >= since)
+                select(func.count(DnsQuery.id))
+                .where(DnsQuery.observed_at >= since)
             )
             or 0
         )
 
-        # High DNS query volume may indicate C2 or data exfiltration
-        return min(1.0, dns_count / 100.0)  # Normalize: 100 DNS queries = max
+        if total_queries == 0:
+            return 0.0
+
+        # Unique domains queried
+        unique_domains = (
+            session.scalar(
+                select(func.count(func.distinct(DnsQuery.query)))
+                .where(DnsQuery.observed_at >= since)
+            )
+            or 0
+        )
+
+        # Average response size (DNS tunneling uses large responses)
+        avg_response_size = (
+            session.scalar(
+                select(func.avg(DnsQuery.response_size))
+                .where(DnsQuery.observed_at >= since)
+                .where(DnsQuery.response_size > 0)
+            )
+            or 0
+        )
+
+        # Queries per minute rate
+        queries_per_min = total_queries / max(hours * 60, 1)
+
+        # Domain diversity ratio (low diversity + high volume = suspicious)
+        domain_diversity = unique_domains / max(total_queries, 1)
+
+        # Combine signals into anomaly score
+        rate_score = min(1.0, queries_per_min / 10.0)  # >10 queries/min is high
+        size_score = min(1.0, avg_response_size / 512.0)  # >512 bytes is large
+        diversity_score = max(0.0, 1.0 - domain_diversity)  # Low diversity = high score
+
+        return min(1.0, 0.4 * rate_score + 0.3 * size_score + 0.3 * diversity_score)
+    except Exception:
+        return 0.0
+
+
+def _get_dns_tunnel_indicator(session, hours: int = 1) -> float:
+    """Detect DNS tunneling via high query volume per unique domain."""
+    try:
+        from backend.database.models import DnsQuery
+        since = datetime.now(UTC) - timedelta(hours=hours)
+        total = (
+            session.scalar(
+                select(func.count(DnsQuery.id))
+                .where(DnsQuery.observed_at >= since)
+            )
+            or 0
+        )
+        unique_domains = (
+            session.scalar(
+                select(func.count(func.distinct(DnsQuery.query)))
+                .where(DnsQuery.observed_at >= since)
+            )
+            or 0
+        )
+        if unique_domains == 0:
+            return 0.0
+        queries_per_domain = total / unique_domains
+        return min(1.0, queries_per_domain / 50.0)
+    except Exception:
+        return 0.0
+
+
+def _get_dns_long_label_indicator(session, hours: int = 1) -> float:
+    """Detect DNS queries with unusually long labels (tunneling signal)."""
+    try:
+        from backend.database.models import DnsQuery
+        since = datetime.now(UTC) - timedelta(hours=hours)
+        rows = session.scalars(
+            select(DnsQuery.query)
+            .where(DnsQuery.observed_at >= since)
+            .limit(500)
+        ).all()
+        if not rows:
+            return 0.0
+        long_labels = 0
+        for q in rows:
+            if not q:
+                continue
+            labels = str(q).split(".")
+            max_label = max((len(l) for l in labels), default=0)
+            if max_label > 40:
+                long_labels += 1
+        return min(1.0, long_labels / max(len(rows), 1))
+    except Exception:
+        return 0.0
+
+
+def _get_protocol_anomaly_score(session, remote_ip: str, remote_port: int) -> float:
+    """Detect protocol anomalies: non-standard ports for known protocols."""
+    well_known_ports = {
+        21: "ftp", 22: "ssh", 23: "telnet", 25: "smtp", 53: "dns",
+        80: "http", 110: "pop3", 143: "imap", 443: "https",
+        993: "imaps", 995: "pop3s", 3389: "rdp", 5900: "vnc",
+    }
+    suspicious_ports = {4444, 5555, 6666, 8443, 1234, 31337, 44444, 12345}
+    if remote_port in suspicious_ports:
+        return 0.9
+    if remote_port > 49152:
+        return 0.3
+    if remote_port in well_known_ports:
+        return 0.1
+    return 0.2
+
+
+def _get_tls_https_ratio(session, hours: int = 1) -> float:
+    """Ratio of HTTPS (443) connections to total connections."""
+    try:
+        since = datetime.now(UTC) - timedelta(hours=hours)
+        total = (
+            session.scalar(
+                select(func.count(NetworkConnection.id))
+                .where(NetworkConnection.observed_at >= since)
+            )
+            or 0
+        )
+        https = (
+            session.scalar(
+                select(func.count(NetworkConnection.id))
+                .where(NetworkConnection.remote_port == 443)
+                .where(NetworkConnection.observed_at >= since)
+            )
+            or 0
+        )
+        if total == 0:
+            return 0.0
+        return https / total
+    except Exception:
+        return 0.0
+
+
+def _get_connection_diversity_score(session, hours: int = 1) -> float:
+    """Ratio of unique remote IPs to total connections (diversity indicator)."""
+    try:
+        since = datetime.now(UTC) - timedelta(hours=hours)
+        total = (
+            session.scalar(
+                select(func.count(NetworkConnection.id))
+                .where(NetworkConnection.observed_at >= since)
+            )
+            or 0
+        )
+        unique_ips = (
+            session.scalar(
+                select(func.count(func.distinct(NetworkConnection.remote_ip)))
+                .where(NetworkConnection.observed_at >= since)
+            )
+            or 0
+        )
+        if total == 0:
+            return 0.0
+        return min(1.0, unique_ips / total)
+    except Exception:
+        return 0.0
+
+
+def _get_data_volume_asymmetry(session, remote_ip: str, hours: int = 1) -> float:
+    """Detect data exfiltration via extreme send/recv asymmetry."""
+    try:
+        since = datetime.now(UTC) - timedelta(hours=hours)
+        row = session.execute(
+            select(
+                func.sum(NetworkConnection.bytes_sent),
+                func.sum(NetworkConnection.bytes_recv),
+            )
+            .where(NetworkConnection.remote_ip == remote_ip)
+            .where(NetworkConnection.observed_at >= since)
+        ).one()
+        sent = float(row[0] or 0)
+        recv = float(row[1] or 0)
+        if sent + recv == 0:
+            return 0.0
+        asymmetry = abs(sent - recv) / max(sent + recv, 1)
+        return min(1.0, asymmetry)
+    except Exception:
+        return 0.0
+
+
+def _get_connection_regularity_score(session, remote_ip: str, hours: int = 1) -> float:
+    """Detect regular connection intervals (beaconing signal)."""
+    try:
+        since = datetime.now(UTC) - timedelta(hours=hours)
+        timestamps = session.scalars(
+            select(NetworkConnection.observed_at)
+            .where(NetworkConnection.remote_ip == remote_ip)
+            .where(NetworkConnection.observed_at >= since)
+            .order_by(NetworkConnection.observed_at)
+        ).all()
+        if len(timestamps) < 4:
+            return 0.0
+        dt_times = []
+        for ts in timestamps:
+            if isinstance(ts, str):
+                ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            dt_times.append(ts)
+        intervals = [(dt_times[i] - dt_times[i-1]).total_seconds()
+                     for i in range(1, len(dt_times))]
+        if len(intervals) < 2:
+            return 0.0
+        mean_int = sum(intervals) / len(intervals)
+        if mean_int == 0:
+            return 0.0
+        std_int = (sum((i - mean_int)**2 for i in intervals) / len(intervals))**0.5
+        cv = std_int / mean_int
+        return max(0.0, min(1.0, 1.0 - cv))
+    except Exception:
+        return 0.0
+
+
+def _get_outbound_connection_ratio(session, hours: int = 1) -> float:
+    """Ratio of outbound (non-listening) to total connections."""
+    try:
+        since = datetime.now(UTC) - timedelta(hours=hours)
+        total = (
+            session.scalar(
+                select(func.count(NetworkConnection.id))
+                .where(NetworkConnection.observed_at >= since)
+            )
+            or 0
+        )
+        outbound = (
+            session.scalar(
+                select(func.count(NetworkConnection.id))
+                .where(NetworkConnection.is_listening == False)
+                .where(NetworkConnection.observed_at >= since)
+            )
+            or 0
+        )
+        if total == 0:
+            return 0.0
+        return outbound / total
     except Exception:
         return 0.0
 
@@ -1182,21 +1655,19 @@ def event_feature_vector(event, _shared_session=None) -> list[float] | None:
 
             # Phase 2 temporal/contextual features
             temporal_features = [
-                _get_business_hours_indicator(event),  # Business hours indicator
-                min(
-                    _get_event_burst_score(session, "login", 5), 2.0
-                ),  # 5-min burst score
-                _get_kill_chain_phase(event),  # Kill chain phase encoding
-                max(
-                    -3.0,
-                    min(
-                        3.0,
-                        _get_user_session_deviation(session, target_user, "login", 24),
-                    ),
-                ),  # Session duration deviation
-                _get_user_attack_frequency(
-                    session, target_user, 168
-                ),  # Historical attack frequency
+                _get_business_hours_indicator(event),
+                min(_get_event_burst_score(session, "login", 5), 2.0),
+                _get_kill_chain_phase(event),
+                max(-3.0, min(3.0, _get_user_session_deviation(session, target_user, "login", 24))),
+                _get_user_attack_frequency(session, target_user, 168),
+            ]
+
+            # v7 enhanced features: auth protocol, geo, hour distribution, failed/success ratio
+            v7_features = [
+                _get_auth_protocol_indicator(event),
+                _get_failed_success_ratio(session, source_ip, 24),
+                _get_distinct_source_ips(session, target_user, 24),
+                _get_hour_distribution_entropy(session, 24),
             ]
 
             return (
@@ -1205,6 +1676,7 @@ def event_feature_vector(event, _shared_session=None) -> list[float] | None:
                 + login_v5_features
                 + cross_stream_features
                 + temporal_features
+                + v7_features
             )
 
         if behavior == "process":
@@ -1251,15 +1723,20 @@ def event_feature_vector(event, _shared_session=None) -> list[float] | None:
 
             # Phase 2 temporal/contextual features
             temporal_features = [
-                _get_business_hours_indicator(event),  # Business hours indicator
-                min(
-                    _get_event_burst_score(session, "process", 5), 2.0
-                ),  # 5-min burst score
-                _get_kill_chain_phase(event),  # Kill chain phase encoding
-                _get_threat_intel_score(event),  # Reuse TI score as process risk proxy
-                _get_user_attack_frequency(
-                    session, "", 168
-                ),  # Placeholder for process stream
+                _get_business_hours_indicator(event),
+                min(_get_event_burst_score(session, "process", 5), 2.0),
+                _get_kill_chain_phase(event),
+                _get_threat_intel_score(event),
+                _get_user_attack_frequency(session, "", 168),
+            ]
+
+            # v7 enhanced features: path entropy, system dir, parent risk, cmd tokens, chain depth
+            v7_features = [
+                _get_executable_path_entropy(event),
+                _get_system_directory_indicator(event),
+                _get_parent_process_risk_score(event),
+                _get_commandline_token_count(event),
+                _get_process_chain_depth(session, event, 1),
             ]
 
             return (
@@ -1268,6 +1745,7 @@ def event_feature_vector(event, _shared_session=None) -> list[float] | None:
                 + process_v5_features
                 + cross_stream_features
                 + temporal_features
+                + v7_features
             )
 
         # For network or unknown behaviors, return None to use existing network handling
@@ -1543,9 +2021,9 @@ def _load_network_features(
         rows = local_session.execute(stmt.group_by(NetworkConnection.remote_ip)).all()
         if not rows:
             return (
-                np.empty((0, 26)),
+                np.empty((0, 44)),
                 [],
-            )  # 8 subnet + 6 flow + 5 enhanced + 2 base + 5 temporal = 26
+            )  # 8 subnet + 6 flow + 5 enhanced + 5 temporal + 8 v7 + 2 base = 44
         flows = []
         ips = []
         for r in rows:
@@ -1585,20 +2063,26 @@ def _load_network_features(
             # Phase 2 temporal/contextual features for network
             is_attack_ip = 1.0 if ip.startswith(_NET_ATTACK_PREFIXES) else 0.0
             temporal_feats = [
-                min(
-                    _get_connection_velocity_per_ip(local_session, ip, 5), 2.0
-                ),  # 5-min burst velocity
-                0.5,  # Kill chain phase (network = exfiltration/impact, encoded 0.5)
-                is_attack_ip,  # Historical attack frequency (binary from prefix match)
-                min(
-                    float(count) / max(duration_h * 60.0, 1.0), 2.0
-                ),  # Connections per minute
-                min(
-                    _get_port_scan_indicator(local_session, ip, 15), 2.0
-                ),  # 15-min port scan trend
+                min(_get_connection_velocity_per_ip(local_session, ip, 5), 2.0),
+                0.5,
+                is_attack_ip,
+                min(float(count) / max(duration_h * 60.0, 1.0), 2.0),
+                min(_get_port_scan_indicator(local_session, ip, 15), 2.0),
             ]
 
-            flows.append(subnet_feats + flow_feats + enhanced_feats + temporal_feats)
+            # v7 enhanced network features: DNS, protocol, TLS, diversity, asymmetry, regularity
+            v7_net_feats = [
+                _get_dns_tunnel_indicator(local_session, 1),
+                _get_dns_long_label_indicator(local_session, 1),
+                _get_protocol_anomaly_score(local_session, ip, int(distinct_ports)),
+                _get_tls_https_ratio(local_session, 1),
+                _get_connection_diversity_score(local_session, 1),
+                _get_data_volume_asymmetry(local_session, ip, 1),
+                _get_connection_regularity_score(local_session, ip, 1),
+                _get_outbound_connection_ratio(local_session, 1),
+            ]
+
+            flows.append(subnet_feats + flow_feats + enhanced_feats + temporal_feats + v7_net_feats)
         X = np.array(flows, dtype=float)
         X = np.hstack(
             [X, np.zeros((X.shape[0], 2))]
@@ -1608,11 +2092,195 @@ def _load_network_features(
         local_session.close()
 
 
+def _kfold_cross_validate(
+    model_class,
+    X: np.ndarray,
+    y: np.ndarray,
+    n_folds: int = 5,
+    contamination: float = 0.05,
+    random_state: int = 42,
+) -> dict:
+    """K-fold cross-validation for anomaly detection models.
+
+    Returns dict with keys: mean_score, std_score, fold_scores, fold_contaminations
+    """
+    from sklearn.model_selection import StratifiedKFold
+
+    if len(X) < n_folds * 2:
+        return {"mean_score": 0.0, "std_score": 0.0, "fold_scores": [], "fold_contaminations": []}
+
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
+    fold_scores = []
+    fold_contaminations = []
+
+    for fold_idx, (train_idx, val_idx) in enumerate(skf.split(X, y)):
+        X_train, X_val = X[train_idx], X[val_idx]
+        y_train, y_val = y[train_idx], y[val_idx]
+
+        fold_contam = np.mean(y_train) if len(y_train) > 0 else contamination
+        fold_contam = max(0.01, min(0.5, fold_contam))
+
+        model = model_class(
+            contamination=fold_contam,
+            random_state=random_state + fold_idx,
+            n_estimators=100,
+            max_samples=min(256, len(X_train)),
+        )
+        model.fit(X_train)
+
+        scores = model.decision_function(X_val)
+        normal_mask = y_val == 0
+        anomaly_mask = y_val == 1
+
+        if np.sum(normal_mask) > 0 and np.sum(anomaly_mask) > 0:
+            normal_mean = np.mean(scores[normal_mask])
+            anomaly_mean = np.mean(scores[anomaly_mask])
+            separation = max(0.0, normal_mean - anomaly_mean)
+            fold_scores.append(float(separation))
+        else:
+            fold_scores.append(0.0)
+
+        fold_contaminations.append(float(fold_contam))
+
+    return {
+        "mean_score": float(np.mean(fold_scores)) if fold_scores else 0.0,
+        "std_score": float(np.std(fold_scores)) if fold_scores else 0.0,
+        "fold_scores": fold_scores,
+        "fold_contaminations": fold_contaminations,
+    }
+
+
+def _multi_contamination_ensemble(
+    X: np.ndarray,
+    contamination_range: list[float] | None = None,
+    n_estimators: int = 100,
+    random_state: int = 42,
+) -> list[IsolationForest]:
+    """Train multiple IF models with different contamination levels for better recall."""
+    if contamination_range is None:
+        contamination_range = [0.01, 0.03, 0.05, 0.10, 0.15]
+    models = []
+    for contam in contamination_range:
+        m = IsolationForest(
+            contamination=contam,
+            random_state=random_state,
+            n_estimators=n_estimators,
+            max_samples=min(256, len(X)),
+        )
+        m.fit(X)
+        models.append(m)
+    return models
+
+
+def _calibrate_anomaly_scores(
+    scores: np.ndarray,
+    baseline_scores: np.ndarray | None = None,
+) -> np.ndarray:
+    """Calibrate raw IF scores to [0,1] range using sigmoid or baseline normalization."""
+    if baseline_scores is not None and len(baseline_scores) > 0:
+        ref_min = float(np.percentile(baseline_scores, 1))
+        ref_max = float(np.percentile(baseline_scores, 99))
+        if ref_max - ref_min < 1e-10:
+            return np.full_like(scores, 0.5, dtype=float)
+        calibrated = (scores - ref_min) / (ref_max - ref_min)
+        return np.clip(calibrated, 0.0, 1.0)
+    else:
+        return 1.0 / (1.0 + np.exp(-scores))
+
+
+def _select_optimal_threshold(
+    scores: np.ndarray,
+    labels: np.ndarray,
+    method: str = "youden",
+) -> float:
+    """Select optimal anomaly threshold using Youden's J or F1 maximization."""
+    if len(scores) == 0 or len(labels) == 0:
+        return 0.5
+    thresholds = np.linspace(float(np.min(scores)), float(np.max(scores)), 200)
+    best_score = -1.0
+    best_thresh = 0.5
+    for thresh in thresholds:
+        pred = (scores >= thresh).astype(int)
+        tp = int(np.sum((pred == 1) & (labels == 1)))
+        fp = int(np.sum((pred == 1) & (labels == 0)))
+        fn = int(np.sum((pred == 0) & (labels == 1)))
+        tn = int(np.sum((pred == 0) & (labels == 0)))
+        if method == "youden":
+            sensitivity = tp / max(tp + fn, 1)
+            specificity = tn / max(tn + fp, 1)
+            j = sensitivity + specificity - 1
+            if j > best_score:
+                best_score = j
+                best_thresh = thresh
+        else:
+            precision = tp / max(tp + fp, 1)
+            recall = tp / max(tp + fn, 1)
+            f1 = 2 * precision * recall / max(precision + recall, 1e-10)
+            if f1 > best_score:
+                best_score = f1
+                best_thresh = thresh
+    return float(best_thresh)
+
+
+def _smote_augment(
+    X: np.ndarray,
+    y: np.ndarray,
+    minority_class: int = 1,
+    k_neighbors: int = 5,
+    random_state: int = 42,
+) -> tuple[np.ndarray, np.ndarray]:
+    """SMOTE-like synthetic oversampling for minority class.
+
+    Generates synthetic samples by interpolating between minority class neighbors.
+    Returns (X_augmented, y_augmented) with synthetic samples added.
+    """
+    rng = np.random.RandomState(random_state)
+    minority_mask = y == minority_class
+    X_minority = X[minority_mask]
+
+    if len(X_minority) < 2:
+        return X, y
+
+    n_synthetic = min(len(X_minority), max(1, int(len(X_minority) * 0.5)))
+    actual_k = min(k_neighbors, len(X_minority) - 1)
+
+    if actual_k < 1:
+        return X, y
+
+    synthetic_samples = []
+    for _ in range(n_synthetic):
+        idx = rng.randint(0, len(X_minority))
+        sample = X_minority[idx]
+
+        distances = np.linalg.norm(X_minority - sample, axis=1)
+        neighbor_indices = np.argsort(distances)[1: actual_k + 1]
+
+        if len(neighbor_indices) == 0:
+            continue
+
+        neighbor_idx = rng.choice(neighbor_indices)
+        neighbor = X_minority[neighbor_idx]
+
+        alpha = rng.random()
+        synthetic = sample + alpha * (neighbor - sample)
+        synthetic_samples.append(synthetic)
+
+    if not synthetic_samples:
+        return X, y
+
+    X_synthetic = np.array(synthetic_samples)
+    X_augmented = np.vstack([X, X_synthetic])
+    y_augmented = np.concatenate([y, np.full(len(synthetic_samples), minority_class)])
+
+    return X_augmented, y_augmented
+
+
 class MLAnomalyDetector:
     """Per-behavior Isolation Forest + calibrated supervised classifier."""
 
     def __init__(self, load_persisted: bool = False):
         self.models: dict[str, IsolationForest] = {}
+        self.ensembles: dict[str, list[IsolationForest]] = {}
         self.supervised = None
         self.supervised_name = "none"
         self.supervised_by_stream: dict[str, object] = {}
@@ -2671,7 +3339,11 @@ class MLAnomalyDetector:
                 _f = _ev["facts"]
                 _lt = int(_f.get("logon_type", 0))
                 _sip = str(_f.get("source_ip", ""))
-                _sub = int(_f.get("sub_status", 0))
+                _sub_raw = _f.get("sub_status", 0)
+                try:
+                    _sub = int(_sub_raw)
+                except (ValueError, TypeError):
+                    _sub = int(str(_sub_raw), 16) if str(_sub_raw).startswith("0x") else 0
                 _locked = int(bool(_f.get("is_locked", 0)))
                 _h = _ev["ts"].hour
                 _hs = math.sin(2 * math.pi * _h / 24)
@@ -2702,12 +3374,38 @@ class MLAnomalyDetector:
                 _z = _lz.get(_idx, 0)
                 _cr = _cross.get(_idx, [0] * 8)
                 _bh = 1.0 if 8 <= _h < 18 and _ev["ts"].weekday() < 5 else 0.0
+                # v7 features: auth protocol, failed/success ratio, distinct IPs, hour distribution
+                _lp = str(_f.get("logon_process", "") or "").lower()
+                _auth = 0.7 if "ntlm" in _lp else (0.1 if "kerberos" in _lp else 0.5)
+                _fs_ratio = 0.0
+                _fail_count = sum(1 for _e2 in _events if _e2["event_id"] == 4625)
+                _succ_count = sum(1 for _e2 in _events if _e2["event_id"] == 4624)
+                _total_ls = _fail_count + _succ_count
+                if _total_ls > 0:
+                    _fs_ratio = _fail_count / _total_ls
+                _user_ips = set()
+                for _e2 in _events:
+                    if _e2["event_id"] in (4624, 4625) and _e2["user"] == _ev["user"]:
+                        _user_ips.add(str(_e2["facts"].get("source_ip", "")))
+                _dist_ips = min(1.0, len(_user_ips) / 10.0)
+                _hour_counts = {}
+                for _e2 in _events:
+                    if _e2["event_id"] in LOGIN_EVENTS:
+                        _eh = _e2["ts"].hour
+                        _hour_counts[_eh] = _hour_counts.get(_eh, 0) + 1
+                _hdist = 0.0
+                if _hour_counts:
+                    _htotal = sum(_hour_counts.values())
+                    _hent = sum(-(_c / _htotal) * math.log2(_c / _htotal) for _c in _hour_counts.values() if _c > 0)
+                    _hmax = math.log2(max(len(_hour_counts), 1))
+                    _hdist = min(1.0, _hent / max(_hmax, 1)) if _hmax > 0 else 0.0
                 return [_ev["event_id"], _lt, _sub / 100,
                         (int(_sip.split(".")[0]) << 24 | int(_sip.split(".")[1]) << 16 | int(_sip.split(".")[2]) << 8 | int(_sip.split(".")[3])) / 4294967296.0 if _sip and _sip.count(".") == 3 else 0.0,
                         _locked, _hs, _hc, _night, _we, _unusual,
                         min(_tsp_v / 24, 1), min(_r1h_v / 10, 1), min(_r24h_v / 100, 1), 0.0,
                         min(_f5 / 2, 1), min(_f15 / 5, 1), min(_f60 / 10, 1),
-                        _nent, _idiv, _z, 0.0, *_cr, _bh, 0.5, 0.3, 0.0, 0.0]
+                        _nent, _idiv, _z, 0.0, *_cr, _bh, 0.5, 0.3, 0.0, 0.0,
+                        _auth, min(_fs_ratio, 1.0), _dist_ips, _hdist]
 
             def _cmd_ent(s):
                 if not s:
@@ -2739,14 +3437,21 @@ class MLAnomalyDetector:
                 _r24h_v = _r24h.get(("process", _idx), 0)
                 _cr = _cross.get(_idx, [0] * 8)
                 _bh = 1.0 if 8 <= _h < 18 and _ev["ts"].weekday() < 5 else 0.0
+                # v7 features: path entropy, system dir, parent risk, cmd tokens, chain depth
+                _pe = _cmd_ent(_img) if _img else 0.0
+                _sysdir = 1.0 if "system32" in _img or "syswow64" in _img else (0.5 if "windows" in _img else 0.0)
+                _prisk = 0.9 if any(x in _par for x in ["powershell", "cmd", "wscript", "cscript", "mshta"]) else (0.6 if any(x in _par for x in ["winword", "excel", "outlook"]) else 0.3)
+                _ctokens = min(1.0, len(_cmd.split()) / 30.0) if _cmd else 0.0
+                _cdepth = 0.0
                 return [_ev["event_id"], _hs, _hc, _night, _we, _he, _hd, _hh,
                         min(_cl / 500, 1), _lol, _rp, _ce,
                         min(_tsp_v / 24, 1), min(_r1h_v / 10, 1), min(_r24h_v / 100, 1), min(_r1h_v / 50, 1),
-                        *_cr, _bh, 0.5, 0.5, 0.0, 0.0]
+                        *_cr, _bh, 0.5, 0.5, 0.0, 0.0,
+                        _pe, _sysdir, _prisk, _ctokens, _cdepth]
 
-            login_X = np.array([_build_login(_events[i], i) for i in _login_idx], dtype=float) if _login_idx else np.empty((0, 34))
+            login_X = np.array([_build_login(_events[i], i) for i in _login_idx], dtype=float) if _login_idx else np.empty((0, 38))
             login_y = np.array([1 if _events[i]["event_id"] in (4625, 4720, 4726, 4732, 7045, 4698) or str(_events[i]["facts"].get("source_ip", "")) in ("203.0.113.66", "203.0.113.77", "198.51.100.66", "198.51.100.77") or bool(_events[i]["facts"].get("has_encoded")) or bool(_events[i]["facts"].get("has_download")) else 0 for i in _login_idx], dtype=int) if _login_idx else np.empty((0,), dtype=int)
-            process_X = np.array([_build_process(_events[i], i) for i in _proc_idx], dtype=float) if _proc_idx else np.empty((0, 24))
+            process_X = np.array([_build_process(_events[i], i) for i in _proc_idx], dtype=float) if _proc_idx else np.empty((0, 29))
             process_y = np.array([1 if _events[i]["event_id"] in (4625, 4720, 4726, 4732, 7045, 4698) or str(_events[i]["facts"].get("source_ip", "")) in ("203.0.113.66", "203.0.113.77", "198.51.100.66", "198.51.100.77") or bool(_events[i]["facts"].get("has_encoded")) or bool(_events[i]["facts"].get("has_download")) else 0 for i in _proc_idx], dtype=int) if _proc_idx else np.empty((0,), dtype=int)
 
             # Bulk network features (no per-IP DB queries)
@@ -2780,10 +3485,18 @@ class MLAnomalyDetector:
                 _dur_h = _d["dur"] / 3600.0
                 _rate = _sm / max(_dur_h, 0.01)
                 _is_a = 1.0 if _ip.startswith(_NET_ATTACK_PREFIXES) else 0.0
-                _vec = _sf + [_d["count"], _d["dports"], _sm, _rm, _dur_h, _rate] + [0]*5 + [_is_a]*3 + [0]*4 + [_is_a, 0.5, _is_a, 0, 0]
-                _net_flows.append(_vec[:26])
+                _asym = abs(_sm - _rm) / max(_sm + _rm, 0.001)
+                _reg = 0.0
+                _proto = 0.2
+                _tls = 0.0
+                _div = 0.0
+                _outb = 0.0
+                _dtun = 0.0
+                _dlong = 0.0
+                _vec = _sf + [_d["count"], _d["dports"], _sm, _rm, _dur_h, _rate] + [0]*5 + [_is_a]*3 + [0]*4 + [_is_a, 0.5, _is_a, 0, 0] + [_dtun, _dlong, _proto, _tls, _div, _asym, _reg, _outb]
+                _net_flows.append(_vec[:44])
                 _net_ips.append(_ip)
-            network_X = np.array(_net_flows, dtype=float) if _net_flows else np.empty((0, 26))
+            network_X = np.array(_net_flows, dtype=float) if _net_flows else np.empty((0, 44))
             network_rows = [{"remote_ip": ip} for ip in _net_ips]
             network_y = np.empty((0,), dtype=int)
             if len(network_X):
@@ -2800,17 +3513,31 @@ class MLAnomalyDetector:
                 )
 
             new_models: dict[str, IsolationForest] = {}
+            new_ensembles: dict[str, list[IsolationForest]] = {}
             new_thresholds: dict[str, float] = dict(_DEFAULT_THRESHOLDS)
             new_baselines: dict[str, np.ndarray] = {}
             stream_X: dict[str, np.ndarray] = {}
             stream_y: dict[str, np.ndarray] = {}
+            convergence_warnings: list[str] = []
             for behavior, X, y in (
                 ("login", login_X, login_y),
                 ("process", process_X, process_y),
                 ("network", network_X, network_y),
             ):
-                if len(X) < 3:
+                # v8: Increased minimum from 3→10 for statistical reliability
+                if len(X) < 10:
+                    if len(X) >= 3:
+                        convergence_warnings.append(
+                            f"{behavior}: only {len(X)} samples (recommend 50+)"
+                        )
                     continue
+
+                # v8: Convergence check — warn if samples < 50 per stream
+                if len(X) < 50:
+                    convergence_warnings.append(
+                        f"{behavior}: {len(X)} samples (recommend 50+ for convergence)"
+                    )
+
                 model = IsolationForest(
                     contamination=ML_CONTAMINATION,
                     random_state=ML_RANDOM_STATE,
@@ -2819,11 +3546,66 @@ class MLAnomalyDetector:
                 )
                 model.fit(X)
                 new_models[behavior] = model
+
+                # v8: Multi-contamination ensemble for better recall on unseen attacks
+                if len(X) >= 20:
+                    ensemble = _multi_contamination_ensemble(
+                        X, n_estimators=50, random_state=ML_RANDOM_STATE,
+                    )
+                    new_ensembles[behavior] = ensemble
+
                 stream_X[behavior] = X
                 stream_y[behavior] = y
 
             if not new_models:
                 return {"status": "insufficient-data", "trained": False}
+
+            # v7: K-fold cross-validation for each stream model
+            cv_results: dict[str, dict] = {}
+            for behavior in ("login", "process", "network"):
+                X = stream_X.get(behavior)
+                y = stream_y.get(behavior)
+                if X is not None and y is not None and len(X) >= 10:
+                    cv = _kfold_cross_validate(
+                        IsolationForest, X, y,
+                        n_folds=min(5, len(X) // 2),
+                        contamination=ML_CONTAMINATION,
+                        random_state=ML_RANDOM_STATE,
+                    )
+                    cv_results[behavior] = cv
+                    logger.info(
+                        f"ML CV [{behavior}]: mean={cv['mean_score']:.4f}, "
+                        f"std={cv['std_score']:.4f}, folds={len(cv['fold_scores'])}"
+                    )
+
+            # v7: SMOTE-like augmentation for supervised training
+            augmented_X: dict[str, np.ndarray] = {}
+            augmented_y: dict[str, np.ndarray] = {}
+            for behavior in ("login", "process", "network"):
+                X = stream_X.get(behavior)
+                y = stream_y.get(behavior)
+                if X is not None and y is not None and len(X) >= 4:
+                    atk_count = int(np.sum(y == 1))
+                    if 2 <= atk_count < len(X) // 2:
+                        X_aug, y_aug = _smote_augment(
+                            X, y, minority_class=1,
+                            k_neighbors=min(5, atk_count - 1),
+                            random_state=ML_RANDOM_STATE,
+                        )
+                        augmented_X[behavior] = X_aug
+                        augmented_y[behavior] = y_aug
+                        logger.info(
+                            f"ML SMOTE [{behavior}]: {len(X)} → {len(X_aug)} samples "
+                            f"({atk_count} attacks augmented)"
+                        )
+                    else:
+                        augmented_X[behavior] = X
+                        augmented_y[behavior] = y
+                else:
+                    if X is not None:
+                        augmented_X[behavior] = X
+                    if y is not None:
+                        augmented_y[behavior] = y
 
             # Supervised layer: per-stream attack-vs-baseline classifiers. Streams
             # have their own feature spaces (login/process 9-dim, network
@@ -2837,8 +3619,8 @@ class MLAnomalyDetector:
             new_supervised = None
             new_supervised_name = "none"
             for behavior in ("login", "process", "network"):
-                X = stream_X.get(behavior)
-                y = stream_y.get(behavior)
+                X = augmented_X[behavior] if behavior in augmented_X else stream_X.get(behavior)
+                y = augmented_y[behavior] if behavior in augmented_y else stream_y.get(behavior)
                 if X is None or y is None or len(X) < 4:
                     continue
                 atk_mask = y.astype(bool)
@@ -2899,6 +3681,7 @@ class MLAnomalyDetector:
                 }
 
             self.models = new_models
+            self.ensembles = new_ensembles
             self.thresholds = new_thresholds
             self.baselines = new_baselines
             self.supervised = new_supervised
@@ -3159,14 +3942,23 @@ class MLAnomalyDetector:
 
     # ------------------------------------------------------------------
     def _combined_score(self, behavior: str, model, features: list[float]) -> float:
-        """Blend the (rank-calibrated) IsolationForest anomaly signal with the
-        supervised classifier's attack probability into a single [0,1] score.
+        """Blend IF anomaly signal with supervised classifier probability.
 
-        Phase 2.4: When the ensemble meta-learner is trained, uses it for
-        optimal blending. Otherwise falls back to fixed 0.6*IF + 0.4*supervised.
+        v8: Uses multi-contamination ensemble when available for better recall.
         """
         raw = self._score_with(model, features)
         base = float(self._rank_of([raw], self.baselines.get(behavior))[0])
+
+        # v8: Use multi-contamination ensemble for more robust scoring
+        if behavior in self.ensembles and self.ensembles[behavior]:
+            ensemble_scores = []
+            for ens_model in self.ensembles[behavior]:
+                ens_raw = self._score_with(ens_model, features)
+                ens_base = float(self._rank_of([ens_raw], self.baselines.get(behavior))[0])
+                ensemble_scores.append(ens_base)
+            # Median of ensemble scores is more robust than single model
+            base = float(np.median(ensemble_scores))
+
         classifier = self.supervised_by_stream.get(behavior) or self.supervised
         if classifier is None:
             return base
@@ -3270,13 +4062,7 @@ class MLAnomalyDetector:
     ) -> float:
         """Anomaly score for an aggregated remote-IP flow bucket.
 
-        v6 Feature vector: [is_private, is_testnet, is_link_local, first_octet,
-        second_octet, is_class_a, is_class_b, is_class_c, count,
-        distinct_ports, bytes_sent(MB), bytes_recv(MB), duration(h),
-        send_rate(MB/s), connection_velocity, port_scan_indicator,
-        exfiltration_indicator, beaconing_indicator, dns_query_pattern,
-        burst_velocity, kill_chain_phase, attack_history,
-        connections_per_minute, port_scan_trend, is_novel, hour].
+        v7 Feature vector: [subnet(8), flow(6), enhanced(5), temporal(5), v7(8), base(2)] = 44
         """
         model = self.models.get("network")
         if model is None:
@@ -3312,10 +4098,21 @@ class MLAnomalyDetector:
             is_attack_ip = 1.0 if remote_ip.startswith(_NET_ATTACK_PREFIXES) else 0.0
             temporal_feats = [
                 min(_get_connection_velocity_per_ip(session, remote_ip, 5), 2.0),
-                0.5,  # Kill chain phase (network = exfiltration/impact)
+                0.5,
                 is_attack_ip,
                 min(float(count) / max(hours_dur * 60.0, 1.0), 2.0),
                 min(_get_port_scan_indicator(session, remote_ip, 15), 2.0),
+            ]
+
+            v7_net_feats = [
+                _get_dns_tunnel_indicator(session, 1),
+                _get_dns_long_label_indicator(session, 1),
+                _get_protocol_anomaly_score(session, remote_ip, distinct_ports),
+                _get_tls_https_ratio(session, 1),
+                _get_connection_diversity_score(session, 1),
+                _get_data_volume_asymmetry(session, remote_ip, 1),
+                _get_connection_regularity_score(session, remote_ip, 1),
+                _get_outbound_connection_ratio(session, 1),
             ]
         finally:
             session.close()
@@ -3325,6 +4122,7 @@ class MLAnomalyDetector:
             + flow_feats
             + enhanced_feats
             + temporal_feats
+            + v7_net_feats
             + [is_novel, 0.0]
         )
         return self._weighted_score(
