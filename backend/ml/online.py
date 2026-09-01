@@ -598,7 +598,7 @@ class OnlineLearner:
                 )
                 self.detector.thresholds[stream] = new_threshold
         except Exception:
-            pass
+            logger.debug("threshold tuning failed for %s", stream, exc_info=True)
 
     def _warm_start_supervised(
         self,
@@ -624,7 +624,7 @@ class OnlineLearner:
                     self.detector.supervised_by_stream[stream] = old_sup
                     return
             except Exception:
-                pass
+                logger.debug("calibration failed for %s, using uncalibrated model", stream, exc_info=True)
 
         # Train new classifier from scratch on weighted buffer
         if HAS_XGBOOST and len(y) >= 50 and min(pos, neg) >= 5:
@@ -669,7 +669,7 @@ class OnlineLearner:
                 self.detector.supervised_name_by_stream[stream] = name + "+calibrated"
                 return
             except Exception:
-                pass
+                logger.debug("calibration failed for %s, using uncalibrated model", stream, exc_info=True)
 
         self.detector.supervised_by_stream[stream] = model
         self.detector.supervised_name_by_stream[stream] = name
