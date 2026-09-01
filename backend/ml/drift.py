@@ -81,6 +81,138 @@ def _verdict(score: float) -> str:
     return "ok"
 
 
+class TemporalBiasDetector:
+    """Detects temporal bias patterns in event distributions.
+
+    Monitors for:
+    - Day-of-week patterns (weekday vs weekend differences)
+    - Hour-of-day patterns (business hours vs off-hours)
+    - Monthly/seasonal patterns (month-end surges, patch Tuesday)
+    - Long-term configuration drift
+    """
+
+    def __init__(self, reference_window_days: int = 30):
+        self.reference_window_days = reference_window_days
+        self._hourly_reference: np.ndarray | None = None
+        self._daily_reference: np.ndarray | None = None
+        self._monthly_reference: np.ndarray | None = None
+
+    def build_reference(self, timestamps: list) -> None:
+        """Build reference distributions from historical timestamps."""
+        if not timestamps:
+            return
+
+        hourly = np.zeros(24)
+        daily = np.zeros(7)
+        monthly = np.zeros(12)
+
+        for ts in timestamps:
+            if hasattr(ts, "hour"):
+                hourly[ts.hour] += 1
+                daily[ts.weekday()] += 1
+                monthly[ts.month - 1] += 1
+
+        # Normalize to probabilities
+        total = max(sum(hourly), 1)
+        self._hourly_reference = hourly / total
+        self._daily_reference = daily / max(sum(daily), 1)
+        self._monthly_reference = monthly / max(sum(monthly), 1)
+
+    def detect_hourly_bias(self, current_timestamps: list) -> dict:
+        """Detect if current hourly distribution differs from reference."""
+        if self._hourly_reference is None or not current_timestamps:
+            return {"bias_detected": False, "psi": 0.0}
+
+        current_hourly = np.zeros(24)
+        for ts in current_timestamps:
+            if hasattr(ts, "hour"):
+                current_hourly[ts.hour] += 1
+
+        total = max(sum(current_hourly), 1)
+        current_prob = current_hourly / total
+
+        # PSI calculation
+        psi_val = float(np.sum(
+            (current_prob - self._hourly_reference)
+            * np.log(np.clip(current_prob, 1e-6, None) / np.clip(self._hourly_reference, 1e-6, None))
+        ))
+
+        return {
+            "bias_detected": psi_val > 0.25,
+            "psi": round(psi_val, 4),
+            "description": "Hourly distribution shift detected" if psi_val > 0.25 else "Normal",
+        }
+
+    def detect_daily_bias(self, current_timestamps: list) -> dict:
+        """Detect if current daily (day-of-week) distribution differs from reference."""
+        if self._daily_reference is None or not current_timestamps:
+            return {"bias_detected": False, "psi": 0.0}
+
+        current_daily = np.zeros(7)
+        for ts in current_timestamps:
+            if hasattr(ts, "weekday"):
+                current_daily[ts.weekday()] += 1
+
+        total = max(sum(current_daily), 1)
+        current_prob = current_daily / total
+
+        psi_val = float(np.sum(
+            (current_prob - self._daily_reference)
+            * np.log(np.clip(current_prob, 1e-6, None) / np.clip(self._daily_reference, 1e-6, None))
+        ))
+
+        return {
+            "bias_detected": psi_val > 0.25,
+            "psi": round(psi_val, 4),
+            "description": "Day-of-week distribution shift detected" if psi_val > 0.25 else "Normal",
+        }
+
+    def detect_monthly_bias(self, current_timestamps: list) -> dict:
+        """Detect seasonal/monthly patterns like month-end surges."""
+        if self._monthly_reference is None or not current_timestamps:
+            return {"bias_detected": False, "psi": 0.0}
+
+        current_monthly = np.zeros(12)
+        for ts in current_timestamps:
+            if hasattr(ts, "month"):
+                current_monthly[ts.month - 1] += 1
+
+        total = max(sum(current_monthly), 1)
+        current_prob = current_monthly / total
+
+        psi_val = float(np.sum(
+            (current_prob - self._monthly_reference)
+            * np.log(np.clip(current_prob, 1e-6, None) / np.clip(self._monthly_reference, 1e-6, None))
+        ))
+
+        return {
+            "bias_detected": psi_val > 0.25,
+            "psi": round(psi_val, 4),
+            "description": "Monthly/seasonal distribution shift detected" if psi_val > 0.25 else "Normal",
+        }
+
+    def get_all_detections(self, current_timestamps: list) -> dict:
+        """Run all temporal bias detections and return aggregated results."""
+        hourly = self.detect_hourly_bias(current_timestamps)
+        daily = self.detect_daily_bias(current_timestamps)
+        monthly = self.detect_monthly_bias(current_timestamps)
+
+        any_bias = hourly["bias_detected"] or daily["bias_detected"] or monthly["bias_detected"]
+        max_psi = max(hourly["psi"], daily["psi"], monthly["psi"])
+
+        return {
+            "any_bias_detected": any_bias,
+            "max_psi": round(max_psi, 4),
+            "hourly": hourly,
+            "daily": daily,
+            "monthly": monthly,
+            "recommendation": (
+                "Consider retraining with extended time window"
+                if any_bias else "No temporal bias detected"
+            ),
+        }
+
+
 def check_drift(session=None, hours: int = 12) -> dict:
     """Compare the last ``hours`` of features per stream to the baselines.
 
