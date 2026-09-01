@@ -96,6 +96,14 @@ from backend import config
 logger.info("BARAQ starting — env=%s, debug=%s, telemetry_v2=%s, alerts_v2=%s, correlation=%s, risk=%s",
     config.BARAQ_ENV, not config.IS_PRODUCTION, config.TELEMETRY_V2_ENABLED, config.ALERTS_V2_ENABLED, config.CORRELATION_ENABLED, config.RISK_ENABLED)
 
+if config._USING_DEV_KEYS and config.ALLOW_DEV_KEYS:
+    logger.warning(
+        "BARAQ is accepting the public development API keys (baraq-dev-*). "
+        "These are well-known credentials and must NOT be enabled in any "
+        "deployment that is not a single-user lab. Set BARAQ_API_KEYS in .env "
+        "or the DPAPI vault, then set BARAQ_ALLOW_DEV_KEYS=0 and restart."
+    )
+
 
 def _seed_admin_user() -> None:
     """Create the bootstrap admin account if the users table is empty."""
