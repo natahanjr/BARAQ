@@ -22,12 +22,18 @@ router = APIRouter(prefix="/api", tags=["events"], dependencies=[Depends(require
 
 
 def _is_private_remote_ip(ip: str) -> bool:
-    """Return True when ``ip`` is RFC1918/loopback/link-local/CGNAT.
+    """Return True when ``ip`` is NOT a globally routable address.
 
     Used by ``list_network`` to bucket a connection as inbound vs
     outbound. Replaces a string-prefix ``LIKE`` test (172.2%, 172.3%,
     10.%) that mismatched public address space (HP/Huawei used
     172.32.0.0/11, public allocations in 172.20.0.0/14, etc.).
+
+    The stdlib ``ipaddress`` module exposes both ``is_private`` (RFC1918
+    + CGNAT) and ``is_global`` (the inverse - publicly routable). We
+    treat ``not is_global`` as 'internal' so loopback, link-local,
+    documentation prefixes, multicast and the various reserved blocks
+    are all bucketed correctly.
 
     Returns False for anything that is not a syntactically valid IP
     address (the SQL ``remote_ip != ""`` filter still excludes empty
@@ -39,13 +45,7 @@ def _is_private_remote_ip(ip: str) -> bool:
         addr = ipaddress.ip_address(ip)
     except ValueError:
         return False
-    return (
-        addr.is_private
-        or addr.is_loopback
-        or addr.is_link_local
-        or addr.is_reserved
-        or addr.is_multicast
-    )
+    return not addr.is_global
 
 
 def _events_scope(request: Request) -> str | None:
