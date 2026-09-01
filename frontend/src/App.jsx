@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, useCallback, memo } from "react";
+import { lazy, Suspense, useEffect, useState, useCallback, memo, Component } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
@@ -40,6 +40,36 @@ const UEBA = lazy(() => import("./pages/UEBA.jsx"));
 const InsiderThreat = lazy(() => import("./pages/InsiderThreat.jsx"));
 const FleetConfig = lazy(() => import("./pages/FleetConfig.jsx"));
 const MitreGapReport = lazy(() => import("./pages/MitreGapReport.jsx"));
+
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error("ErrorBoundary caught:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex h-screen items-center justify-center bg-[var(--bg-primary)]">
+          <div className="max-w-md rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-8 text-center">
+            <h2 className="mb-2 text-lg font-semibold text-[var(--fg-primary)]">Something went wrong</h2>
+            <p className="mb-4 text-sm text-[var(--fg-muted)]">{this.state.error?.message}</p>
+            <button
+              onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+              className="rounded bg-[var(--accent-cyan)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            >Reload page</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function Loading() {
   return (
