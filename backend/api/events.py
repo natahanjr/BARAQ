@@ -154,31 +154,41 @@ def list_network(
             stmt = stmt.where(NetworkConnection.observed_at >= since_dt)
         except ValueError:
             pass
-    if direction == "outbound":
-        # local is internal/private, remote is external
-        stmt = stmt.where(NetworkConnection.remote_ip != "").where(
-            ~NetworkConnection.remote_ip.like("10.%"),
-            ~NetworkConnection.remote_ip.like("192.168.%"),
-            ~NetworkConnection.remote_ip.like("172.16.%"),
-            ~NetworkConnection.remote_ip.like("172.17.%"),
-            ~NetworkConnection.remote_ip.like("172.18.%"),
-            ~NetworkConnection.remote_ip.like("172.19.%"),
-            ~NetworkConnection.remote_ip.like("172.2%"),
-            ~NetworkConnection.remote_ip.like("172.3%"),
-            ~NetworkConnection.remote_ip.like("127.%"),
-            ~NetworkConnection.remote_ip.like("0.%"),
-            ~NetworkConnection.remote_ip.like("::1"),
-        )
-    elif direction == "inbound":
-        stmt = stmt.where(NetworkConnection.remote_ip != "").where(
-            NetworkConnection.remote_ip.like("10.%"),
-            NetworkConnection.remote_ip.like("192.168.%"),
-            NetworkConnection.remote_ip.like("172.1%"),
-            NetworkConnection.remote_ip.like("127.%"),
-        )
-    rows = db.scalars(
-        stmt.order_by(NetworkConnection.observed_at.desc()).limit(limit)
-    ).all()
+    if direction in ("outbound", "inbound"):
+        # The previous implementation fetched ``limit * 4`` candidates
+        # from SQL and dropped up to 75 % in Python, which gave the user
+        # short pages with no signal that more rows were available.
+        # Walk the cursor in small batches until the page is full or
+        # the table is exhausted, so callers always get exactly
+        # ``limit`` rows when at least ``limit`` matches exist.
+        want = _is_private_remote_ip  # inbound: bucket = private
+        if direction == "outbound":
+            want = lambda ip: not _is_private_remote_ip(ip)  # type: ignore[assignment]
+        keep = []
+        offset = 0
+        page_size = 500
+        max_pages = 8  # hard cap on DB round-trips
+        for _ in range(max_pages):
+            batch = db.scalars(
+                stmt.order_by(NetworkConnection.observed_at.desc())
+                .offset(offset)
+                .limit(page_size)
+            ).all()
+            if not batch:
+                break
+            offset += len(batch)
+            for c in batch:
+                if c.remote_ip and want(c.remote_ip):
+                    keep.append(c)
+                    if len(keep) >= limit:
+                        break
+            if len(keep) >= limit:
+                break
+        rows = keep[:limit]
+    else:
+        rows = db.scalars(
+            stmt.order_by(NetworkConnection.observed_at.desc()).limit(limit)
+        ).all()
     return {"total": len(rows), "items": [c.to_dict() for c in rows]}
 
 
