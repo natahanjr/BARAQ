@@ -272,45 +272,65 @@ def _gen_security_benign(n: int = 100, rng: random.Random | None = None) -> list
 
 
 def _gen_security_attack(n: int = 20, rng: random.Random | None = None) -> list[dict]:
-    """Generate attack Security channel events."""
+    """Generate attack Security channel events with realistic bursty timing.
+
+    v8: Uses realistic attack timing patterns:
+    - Burst phases (rapid attempts within seconds)
+    - Dormant phases (random delays between bursts)
+    - Escalation patterns (increasing intensity over time)
+    """
     rng = rng or random.Random(42)
     events = []
     base = datetime.now(UTC) - timedelta(hours=24)
     attacker_ip = rng.choice(MALICIOUS_IPS)
 
-    # Brute force pattern
     target = rng.choice(USERS)
-    for i in range(min(n, 15)):
-        dt = base + timedelta(seconds=rng.randint(0, 86400))
-        events.append(
-            {
-                "event_id": 4625,
-                "channel": "Security",
-                "timestamp": _ts(dt),
-                "host": rng.choice(HOSTS),
-                "user": target,
-                "message": (
-                    f"An account failed to log on.\n"
-                    f"Target: {target}\n"
-                    f"Logon Type: 3\n"
-                    f"Source IP: {attacker_ip}\n"
-                    f"Failure Reason: Bad password\n"
-                    f"Sub Status: 0xC000006A"
-                ),
-                "source_ip": attacker_ip,
-                "raw": {
-                    "logon_type": 3,
+
+    # v8: Realistic bursty timing generation
+    time_cursor = base
+    attempts_remaining = min(n, 15)
+
+    while attempts_remaining > 0:
+        # Burst phase: 3-8 rapid attempts within 1-30 seconds
+        burst_size = min(rng.randint(3, 8), attempts_remaining)
+        burst_interval = rng.uniform(1.0, 30.0)  # seconds between attempts in burst
+
+        for _ in range(burst_size):
+            dt = time_cursor + timedelta(seconds=rng.uniform(0, burst_interval))
+            events.append(
+                {
+                    "event_id": 4625,
+                    "channel": "Security",
+                    "timestamp": _ts(dt),
+                    "host": rng.choice(HOSTS),
+                    "user": target,
+                    "message": (
+                        f"An account failed to log on.\n"
+                        f"Target: {target}\n"
+                        f"Logon Type: 3\n"
+                        f"Source IP: {attacker_ip}\n"
+                        f"Failure Reason: Bad password\n"
+                        f"Sub Status: 0xC000006A"
+                    ),
                     "source_ip": attacker_ip,
-                    "target_user": target,
-                    "is_locked": False,
-                    "sub_status": "0xC000006A",
-                },
-            }
-        )
+                    "raw": {
+                        "logon_type": 3,
+                        "source_ip": attacker_ip,
+                        "target_user": target,
+                        "is_locked": False,
+                        "sub_status": "0xC000006A",
+                    },
+                }
+            )
+            attempts_remaining -= 1
+
+        # Dormant phase: random delay between bursts (2-15 minutes)
+        dormant_minutes = rng.uniform(2.0, 15.0)
+        time_cursor = time_cursor + timedelta(seconds=burst_interval * burst_size + dormant_minutes * 60)
 
     # Successful logon after brute force (lateral movement)
     if n > 15:
-        dt = base + timedelta(seconds=rng.randint(0, 86400))
+        dt = time_cursor + timedelta(seconds=rng.randint(60, 600))
         events.append(
             {
                 "event_id": 4624,
