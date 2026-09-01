@@ -77,6 +77,36 @@ Out of scope:
 - Phishing/social-engineering of operators, physical security of the host machine
 - Unsolicited mass automated scanning; report one issue per report
 
+## Secret vault scope (`secrets.dat`)
+
+The encrypted vault protects secrets at rest, but its threat model is
+**local-user scope**, not machine-scope:
+
+* **Windows** — DPAPI encrypts against the current Windows user
+  account. Any process running as that user can decrypt the vault
+  (including the bundled `BARAQAgent.exe`, which therefore inherits
+  full admin-API access by design). A separate Windows user account
+  cannot decrypt the same `secrets.dat`.
+* **Linux / macOS** — AES-256-GCM via a `secrets.key` file next to the
+  vault, mode 0600. Any process as the same UID can decrypt it; the key
+  is **not** protected by a passphrase.
+
+Implications for the operator:
+
+1. **Do not** copy `secrets.dat` (or `secrets.key` on Linux) to another
+   machine or share it across user accounts and expect confidentiality.
+2. **Do not** rely on the vault against an attacker who has compromised
+   the local user account — the vault is a defence-in-depth layer, not
+   the only one.
+3. Set `BARAQ_VAULT_ENFORCED=1` to refuse to boot when no encryption
+   backend is available, instead of degrading to plaintext.
+4. Restrict filesystem permissions on the application directory; the
+   vault and key are only as safe as the directory they live in.
+
+For high-assurance deployments that need a stronger at-rest guarantee,
+front the host with full-disk encryption (BitLocker / LUKS / FileVault)
+and an OS-level account with a strong passphrase.
+
 ## Security Hardening Summary (current)
 
 Implemented and verified in the current codebase:
