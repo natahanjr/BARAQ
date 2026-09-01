@@ -1080,7 +1080,17 @@ LDAP_USER_FILTER = os.environ.get(
 )
 #: Attribute holding the display name (fallback: CN / user name).
 LDAP_NAME_ATTRIBUTE = os.environ.get("BARAQ_LDAP_NAME_ATTRIBUTE", "displayName")
-#: Group names (CN or DN substring, case-insensitive) granting the admin role.
+#: Group names (exact, case-insensitive) granting the admin role in both the
+#: LDAP (``backend/ldap.py::_role_for``) and OIDC
+#: (``backend/oidc.py::profile_from_claims``) SSO adapters.
+#:
+#: Matching is intentionally EXACT (case-insensitive) — a group whose name
+#: merely contains 'admin' (e.g. ``Administrators (Read-Only)``,
+#: ``not-admin-but-related``, ``BARAQ Admins Pager``) is NOT promoted to
+#: admin. Substring matching was removed because it was a privilege-
+#: escalation primitive against IdPs whose group names are loosely
+#: classified. Operators must opt in to admin by listing the canonical
+#: group CN.
 LDAP_ADMIN_GROUPS = [
     g.strip()
     for g in os.environ.get(
