@@ -2108,3 +2108,44 @@ class HostProcessChain(Base):
             "first_seen": self.first_seen.isoformat() if self.first_seen else None,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
         }
+
+
+class TokenRevocation(Base):
+    """Server-side session-token revocation list.
+
+    Every session token issued by ``backend.auth.create_token`` carries a
+    random ``jti``. A token is rejected by ``backend.auth.verify_token``
+    when its ``jti`` is present in this table -- so logout, admin
+    disable, password change, or role demotion can invalidate outstanding
+    tokens immediately instead of waiting for the 12-hour TTL.
+
+    Rows are pruned opportunistically when older than the longest
+    plausible TTL (see ``backend.auth.revoke_token``); the
+    ``expires_at`` index keeps the prune query cheap.
+    """
+
+    __tablename__ = "token_revocations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    jti: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    #: Username that owned the token at revocation time (audit trail).
+    username: Mapped[str] = mapped_column(String(64), default="", index=True)
+    #: Optional reason recorded in the audit log.
+    reason: Mapped[str] = mapped_column(String(64), default="")
+    revoked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    #: Hard expiry -- the revoke entry can be dropped after this.
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "jti": self.jti,
+            "username": self.username,
+            "reason": self.reason,
+            "revoked_at": self.revoked_at.isoformat() if self.revoked_at else None,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+        }

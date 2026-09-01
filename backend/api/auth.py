@@ -714,15 +714,25 @@ def logout(request: Request, db: Session = Depends(get_db)):
     auth = request.headers.get("Authorization", "")
     token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
     payload = verify_token(token)
+    actor = payload.get("sub", "unknown") if payload else "unknown"
+    jti = payload.get("jti") if payload else None
     log_action(
         db,
-        payload.get("sub", "unknown") if payload else "unknown",
+        actor,
         "logout",
         "user",
         str(payload.get("uid", "")) if payload else "",
         "session ended",
         client_ip(request),
     )
+    if jti:
+        # Invalidate the token immediately rather than waiting for the
+        # 12-hour TTL. The verify_token path now consults the
+        # token_revocations table so any subsequent request carrying
+        # this token is rejected.
+        from backend.auth import revoke_token
+
+        revoke_token(jti, username=actor, reason="logout")
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(SESSION_COOKIE, path="/")
     return resp

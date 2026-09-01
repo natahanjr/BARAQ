@@ -4,6 +4,14 @@ Kept dependency-free (stdlib only). A token is ``base64(payload).signature``
 where the signature is an HMAC-SHA256 over the payload using a secret derived
 from the same secret as the API keys; payload carries user id, username, role
 and an expiry timestamp, so sessions are stateless and survive restarts.
+
+Revocation:
+  Every token carries a random ``jti``. ``revoke_token(jti, db)`` adds
+  it to the ``token_revocations`` table; ``verify_token`` then rejects
+  any token whose ``jti`` is present. This is what lets ``/api/auth/logout``
+  invalidate an outstanding session immediately instead of waiting for
+  the 12-hour TTL, and what gives admin disable / password change /
+  role demotion a way to revoke open sessions.
 """
 
 from __future__ import annotations
@@ -12,11 +20,19 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import time
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import delete, select
 
 from backend.config import AUTH_TOKEN_SECRET
+from backend.database.connection import SessionLocal
+from backend.database.models import TokenRevocation
+
+logger = logging.getLogger("baraq.auth")
 
 _PBKDF2_ITERATIONS = 260_000
 
@@ -99,7 +115,13 @@ def create_mfa_challenge(user_id: int, username: str, ttl_seconds: int = 300) ->
 
 
 def verify_token(token: str) -> dict | None:
-    """Validate a session token; return its payload or None."""
+    """Validate a session token; return its payload or None.
+
+    Three failure paths, in order:
+      1. signature mismatch (tampering)
+      2. expiry (``exp`` field)
+      3. revocation (``jti`` present in token_revocations)
+    """
     try:
         body, sig = token.split(".", 1)
         expected = hmac.new(
@@ -110,6 +132,101 @@ def verify_token(token: str) -> dict | None:
         payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
         if int(payload.get("exp", 0)) < time.time():
             return None
+        # Server-side revocation check. Done outside the HMAC path so a
+        # revoked-but-otherwise-valid token is rejected. The cost is one
+        # cheap SELECT on a unique index per request.
+        jti = payload.get("jti")
+        if jti and _is_token_revoked(jti):
+            return None
         return payload
     except (ValueError, TypeError, json.JSONDecodeError):
         return None
+
+
+def _is_token_revoked(jti: str) -> bool:
+    """True when ``jti`` is in the revocation table.
+
+    Uses a fresh DB session so callers (including request middleware)
+    do not have to manage one. Errors are swallowed and treated as
+    'not revoked' -- a single transient DB error must not silently lock
+    every operator out of the platform; the next request retries.
+    """
+    try:
+        db = SessionLocal()
+        try:
+            row = db.scalar(
+                select(TokenRevocation.id)
+                .where(TokenRevocation.jti == jti)
+                .limit(1)
+            )
+            return row is not None
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("Token revocation lookup failed (fail-open): %s", exc)
+        return False
+
+
+def revoke_token(
+    jti: str,
+    username: str = "",
+    reason: str = "",
+    ttl_seconds: int = 12 * 3600,
+) -> bool:
+    """Add ``jti`` to the revocation list.
+
+    Idempotent: re-revoking the same ``jti`` is a no-op (the unique
+    index on ``token_revocations.jti`` rejects the second insert).
+    Returns True on a fresh revocation, False if the token was already
+    revoked or the write failed.
+    """
+    if not jti:
+        return False
+    try:
+        db = SessionLocal()
+        try:
+            existing = db.scalar(
+                select(TokenRevocation.id)
+                .where(TokenRevocation.jti == jti)
+                .limit(1)
+            )
+            if existing is not None:
+                return False
+            db.add(
+                TokenRevocation(
+                    jti=jti,
+                    username=username,
+                    reason=reason,
+                    revoked_at=datetime.now(UTC),
+                    expires_at=datetime.now(UTC) + timedelta(seconds=ttl_seconds),
+                )
+            )
+            db.commit()
+            return True
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("Token revocation write failed: %s", exc)
+        return False
+
+
+def prune_revoked_tokens() -> int:
+    """Delete revocation rows whose ``expires_at`` is in the past.
+
+    Called opportunistically (e.g. on logout) so the table does not
+    grow without bound. Returns the number of rows deleted.
+    """
+    try:
+        db = SessionLocal()
+        try:
+            now = datetime.now(UTC)
+            result = db.execute(
+                delete(TokenRevocation).where(TokenRevocation.expires_at < now)
+            )
+            db.commit()
+            return int(result.rowcount or 0)
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("Token revocation prune failed: %s", exc)
+        return 0
