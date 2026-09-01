@@ -989,10 +989,26 @@ if _USING_DEV_KEYS and not ALLOW_DEV_KEYS:
 
 #: Secret used to sign session tokens (override via BARAQ_TOKEN_SECRET).
 AUTH_TOKEN_SECRET = _secret("BARAQ_TOKEN_SECRET", "")
-if not AUTH_TOKEN_SECRET and not IS_PRODUCTION:
+#: True when AUTH_TOKEN_SECRET was auto-generated in-process rather than
+#: supplied via the environment, .env, or the DPAPI vault. A new random
+#: value is generated every restart, which silently invalidates every
+#: outstanding session token.
+AUTH_TOKEN_SECRET_AUTO_GENERATED = not _secret("BARAQ_TOKEN_SECRET", "")
+if AUTH_TOKEN_SECRET_AUTO_GENERATED and not IS_PRODUCTION:
     import secrets as _secrets
 
     AUTH_TOKEN_SECRET = _secrets.token_hex(32)
+    # Logged lazily: this module is imported before the application's
+    # logging config is set up. The warning fires once at import time
+    # and is captured by whatever handler is attached later.
+    import logging as _logging
+
+    _logging.getLogger("baraq.config").warning(
+        "BARAQ_TOKEN_SECRET was not provided; a random 32-byte value "
+        "was generated for THIS process. Every restart will invalidate "
+        "all outstanding session tokens. Set BARAQ_TOKEN_SECRET in .env "
+        "or the DPAPI vault for any non-ephemeral deployment."
+    )
 #: True once the admin password and API keys are configured (via vault/.env or
 #: the environment), i.e. the public development defaults are no longer in force.
 SECRETS_CONFIGURED = bool(_secret("BARAQ_ADMIN_PASSWORD") and _secret("BARAQ_API_KEYS"))
