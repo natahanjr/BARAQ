@@ -597,7 +597,7 @@ ML_META_FILE = Path(
 )
 #: Version of the event feature space; persisted bundles with a different
 #: version are ignored and a clean retrain is forced.
-ML_FEATURE_VERSION = 6
+ML_FEATURE_VERSION = 7
 #: Persisted model bundle (Isolation Forests + supervised + thresholds).
 ML_MODEL_BUNDLE = Path(
     os.environ.get(
