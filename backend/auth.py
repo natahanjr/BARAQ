@@ -73,12 +73,14 @@ def _token_secret() -> bytes:
 def create_token(
     user_id: int, username: str, role: str, org: str = "", ttl_seconds: int = 12 * 3600
 ) -> str:
+    now = int(time.time())
     payload = {
         "uid": user_id,
         "sub": username,
         "role": role,
         "org": org,
-        "exp": int(time.time()) + ttl_seconds,
+        "iat": now,
+        "exp": now + ttl_seconds,
         "jti": secrets.token_hex(8),
     }
     body = (
@@ -117,10 +119,11 @@ def create_mfa_challenge(user_id: int, username: str, ttl_seconds: int = 300) ->
 def verify_token(token: str) -> dict | None:
     """Validate a session token; return its payload or None.
 
-    Three failure paths, in order:
+    Four failure paths, in order:
       1. signature mismatch (tampering)
       2. expiry (``exp`` field)
-      3. revocation (``jti`` present in token_revocations)
+      3. ``iat`` in the future (clock skew > 5 min, or forged token)
+      4. revocation (``jti`` present in token_revocations)
     """
     try:
         body, sig = token.split(".", 1)
@@ -130,7 +133,15 @@ def verify_token(token: str) -> dict | None:
         if not hmac.compare_digest(sig, expected):
             return None
         payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
-        if int(payload.get("exp", 0)) < time.time():
+        now = time.time()
+        if int(payload.get("exp", 0)) < now:
+            return None
+        # Reject tokens whose ``iat`` is in the future by more than 5
+        # minutes. A small skew window tolerates a real-time clock
+        # adjustment, but a forged token that claims a future iat is
+        # almost certainly hostile.
+        iat = int(payload.get("iat", 0))
+        if iat > now + 300:
             return None
         # Server-side revocation check. Done outside the HMAC path so a
         # revoked-but-otherwise-valid token is rejected. The cost is one
