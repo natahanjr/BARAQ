@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -192,6 +193,7 @@ def _scheduler_loop(interval_seconds: int = 15):
 
     counter = 0
     while not _scheduler_stop.is_set():
+        cycle_start = time.monotonic()
         try:
             db = SessionLocal()
             # Production partition for the whole cycle: detection, RBA,
@@ -573,6 +575,10 @@ def _scheduler_loop(interval_seconds: int = 15):
                 db.close()
         except Exception as exc:
             logger.exception("Scheduler cycle failed: %s", exc)
+        finally:
+            from backend.metrics import record_scheduler_cycle_seconds
+
+            record_scheduler_cycle_seconds(time.monotonic() - cycle_start)
         _scheduler_stop.wait(interval_seconds)
     logger.info("Scheduler stopped")
 
@@ -691,6 +697,21 @@ async def lifespan(app: FastAPI):
         ", production gate active" if IS_PRODUCTION else "",
         "on" if scheduler_owner and not no_scheduler else "off",
     )
+    if scheduler_owner and not no_scheduler:
+        # The single-writer scheduler is a deliberate scalability
+        # ceiling. Detection, RBA, entity-risk escalation, ML drift,
+        # dataset sweeps and threat-intel refreshes all run
+        # sequentially on the lock-holder; adding API replicas does
+        # not increase detection throughput. Per-cycle duration is
+        # tracked via baraq_scheduler_cycle_seconds on
+        # /api/system/metrics -- a value persistently above
+        # COLLECT_INTERVAL_SECONDS means the ceiling is being hit.
+        logger.info(
+            "Single-writer scheduler active (InstanceLock via %s); "
+            "baraq_scheduler_cycle_seconds on /api/system/metrics is the "
+            "ceiling signal.",
+            "PostgreSQL advisory lock" if SINGLE_INSTANCE else "Redis SET NX EX",
+        )
     yield
     _scheduler_stop.set()
     if _scheduler_thread:

@@ -13,12 +13,38 @@ Endpoints:
 
 from __future__ import annotations
 
+import threading
 import time
 
 from sqlalchemy import func, select
 
 #: Registered process start time (module import moment).
 _START = time.time()
+
+#: Last observed scheduler-cycle duration in seconds (set by
+#: ``record_scheduler_cycle_seconds`` from ``backend.main._scheduler_loop``).
+#: The /api/system/metrics endpoint surfaces this as the
+#: ``baraq_scheduler_cycle_seconds`` gauge. A persistently high value
+#: indicates the single-writer scheduler (InstanceLock) is the
+#: bottleneck -- detection, RBA, ML drift, dataset sweeps and threat-
+#: intel refreshes all run sequentially on the lock-holder and add
+#: up. Above 2x COLLECT_INTERVAL_SECONDS the next cycle starts late
+#: and backlog grows.
+_scheduler_cycle_seconds: float = 0.0
+_scheduler_cycle_lock = threading.Lock()
+
+
+def record_scheduler_cycle_seconds(elapsed: float) -> None:
+    """Record the wall-clock duration of one scheduler cycle.
+
+    Called from ``backend.main._scheduler_loop`` once per cycle (after
+    the cycle finishes, regardless of success or failure). The last
+    value is what shows up in /api/system/metrics; thread-safe so
+    other modules can also record per-stage durations in the future.
+    """
+    global _scheduler_cycle_seconds
+    with _scheduler_cycle_lock:
+        _scheduler_cycle_seconds = max(0.0, float(elapsed))
 
 
 def _fmt(name: str, labels: dict[str, str] | None, value: float) -> str:
@@ -299,6 +325,17 @@ def collect_metrics(session=None) -> str:
             "Size of the PostgreSQL database in bytes.",
             None,
             _db_size_bytes(session),
+        )
+        with _scheduler_cycle_lock:
+            last_cycle = _scheduler_cycle_seconds
+        _emit(
+            "baraq_scheduler_cycle_seconds",
+            "gauge",
+            "Duration of the last scheduler cycle (seconds). Values above "
+            "COLLECT_INTERVAL_SECONDS indicate the single-writer scheduler "
+            "is the bottleneck; backlog will grow.",
+            None,
+            last_cycle,
         )
         # Roadmap 5.2 - service-level objectives (declared targets + live health).
         from backend.observability import slo_metrics
