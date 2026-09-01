@@ -744,9 +744,17 @@ def me(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/users", dependencies=[Depends(require_admin)])
-def list_users(request: Request = None, db: Session = Depends(get_db)):
-    users = db.scalars(select(User).order_by(User.username)).all()
-    return {"items": [_public_user(u) for u in users], "total": len(users)}
+def list_users(
+    request: Request = None,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    total = db.scalar(select(func.count(User.id)))
+    users = db.scalars(
+        select(User).order_by(User.username).offset(offset).limit(limit)
+    ).all()
+    return {"items": [_public_user(u) for u in users], "total": total, "offset": offset, "limit": limit}
 
 
 @router.post("/users", dependencies=[Depends(require_admin)])
@@ -981,15 +989,17 @@ def list_audit(
     action: str | None = None,
     actor: str | None = None,
     limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    stmt = select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
+    stmt = select(AuditLog).order_by(AuditLog.created_at.desc())
     if action:
         stmt = stmt.where(AuditLog.action == action)
     if actor:
         stmt = stmt.where(AuditLog.actor == actor)
-    rows = db.scalars(stmt).all()
-    return {"items": [e.to_dict() for e in rows]}
+    total = db.scalar(select(func.count()).select_from(stmt.subquery()))
+    rows = db.scalars(stmt.offset(offset).limit(limit)).all()
+    return {"items": [e.to_dict() for e in rows], "total": total, "offset": offset, "limit": limit}
 
 
 @router.get("/audit/verify", dependencies=[Depends(require_admin)])
