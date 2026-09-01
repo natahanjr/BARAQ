@@ -566,6 +566,7 @@ class OnlineLearner:
             if new_auc >= old_auc * 0.95:
                 self.detector.models[stream] = new_if
         except Exception:
+            logger.debug("IF comparison failed, accepting new model for %s", stream, exc_info=True)
             self.detector.models[stream] = new_if
 
         # Warm-start supervised with weighted data
@@ -584,7 +585,7 @@ class OnlineLearner:
             )
             self.detector.baselines[stream] = self.detector._compact_baseline(raws)
         except Exception:
-            pass
+            logger.debug("baseline CDF update failed for %s", stream, exc_info=True)
 
         # Update threshold
         try:
