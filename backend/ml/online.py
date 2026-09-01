@@ -734,6 +734,7 @@ class OnlineLearner:
                     )
                     return True
             except Exception:
+                logger.debug("post-update validation failed for %s", stream, exc_info=True)
                 continue
         return False
 
@@ -772,6 +773,7 @@ class OnlineLearner:
                     "n_samples": len(labels_arr),
                 }
             except Exception:
+                logger.debug("quality report failed for %s", stream, exc_info=True)
                 continue
         return report
 
