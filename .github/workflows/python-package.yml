@@ -35,7 +35,14 @@ jobs:
         continue-on-error: true
 
       - name: Lint with ruff (strict — real bugs only)
+        # F = pyflakes (unused imports, undefined names, shadowed builtins)
+        # E9 = syntax errors that prevent Python from parsing the file.
+        # Both are real bugs; F401 is also surfaced by the auto-fixable
+        # subset below. Kept on continue-on-error while we pay down the
+        # broader unused-import backlog so the full lint gate can be
+        # promoted in a follow-up.
         run: ruff check . --select F,E9 --no-fix
+        continue-on-error: true
         continue-on-error: true
 
       - name: Lint with ruff (auto-fixable subset)
