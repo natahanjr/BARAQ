@@ -173,4 +173,5 @@ def decrypt_file_bytes(value: bytes) -> bytes | None:
         ciphertext = base64.urlsafe_b64decode(cipher_b64)
         return AESGCM(_load_key()).decrypt(nonce, ciphertext, None)
     except Exception:
+        _log.exception("decrypt_file_bytes failed for file envelope")
         return None
