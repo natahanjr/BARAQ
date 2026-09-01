@@ -1316,10 +1316,7 @@ INGEST_ASYNC_DETECT = os.environ.get("BARAQ_INGEST_ASYNC_DETECT", "0").lower() i
 # When set, the assistant delegates to the BARAQ AI endpoint.
 # Leave empty to use the fully local rule/TF-IDF engine (default).
 AI_API_URL = os.environ.get("BARAQ_AI_API_URL", "https://integrate.api.nvidia.com/v1")
-AI_API_KEY = _secret(
-    "BARAQ_AI_API_KEY",
-    "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",
-)
+AI_API_KEY = _secret("BARAQ_AI_API_KEY", "")
 AI_MODEL = os.environ.get("BARAQ_AI_MODEL", "nvidia/nemotron-3-nano-30b-a3b")
 
 # --------------------------------------------------------------------------
