@@ -117,6 +117,7 @@ def decrypt_text(value: str | None) -> str | None:
         plain = AESGCM(_load_key()).decrypt(nonce, ciphertext, None)
         return plain.decode("utf-8")
     except Exception:
+        _log.exception("decrypt_text failed for envelope value")
         return None
 
 
