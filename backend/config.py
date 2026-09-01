@@ -1038,11 +1038,10 @@ def _assert_production_safe() -> None:
             "Production mode refuses the public development API keys "
             "(baraq-dev-*). Configure a private BARAQ_API_KEYS value."
         )
-    if AUTH_TOKEN_SECRET in ("baraq-soc-session-secret", ""):
+    if not AUTH_TOKEN_SECRET:
         raise RuntimeError(
             "Production mode requires a unique session secret: set "
-            "BARAQ_TOKEN_SECRET (the hardcoded development fallback is "
-            "refused in production)."
+            "BARAQ_TOKEN_SECRET in your environment or .env file."
         )
     if not AUTH_ENABLED:
         raise RuntimeError("Production mode forbids BARAQ_AUTH_ENABLED=0.")
