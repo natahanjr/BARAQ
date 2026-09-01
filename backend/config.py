@@ -991,7 +991,11 @@ if _USING_DEV_KEYS and not ALLOW_DEV_KEYS:
     )
 
 #: Secret used to sign session tokens (override via BARAQ_TOKEN_SECRET).
-AUTH_TOKEN_SECRET = _secret("BARAQ_TOKEN_SECRET", "baraq-soc-session-secret")
+AUTH_TOKEN_SECRET = _secret("BARAQ_TOKEN_SECRET", "")
+if not AUTH_TOKEN_SECRET and not IS_PRODUCTION:
+    import secrets as _secrets
+
+    AUTH_TOKEN_SECRET = _secrets.token_hex(32)
 #: True once the admin password and API keys are configured (via vault/.env or
 #: the environment), i.e. the public development defaults are no longer in force.
 SECRETS_CONFIGURED = bool(_secret("BARAQ_ADMIN_PASSWORD") and _secret("BARAQ_API_KEYS"))
