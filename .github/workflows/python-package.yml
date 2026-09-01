@@ -48,7 +48,6 @@ jobs:
 
       - name: Security linting with bandit
         run: bandit -r backend -ll
-        continue-on-error: true
 
   test:
     name: Test Suite
