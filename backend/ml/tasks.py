@@ -365,5 +365,46 @@ def train_in_background(hours=None, validate=True, force=False):
     return True
 
 
+def check_online_update():
+    """Check if online learning update is needed and perform it.
+
+    Called periodically by the background scheduler. Uses ADWIN drift detection
+    and reservoir sampling buffers to perform incremental model updates.
+    """
+    from backend.ml.anomaly import get_detector
+
+    detector = get_detector()
+    if not detector.is_ready or detector.online_learner is None:
+        return None
+
+    try:
+        if detector.online_learner.should_update():
+            logger.info("Online learning update triggered")
+            result = detector.online_learner.incremental_update()
+            logger.info("Online learning update: %s", result.get("status"))
+            return result
+    except Exception:
+        logger.debug("Online learning update failed", exc_info=True)
+    return None
+
+
+def get_active_learning_suggestions():
+    """Get top uncertain events for analyst labeling.
+
+    Returns list of (event_id, features, uncertainty_score) tuples
+    that would most improve the model if labeled.
+    """
+    from backend.ml.anomaly import get_detector
+
+    detector = get_detector()
+    if not detector.is_ready or detector.online_learner is None:
+        return []
+
+    try:
+        return detector.online_learner.active_learner.get_suggestions()
+    except Exception:
+        return []
+
+
 def training_active():
     return _train_lock.locked()
