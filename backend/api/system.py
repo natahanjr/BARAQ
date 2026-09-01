@@ -490,6 +490,27 @@ def notification_health():
     return channel_health()
 
 
+@router.get("/realtime/health")
+def realtime_health():
+    """Realtime WebSocket publish health.
+
+    Returns the cumulative count of publish() failures since process
+    start. A non-zero value means at least one alert, incident, or
+    status update was silently dropped on the way to the dashboard
+    (closed event loop, JSON encode error, queue overflow, ...).
+
+    Mirrors /api/system/audit/health (audit chain write failures) and
+    /api/system/notifications/health (channel delivery failures).
+    """
+    from backend import realtime
+
+    return {
+        "publish_failures": realtime.publish_failure_count(),
+        "started": realtime.hub._started,
+        "clients": len(realtime.hub._clients),
+    }
+
+
 @router.post("/ml/train", dependencies=[Depends(require_admin)])
 def ml_train(
     async_mode: bool = Query(True),
