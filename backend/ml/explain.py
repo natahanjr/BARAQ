@@ -97,6 +97,11 @@ FEATURE_NAMES = {
         "kill_chain_phase",
         "session_duration_deviation",
         "user_attack_frequency",
+        # v7 enhanced features
+        "auth_protocol_indicator",
+        "failed_success_ratio",
+        "distinct_source_ips",
+        "hour_distribution_entropy",
     ],
     "process": [
         "event_id",
@@ -134,6 +139,12 @@ FEATURE_NAMES = {
         "kill_chain_phase",
         "process_risk_proxy",
         "process_attack_frequency",
+        # v7 enhanced features
+        "executable_path_entropy",
+        "system_directory_indicator",
+        "parent_process_risk",
+        "commandline_token_count",
+        "process_chain_depth",
     ],
     "network": [
         "is_private",
@@ -162,6 +173,15 @@ FEATURE_NAMES = {
         "attack_history",
         "connections_per_minute",
         "port_scan_trend",
+        # v7 enhanced network features
+        "dns_tunnel_indicator",
+        "dns_long_label_indicator",
+        "protocol_anomaly_score",
+        "tls_https_ratio",
+        "connection_diversity",
+        "data_volume_asymmetry",
+        "connection_regularity",
+        "outbound_connection_ratio",
         # Base features
         "is_novel",
         "hour",
