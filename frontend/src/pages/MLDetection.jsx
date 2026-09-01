@@ -8,6 +8,14 @@ const MODEL_ICONS = {
   anomaly: { icon: "\uD83D\uDD0D", gradient: "from-[var(--severity-medium)] to-[var(--severity-high)]" },
   supervised: { icon: "\uD83D\uDCCA", gradient: "from-[var(--accent-cyan)] to-[var(--accent-violet)]" },
   ensemble: { icon: "\uD83E\uDDE0", gradient: "from-[var(--accent-violet)] to-[var(--accent-gold)]" },
+  robustness: { icon: "\uD83D\uDEE1\uFE0F", gradient: "from-[var(--status-healthy)] to-[var(--accent-cyan)]" },
+  online: { icon: "\u26A1", gradient: "from-[var(--accent-gold)] to-[var(--severity-medium)]" },
+  temporal: { icon: "\uD83D\uDCC5", gradient: "from-[var(--accent-cyan)] to-[var(--accent-violet)]" },
+  federated: { icon: "\uD83C\uDF10", gradient: "from-[var(--accent-violet)] to-[var(--accent-gold)]" },
+  community: { icon: "\uD83D\uDC65", gradient: "from-[var(--status-healthy)] to-[var(--accent-cyan)]" },
+  remediation: { icon: "\uD83D\uDD27", gradient: "from-[var(--severity-medium)] to-[var(--severity-high)]" },
+  comparison: { icon: "\uD83D\uDCCA", gradient: "from-[var(--accent-cyan)] to-[var(--accent-violet)]" },
+  retention: { icon: "\uD83D\uDCC1", gradient: "from-[var(--accent-gold)] to-[var(--status-healthy)]" },
 };
 
 function MLDetection() {
@@ -20,6 +28,15 @@ function MLDetection() {
   const [training, setTraining] = useState(false);
   const [trainingResult, setTrainingResult] = useState(null);
   const [selectedModel, setSelectedModel] = useState(null);
+  const [robustness, setRobustness] = useState(null);
+  const [onlineLearning, setOnlineLearning] = useState(null);
+  const [temporalBias, setTemporalBias] = useState(null);
+  const [federated, setFederated] = useState(null);
+  const [communityRules, setCommunityRules] = useState(null);
+  const [remediation, setRemediation] = useState(null);
+  const [comparison, setComparison] = useState(null);
+  const [retention, setRetention] = useState(null);
+  const [ensemble, setEnsemble] = useState(null);
   const { toast } = useToast();
 
   const load = useCallback(async () => {
@@ -92,6 +109,69 @@ function MLDetection() {
     }
   }, [toast]);
 
+  const loadTabData = useCallback(async (tabId) => {
+    try {
+      switch (tabId) {
+        case "robustness":
+          if (!robustness) {
+            const r = await api.mlRobustness();
+            setRobustness(r);
+          }
+          break;
+        case "online-learning":
+          if (!onlineLearning) {
+            const o = await api.mlOnlineLearning();
+            setOnlineLearning(o);
+          }
+          break;
+        case "temporal-bias":
+          if (!temporalBias) {
+            const t = await api.mlTemporalBias();
+            setTemporalBias(t);
+          }
+          break;
+        case "federated":
+          if (!federated) {
+            const f = await api.mlFederated();
+            setFederated(f);
+          }
+          break;
+        case "community":
+          if (!communityRules) {
+            const c = await api.mlCommunityRules();
+            setCommunityRules(c);
+          }
+          break;
+        case "remediation":
+          if (!remediation) {
+            const rm = await api.mlRemediation();
+            setRemediation(rm);
+          }
+          break;
+        case "comparison":
+          if (!comparison) {
+            const comp = await api.mlComparison();
+            setComparison(comp);
+          }
+          break;
+        case "retention":
+          if (!retention) {
+            const ret = await api.mlRetention();
+            setRetention(ret);
+          }
+          break;
+        case "ensemble":
+          if (!ensemble) {
+            const e = await api.mlEnsemble();
+            setEnsemble(e);
+          }
+          break;
+      }
+    } catch (err) {
+      console.error(`Failed to load ${tabId} data:`, err);
+    }
+  }, [robustness, onlineLearning, temporalBias, federated, communityRules, remediation, comparison, retention, ensemble]);
+
   if (loading) return <Loading label="Loading ML detection" />;
   if (error) return <ErrorBanner message={error} onRetry={load} />;
 
@@ -135,7 +215,7 @@ function MLDetection() {
         </div>
       </header>
 
-      {/* Training Result Banner — always visible when present */}
+      {/* Training Result Banner */}
       {trainingResult && (
         <div className={`rounded-[var(--radius-xl)] border p-4 ${
           trainingResult.status === "error"
@@ -226,9 +306,18 @@ function MLDetection() {
           { id: "models", label: "Models" },
           { id: "anomalies", label: "Anomaly Feed" },
           { id: "training", label: "Training" },
+          { id: "ensemble", label: "Ensemble" },
+          { id: "robustness", label: "Robustness" },
+          { id: "online-learning", label: "Online Learning" },
+          { id: "temporal-bias", label: "Temporal Bias" },
+          { id: "federated", label: "Federated" },
+          { id: "community", label: "Community Rules" },
+          { id: "remediation", label: "Remediation" },
+          { id: "comparison", label: "Comparison" },
+          { id: "retention", label: "Retention" },
         ]}
         active={tab}
-        onChange={(t) => { setTab(t); setSelectedModel(null); }}
+        onChange={(t) => { setTab(t); setSelectedModel(null); loadTabData(t); }}
       />
 
       {/* ── Models Grid ──────────────────────────────────── */}
@@ -243,11 +332,8 @@ function MLDetection() {
                 onClick={() => setSelectedModel(model)}
                 className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-300 p-6 text-left hover:border-[var(--border-strong)] hover:shadow-xl hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-[var(--accent-cyan)]/30"
               >
-                {/* Ambient glow */}
                 <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-gradient-to-br opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-30" style={{ background: `linear-gradient(135deg, ${stateColor}, transparent)` }} />
-
                 <div className="relative">
-                  {/* Icon + Name */}
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
                       <div className={`flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br ${iconInfo.gradient} text-white shadow-lg transition-transform duration-300 group-hover:scale-110`}>
@@ -263,27 +349,16 @@ function MLDetection() {
                       {model.state}
                     </span>
                   </div>
-
                   <p className="mt-3 text-[12px] text-[var(--fg-muted)] line-clamp-2">{model.desc}</p>
-
-                  {/* Accuracy */}
                   <div className="mt-4">
                     <div className="flex items-center justify-between text-[11px] mb-1.5">
                       <span className="text-[var(--fg-muted)]">Accuracy</span>
                       <span className="font-semibold text-[var(--fg-primary)]">{model.accuracy}%</span>
                     </div>
                     <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--border-subtle)" }}>
-                      <div
-                        className="h-full rounded-full transition-all duration-700 ease-out"
-                        style={{
-                          width: `${model.accuracy}%`,
-                          background: model.accuracy >= 90 ? "var(--status-healthy)" : model.accuracy >= 80 ? "var(--severity-medium)" : "var(--severity-critical)",
-                        }}
-                      />
+                      <div className="h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${model.accuracy}%`, background: model.accuracy >= 90 ? "var(--status-healthy)" : model.accuracy >= 80 ? "var(--severity-medium)" : "var(--severity-critical)" }} />
                     </div>
                   </div>
-
-                  {/* Arrow hint */}
                   <div className="mt-3 flex items-center gap-1 text-[11px] font-medium text-[var(--fg-muted)] opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                     View details <span className="text-[13px]">{"\u2192"}</span>
                   </div>
@@ -301,7 +376,6 @@ function MLDetection() {
             <span className="text-[15px]">{"\u2190"}</span> Back to models
           </button>
           <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
-            {/* Header */}
             <div className="flex items-start gap-4">
               {(() => {
                 const iconInfo = MODEL_ICONS[selectedModel.type];
@@ -334,28 +408,18 @@ function MLDetection() {
                 );
               })()}
             </div>
-
-            {/* Accuracy bar */}
             <div className="mt-6 rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-5">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[12px] font-semibold text-[var(--fg-muted)]">Accuracy</span>
                 <span className="text-[24px] font-bold tabular-nums text-[var(--fg-primary)]" style={{ fontFeatureSettings: '"tnum"' }}>{selectedModel.accuracy}%</span>
               </div>
               <div className="h-3 rounded-full overflow-hidden" style={{ background: "var(--border-subtle)" }}>
-                <div
-                  className="h-full rounded-full transition-all duration-1000 ease-out"
-                  style={{
-                    width: `${selectedModel.accuracy}%`,
-                    background: selectedModel.accuracy >= 90 ? "linear-gradient(90deg, var(--status-healthy), #22d3ee)" : "var(--severity-medium)",
-                  }}
-                />
+                <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${selectedModel.accuracy}%`, background: selectedModel.accuracy >= 90 ? "linear-gradient(90deg, var(--status-healthy), #22d3ee)" : "var(--severity-medium)" }} />
               </div>
               <div className="mt-2 flex justify-between text-[11px] text-[var(--fg-muted)]">
                 <span>0%</span><span>50%</span><span>100%</span>
               </div>
             </div>
-
-            {/* Features */}
             <div className="mt-4 rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-5">
               <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)] mb-3">Model Capabilities</p>
               <div className="flex flex-wrap gap-2">
@@ -373,7 +437,6 @@ function MLDetection() {
       {/* ── Anomaly Feed ─────────────────────────────────── */}
       {tab === "anomalies" && (
         <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 overflow-hidden">
-          {/* Scan header */}
           <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-4">
             <div>
               <h2 className="text-[15px] font-semibold text-[var(--fg-primary)]">Anomaly Scan</h2>
@@ -385,11 +448,9 @@ function MLDetection() {
               {anomalyLoading ? "Scanning\u2026" : "\uD83D\uDD0D Run Scan"}
             </Button>
           </div>
-
           <div className="p-6">
             {anomalies?.status === "ok" ? (
               <div className="space-y-4">
-                {/* Quick stats */}
                 <div className="grid grid-cols-3 gap-4">
                   {[
                     { label: "Status", value: "OK", color: "var(--status-healthy)", icon: "\u2705" },
@@ -446,7 +507,6 @@ function MLDetection() {
       {/* ── Training ─────────────────────────────────────── */}
       {tab === "training" && (
         <div className="space-y-4">
-          {/* Auto-training status */}
           <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--status-healthy)] to-[var(--accent-cyan)] text-white">
@@ -474,8 +534,6 @@ function MLDetection() {
               </div>
             </div>
           </div>
-
-          {/* Manual Retrain */}
           <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -486,39 +544,7 @@ function MLDetection() {
                 {training ? "\u23F3 Training\u2026" : "\u26A1 Retrain Now"}
               </Button>
             </div>
-            {trainingResult && (
-              <div className={`mt-4 rounded-[var(--radius-xl)] border p-4 ${
-                trainingResult.status === "error"
-                  ? "border-[var(--severity-high)]/30 bg-[var(--severity-high)]/[0.06]"
-                  : trainingResult.scheduled
-                  ? "border-[var(--status-healthy)]/30 bg-[var(--status-healthy)]/[0.06]"
-                  : trainingResult.training
-                  ? "border-[var(--severity-medium)]/30 bg-[var(--severity-medium)]/[0.06]"
-                  : "border-[var(--accent-cyan)]/30 bg-[var(--accent-cyan)]/[0.06]"
-              }`}>
-                {trainingResult.status === "error" ? (
-                  <p className="text-[13px] text-[var(--severity-high)]">{trainingResult.message}</p>
-                ) : trainingResult.scheduled ? (
-                  <div>
-                    <p className="text-[13px] font-semibold text-[var(--status-healthy)]">Training started in background</p>
-                    <p className="text-[12px] text-[var(--fg-muted)] mt-0.5">Window: {trainingResult.window}</p>
-                  </div>
-                ) : trainingResult.training ? (
-                  <div>
-                    <p className="text-[13px] font-semibold text-[var(--severity-medium)]">Training already in progress</p>
-                    <p className="text-[12px] text-[var(--fg-muted)] mt-0.5">A training run is currently running. Polling for completion...</p>
-                  </div>
-                ) : trainingResult.window ? (
-                  <div>
-                    <p className="text-[13px] font-semibold text-[var(--fg-primary)]">Training complete</p>
-                    <p className="text-[12px] text-[var(--fg-muted)] mt-0.5">Window: {trainingResult.window}</p>
-                  </div>
-                ) : null}
-              </div>
-            )}
           </div>
-
-          {/* Feature Importance */}
           <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] transition-all duration-200 p-6">
             <h2 className="text-[15px] font-semibold text-[var(--fg-primary)]">Feature Importance</h2>
             <p className="mt-0.5 text-[12px] text-[var(--fg-muted)]">Top contributing signals to model decisions</p>
@@ -540,18 +566,420 @@ function MLDetection() {
                       </span>
                     </div>
                     <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--border-subtle)" }}>
-                      <div
-                        className="h-full rounded-full transition-all duration-700 ease-out"
-                        style={{
-                          width: `${Math.abs(value) * 3}%`,
-                          background: value >= 0 ? "linear-gradient(90deg, var(--accent-cyan), var(--accent-violet))" : "linear-gradient(90deg, var(--severity-critical), var(--severity-high))",
-                        }}
-                      />
+                      <div className="h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${Math.abs(value) * 3}%`, background: value >= 0 ? "linear-gradient(90deg, var(--accent-cyan), var(--accent-violet))" : "linear-gradient(90deg, var(--severity-critical), var(--severity-high))" }} />
                     </div>
                   </div>
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Ensemble ─────────────────────────────────────── */}
+      {tab === "ensemble" && (
+        <div className="space-y-4">
+          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br ${MODEL_ICONS.ensemble.gradient} text-white`}>
+                <span className="text-[18px]">{MODEL_ICONS.ensemble.icon}</span>
+              </div>
+              <div>
+                <h2 className="text-[15px] font-semibold text-[var(--fg-primary)]">Ensemble Stackers</h2>
+                <p className="text-[12px] text-[var(--fg-muted)]">Meta-learner combining Isolation Forest, XGBoost, and Markov predictions</p>
+              </div>
+            </div>
+            {ensemble?.ensemble ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Trained</p>
+                  <p className="mt-1 text-[13px] font-semibold" style={{ color: ensemble.ensemble.is_trained ? "var(--status-healthy)" : "var(--severity-medium)" }}>
+                    {ensemble.ensemble.is_trained ? "Yes" : "No"}
+                  </p>
+                </div>
+                <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Meta Learner</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{ensemble.ensemble.active_meta_learner || "none"}</p>
+                </div>
+                <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Min Samples</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{ensemble.ensemble.min_samples_required || 30}</p>
+                </div>
+                <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Weights</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">
+                    {ensemble.ensemble.meta_weights && Object.keys(ensemble.ensemble.meta_weights).length > 0
+                      ? Object.entries(ensemble.ensemble.meta_weights).map(([k, v]) => `${k}: ${typeof v === "number" ? v.toFixed(2) : v}`).join(", ")
+                      : "Fixed (0.6/0.4)"}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-[13px] text-[var(--fg-muted)]">Ensemble data loading...</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Robustness ───────────────────────────────────── */}
+      {tab === "robustness" && (
+        <div className="space-y-4">
+          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br ${MODEL_ICONS.robustness.gradient} text-white`}>
+                <span className="text-[18px]">{MODEL_ICONS.robustness.icon}</span>
+              </div>
+              <div>
+                <h2 className="text-[15px] font-semibold text-[var(--fg-primary)]">Model Robustness</h2>
+                <p className="text-[12px] text-[var(--fg-muted)]">FGSM adversarial testing and cross-validation results</p>
+              </div>
+            </div>
+            {robustness ? (
+              <div className="space-y-4">
+                {robustness.cross_user && (
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+                    <p className="text-[12px] font-semibold text-[var(--fg-primary)] mb-2">Cross-User Validation</p>
+                    <pre className="text-[11px] text-[var(--fg-muted)] overflow-auto max-h-40">{JSON.stringify(robustness.cross_user, null, 2)}</pre>
+                  </div>
+                )}
+                {robustness.cross_environment && (
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+                    <p className="text-[12px] font-semibold text-[var(--fg-primary)] mb-2">Cross-Environment Validation</p>
+                    <pre className="text-[11px] text-[var(--fg-muted)] overflow-auto max-h-40">{JSON.stringify(robustness.cross_environment, null, 2)}</pre>
+                  </div>
+                )}
+                {robustness.cross_platform && (
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+                    <p className="text-[12px] font-semibold text-[var(--fg-primary)] mb-2">Cross-Platform Validation</p>
+                    <pre className="text-[11px] text-[var(--fg-muted)] overflow-auto max-h-40">{JSON.stringify(robustness.cross_platform, null, 2)}</pre>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-[13px] text-[var(--fg-muted)]">Loading robustness data...</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Online Learning ──────────────────────────────── */}
+      {tab === "online-learning" && (
+        <div className="space-y-4">
+          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br ${MODEL_ICONS.online.gradient} text-white`}>
+                <span className="text-[18px]">{MODEL_ICONS.online.icon}</span>
+              </div>
+              <div>
+                <h2 className="text-[15px] font-semibold text-[var(--fg-primary)]">Online Learning</h2>
+                <p className="text-[12px] text-[var(--fg-muted)]">Incremental model updates and active learning suggestions</p>
+              </div>
+            </div>
+            {onlineLearning ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Available</p>
+                  <p className="mt-1 text-[13px] font-semibold" style={{ color: onlineLearning.online_learner_available ? "var(--status-healthy)" : "var(--severity-medium)" }}>
+                    {onlineLearning.online_learner_available ? "Yes" : "No"}
+                  </p>
+                </div>
+                <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Should Update</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{onlineLearning.should_update ? "Yes" : "No"}</p>
+                </div>
+                <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Active Learning</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{onlineLearning.active_learning_suggestions || 0} suggestions</p>
+                </div>
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-[13px] text-[var(--fg-muted)]">Loading online learning data...</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Temporal Bias ────────────────────────────────── */}
+      {tab === "temporal-bias" && (
+        <div className="space-y-4">
+          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br ${MODEL_ICONS.temporal.gradient} text-white`}>
+                <span className="text-[18px]">{MODEL_ICONS.temporal.icon}</span>
+              </div>
+              <div>
+                <h2 className="text-[15px] font-semibold text-[var(--fg-primary)]">Temporal Bias Detection</h2>
+                <p className="text-[12px] text-[var(--fg-muted)]">Hourly, daily, and monthly distribution shift analysis</p>
+              </div>
+            </div>
+            {temporalBias ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Bias Detected</p>
+                    <p className="mt-1 text-[13px] font-semibold" style={{ color: temporalBias.any_bias_detected ? "var(--severity-high)" : "var(--status-healthy)" }}>
+                      {temporalBias.any_bias_detected ? "Yes" : "No"}
+                    </p>
+                  </div>
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Max PSI</p>
+                    <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{temporalBias.max_psi || 0}</p>
+                  </div>
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Recommendation</p>
+                    <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{temporalBias.recommendation || "N/A"}</p>
+                  </div>
+                </div>
+                {temporalBias.hourly && (
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+                    <p className="text-[12px] font-semibold text-[var(--fg-primary)] mb-2">Hourly Distribution</p>
+                    <p className="text-[11px] text-[var(--fg-muted)]">PSI: {temporalBias.hourly.psi} - {temporalBias.hourly.description}</p>
+                  </div>
+                )}
+                {temporalBias.daily && (
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+                    <p className="text-[12px] font-semibold text-[var(--fg-primary)] mb-2">Daily Distribution</p>
+                    <p className="text-[11px] text-[var(--fg-muted)]">PSI: {temporalBias.daily.psi} - {temporalBias.daily.description}</p>
+                  </div>
+                )}
+                {temporalBias.monthly && (
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+                    <p className="text-[12px] font-semibold text-[var(--fg-primary)] mb-2">Monthly Distribution</p>
+                    <p className="text-[11px] text-[var(--fg-muted)]">PSI: {temporalBias.monthly.psi} - {temporalBias.monthly.description}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-[13px] text-[var(--fg-muted)]">Loading temporal bias data...</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Federated Learning ───────────────────────────── */}
+      {tab === "federated" && (
+        <div className="space-y-4">
+          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br ${MODEL_ICONS.federated.gradient} text-white`}>
+                <span className="text-[18px]">{MODEL_ICONS.federated.icon}</span>
+              </div>
+              <div>
+                <h2 className="text-[15px] font-semibold text-[var(--fg-primary)]">Federated Learning</h2>
+                <p className="text-[12px] text-[var(--fg-muted)]">Multi-organization model training without data sharing</p>
+              </div>
+            </div>
+            {federated ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Available</p>
+                  <p className="mt-1 text-[13px] font-semibold" style={{ color: federated.available ? "var(--status-healthy)" : "var(--severity-medium)" }}>
+                    {federated.available ? "Yes" : "No"}
+                  </p>
+                </div>
+                <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Aggregator</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{federated.aggregator_class}</p>
+                </div>
+                <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Protocol</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">FedAvg</p>
+                </div>
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-[13px] text-[var(--fg-muted)]">Loading federated learning data...</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Community Rules ──────────────────────────────── */}
+      {tab === "community" && (
+        <div className="space-y-4">
+          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br ${MODEL_ICONS.community.gradient} text-white`}>
+                <span className="text-[18px]">{MODEL_ICONS.community.icon}</span>
+              </div>
+              <div>
+                <h2 className="text-[15px] font-semibold text-[var(--fg-primary)]">Community Rules</h2>
+                <p className="text-[12px] text-[var(--fg-muted)]">Sigma, correlation, and Python-native rule contributions</p>
+              </div>
+            </div>
+            {communityRules ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Total Submitted</p>
+                    <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{communityRules.statistics?.total_submitted || 0}</p>
+                  </div>
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Approved</p>
+                    <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--status-healthy)" }}>{communityRules.statistics?.by_status?.approved || 0}</p>
+                  </div>
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Pending</p>
+                    <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--severity-medium)" }}>{communityRules.statistics?.by_status?.pending || 0}</p>
+                  </div>
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Rule Types</p>
+                    <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{communityRules.rule_types?.length || 0}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-[13px] text-[var(--fg-muted)]">Loading community rules data...</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Remediation ──────────────────────────────────── */}
+      {tab === "remediation" && (
+        <div className="space-y-4">
+          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br ${MODEL_ICONS.remediation.gradient} text-white`}>
+                <span className="text-[18px]">{MODEL_ICONS.remediation.icon}</span>
+              </div>
+              <div>
+                <h2 className="text-[15px] font-semibold text-[var(--fg-primary)]">FN Remediation</h2>
+                <p className="text-[12px] text-[var(--fg-muted)]">Automated false negative analysis and improvement suggestions</p>
+              </div>
+            </div>
+            {remediation ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Total FNs</p>
+                    <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{remediation.summary?.fn_summary?.total || 0}</p>
+                  </div>
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Actions</p>
+                    <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{remediation.summary?.remediation_actions?.count || 0}</p>
+                  </div>
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Patterns</p>
+                    <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{remediation.summary?.fn_summary?.attack_types?.length || 0}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-[13px] text-[var(--fg-muted)]">Loading remediation data...</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Comparison ───────────────────────────────────── */}
+      {tab === "comparison" && (
+        <div className="space-y-4">
+          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br ${MODEL_ICONS.comparison.gradient} text-white`}>
+                <span className="text-[18px]">{MODEL_ICONS.comparison.icon}</span>
+              </div>
+              <div>
+                <h2 className="text-[15px] font-semibold text-[var(--fg-primary)]">SOC Platform Comparison</h2>
+                <p className="text-[12px] text-[var(--fg-muted)]">BARAQ vs commercial alternatives</p>
+              </div>
+            </div>
+            {comparison ? (
+              <div className="space-y-4">
+                {comparison.recommendation && (
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--accent-cyan)]/20 bg-[var(--accent-cyan)]/[0.06] p-4">
+                    <p className="text-[13px] font-semibold text-[var(--accent-cyan)]">Recommendation</p>
+                    <p className="text-[12px] text-[var(--fg-muted)] mt-1">{comparison.recommendation.recommendation}</p>
+                  </div>
+                )}
+                {comparison.radar_chart?.labels && (
+                  <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-4">
+                    <p className="text-[12px] font-semibold text-[var(--fg-primary)] mb-3">Capability Dimensions</p>
+                    <div className="space-y-2">
+                      {comparison.radar_chart.labels.map((label, i) => (
+                        <div key={label} className="flex items-center gap-3">
+                          <span className="text-[11px] text-[var(--fg-muted)] w-32 shrink-0">{label}</span>
+                          {comparison.radar_chart.datasets?.map((ds, j) => (
+                            <div key={j} className="flex-1">
+                              <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--border-subtle)" }}>
+                                <div className="h-full rounded-full" style={{ width: `${(ds.data[i] || 0) * 10}%`, background: j === 0 ? "var(--accent-cyan)" : j === 1 ? "var(--accent-violet)" : "var(--accent-gold)" }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-[13px] text-[var(--fg-muted)]">Loading comparison data...</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Retention ────────────────────────────────────── */}
+      {tab === "retention" && (
+        <div className="space-y-4">
+          <div className="rounded-[var(--radius-2xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br ${MODEL_ICONS.retention.gradient} text-white`}>
+                <span className="text-[18px]">{MODEL_ICONS.retention.icon}</span>
+              </div>
+              <div>
+                <h2 className="text-[15px] font-semibold text-[var(--fg-primary)]">Data Retention & Archival</h2>
+                <p className="text-[12px] text-[var(--fg-muted)]">ML training data lifecycle management</p>
+              </div>
+            </div>
+            {retention ? (
+              <div className="space-y-4">
+                {retention.storage_metrics ? (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Active Models</p>
+                      <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{retention.storage_metrics.active_models || 0}</p>
+                    </div>
+                    <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Archived</p>
+                      <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{retention.storage_metrics.archived_models || 0}</p>
+                    </div>
+                    <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Archive Size</p>
+                      <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{retention.storage_metrics.archive_size_mb || 0} MB</p>
+                    </div>
+                    <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Total Size</p>
+                      <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{retention.storage_metrics.total_size_mb || 0} MB</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-8 text-center">
+                    <p className="text-[13px] text-[var(--fg-muted)]">No retention data available</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-[13px] text-[var(--fg-muted)]">Loading retention data...</p>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -362,6 +362,15 @@ export const api = {
     return request(`/api/system/ml/train?${qs.toString()}`, { method: "POST" });
   },
   mlAnalyze: () => request("/api/system/ml/analyze", { method: "POST" }),
+  mlRobustness: () => request("/api/system/ml/robustness"),
+  mlOnlineLearning: () => request("/api/system/ml/online-learning"),
+  mlTemporalBias: (hours = 24) => request(`/api/system/ml/temporal-bias?hours=${hours}`),
+  mlFederated: () => request("/api/system/ml/federated"),
+  mlCommunityRules: () => request("/api/system/ml/community-rules"),
+  mlRemediation: () => request("/api/system/ml/remediation"),
+  mlComparison: () => request("/api/system/ml/comparison"),
+  mlRetention: () => request("/api/system/ml/retention"),
+  mlEnsemble: () => request("/api/system/ml/ensemble"),
 
   rbaEntities: (params = {}) => {
     const qs = new URLSearchParams();

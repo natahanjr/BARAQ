@@ -569,6 +569,11 @@ def ml_status():
     except Exception:
         pass
 
+    # v7/v8 enhanced status
+    ensemble_status = detector.ensemble.status()
+    online_learning = detector.online_learner is not None
+    feature_version = detector.version
+
     return {
         **status,
         "model_state": state,
@@ -578,6 +583,10 @@ def ml_status():
         "scored_events": scored_events,
         "training": training_active(),
         "version_info": info,
+        "ensemble": ensemble_status,
+        "online_learning": online_learning,
+        "feature_version": feature_version,
+        "models_trained": list(detector.models.keys()),
     }
 
 
@@ -667,6 +676,203 @@ def ml_explain_event(event_id: int, db: Session = Depends(get_db)):
 
         raise HTTPException(404, "Event not found")
     return explain_event(event, session=db)
+
+
+@router.get("/ml/robustness", dependencies=[Depends(require_auth)])
+def ml_robustness():
+    """Model robustness testing: FGSM evasion, cross-user/env/platform validation."""
+    from backend.ml.robustness import (
+        cross_user_validation,
+        cross_environment_validation,
+        cross_platform_validation,
+    )
+
+    detector = get_detector()
+    result = {
+        "status": "ok",
+        "models_ready": detector.is_ready,
+    }
+
+    if detector.is_ready:
+        try:
+            result["cross_user"] = cross_user_validation()
+        except Exception as e:
+            result["cross_user"] = {"error": str(e)}
+
+        try:
+            result["cross_environment"] = cross_environment_validation()
+        except Exception as e:
+            result["cross_environment"] = {"error": str(e)}
+
+        try:
+            result["cross_platform"] = cross_platform_validation()
+        except Exception as e:
+            result["cross_platform"] = {"error": str(e)}
+
+    return result
+
+
+@router.get("/ml/online-learning", dependencies=[Depends(require_auth)])
+def ml_online_learning():
+    """Online learning status and active learning suggestions."""
+    detector = get_detector()
+    result = {
+        "status": "ok",
+        "online_learner_available": detector.online_learner is not None,
+    }
+
+    if detector.online_learner is not None:
+        try:
+            result["should_update"] = detector.online_learner.should_update()
+        except Exception:
+            result["should_update"] = False
+
+        try:
+            suggestions = detector.online_learner.active_learner.get_suggestions()
+            result["active_learning_suggestions"] = len(suggestions)
+            result["suggestions"] = [
+                {"event_id": s[0], "uncertainty": round(s[2], 4)}
+                for s in (suggestions[:10] if suggestions else [])
+            ]
+        except Exception:
+            result["active_learning_suggestions"] = 0
+            result["suggestions"] = []
+
+    return result
+
+
+@router.get("/ml/temporal-bias", dependencies=[Depends(require_auth)])
+def ml_temporal_bias(hours: int = Query(24, ge=1, le=168)):
+    """Temporal bias detection: hourly, daily, monthly distribution shifts."""
+    from backend.ml.drift import TemporalBiasDetector
+
+    detector = TemporalBiasDetector()
+    result = {"status": "ok", "bias_detected": False}
+
+    try:
+        from datetime import UTC, datetime, timedelta
+
+        from backend.database.connection import SessionLocal
+        from backend.database.models import NormalizedEvent
+
+        db = SessionLocal()
+        try:
+            since = datetime.now(UTC) - timedelta(hours=hours)
+            rows = db.execute(
+                select(NormalizedEvent.timestamp).where(
+                    NormalizedEvent.timestamp >= since
+                )
+            ).all()
+            timestamps = [r[0] for r in rows if r[0]]
+
+            if len(timestamps) >= 10:
+                detector.build_reference(timestamps)
+                detection = detector.get_all_detections(timestamps)
+                result.update(detection)
+            else:
+                result["message"] = f"Insufficient data ({len(timestamps)} events, need 10+)"
+        finally:
+            db.close()
+    except Exception as e:
+        result["status"] = "error"
+        result["error"] = str(e)
+
+    return result
+
+
+@router.get("/ml/federated", dependencies=[Depends(require_auth)])
+def ml_federated():
+    """Federated learning status and capabilities."""
+    from backend.ml.federated import FederatedAggregator, FederatedClient
+
+    return {
+        "status": "ok",
+        "available": True,
+        "aggregator_class": FederatedAggregator.__name__,
+        "client_class": FederatedClient.__name__,
+        "description": "FedAvg-based federated learning for multi-organization collaboration",
+    }
+
+
+@router.get("/ml/community-rules", dependencies=[Depends(require_auth)])
+def ml_community_rules():
+    """Community rule contribution framework status."""
+    from backend.ml.community_rules import CommunityRuleManager
+
+    manager = CommunityRuleManager()
+    stats = manager.get_statistics()
+
+    return {
+        "status": "ok",
+        "statistics": stats,
+        "rule_types": ["sigma", "correlation", "python_native"],
+    }
+
+
+@router.get("/ml/remediation", dependencies=[Depends(require_auth)])
+def ml_remediation():
+    """FN remediation suggestions from false negative analysis."""
+    from backend.ml.remediation import RemediationEngine
+
+    engine = RemediationEngine()
+    summary = engine.get_summary()
+
+    return {
+        "status": "ok",
+        "summary": summary,
+    }
+
+
+@router.get("/ml/comparison", dependencies=[Depends(require_auth)])
+def ml_comparison():
+    """SOC platform comparison radar chart data."""
+    from backend.ml.comparison import SOCComparison
+
+    comp = SOCComparison()
+    radar = comp.get_radar_chart_data(["baraq", "wazuh", "datadog_security"])
+    recommendation = comp.get_recommendation()
+
+    return {
+        "status": "ok",
+        "radar_chart": radar,
+        "recommendation": recommendation,
+    }
+
+
+@router.get("/ml/retention", dependencies=[Depends(require_auth)])
+def ml_retention():
+    """ML data retention and archival status."""
+    import tempfile
+
+    from backend.ml.retention import MLDataRetention
+
+    try:
+        retention = MLDataRetention(
+            model_dir=str(Path(__file__).parent.parent / "ml"),
+            archive_dir=str(Path(__file__).parent.parent / "ml" / "archives"),
+        )
+        metrics = retention.get_storage_metrics()
+        return {
+            "status": "ok",
+            "storage_metrics": metrics,
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+        }
+
+
+@router.get("/ml/ensemble", dependencies=[Depends(require_auth)])
+def ml_ensemble():
+    """Ensemble stacker status and model weights."""
+    detector = get_detector()
+    ensemble_status = detector.ensemble.status()
+
+    return {
+        "status": "ok",
+        "ensemble": ensemble_status,
+    }
 
 
 @router.get("/stream/status")
