@@ -100,6 +100,7 @@ def encrypt_text(plaintext: str) -> str | None:
             + base64.urlsafe_b64encode(ciphertext).decode("ascii")
         )
     except Exception:
+        _log.exception("encrypt_text failed; returning plaintext as fallback")
         return plaintext
 
 
