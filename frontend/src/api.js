@@ -1,5 +1,5 @@
 const BASE = import.meta.env.DEV ? "" : "";
-const API_KEY = import.meta.env.VITE_API_KEY || "baraq-dev-admin";
+const API_KEY = import.meta.env.VITE_API_KEY || "";
 
 // The session token is kept in memory only; persistence happens server-side
 // via an httpOnly cookie so XSS can never read it (CWE-312 mitigation).
