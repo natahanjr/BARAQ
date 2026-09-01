@@ -40,7 +40,6 @@ jobs:
 
       - name: Lint with ruff (auto-fixable subset)
         run: ruff check . --select F401,F811,F841,E711,E712,E713,E714,F402 --no-fix
-        continue-on-error: true
 
       - name: Lint with ruff (full)
         run: ruff check .
