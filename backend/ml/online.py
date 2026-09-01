@@ -297,6 +297,7 @@ class ActiveLearner:
             uncertainty = 1.0 - abs(proba - 0.5) * 2.0
             return max(0.0, min(1.0, uncertainty))
         except Exception:
+            logger.debug("uncertainty_score fallback to 0.5", exc_info=True)
             return 0.5
 
     def suggest_for_labeling(
@@ -398,7 +399,7 @@ class OnlineLearner:
             try:
                 score = self.detector.score_event(features)
             except Exception:
-                pass
+                logger.debug("score_event failed in online learner", exc_info=True)
 
         # Track prequential scores
         if stream not in self._prequential_scores:
