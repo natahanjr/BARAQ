@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ipaddress
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -17,6 +19,33 @@ from backend.database.models import (
 from backend.security import require_auth, tenant_scope
 
 router = APIRouter(prefix="/api", tags=["events"], dependencies=[Depends(require_auth)])
+
+
+def _is_private_remote_ip(ip: str) -> bool:
+    """Return True when ``ip`` is RFC1918/loopback/link-local/CGNAT.
+
+    Used by ``list_network`` to bucket a connection as inbound vs
+    outbound. Replaces a string-prefix ``LIKE`` test (172.2%, 172.3%,
+    10.%) that mismatched public address space (HP/Huawei used
+    172.32.0.0/11, public allocations in 172.20.0.0/14, etc.).
+
+    Returns False for anything that is not a syntactically valid IP
+    address (the SQL ``remote_ip != ""`` filter still excludes empty
+    strings).
+    """
+    if not ip:
+        return False
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_reserved
+        or addr.is_multicast
+    )
 
 
 def _events_scope(request: Request) -> str | None:
