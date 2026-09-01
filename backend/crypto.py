@@ -26,11 +26,14 @@ Security notes:
 from __future__ import annotations
 
 import base64
+import logging
 import os
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from backend.config import APP_DIR, ENCRYPT_AT_REST, ENCRYPTION_KEY_NAME
+
+_log = logging.getLogger(__name__)
 
 _ENVELOPE_PREFIX = "baraq-v1:"
 #: On-disk envelopes written before the BARAQ rename are still decryptable.
