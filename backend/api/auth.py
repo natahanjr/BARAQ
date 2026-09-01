@@ -1004,13 +1004,20 @@ def list_audit(
 
 @router.get("/audit/verify", dependencies=[Depends(require_admin)])
 def verify_audit_chain(db: Session = Depends(get_db)):
-    """Recompute the audit hash chain and confirm no entry was tampered with."""
-    from backend.audit import verify_chain
+    """Recompute the audit hash chain and confirm no entry was tampered with.
+
+    The response includes ``write_failures`` (a monotonic counter of
+    audit-chain write failures observed by the running process) so an
+    operator can spot a silently broken chain without scanning logs.
+    """
+    from backend.audit import audit_failure_count, verify_chain
 
     try:
-        return verify_chain(db)
+        result = verify_chain(db)
     except Exception as exc:
-        return {"ok": False, "checked": 0, "broken_at": None, "error": str(exc)}
+        result = {"ok": False, "checked": 0, "broken_at": None, "error": str(exc)}
+    result["write_failures"] = audit_failure_count()
+    return result
 
 
 @router.post("/audit/clear", dependencies=[Depends(require_admin)])
