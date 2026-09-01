@@ -213,3 +213,18 @@ def test_health_endpoint_is_unauthenticated():
             "Container healthcheck must hit an unauthenticated endpoint; "
             f"got {r.status_code} for /api/health"
         )
+
+
+def test_dev_keys_warning_helper_exists_in_main():
+    """A WARNING-level log line about the public dev keys must fire
+    from backend.main at import time. This is a structural check:
+    we assert the message exists in the module source so a future
+    'cleanup' of the startup logger cannot silently drop it.
+    """
+    import inspect
+
+    import backend.main as main_mod
+
+    src = inspect.getsource(main_mod)
+    assert "baraq-dev" in src, "expected baraq-dev warning in backend/main.py"
+    assert "BARAQ_API_KEYS" in src, "expected env-var hint in backend/main.py"
