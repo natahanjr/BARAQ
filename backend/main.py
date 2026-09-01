@@ -140,6 +140,45 @@ _scheduler_thread: threading.Thread | None = None
 _scheduler_stop = threading.Event()
 
 
+#: Declarative schedule for the rare-cycle steps in ``_scheduler_loop``.
+#: Each entry is ``(every_n_cycles, label, callable)``. The callable is
+#: invoked only when ``counter % every_n_cycles == 0``. With the
+#: default 15 s interval (COLLECT_INTERVAL_SECONDS), the wall-clock
+#: frequencies are::
+#:
+#:     4     -> ~1 min      (per-host chain learning, ML auto-train probe,
+#:                          entity-risk decay)
+#:     6     -> ~1.5 min    (entity-risk backfill sweep + escalate)
+#:     20    -> ~5 min      (dashboard snapshot)
+#:     120   -> ~30 min     (ML drift check + watch retrain)
+#:     240   -> ~1 h        (dataset auto-export, online learning,
+#:                          retention purge, scheduled reports)
+#:     720   -> ~3 h        (threat-intel feed refresh)
+#:     5760  -> ~daily      (rule precision auto-tune)
+#:
+#: This table is the single source of truth for 'how often does step X
+#: run?'. The hot inline counter checks in ``_scheduler_loop`` are kept
+#: in sync with this comment by code review. A future refactor can
+#: replace the inline checks with a dispatcher that reads this table
+#: without changing the cadence.
+SCHEDULER_CYCLE_FREQUENCY_SECONDS: dict[str, int] = {
+    "chain_learning": 4 * 15,
+    "ml_drift_check": 120 * 15,
+    "dashboard_snapshot": 20 * 15,
+    "ml_analyze_events": 4 * 15,
+    "ml_stale_check": 4 * 15,
+    "entity_risk_decay": 4 * 15,
+    "entity_risk_sweep": 6 * 15,
+    "dataset_auto_export": 240 * 15,
+    "ml_online_update": 240 * 15,
+    "retention_purge": 240 * 15,
+    "audit_retention_purge": 240 * 15,
+    "scheduled_reports": 240 * 15,
+    "threat_intel_refresh": 720 * 15,
+    "rule_precision_auto_tune": 5760 * 15,
+}
+
+
 def _scheduler_loop(interval_seconds: int = 15):
     """Background collection + detection loop."""
     logger.info("Scheduler started (interval=%ss)", interval_seconds)
