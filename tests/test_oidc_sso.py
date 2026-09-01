@@ -148,6 +148,27 @@ def test_profile_from_claims_admin_group():
     assert profile["role"] == "admin"
 
 
+def test_profile_from_claims_rejects_substring_match():
+    """A group named e.g. 'not-admin-but-related' must not grant admin.
+
+    Regression: the matcher previously used a substring test
+    (``admin.lower() in str(group).lower()``) so any group whose name
+    contained 'admin' was promoted to admin — a privilege-escalation
+    primitive. The fix is an exact, case-insensitive comparison.
+    """
+    profile = oidc_sso.profile_from_claims(
+        {
+            "preferred_username": "intern",
+            "groups": [
+                "not-admin-but-related",
+                "Domain Administrators Read-Only",
+                "BARAQ Admins Pager",
+            ],
+        }
+    )
+    assert profile["role"] == "analyst"
+
+
 def test_profile_from_claims_uses_sub_fallback():
     profile = oidc_sso.profile_from_claims({"sub": "ABC-123", "groups": []})
     assert profile["username"] == "abc-123"
