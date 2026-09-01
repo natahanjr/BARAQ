@@ -48,6 +48,19 @@ def test_group_names_normalises_dn_and_cn():
     assert names == ["CN=SOC Team,OU=Groups,DC=corp,DC=local", "SOC Team"]
 
 
+def test_substring_match_does_not_grant_admin():
+    """Regression: groups whose CN contains 'admin' as a substring must
+    NOT grant admin. The previous implementation used
+    ``admin_group.lower() in n`` which falsely matched
+    ``Administrators (Read-Only)``, ``Helpdesk Admins Temp`` etc."""
+    groups = [
+        "CN=Administrators (Read-Only),OU=Groups,DC=corp,DC=local",
+        "CN=Helpdesk Admins Temp,OU=Groups,DC=corp,DC=local",
+        "CN=not-admin-but-related,OU=Groups,DC=corp,DC=local",
+    ]
+    assert ldap_sso._role_for(groups) == "analyst"
+
+
 # ---------------------------------------------------------------------------
 # Login flow with a fake directory
 # ---------------------------------------------------------------------------

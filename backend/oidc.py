@@ -293,15 +293,9 @@ def profile_from_claims(claims: dict[str, Any]) -> dict[str, Any]:
     groups = claims.get(OIDC_GROUP_CLAIM, [])
     if isinstance(groups, str):
         groups = [groups]
-    role = (
-        "admin"
-        if any(
-            str(group).lower() == admin.lower() or admin.lower() in str(group).lower()
-            for admin in LDAP_ADMIN_GROUPS
-            for group in groups
-        )
-        else "analyst"
-    )
+    normalized_user_groups = {str(group).strip().lower() for group in groups if group}
+    normalized_admin_groups = {str(admin).strip().lower() for admin in LDAP_ADMIN_GROUPS if admin}
+    role = "admin" if normalized_user_groups & normalized_admin_groups else "analyst"
     return {
         "username": username,
         "full_name": str(full_name),

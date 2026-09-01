@@ -45,8 +45,11 @@ RUN mkdir -p frontend/dist reports logs
 USER baraq
 EXPOSE 8000
 
-# Healthcheck matches the K8s readiness probe.
+# Healthcheck hits the unauthenticated /api/health endpoint. Anything
+# under /api/system/* requires X-API-Key (BARAQ_AUTH_ENABLED=1 default),
+# so using /api/system/status here would 401 and the container would be
+# marked unhealthy on every start.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8000/api/system/status || exit 1
+    CMD curl -fsS http://127.0.0.1:8000/api/health || exit 1
 
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

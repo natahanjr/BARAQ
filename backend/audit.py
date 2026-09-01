@@ -32,6 +32,28 @@ def _chain_hash(canonical: str) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+#: Monotonic counter of audit-log write failures. Exposed via
+#: ``stats()`` / ``health()`` so operators and the /api/system/audit
+#: health endpoint can detect a silently broken chain.
+_write_failures: int = 0
+
+
+def record_failure(reason: BaseException | str) -> None:
+    """Record a chain-write failure. Imported by retry helpers and the
+    callers that see a recoverable exception (DB conflict, lock timeout,
+    etc.). Always increments the counter and logs at ERROR level."""
+    global _write_failures
+    _write_failures += 1
+    logger.error("Audit chain write failure (#%d): %s", _write_failures, reason)
+
+
+def audit_failure_count() -> int:
+    """Return the cumulative count of audit-chain write failures since
+    process start. Used by the /api/system/audit/health endpoint and
+    by tests."""
+    return _write_failures
+
+
 def log_action(
     db,
     actor: str,
@@ -83,12 +105,21 @@ def log_action(
                     "prev_hash": prev_hash,
                 }
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            # Syslog forwarder failure is non-fatal but the chain itself
+            # IS already on disk above; this branch only covers the
+            # external transport.
+            record_failure(f"syslog forwarder: {exc}")
         return entry
     except Exception as exc:
-        logger.warning("Audit log write failed: %s", exc)
-        db.rollback()
+        # Chain write failed: roll back, increment the failure counter
+        # at ERROR level so the operator can see this in logs, and
+        # surface it via /api/system/audit/health.
+        record_failure(exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass
         return None
 
 

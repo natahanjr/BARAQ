@@ -50,7 +50,9 @@ services:
     ports:
       - "${BARAQ_API_PORT:-8000}:8000"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/system/status"]
+      # /api/health is unauthenticated; /api/system/status requires
+      # BARAQ_API_KEYS and would 401 on every container start.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3

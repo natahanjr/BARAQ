@@ -195,3 +195,36 @@ def test_health_endpoint_skips_rate_limit():
     finally:
         cfg.API_RATE_LIMIT, cfg.API_RATE_BURST = old_limit, old_burst
         main_mod._rate_buckets.clear()
+
+
+def test_health_endpoint_is_unauthenticated():
+    """The /api/health endpoint must succeed without any auth header.
+
+    The Dockerfile and compose.yml use it as the container healthcheck.
+    A 401 would mark the container unhealthy and trigger restart loops.
+    Regression: the previous ``/api/system/status`` healthcheck returned
+    401 whenever ``BARAQ_AUTH_ENABLED=1`` (the production default).
+    """
+    from backend.main import app
+
+    with TestClient(app) as client:
+        r = client.get("/api/health")
+        assert r.status_code == 200, (
+            "Container healthcheck must hit an unauthenticated endpoint; "
+            f"got {r.status_code} for /api/health"
+        )
+
+
+def test_dev_keys_warning_helper_exists_in_main():
+    """A WARNING-level log line about the public dev keys must fire
+    from backend.main at import time. This is a structural check:
+    we assert the message exists in the module source so a future
+    'cleanup' of the startup logger cannot silently drop it.
+    """
+    import inspect
+
+    import backend.main as main_mod
+
+    src = inspect.getsource(main_mod)
+    assert "baraq-dev" in src, "expected baraq-dev warning in backend/main.py"
+    assert "BARAQ_API_KEYS" in src, "expected env-var hint in backend/main.py"

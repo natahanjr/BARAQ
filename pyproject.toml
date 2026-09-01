@@ -36,6 +36,11 @@ ignore = [
 "tests/**" = ["S101", "S106"]
 
 [tool.pytest.ini_options]
+# Pin test collection to the tests/ directory so scripts/verify_*.py and
+# tools/load_test_agents.py are not silently picked up by `pytest`.
+testpaths = ["tests"]
+# Fail fast on typos in the test names / markers so a renames cannot pass.
+addopts = ["--strict-markers", "--strict-config"]
 asyncio_mode = "auto"
 
 [tool.mypy]

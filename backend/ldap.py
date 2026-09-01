@@ -64,12 +64,19 @@ def _group_names(member_of: list[str] | None) -> list[str]:
 
 
 def _role_for(member_of: list[str] | None) -> str:
-    """Map directory group membership to a BARAQ role."""
-    names = [n.lower() for n in _group_names(member_of)]
-    for admin_group in LDAP_ADMIN_GROUPS:
-        if any(admin_group.lower() in n for n in names):
-            return "admin"
-    return "analyst"
+    """Map directory group membership to a BARAQ role.
+
+    Matching is exact and case-insensitive against ``LDAP_ADMIN_GROUPS``:
+    a group like ``administrators-readonly`` does NOT grant admin just
+    because its CN contains the substring "admin". Operators must opt
+    in to admin by listing the canonical group name in
+    ``BARAQ_LDAP_ADMIN_GROUPS``.
+    """
+    names = {n.strip().lower() for n in _group_names(member_of) if n and n.strip()}
+    admin_groups = {
+        str(g).strip().lower() for g in LDAP_ADMIN_GROUPS if g and g.strip()
+    }
+    return "admin" if names & admin_groups else "analyst"
 
 
 def ldap_authenticate(username: str, password: str) -> dict[str, Any] | None:
