@@ -627,7 +627,7 @@ class AlertingService:
                 try:
                     publish_alert(alert.to_dict())
                 except Exception:
-                    pass
+                    logger.debug("publish_alert failed for alert #%s", alert.id, exc_info=True)
                 logger.info(
                     "Created alert #%s: %s (%s) risk=%s [%s] %s",
                     alert.id,
