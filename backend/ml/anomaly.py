@@ -3606,11 +3606,16 @@ class MLAnomalyDetector:
                         f"{behavior}: {len(X)} samples (recommend 50+ for convergence)"
                     )
 
+                # v9: Hyperparameter tuning via grid search for better performance
+                best_params = _grid_search_if(X, y, random_state=ML_RANDOM_STATE)
+                ms = best_params.get("max_samples", 256)
+                if ms == "auto":
+                    ms = min(256, len(X))
                 model = IsolationForest(
-                    contamination=ML_CONTAMINATION,
+                    contamination=best_params.get("contamination", ML_CONTAMINATION),
                     random_state=ML_RANDOM_STATE,
-                    n_estimators=100,
-                    max_samples=min(256, len(X)),
+                    n_estimators=best_params.get("n_estimators", 100),
+                    max_samples=ms,
                 )
                 model.fit(X)
                 new_models[behavior] = model
