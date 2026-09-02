@@ -100,3 +100,11 @@ python -m pytest tests -v
 Copyright (c) 2026 [Natahan](https://github.com/natahanjr) — [RazForge Lab](https://github.com/natahanjr)
 
 All rights reserved. See [LICENSE.md](LICENSE.md) for details.
+
+---
+
+<div align="center">
+
+**Part of [RazForge](https://github.com/natahanjr)**
+
+</div>
