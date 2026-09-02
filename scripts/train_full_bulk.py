@@ -276,6 +276,14 @@ print(f"  Process: {process_X.shape} pos={int(process_y.sum())}", flush=True)
 print(f"[{time.time()-t0:.0f}s] Building network features...", flush=True)
 from collections import defaultdict as dd
 from backend.ml.anomaly import _ip_subnet_features, _NET_ATTACK_PREFIXES
+from backend.ml.anomaly import (
+    _get_connection_velocity_per_ip, _get_port_scan_indicator,
+    _get_exfiltration_indicator, _get_beaconing_indicator, _get_dns_query_pattern,
+    _get_dns_tunnel_indicator, _get_dns_long_label_indicator,
+    _get_protocol_anomaly_score, _get_tls_https_ratio,
+    _get_connection_diversity_score, _get_data_volume_asymmetry,
+    _get_connection_regularity_score, _get_outbound_connection_ratio,
+)
 net_by_ip = dd(list)
 for r in net_rows: net_by_ip[r.remote_ip or "unknown"].append(r)
 network_X, network_rows_out = [], []
@@ -287,13 +295,39 @@ for ip, rows in net_by_ip.items():
     dur = sum(r.duration_seconds or 0 for r in rows) / 3600.0
     sm, rm = bsent/1e6, brecv/1e6
     rate = sm / max(dur, 0.01)
-    sf = _ip_subnet_features(ip)
-    is_a = 1.0 if ip.startswith(_NET_ATTACK_PREFIXES) else 0.0
-    vec = sf + [cnt, dports, sm, rm, dur, rate] + [0]*5 + [is_a]*3 + [0]*4 + [is_a, 0.5, is_a, 0, 0]
-    network_X.append(vec[:26])
+    # 34-dim feature vector matching score_network_connection and _load_network_features
+    subnet_feats = _ip_subnet_features(ip)  # 8
+    flow_feats = [float(cnt), float(dports), sm, rm, dur, rate]  # 6
+    enhanced_feats = [  # 5
+        _get_connection_velocity_per_ip(session, ip, 60),
+        _get_port_scan_indicator(session, ip, 60),
+        _get_exfiltration_indicator(session, ip, 1),
+        _get_beaconing_indicator(session, ip, 1),
+        _get_dns_query_pattern(session, 1),
+    ]
+    is_attack_ip = 1.0 if is_attack_ip_offline(ip) else 0.0
+    temporal_feats = [  # 5
+        min(_get_connection_velocity_per_ip(session, ip, 5), 2.0),
+        0.5,
+        is_attack_ip,
+        min(float(cnt) / max(dur * 60.0, 1.0), 2.0),
+        min(_get_port_scan_indicator(session, ip, 15), 2.0),
+    ]
+    v7_net_feats = [  # 8
+        _get_dns_tunnel_indicator(session, 1),
+        _get_dns_long_label_indicator(session, 1),
+        _get_protocol_anomaly_score(session, ip, dports),
+        _get_tls_https_ratio(session, 1),
+        _get_connection_diversity_score(session, 1),
+        _get_data_volume_asymmetry(session, ip, 1),
+        _get_connection_regularity_score(session, ip, 1),
+        _get_outbound_connection_ratio(session, 1),
+    ]
+    vec = subnet_feats + flow_feats + enhanced_feats + temporal_feats + v7_net_feats + [is_attack_ip, 0.0]
+    network_X.append(vec[:34])
     network_rows_out.append({"remote_ip": ip})
 network_X = np.array(network_X, dtype=float)
-network_y = np.array([1 if r["remote_ip"].startswith(_NET_ATTACK_PREFIXES) else 0 for r in network_rows_out], dtype=int)
+network_y = np.array([1 if is_attack_ip_offline(r.remote_ip or "unknown") else 0 for r in network_rows_out], dtype=int)
 print(f"  Network: {network_X.shape} pos={int(network_y.sum())}", flush=True)
 
 print(f"\n[{time.time()-t0:.0f}s] Training...", flush=True)
