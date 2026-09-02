@@ -558,3 +558,46 @@ def ml_labeling_stats(db: Session = Depends(get_db)):
     except Exception:
         stats["model_error"] = "detector not available"
     return stats
+
+
+# =====================================================================
+# Model rollback
+# =====================================================================
+
+@router.post("/ml/rollback", dependencies=[Depends(require_auth)])
+def ml_rollback(request: Request, db: Session = Depends(get_db)):
+    """Roll back the ML model to the previous version.
+
+    Restores the model bundle from before the last training run.
+    """
+    try:
+        from backend.ml.anomaly import get_detector
+        detector = get_detector()
+        success = detector.rollback()
+        if success:
+            return {"status": "ok", "version": detector.version, "message": f"Rolled back to version {detector.version}"}
+        else:
+            raise HTTPException(status_code=404, detail="No previous model version available for rollback")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Rollback failed: {str(e)}")
+
+
+@router.get("/ml/model-history", dependencies=[Depends(require_auth)])
+def ml_model_history(request: Request, db: Session = Depends(get_db)):
+    """Return model version history for monitoring."""
+    try:
+        from backend.ml.anomaly import get_detector
+        detector = get_detector()
+        return {
+            "current_version": detector.version,
+            "trained_at": detector.trained_at,
+            "model_source": detector.model_source,
+            "n_samples": detector.n_samples,
+            "events_at_train": detector.events_at_train,
+            "history": detector.versions,
+            "feedback_weights": dict(detector.feedback_weights),
+        }
+    except Exception as e:
+        return {"error": str(e)}
