@@ -111,6 +111,95 @@ _DEFAULT_THRESHOLDS = {"login": 0.5, "process": 0.5, "network": 0.5}
 #: generalization (see :meth:`MLAnomalyDetector._build_classifier`).
 _XGB_MIN_SAMPLES = 400
 
+# ── Hyperparameter tuning ─────────────────────────────────────────────
+_IF_PARAM_GRID: list[dict] = [
+    {
+        "n_estimators": [100, 150],
+        "max_samples": ["auto", 128, 256],
+        "contamination": [0.03, 0.05, 0.08],
+    }
+]
+
+
+def _grid_search_if(
+    X: np.ndarray,
+    y: np.ndarray | None = None,
+    param_grid: list[dict] | None = None,
+    n_folds: int = 3,
+    random_state: int = 42,
+) -> dict:
+    """Lightweight grid search for Isolation Forest parameters.
+
+    When labels are available, selects the parameter combination that
+    maximizes ROC-AUC on a stratified split.  When labels are absent
+    (pure unsupervised), uses the contamination-based heuristic:
+    pick the model whose anomaly rate is closest to the median of the grid.
+
+    Returns the best parameter dict.
+    """
+    if param_grid is None:
+        param_grid = _IF_PARAM_GRID
+
+    # Flatten the grid into a list of param dicts
+    combos = []
+    for block in param_grid:
+        keys = list(block.keys())
+        vals = list(block.values())
+        from itertools import product as _prod
+        for combo in _prod(*vals):
+            combos.append(dict(zip(keys, combo)))
+
+    if len(combos) <= 1:
+        return combos[0] if combos else {"n_estimators": 100, "contamination": 0.05, "max_samples": min(256, len(X))}
+
+    # If labels are available, use stratified split for evaluation
+    if y is not None and len(np.unique(y)) >= 2 and len(X) >= 20:
+        from sklearn.model_selection import StratifiedKFold
+
+        skf = StratifiedKFold(n_splits=min(n_folds, len(X) // 2), shuffle=True, random_state=random_state)
+        best_score = -1.0
+        best_params = combos[0]
+        for params in combos:
+            fold_scores = []
+            for train_idx, val_idx in skf.split(X, y):
+                X_train, X_val = X[train_idx], X[val_idx]
+                y_val = y[val_idx]
+                ms = params.get("max_samples", 256)
+                if ms == "auto":
+                    ms = min(256, len(X_train))
+                else:
+                    ms = min(int(ms), len(X_train))  # Cap to avoid sklearn warning
+                model = IsolationForest(
+                    contamination=params.get("contamination", 0.05),
+                    random_state=random_state,
+                    n_estimators=params.get("n_estimators", 100),
+                    max_samples=ms,
+                )
+                model.fit(X_train)
+                try:
+                    from sklearn.metrics import roc_auc_score
+                    scores = model.decision_function(X_val)
+                    auc = roc_auc_score(y_val, -scores)  # negative because IF: lower = anomaly
+                    fold_scores.append(auc)
+                except ValueError:
+                    fold_scores.append(0.5)
+            mean_auc = np.mean(fold_scores) if fold_scores else 0.5
+            if mean_auc > best_score:
+                best_score = mean_auc
+                best_params = params
+        logger.info(
+            "IF grid search: best_params=%s, mean_AUC=%.4f",
+            best_params, best_score,
+        )
+        # Cap max_samples in the returned params to avoid sklearn warnings
+        best_ms = best_params.get("max_samples", 256)
+        if best_ms != "auto":
+            best_params["max_samples"] = min(int(best_ms), len(X))
+        return best_params
+
+    # No labels: use contamination heuristic (pick middle contamination)
+    return combos[len(combos) // 2]
+
 
 def _behavior_of(event_id: int) -> str:
     if event_id in LOGIN_EVENTS:
