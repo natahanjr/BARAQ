@@ -95,6 +95,14 @@ python -m pytest tests -v
 
 ---
 
+## License
+
+Copyright (c) 2026 [Natahan](https://github.com/natahanjr) — [RazForge Lab](https://github.com/natahanjr)
+
+Licensed under the [RazForge License](LICENSE.md).
+
+---
+
 <div align="center">
 
 [![Part of RazForge](https://img.shields.io/badge/Part%20of-RazForge-1a1a2e?style=for-the-badge&logo=github&logoColor=white&labelColor=16213e)](https://github.com/natahanjr)
