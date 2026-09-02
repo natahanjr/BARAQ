@@ -16,6 +16,7 @@ from backend.ml.anomaly import (
     get_detector, IsolationForest, ML_CONTAMINATION, ML_RANDOM_STATE,
     _DEFAULT_THRESHOLDS,
 )
+from backend.ml.realworld_labeler import is_attack_ip_offline, get_attack_ips
 from sqlalchemy import select
 from datetime import UTC, datetime
 
@@ -31,11 +32,12 @@ def load_login_features(session):
             if vec:
                 X.append(vec)
                 facts = (ev.raw_json or {}).get("facts", {})
+                sip = str(facts.get("source_ip", ""))
                 is_attack = (
-                    ev.event_id == 4625
-                    or ev.event_id in (4720, 4732, 7045, 4698)
-                    or ev.event_id == 4624 and str(facts.get("source_ip", "")).startswith(("203.", "198.", "192.0.2."))
-                    or str(facts.get("source_ip", "")) in ("203.0.113.66", "203.0.113.77", "198.51.100.66", "198.51.100.77")
+                    ev.event_id in (4625, 4720, 4726, 4732, 7045, 4698)
+                    or is_attack_ip_offline(sip)
+                    or bool(facts.get("has_encoded"))
+                    or bool(facts.get("has_download"))
                 )
                 y.append(1 if is_attack else 0)
         except Exception:
@@ -58,8 +60,10 @@ def load_process_features(session):
             if vec:
                 X.append(vec)
                 facts = (ev.raw_json or {}).get("facts", {})
+                sip = str(facts.get("source_ip", ""))
                 is_attack = (
                     ev.event_id in (4720, 4726, 4732, 7045, 4698)
+                    or is_attack_ip_offline(sip)
                     or bool(facts.get("has_encoded"))
                     or bool(facts.get("has_download"))
                     or bool(facts.get("has_hidden"))
