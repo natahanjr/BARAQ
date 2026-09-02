@@ -2150,11 +2150,12 @@ def _load_network_features(
             ]
 
             # Phase 2 temporal/contextual features for network
-            is_attack_ip = 1.0 if ip.startswith(_NET_ATTACK_PREFIXES) else 0.0
+            from backend.ml.realworld_labeler import is_attack_ip_offline
+            is_attack_ip_feat = 1.0 if is_attack_ip_offline(ip) else 0.0
             temporal_feats = [
                 min(_get_connection_velocity_per_ip(local_session, ip, 5), 2.0),
                 0.5,
-                is_attack_ip,
+                is_attack_ip_feat,
                 min(float(count) / max(duration_h * 60.0, 1.0), 2.0),
                 min(_get_port_scan_indicator(local_session, ip, 15), 2.0),
             ]
