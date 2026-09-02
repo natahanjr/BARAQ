@@ -3541,9 +3541,28 @@ class MLAnomalyDetector:
                         _pe, _sysdir, _prisk, _ctokens, _cdepth]
 
             login_X = np.array([_build_login(_events[i], i) for i in _login_idx], dtype=float) if _login_idx else np.empty((0, 38))
-            login_y = np.array([1 if _events[i]["event_id"] in (4625, 4720, 4726, 4732, 7045, 4698) or str(_events[i]["facts"].get("source_ip", "")) in ("203.0.113.66", "203.0.113.77", "198.51.100.66", "198.51.100.77") or bool(_events[i]["facts"].get("has_encoded")) or bool(_events[i]["facts"].get("has_download")) else 0 for i in _login_idx], dtype=int) if _login_idx else np.empty((0,), dtype=int)
             process_X = np.array([_build_process(_events[i], i) for i in _proc_idx], dtype=float) if _proc_idx else np.empty((0, 29))
-            process_y = np.array([1 if _events[i]["event_id"] in (4625, 4720, 4726, 4732, 7045, 4698) or str(_events[i]["facts"].get("source_ip", "")) in ("203.0.113.66", "203.0.113.77", "198.51.100.66", "198.51.100.77") or bool(_events[i]["facts"].get("has_encoded")) or bool(_events[i]["facts"].get("has_download")) else 0 for i in _proc_idx], dtype=int) if _proc_idx else np.empty((0,), dtype=int)
+
+            # ── Hybrid labeling: analyst verdicts + threat intel + heuristic ──
+            from backend.ml.realworld_labeler import get_analyst_labels, is_attack_ip_offline
+            _analyst_labels = get_analyst_labels(session)
+
+            def _hybrid_label(ev):
+                """Determine if an event is an attack using hybrid labeling."""
+                _eid = int(ev["event_id"])
+                _raw = {"facts": ev["facts"]}
+                _sip = str(ev["facts"].get("source_ip", ""))
+                # 1. Analyst verdict (authoritative)
+                if ev["id"] in _analyst_labels:
+                    return bool(_analyst_labels[ev["id"]])
+                # 2. Threat-intel IP match
+                if _sip and is_attack_ip_offline(_sip):
+                    return True
+                # 3. Heuristic fallback (same logic as _is_attack_sample)
+                return _eid in (4625, 4720, 4726, 4732, 7045, 4698) or bool(_raw["facts"].get("has_encoded")) or bool(_raw["facts"].get("has_download"))
+
+            login_y = np.array([1 if _hybrid_label(_events[i]) else 0 for i in _login_idx], dtype=int) if _login_idx else np.empty((0,), dtype=int)
+            process_y = np.array([1 if _hybrid_label(_events[i]) else 0 for i in _proc_idx], dtype=int) if _proc_idx else np.empty((0,), dtype=int)
 
             # Bulk network features (no per-IP DB queries)
             _net_stmt = select(
