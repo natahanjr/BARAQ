@@ -13,6 +13,7 @@ from backend.ml.anomaly import (
     get_detector, IsolationForest, ML_CONTAMINATION, ML_RANDOM_STATE,
     _DEFAULT_THRESHOLDS,
 )
+from backend.ml.realworld_labeler import is_attack_ip_offline
 from sqlalchemy import select
 from datetime import UTC, datetime
 
@@ -30,9 +31,10 @@ def load_features(session, event_ids, label, limit=MAX_EVENTS):
             if vec:
                 X.append(vec)
                 facts = (ev.raw_json or {}).get("facts", {})
+                sip = str(facts.get("source_ip", ""))
                 is_atk = (
                     ev.event_id in (4625, 4720, 4726, 4732, 7045, 4698)
-                    or str(facts.get("source_ip", "")) in ("203.0.113.66","203.0.113.77","198.51.100.66","198.51.100.77")
+                    or is_attack_ip_offline(sip)
                     or bool(facts.get("has_encoded")) or bool(facts.get("has_download"))
                 )
                 y.append(1 if is_atk else 0)
@@ -62,7 +64,7 @@ print(f"[{time.time()-t0:.0f}s] Process: {process_X.shape} pos={int(process_y.su
 
 print(f"[{time.time()-t0:.0f}s] Network...", flush=True)
 network_X, network_rows = _load_network_features(None, None, cutoff=None)
-network_y = np.array([1 if str(r.get("remote_ip","")).startswith(_NET_ATTACK_PREFIXES) else 0 for r in network_rows], dtype=int) if network_rows else np.empty((0,),dtype=int)
+network_y = np.array([1 if is_attack_ip_offline(r.get("remote_ip","")) else 0 for r in network_rows], dtype=int) if network_rows else np.empty((0,),dtype=int)
 print(f"[{time.time()-t0:.0f}s] Network: {network_X.shape}", flush=True)
 
 new_models = {}
@@ -100,7 +102,7 @@ detector.supervised_by_stream = new_sup
 detector.supervised_name = "+".join(new_sup.keys()) or "none"
 detector.n_samples = int(len(login_X)+len(process_X)+len(network_X))
 detector.trained_at = datetime.now(UTC).isoformat()
-detector.events_at_train = 253899
+detector.events_at_train = int(len(login_X) + len(process_X) + len(network_X))
 detector.version += 1
 detector._save_meta()
 detector._save_bundle()
