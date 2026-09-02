@@ -14,6 +14,7 @@ from backend.ml.anomaly import (
     _DEFAULT_THRESHOLDS, LOGIN_EVENTS, PROCESS_EVENTS,
     _NET_ATTACK_PREFIXES, _COMMON_LOGON_TYPES, _NIGHT_HOURS,
 )
+from backend.ml.realworld_labeler import is_attack_ip_offline
 from sqlalchemy import select
 
 def bulk_load_events(session):
@@ -174,8 +175,8 @@ def is_atk(ev):
     f = ev["facts"]
     eid = ev["event_id"]
     if eid in (4625,4720,4726,4732,7045,4698): return True
-    ip = str(f.get("source_ip",""))
-    if ip in ("203.0.113.66","203.0.113.77","198.51.100.66","198.51.100.77"): return True
+    sip = str(f.get("source_ip",""))
+    if is_attack_ip_offline(sip): return True
     if f.get("has_encoded") or f.get("has_download"): return True
     if eid == 4624 and int(f.get("logon_type",0)) not in _COMMON_LOGON_TYPES: return True
     return False
