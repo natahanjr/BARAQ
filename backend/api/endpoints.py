@@ -529,3 +529,32 @@ def list_verdicts(
         item["timestamp"] = ev.timestamp.isoformat() if (ev and ev.timestamp) else None
         items.append(item)
     return {"items": items, "total": len(items)}
+
+
+# =====================================================================
+# Real-world ML labeling stats
+# =====================================================================
+
+@router.get("/ml/labeling-stats", dependencies=[Depends(require_auth)])
+def ml_labeling_stats(db: Session = Depends(get_db)):
+    """Stats about real-world data feeding the ML training pipeline.
+
+    Shows how many threat-intel IPs and analyst verdicts are available
+    for training, so operators can see the ML is learning from real data.
+    """
+    from backend.ml.realworld_labeler import get_threat_intel_stats, get_attack_ips
+
+    stats = get_threat_intel_stats(db)
+    stats["active_attack_ips"] = len(get_attack_ips(db))
+    try:
+        from backend.ml.anomaly import get_detector
+        detector = get_detector()
+        stats["model_version"] = detector.version
+        stats["model_trained_at"] = detector.trained_at
+        stats["model_samples"] = detector.n_samples
+        stats["model_events_at_train"] = detector.events_at_train
+        stats["model_source"] = detector.model_source
+        stats["feedback_weights"] = dict(detector.feedback_weights)
+    except Exception:
+        stats["model_error"] = "detector not available"
+    return stats
