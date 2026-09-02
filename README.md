@@ -105,6 +105,6 @@ Licensed under the [RazForge License](https://github.com/RazForge/.github/blob/m
 
 <div align="center">
 
-[![Part of RazForge](https://img.shields.io/badge/Part%20of-RazForge-1a1a2e?style=for-the-badge&logo=github&logoColor=white&labelColor=16213e)](https://github.com/natahanjr)
+[![Part of RazForge](https://img.shields.io/badge/Part%20of-RazForge-1a1a2e?style=for-the-badge&logo=github&logoColor=white&labelColor=16213e)](https://github.com/RazForge)
 
 </div>
