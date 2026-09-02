@@ -3565,58 +3565,15 @@ class MLAnomalyDetector:
             process_y = np.array([1 if _hybrid_label(_events[i]) else 0 for i in _proc_idx], dtype=int) if _proc_idx else np.empty((0,), dtype=int)
 
             # Bulk network features (no per-IP DB queries)
-            _net_stmt = select(
-                NetworkConnection.remote_ip,
-                func.count(NetworkConnection.id),
-                func.count(func.distinct(NetworkConnection.remote_port)),
-                func.sum(NetworkConnection.bytes_sent),
-                func.sum(NetworkConnection.bytes_recv),
-                func.avg(NetworkConnection.duration_seconds),
-            )
-            if since is not None:
-                _net_stmt = _net_stmt.where(NetworkConnection.observed_at >= since)
-            if cutoff is not None:
-                _net_stmt = _net_stmt.where(NetworkConnection.observed_at < cutoff)
-            _net_rows = session.execute(_net_stmt.group_by(NetworkConnection.remote_ip)).all()
-            _net_by_ip = {}
-            for _r in _net_rows:
-                _ip = _r[0] or "unknown"
-                _net_by_ip[_ip] = {
-                    "count": int(_r[1]), "dports": int(_r[2]),
-                    "bsent": float(_r[3] or 0), "brecv": float(_r[4] or 0),
-                    "dur": float(_r[5] or 0),
-                }
-            _net_flows = []
-            _net_ips = []
-            for _ip, _d in _net_by_ip.items():
-                _sf = _ip_subnet_features(_ip)
-                _sm = _d["bsent"] / 1e6
-                _rm = _d["brecv"] / 1e6
-                _dur_h = _d["dur"] / 3600.0
-                _rate = _sm / max(_dur_h, 0.01)
-                _is_a = 1.0 if _ip.startswith(_NET_ATTACK_PREFIXES) else 0.0
-                _asym = abs(_sm - _rm) / max(_sm + _rm, 0.001)
-                _reg = 0.0
-                _proto = 0.2
-                _tls = 0.0
-                _div = 0.0
-                _outb = 0.0
-                _dtun = 0.0
-                _dlong = 0.0
-                _vec = _sf + [_d["count"], _d["dports"], _sm, _rm, _dur_h, _rate] + [0]*5 + [_is_a]*3 + [0]*4 + [_is_a, 0.5, _is_a, 0, 0] + [_dtun, _dlong, _proto, _tls, _div, _asym, _reg, _outb]
-                _net_flows.append(_vec[:44])
-                _net_ips.append(_ip)
-            network_X = np.array(_net_flows, dtype=float) if _net_flows else np.empty((0, 44))
-            network_rows = [{"remote_ip": ip} for ip in _net_ips]
+            # Use _load_network_features for consistent 34-dim feature vector
+            # matching the scoring path (score_network_connection)
+            network_X, network_rows = _load_network_features(session, since, cutoff)
             network_y = np.empty((0,), dtype=int)
             if len(network_X):
-                # Labels MUST come from the same filtered row set as network_X
-                # (a separate query can disagree under ``since``/``cutoff``
-                # windows and desync feature/label counts -> boolean-index
-                # crash in threshold tuning).
+                from backend.ml.realworld_labeler import is_attack_ip_offline
                 network_y = np.array(
                     [
-                        1 if str(r["remote_ip"]).startswith(_NET_ATTACK_PREFIXES) else 0
+                        1 if is_attack_ip_offline(str(r["remote_ip"])) else 0
                         for r in network_rows
                     ],
                     dtype=int,
