@@ -472,9 +472,21 @@ def record_verdict(
     # Roadmap 4.1 - online learning: fold the verdict into the live detector
     # (damp/boost the per-behavior anomaly score) immediately.
     try:
-        from backend.ml.anomaly import _behavior_of, get_detector
+        from backend.ml.anomaly import _behavior_of, event_feature_vector, get_detector
 
-        get_detector().apply_feedback(body.verdict, _behavior_of(event.event_id))
+        detector = get_detector()
+        behavior = _behavior_of(event.event_id)
+        detector.apply_feedback(body.verdict, behavior)
+        # Also record in the online learner's buffer for incremental retraining
+        if detector.online_learner is not None:
+            try:
+                features = event_feature_vector(event)
+                if features:
+                    detector.online_learner.record_verdict(
+                        behavior, features, body.verdict == "true_positive"
+                    )
+            except Exception:
+                pass
     except Exception:
         pass
     log_action(
