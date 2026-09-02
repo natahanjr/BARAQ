@@ -12,7 +12,7 @@ from backend.database.models import NormalizedEvent, NetworkConnection
 from backend.ml.anomaly import (
     get_detector, IsolationForest, ML_CONTAMINATION, ML_RANDOM_STATE,
     _DEFAULT_THRESHOLDS, LOGIN_EVENTS, PROCESS_EVENTS,
-    _NET_ATTACK_PREFIXES, _COMMON_LOGON_TYPES, _NIGHT_HOURS,
+    _COMMON_LOGON_TYPES, _NIGHT_HOURS,
 )
 from backend.ml.realworld_labeler import is_attack_ip_offline
 from sqlalchemy import select
@@ -275,7 +275,7 @@ print(f"  Process: {process_X.shape} pos={int(process_y.sum())}", flush=True)
 
 print(f"[{time.time()-t0:.0f}s] Building network features...", flush=True)
 from collections import defaultdict as dd
-from backend.ml.anomaly import _ip_subnet_features, _NET_ATTACK_PREFIXES
+from backend.ml.anomaly import _ip_subnet_features
 from backend.ml.anomaly import (
     _get_connection_velocity_per_ip, _get_port_scan_indicator,
     _get_exfiltration_indicator, _get_beaconing_indicator, _get_dns_query_pattern,
