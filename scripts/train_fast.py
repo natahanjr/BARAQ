@@ -97,7 +97,7 @@ finally:
 print(f"[{time.time()-t0:.0f}s] Loading network features...", flush=True)
 network_X, network_rows = _load_network_features(None, None, cutoff=None)
 network_y = np.array([
-    1 if str(r.get("remote_ip", "")).startswith(_NET_ATTACK_PREFIXES) else 0
+    1 if is_attack_ip_offline(str(r.get("remote_ip", ""))) else 0
     for r in network_rows
 ], dtype=int) if network_rows else np.empty((0,), dtype=int)
 print(f"[{time.time()-t0:.0f}s] Network: {network_X.shape} pos={int(network_y.sum())}", flush=True)
@@ -147,7 +147,7 @@ detector.supervised_by_stream = new_supervised_by_stream
 detector.supervised_name = next(iter(new_supervised_by_stream.values()), None) and "+".join(new_supervised_by_stream.keys()) or "none"
 detector.n_samples = int(len(login_X) + len(process_X) + len(network_X))
 detector.trained_at = datetime.now(UTC).isoformat()
-detector.events_at_train = 253899
+detector.events_at_train = int(len(login_X) + len(process_X) + len(network_X))
 detector.version += 1
 
 print(f"[{time.time()-t0:.0f}s] SAVING bundle...", flush=True)
