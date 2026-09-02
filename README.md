@@ -105,6 +105,6 @@ All rights reserved. See [LICENSE.md](LICENSE.md) for details.
 
 <div align="center">
 
-**Part of [RazForge](https://github.com/natahanjr)**
+[![Part of RazForge](https://img.shields.io/badge/Part%20of-RazForge-1a1a2e?style=for-the-badge&logo=github&logoColor=white&labelColor=16213e)](https://github.com/natahanjr)
 
 </div>
