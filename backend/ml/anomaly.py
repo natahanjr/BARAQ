@@ -2538,6 +2538,41 @@ class MLAnomalyDetector:
             logger.warning("Could not load ML model bundle; retraining", exc_info=True)
             return False
 
+    def rollback(self) -> bool:
+        """Roll back to the previous model version.
+
+        Loads the ``.prev.joblib`` archive that was saved before the last
+        ``_save_bundle()`` call.  Returns True if rollback succeeded.
+        """
+        import joblib
+
+        prev_path = self._prev_bundle_path()
+        if not prev_path.exists():
+            logger.warning("No previous model bundle to rollback to")
+            return False
+        try:
+            bundle = joblib.load(prev_path)
+            if bundle.get("feature_version") != ML_FEATURE_VERSION:
+                logger.warning("Previous bundle has incompatible feature version")
+                return False
+            self.models = bundle.get("models", {})
+            self.encoders = bundle.get("encoders", {})
+            self.supervised = bundle.get("supervised")
+            self.supervised_name = bundle.get("supervised_name", "none")
+            self.supervised_by_stream = bundle.get("supervised_by_stream") or {}
+            self.supervised_name_by_stream = bundle.get("supervised_name_by_stream") or {}
+            self.thresholds = {**dict(_DEFAULT_THRESHOLDS), **bundle.get("thresholds", {})}
+            self.baselines = {k: np.asarray(v, dtype=float) for k, v in (bundle.get("baselines") or {}).items()}
+            self.version = int(bundle.get("version", 0))
+            self.feedback_weights = {k: float(v) for k, v in (bundle.get("feedback_weights") or {}).items()}
+            self.model_source = "user" if not bundle.get("bootstrap") else "bootstrap"
+            self._save_meta()
+            logger.info("Rolled back to model version %d", self.version)
+            return True
+        except Exception:
+            logger.warning("Failed to rollback model bundle", exc_info=True)
+            return False
+
     def _load_bootstrap(self) -> bool:
         """Day-1 cold start: load the bundled seed model.
 
