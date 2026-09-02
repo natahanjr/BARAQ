@@ -99,7 +99,7 @@ python -m pytest tests -v
 
 Copyright (c) 2026 [Natahan](https://github.com/natahanjr) — [RazForge Lab](https://github.com/natahanjr)
 
-Licensed under the [RazForge License](LICENSE.md).
+Licensed under the [RazForge License](https://github.com/RazForge/.github/blob/main/RAZFORGE-SOURCE-AVAILABLE-LICENSE.md).
 
 ---
 
