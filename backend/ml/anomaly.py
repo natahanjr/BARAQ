@@ -3161,16 +3161,18 @@ class MLAnomalyDetector:
     ) -> tuple[np.ndarray, np.ndarray, list[str]]:
         """Per-remote-IP flow features with attack labels for the network stream.
 
-        Label source: remote IPs inside the known attack prefixes (scripted
-        ground truth / threat-intel ranges). Returns (X, y, ips) aligned to
+        Label source: threat-intel IPs from the realworld_labeler module
+        (DB-backed with legacy fallback). Returns (X, y, ips) aligned to
         the same feature space used at score time.
         """
+        from backend.ml.realworld_labeler import is_attack_ip_offline
+
         X, rows = _load_network_features(session, since)
         ips = [r["remote_ip"] for r in rows]
         if not ips:
             return X, np.empty((0,), dtype=int), []
         y = np.array(
-            [1 if ip.startswith(_NET_ATTACK_PREFIXES) else 0 for ip in ips], dtype=int
+            [1 if is_attack_ip_offline(ip) else 0 for ip in ips], dtype=int
         )
         return X, y, ips
 
