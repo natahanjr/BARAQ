@@ -4137,7 +4137,8 @@ class MLAnomalyDetector:
             return 0.0
 
         subnet_feats = _ip_subnet_features(remote_ip)
-        is_novel = 1.0 if remote_ip.startswith(_NET_ATTACK_PREFIXES) else 0.0
+        from backend.ml.realworld_labeler import is_attack_ip_offline
+        is_novel = 1.0 if is_attack_ip_offline(remote_ip) else 0.0
 
         sent_mb = float(bytes_sent) / 1_000_000.0
         hours_dur = float(duration) / 3600.0
@@ -4163,11 +4164,12 @@ class MLAnomalyDetector:
                 _get_dns_query_pattern(session, 1),
             ]
 
-            is_attack_ip = 1.0 if remote_ip.startswith(_NET_ATTACK_PREFIXES) else 0.0
+            from backend.ml.realworld_labeler import is_attack_ip_offline as _is_atk_ip
+            is_attack_ip_feat = 1.0 if _is_atk_ip(remote_ip) else 0.0
             temporal_feats = [
                 min(_get_connection_velocity_per_ip(session, remote_ip, 5), 2.0),
                 0.5,
-                is_attack_ip,
+                is_attack_ip_feat,
                 min(float(count) / max(hours_dur * 60.0, 1.0), 2.0),
                 min(_get_port_scan_indicator(session, remote_ip, 15), 2.0),
             ]
