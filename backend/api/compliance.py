@@ -70,8 +70,57 @@ def dsar_endpoint(
 
 
 @router.get("/report", dependencies=[Depends(require_admin)])
-def compliance_report_endpoint(request: Request = None, db: Session = Depends(get_db)):
-    """Data inventory + retention posture for auditors (GDPR Art. 30)."""
+def compliance_report_endpoint(
+    framework: str = Query("", description="SOC2, ISO27001, or NIST-CSF"),
+    request: Request = None,
+    db: Session = Depends(get_db),
+):
+    """Framework gap analysis or GDPR Art.30 data inventory."""
+    if framework:
+        from backend.compliance.gap_analysis import analyze_gaps
+        from backend.compliance.frameworks import get_framework
+
+        report = analyze_gaps(framework)
+        if not report:
+            raise HTTPException(400, f"Unknown framework: {framework}")
+        log_action(
+            db,
+            actor_name(request),
+            "compliance.gap_report",
+            "framework",
+            framework,
+            f"gap report for {framework}",
+            client_ip(request),
+        )
+        controls = []
+        for gap in report.gaps:
+            controls.append({
+                "id": gap.control_id,
+                "control": gap.title,
+                "status": gap.status,
+                "gap": gap.gap_description,
+                "remediation": gap.remediation,
+            })
+        for ctrl in get_framework(framework).controls:
+            if ctrl.status == "compliant":
+                controls.append({
+                    "id": ctrl.control_id,
+                    "control": ctrl.title,
+                    "status": "compliant",
+                    "gap": "",
+                    "remediation": "",
+                })
+        return {
+            "framework": report.framework,
+            "total_controls": report.total_controls,
+            "compliant": report.compliant,
+            "partial": report.partial,
+            "non_compliant": report.non_compliant,
+            "unassessed": report.unassessed,
+            "compliance_pct": report.compliance_pct,
+            "controls": controls,
+        }
+
     from backend.compliance import compliance_report
 
     report = compliance_report(db)
