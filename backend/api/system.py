@@ -857,7 +857,7 @@ def ml_online_learning():
             result["should_update"] = False
 
         try:
-            suggestions = detector.online_learner.active_learner.get_suggestions()
+            suggestions = detector.online_learner.active_learner.suggest_for_labeling()
             result["active_learning_suggestions"] = len(suggestions)
             result["suggestions"] = [
                 {"event_id": s[0], "uncertainty": round(s[2], 4)}
