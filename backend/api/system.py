@@ -699,6 +699,111 @@ def ml_explain_event(event_id: int, db: Session = Depends(get_db)):
     return explain_event(event, session=db)
 
 
+def _build_user_sessions() -> dict:
+    """Build per-user feature matrices from recent events."""
+    import numpy as np
+    from backend.ml.anomaly import event_feature_vector
+
+    db = SessionLocal()
+    try:
+        from datetime import UTC, datetime, timedelta
+        from backend.database.models import NormalizedEvent
+
+        since = datetime.now(UTC) - timedelta(hours=24)
+        rows = db.execute(
+            select(NormalizedEvent).where(NormalizedEvent.timestamp >= since)
+        ).scalars().all()
+
+        user_events: dict[str, list] = {}
+        for ev in rows:
+            user = ev.user or "unknown"
+            user_events.setdefault(user, []).append(ev)
+
+        sessions = {}
+        for user, events in user_events.items():
+            vectors = []
+            for ev in events[:200]:
+                try:
+                    vec = event_feature_vector(ev)
+                    if vec:
+                        vectors.append(vec)
+                except Exception:
+                    pass
+            if vectors:
+                sessions[user] = np.array(vectors, dtype=np.float32)
+        return sessions
+    finally:
+        db.close()
+
+
+def _build_env_sessions() -> dict:
+    """Build per-environment feature matrices (grouped by host)."""
+    import numpy as np
+    from backend.ml.anomaly import event_feature_vector
+
+    db = SessionLocal()
+    try:
+        from datetime import UTC, datetime, timedelta
+        from backend.database.models import NormalizedEvent
+
+        since = datetime.now(UTC) - timedelta(hours=24)
+        rows = db.execute(
+            select(NormalizedEvent).where(NormalizedEvent.timestamp >= since)
+        ).scalars().all()
+
+        host_events: dict[str, list] = {}
+        for ev in rows:
+            host = ev.host or "unknown"
+            host_events.setdefault(host, []).append(ev)
+
+        sessions = {}
+        for host, events in host_events.items():
+            vectors = []
+            for ev in events[:200]:
+                try:
+                    vec = event_feature_vector(ev)
+                    if vec:
+                        vectors.append(vec)
+                except Exception:
+                    pass
+            if vectors:
+                sessions[host] = np.array(vectors, dtype=np.float32)
+        return sessions
+    finally:
+        db.close()
+
+
+def _build_platform_sessions() -> dict:
+    """Build per-platform feature matrices (all Windows for now)."""
+    import numpy as np
+    from backend.ml.anomaly import event_feature_vector
+
+    db = SessionLocal()
+    try:
+        from datetime import UTC, datetime, timedelta
+        from backend.database.models import NormalizedEvent
+
+        since = datetime.now(UTC) - timedelta(hours=24)
+        rows = db.execute(
+            select(NormalizedEvent).where(NormalizedEvent.timestamp >= since)
+        ).scalars().all()
+
+        vectors = []
+        for ev in rows[:500]:
+            try:
+                vec = event_feature_vector(ev)
+                if vec:
+                    vectors.append(vec)
+            except Exception:
+                pass
+
+        if vectors:
+            return {"windows": np.array(vectors, dtype=np.float32)}
+        return {}
+    finally:
+        db.close()
+
+
 @router.get("/ml/robustness", dependencies=[Depends(require_auth)])
 def ml_robustness():
     """Model robustness testing: FGSM evasion, cross-user/env/platform validation."""
@@ -716,17 +821,20 @@ def ml_robustness():
 
     if detector.is_ready:
         try:
-            result["cross_user"] = cross_user_validation()
+            user_sessions = _build_user_sessions()
+            result["cross_user"] = cross_user_validation(detector, user_sessions)
         except Exception as e:
             result["cross_user"] = {"error": str(e)}
 
         try:
-            result["cross_environment"] = cross_environment_validation()
+            env_sessions = _build_env_sessions()
+            result["cross_environment"] = cross_environment_validation(detector, env_sessions)
         except Exception as e:
             result["cross_environment"] = {"error": str(e)}
 
         try:
-            result["cross_platform"] = cross_platform_validation()
+            platform_sessions = _build_platform_sessions()
+            result["cross_platform"] = cross_platform_validation(detector, platform_sessions)
         except Exception as e:
             result["cross_platform"] = {"error": str(e)}
 
