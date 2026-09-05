@@ -318,17 +318,15 @@ export default function AssistantPanel({ compact = false }) {
         >
           {busy ? "…" : "Send"}
         </button>
-        {!compact && (
-          <button
-            type="button"
-            onClick={clearConversation}
-            disabled={busy || messages.length === 0}
-            title="Clear conversation history"
-            className="rounded-xl border border-red-500/25 bg-red-500/[0.08] px-2.5 py-2.5 text-red-300 transition-colors hover:bg-red-500/[0.15] hover:shadow-[0_0_16px_-4px_rgba(239,68,68,0.2)] disabled:opacity-40"
-          >
-            <TrashIcon className="h-4 w-4" />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={clearConversation}
+          disabled={busy || messages.length === 0}
+          title="Clear conversation history"
+          className="rounded-xl border border-red-500/25 bg-red-500/[0.08] px-2.5 py-2.5 text-red-300 transition-colors hover:bg-red-500/[0.15] hover:shadow-[0_0_16px_-4px_rgba(239,68,68,0.2)] disabled:opacity-40"
+        >
+          <TrashIcon className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );
