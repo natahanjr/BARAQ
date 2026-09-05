@@ -702,6 +702,7 @@ def ml_explain_event(event_id: int, db: Session = Depends(get_db)):
 def _build_user_sessions() -> dict:
     """Build per-user feature matrices from recent events."""
     import numpy as np
+    from backend.database.connection import SessionLocal as SessionLocal
     from backend.ml.anomaly import event_feature_vector
 
     db = SessionLocal()
@@ -739,6 +740,7 @@ def _build_user_sessions() -> dict:
 def _build_env_sessions() -> dict:
     """Build per-environment feature matrices (grouped by host)."""
     import numpy as np
+    from backend.database.connection import SessionLocal as SessionLocal
     from backend.ml.anomaly import event_feature_vector
 
     db = SessionLocal()
@@ -776,6 +778,7 @@ def _build_env_sessions() -> dict:
 def _build_platform_sessions() -> dict:
     """Build per-platform feature matrices (all Windows for now)."""
     import numpy as np
+    from backend.database.connection import SessionLocal as SessionLocal
     from backend.ml.anomaly import event_feature_vector
 
     db = SessionLocal()
