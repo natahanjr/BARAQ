@@ -914,12 +914,16 @@ def ml_federated():
     """Federated learning status and capabilities."""
     from backend.ml.federated import FederatedAggregator, FederatedClient
 
+    aggregator = FederatedAggregator()
+    status = aggregator.status()
+
     return {
         "status": "ok",
         "available": True,
         "aggregator_class": FederatedAggregator.__name__,
         "client_class": FederatedClient.__name__,
         "description": "FedAvg-based federated learning for multi-organization collaboration",
+        "runtime": status,
     }
 
 
