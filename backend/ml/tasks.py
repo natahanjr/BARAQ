@@ -401,7 +401,9 @@ def get_active_learning_suggestions():
         return []
 
     try:
-        return detector.online_learner.active_learner.get_suggestions()
+        return detector.online_learner.active_learner.suggest_for_labeling(
+            features_list=[], behaviors=[], models=detector.models
+        )
     except Exception:
         return []
 
