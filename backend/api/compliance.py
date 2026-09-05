@@ -80,7 +80,7 @@ def compliance_report_endpoint(
         from backend.compliance.gap_analysis import analyze_gaps
         from backend.compliance.frameworks import get_framework
 
-        report = analyze_gaps(framework)
+        report = analyze_gaps(framework.upper())
         if not report:
             raise HTTPException(400, f"Unknown framework: {framework}")
         log_action(
@@ -101,7 +101,7 @@ def compliance_report_endpoint(
                 "gap": gap.gap_description,
                 "remediation": gap.remediation,
             })
-        for ctrl in get_framework(framework).controls:
+        for ctrl in get_framework(framework.upper()).controls:
             if ctrl.status == "compliant":
                 controls.append({
                     "id": ctrl.control_id,

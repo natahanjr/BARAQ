@@ -2047,7 +2047,7 @@ def _load_behavior_features(
             stmt = stmt.where(NormalizedEvent.timestamp >= since)
         if cutoff is not None:
             stmt = stmt.where(NormalizedEvent.timestamp < cutoff)
-        rows = _sess.scalars(stmt).all()
+        rows = _sess.scalars(stmt.limit(10000)).all()
         X = []
         y = []
         verdicts = _verdict_map(_sess) if with_labels else {}
