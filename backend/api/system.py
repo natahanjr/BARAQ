@@ -950,12 +950,20 @@ def ml_community_rules():
     }
 
 
+_remediation_engine = None
+
+def get_remediation_engine():
+    global _remediation_engine
+    if _remediation_engine is None:
+        from backend.ml.remediation import RemediationEngine
+        _remediation_engine = RemediationEngine()
+    return _remediation_engine
+
+
 @router.get("/ml/remediation", dependencies=[Depends(require_auth)])
 def ml_remediation():
     """FN remediation suggestions from false negative analysis."""
-    from backend.ml.remediation import RemediationEngine
-
-    engine = RemediationEngine()
+    engine = get_remediation_engine()
     summary = engine.get_summary()
 
     return {
