@@ -958,7 +958,7 @@ function MLDetection() {
                     </div>
                     <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
                       <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Archived</p>
-                      <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{retention.storage_metrics.archived_models || 0}</p>
+                      <p className="mt-1 text-[13px] font-semibold text-[var(--fg-primary)]">{retention.storage_metrics.archived_versions || 0}</p>
                     </div>
                     <div className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3.5">
                       <p className="text-[11px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">Archive Size</p>
