@@ -47,8 +47,9 @@ def generate_gap_report(rules_engine=None, alert_store=None) -> GapReport:
         rules = []
         alert_count = 0
         if rules_engine:
-            for rule in getattr(rules_engine, "_rules", []):
-                if tid in getattr(rule, "mitre_id", ""):
+            for rule in getattr(rules_engine, "rules", []):
+                rule_mitre = getattr(rule, "mitre_id", "") or ""
+                if tid == rule_mitre or tid.startswith(rule_mitre + ".") or rule_mitre.startswith(tid + "."):
                     has_detection = True
                     rules.append(getattr(rule, "name", ""))
         entry = TechniqueCoverage(
