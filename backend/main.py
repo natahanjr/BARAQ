@@ -1057,6 +1057,7 @@ class _BodyTooLargeError(Exception):
 
 @app.exception_handler(_BodyTooLargeError)
 async def _body_too_large_handler(request, exc):
+    from backend.config import MAX_REQUEST_BYTES
     return JSONResponse(
         {"detail": f"Request body exceeds {MAX_REQUEST_BYTES} bytes"},
         status_code=413,
@@ -1336,4 +1337,22 @@ class _SPAMount(StaticFiles):
 
 
 if FRONTEND_DIST.is_dir():
-    app.mount("/", _SPAMount(directory=FRONTEND_DIST, html=True), name="frontend")
+
+    @app.get("/{full_path:path}")
+    async def _spa_fallback(full_path: str):
+        import re as _re
+
+        stripped = full_path.strip("/")
+        static_file = FRONTEND_DIST / stripped
+        if stripped and static_file.is_file():
+            ext = static_file.suffix.lower()
+            ct = _ASSET_TYPES.get(ext, "application/octet-stream")
+            return FileResponse(static_file, media_type=ct)
+        index = FRONTEND_DIST / "index.html"
+        if index.is_file():
+            resp = FileResponse(index, media_type="text/html; charset=utf-8")
+            resp.headers["Cache-Control"] = "no-store"
+            return resp
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="static-assets")
