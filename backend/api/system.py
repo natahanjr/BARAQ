@@ -927,12 +927,20 @@ def ml_federated():
     }
 
 
+_community_rule_manager = None
+
+def get_community_rule_manager():
+    global _community_rule_manager
+    if _community_rule_manager is None:
+        from backend.ml.community_rules import CommunityRuleManager
+        _community_rule_manager = CommunityRuleManager()
+    return _community_rule_manager
+
+
 @router.get("/ml/community-rules", dependencies=[Depends(require_auth)])
 def ml_community_rules():
     """Community rule contribution framework status."""
-    from backend.ml.community_rules import CommunityRuleManager
-
-    manager = CommunityRuleManager()
+    manager = get_community_rule_manager()
     stats = manager.get_statistics()
 
     return {
