@@ -36,6 +36,7 @@ from backend.auth import (
     hash_password,
     verify_password,
     verify_token,
+    verify_token_for_user,
 )
 from backend.config import AUTH_TOKEN_SECRET, COOKIE_SECURE, DEFAULT_ADMIN_PASSWORD
 from backend.database.connection import get_db
@@ -60,6 +61,10 @@ CSRF_COOKIE = "baraq_csrf"
 LOGIN_MAX_ATTEMPTS = 5
 LOGIN_WINDOW_SECONDS = 300
 _lockout: dict[str, list[float]] = defaultdict(list)
+#: Per-account lockout: track failures per username to prevent distributed brute-force
+_account_lockout: dict[str, list[float]] = defaultdict(list)
+ACCOUNT_MAX_ATTEMPTS = 10
+ACCOUNT_LOCKOUT_SECONDS = 600
 
 
 def _check_login_rate_limit(request: Request) -> None:
@@ -78,16 +83,22 @@ def _check_login_rate_limit(request: Request) -> None:
     _lockout[ip] = failures
 
 
-def _record_login_failure(request: Request) -> None:
+def _record_login_failure(request: Request, username: str = "") -> None:
     ip = client_ip(request)
     _lockout.setdefault(ip, []).append(time.monotonic())
-    # Keep the map bounded.
     if len(_lockout) > 10000:
         _lockout.clear()
+    # Per-account tracking
+    if username:
+        _account_lockout[username.lower()].append(time.monotonic())
+        if len(_account_lockout) > 10000:
+            _account_lockout.clear()
 
 
-def _clear_login_rate_limit(request: Request) -> None:
+def _clear_login_rate_limit(request: Request, username: str = "") -> None:
     _lockout.pop(client_ip(request), None)
+    if username:
+        _account_lockout.pop(username.lower(), None)
 
 
 class LoginRequest(BaseModel):
@@ -103,6 +114,16 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=256)
     full_name: str = Field("", max_length=128)
     org: str = Field("", max_length=64)
+
+    def model_post_init(self, __context) -> None:
+        """Enforce password complexity: at least one uppercase, lowercase, digit."""
+        pw = self.password
+        if not any(c.isupper() for c in pw):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.islower() for c in pw):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not any(c.isdigit() for c in pw):
+            raise ValueError("Password must contain at least one digit")
 
 
 class PasswordChangeRequest(BaseModel):
@@ -147,6 +168,17 @@ def _public_user(user: User) -> dict:
 def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
     _check_login_rate_limit(request)
     username = body.username.strip()
+    # Per-account lockout check
+    now = time.monotonic()
+    account_failures = [t for t in _account_lockout.get(username.lower(), []) if now - t < ACCOUNT_LOCKOUT_SECONDS]
+    if len(account_failures) >= ACCOUNT_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Too many failed login attempts for this account. Try again in "
+                f"{int(ACCOUNT_LOCKOUT_SECONDS - (now - account_failures[0]))} seconds."
+            ),
+        )
     user = db.scalar(select(User).where(User.username == username))
     password_ok = bool(user) and verify_password(body.password, user.password_hash)
     source = "local"
@@ -156,7 +188,7 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
             source = "ldap"
             password_ok = True
     if not user or not password_ok:
-        _record_login_failure(request)
+        _record_login_failure(request, username)
         log_action(
             db,
             username,
@@ -168,25 +200,19 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
         )
         raise HTTPException(401, "Invalid username or password")
     if not user.is_active:
-        _record_login_failure(request)
-        status_hint = user.registration_status or ""
-        if status_hint == "pending":
-            detail = "Your account is pending verification by an administrator"
-        elif status_hint == "rejected":
-            detail = "Your account registration was rejected by an administrator"
-        else:
-            detail = "Account disabled"
+        _record_login_failure(request, username)
         log_action(
             db,
             user.username,
             "login.rejected",
             "user",
             str(user.id),
-            f"account not active ({status_hint or 'disabled'})",
+            f"account not active ({user.registration_status or 'disabled'})",
             client_ip(request),
         )
-        raise HTTPException(403, detail)
-    _clear_login_rate_limit(request)
+        # Return same generic error to prevent username enumeration
+        raise HTTPException(401, "Invalid username or password")
+    _clear_login_rate_limit(request, username)
     if user.totp_enabled:
         challenge = create_mfa_challenge(user.id, user.username)
         log_action(
@@ -220,7 +246,13 @@ def register(body: RegisterRequest, request: Request, db: Session = Depends(get_
     """
     username = body.username.strip()
     if _username_taken(db, username):
-        raise HTTPException(409, "Username already exists")
+        # Return generic message to prevent username enumeration
+        return {
+            "ok": True,
+            "pending": True,
+            "message": "If this username is available, your request will be "
+            "pending verification by an administrator.",
+        }
     user = User(
         username=username,
         password_hash=hash_password(body.password),
@@ -291,14 +323,27 @@ def _provision_sso_user(
     The local password hash is random/unusable so the external provider
     remains the only way in for that account. ``source`` is "ldap" or "oidc"
     and only affects the audit detail.
+
+    Security: roles from external providers are NEVER trusted for initial
+    provisioning. New accounts are always created as 'analyst'. Existing
+    accounts keep their local role unless explicitly changed by an admin.
+    The exception is LDAP, where _role_for() uses group-based mapping
+    from the LDAP_ADMIN_GROUPS config (not the profile's role claim).
     """
     username = profile.get("username", "")
     user = db.scalar(select(User).where(User.username == username))
+    # Determine the role: use group-based mapping for LDAP, default to analyst for others
+    if source == "ldap":
+        # LDAP role is already computed by _role_for() from group membership
+        proposed_role = profile.get("role", "analyst")
+    else:
+        # OIDC and other SSO: never trust the external role claim
+        proposed_role = "analyst"
     if user is None:
         user = User(
             username=username,
             password_hash=hash_password(secrets.token_urlsafe(48)),  # unusable
-            role=profile.get("role", "analyst"),
+            role=proposed_role,
             full_name=profile.get("full_name", ""),
         )
         db.add(user)
@@ -314,12 +359,13 @@ def _provision_sso_user(
             client_ip(request),
         )
         return user
-    role = profile.get("role", user.role)
+    # For existing users, only update role from LDAP group mapping, not from profile claims
+    if source == "ldap" and proposed_role != user.role:
+        user.role = proposed_role
     full_name = profile.get("full_name", "")
-    if role != user.role or full_name != user.full_name:
-        user.role = role
-        if full_name:
-            user.full_name = full_name
+    if full_name and full_name != user.full_name:
+        user.full_name = full_name
+    if source == "ldap" and proposed_role != user.role or full_name and full_name != user.full_name:
         db.commit()
         log_action(
             db,
@@ -510,14 +556,14 @@ def mfa_verify(body: MfaVerifyRequest, request: Request, db: Session = Depends(g
     _check_login_rate_limit(request)
     payload = verify_token(body.challenge)
     if not payload or not payload.get("mfa"):
-        _record_login_failure(request)
+        _record_login_failure(request, payload.get("sub", "") if payload else "")
         raise HTTPException(401, "Challenge expired — log in again")
     user = db.get(User, payload.get("uid"))
     if not user or not user.is_active or not user.totp_enabled:
-        _record_login_failure(request)
+        _record_login_failure(request, payload.get("sub", "") if payload else "")
         raise HTTPException(401, "Challenge invalid — log in again")
     if not verify_code(user.totp_secret, body.code):
-        _record_login_failure(request)
+        _record_login_failure(request, user.username)
         log_action(
             db,
             user.username,
@@ -528,7 +574,7 @@ def mfa_verify(body: MfaVerifyRequest, request: Request, db: Session = Depends(g
             client_ip(request),
         )
         raise HTTPException(401, "Invalid verification code")
-    _clear_login_rate_limit(request)
+    _clear_login_rate_limit(request, user.username)
     token = create_token(user.id, user.username, user.role, user.org)
     log_action(
         db,
@@ -735,6 +781,7 @@ def logout(request: Request, db: Session = Depends(get_db)):
         revoke_token(jti, username=actor, reason="logout")
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(SESSION_COOKIE, path="/")
+    resp.delete_cookie(CSRF_COOKIE, path="/")
     return resp
 
 
@@ -864,6 +911,7 @@ def change_password(
         )
     user.password_hash = hash_password(body.new_password)
     user.must_change_password = False
+    user.password_changed_at = datetime.now(UTC)
     db.commit()
     log_action(
         db,
@@ -927,6 +975,7 @@ def update_user(
         user.org = body.org.strip()
     if body.password:
         user.password_hash = hash_password(body.password)
+        user.password_changed_at = datetime.now(UTC)
     db.commit()
     log_action(
         db,
