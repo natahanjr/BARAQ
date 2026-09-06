@@ -37,11 +37,11 @@ spec:
           env:
             - { name: BARAQ_ROLE, value: "api" }
           readinessProbe:
-            httpGet: { path: /api/system/status, port: http }
+            httpGet: { path: /api/health, port: http }
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
-            httpGet: { path: /api/system/status, port: http }
+            httpGet: { path: /api/health, port: http }
             initialDelaySeconds: 30
             periodSeconds: 20
           resources:
@@ -73,18 +73,13 @@ spec:
           env:
             - { name: BARAQ_ROLE, value: "api" }
           readinessProbe:
-            httpGet: { path: /api/system/status, port: http }
+            httpGet: { path: /api/health, port: http }
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
-            httpGet: { path: /api/system/status, port: http }
+            httpGet: { path: /api/health, port: http }
             initialDelaySeconds: 30
             periodSeconds: 20
-          resources:
-            requests: { cpu: 250m, memory: 256Mi }
-            limits: { cpu: "2", memory: 2Gi }
----
-# The Service routes to whichever release is active. The switch script flips
 # this selector; a failed rollout never changes it, so the old release keeps
 # serving until the new one is verified.
 apiVersion: v1

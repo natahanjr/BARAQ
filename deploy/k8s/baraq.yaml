@@ -39,11 +39,11 @@ spec:
           env:
             - { name: BARAQ_ROLE, value: "api" }
           readinessProbe:
-            httpGet: { path: /api/system/status, port: http }
+            httpGet: { path: /api/health, port: http }
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
-            httpGet: { path: /api/system/status, port: http }
+            httpGet: { path: /api/health, port: http }
             initialDelaySeconds: 30
             periodSeconds: 20
           resources:
