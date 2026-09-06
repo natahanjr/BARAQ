@@ -70,10 +70,13 @@ const typeIcons = {
 
 function ToastItem({ toast, onDismiss }) {
   const [exiting, setExiting] = useState(false);
+  const timerRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
 
   const handleDismiss = () => {
     setExiting(true);
-    setTimeout(onDismiss, 200);
+    timerRef.current = setTimeout(onDismiss, 200);
   };
 
   return (
