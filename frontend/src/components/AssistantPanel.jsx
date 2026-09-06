@@ -112,16 +112,20 @@ const mdComponents = {
     </td>
   ),
   hr: () => <hr className="my-4 border-white/[0.06]" />,
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-cyan-400 underline decoration-cyan-400/30 transition-colors hover:text-cyan-300 hover:decoration-cyan-300/50"
-    >
-      {children}
-    </a>
-  ),
+  a: ({ href, children }) => {
+    // Sanitize: only allow http/https URLs, block javascript: URIs
+    const safeHref = href && /^(https?:\/\/|\/)/.test(href) ? href : "#";
+    return (
+      <a
+        href={safeHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-cyan-400 underline decoration-cyan-400/30 transition-colors hover:text-cyan-300 hover:decoration-cyan-300/50"
+      >
+        {children}
+      </a>
+    );
+  },
 };
 
 /* ------------------------------------------------------------------ */
