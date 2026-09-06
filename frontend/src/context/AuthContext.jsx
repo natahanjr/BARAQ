@@ -30,15 +30,15 @@ export function AuthProvider({ children }) {
     setUser(authStore.user || loginResult?.user || null);
   }, []);
 
-  const logout = useCallback(() => {
-    api.logout();
+  const logout = useCallback(async () => {
+    try { await api.logout(); } catch { /* best-effort */ }
     setUser(null);
   }, []);
 
   const setOrg = useCallback((o) => {
     setOrgState(o);
     try { localStorage.setItem("baraq-org", o); } catch {}
-    api.setOrg?.(o);
+    authStore.org = o;
   }, []);
 
   const refreshUser = useCallback(() => {
