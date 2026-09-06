@@ -8,7 +8,7 @@ public endpoint (list, read, mutate).
 Example:
     from backend.integrations.sdk import BARAQClient
 
-    client = BARAQClient("https://soc.corp.local:8443", api_key="baraq-prod-admin")
+    client = BARAQClient("https://soc.corp.local:8443", api_key="your-admin-api-key")
     open_alerts = client.alerts(status="open", limit=10)
     client.incident_create("Ransomware beacon", alert_ids=[a["id"] for a in open_alerts])
     client.alert_action(open_alerts[0]["id"], "contain")
