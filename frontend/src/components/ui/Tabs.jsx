@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useEffect, useRef } from "react";
+import { memo, useState, useEffect, useRef } from "react";
 
 export function Tabs({ tabs, active, onChange, className = "" }) {
   const tabRefs = useRef({});
