@@ -13,6 +13,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -437,8 +438,11 @@ def _scheduler_loop(interval_seconds: int = 15):
                                 for notable in notables:
                                     try:
                                         publish_alert(notable.to_dict())
-                                    except Exception:
-                                        pass
+                                    except Exception as exc:
+                                        logger.debug(
+                                            "Failed to publish notable alert %s: %s",
+                                            notable.to_dict().get("alert_id"), exc,
+                                        )
                 except Exception:
                     logger.exception("Entity RBA cycle failed")
 
@@ -721,8 +725,8 @@ async def lifespan(app: FastAPI):
         from backend.monitor import data_quality as dq_monitor
 
         dq_monitor.stop()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Failed to stop data quality monitor: %s", exc)
     release_instance_lock()
     logger.info("BARAQ API shut down")
 
@@ -750,6 +754,7 @@ app.add_middleware(
     allow_headers=["Authorization", "X-API-Key", "X-CSRF-Token", "Content-Type", "X-Org"],
     expose_headers=["X-Baraq-Code"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # ---------------------------------------------------------------------------
 # API hardening (roadmap 5.3): security headers, rate limiting, IP ACLs.
@@ -1329,9 +1334,8 @@ if FRONTEND_DIST.is_dir():
     async def _spa_fallback(full_path: str):
         import re as _re
 
-        stripped = full_path.strip("/")
+        stripped = full_path.strip("/").replace("\\", "/")
         static_file = FRONTEND_DIST / stripped
-        # Prevent path traversal: resolve and verify the path is within FRONTEND_DIST
         if stripped:
             resolved = static_file.resolve()
             if not str(resolved).startswith(str(FRONTEND_DIST.resolve())):
