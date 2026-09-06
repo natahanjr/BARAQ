@@ -25,6 +25,11 @@ from backend.database.models import Alert, AuditLog, NormalizedEvent, User
 
 logger = logging.getLogger("baraq.compliance")
 
+
+def _safe_like(value: str) -> str:
+    """Escape characters that have special meaning in SQL LIKE patterns."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
 #: Fields carrying personal data; values are replaced by a token.
 _PII_FIELDS = (
     "user",
@@ -110,7 +115,7 @@ def dsar_package(session, email: str) -> dict:
         select(NormalizedEvent).where(NormalizedEvent.user == email).limit(5000)
     ).all()
     alerts = session.scalars(
-        select(Alert).where(Alert.evidence.contains(email)).limit(1000)
+        select(Alert).where(Alert.evidence.like(f"%{_safe_like(email)}%")).limit(1000)
     ).all()
     return {
         "requested_at": datetime.now(UTC).isoformat(),

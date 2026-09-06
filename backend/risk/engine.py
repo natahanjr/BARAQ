@@ -56,6 +56,11 @@ from backend.risk.registry import (
     repetition_curve,
 )
 
+
+def _safe_like(value: str) -> str:
+    """Escape characters that have special meaning in SQL LIKE patterns."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
 #: Technique -> registered factor (deterministic mapping, spec 6.9).
 TECHNIQUE_FACTORS: dict[str, str] = {
     "T1021": "RF003_LATERAL_MOVEMENT",
@@ -424,7 +429,7 @@ def apply_alert(
             .where(
                 EntityRiskV2Event.risk_id == risk.risk_id,
                 EntityRiskV2Event.evidence_kind == "ALERT",
-                EntityRiskV2Event.summary.like(f"%({detector})%"),
+                EntityRiskV2Event.summary.like(f"%({_safe_like(detector)})%"),
             )
         ).one()
         occurrence = int(alert_occurrences)
