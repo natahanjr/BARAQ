@@ -37,6 +37,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend ./backend
+COPY alembic.ini alembic/ ./alembic/
 COPY --from=web /src/dist ./frontend/dist
 # The SPA mount requires the directory to exist even when a deployment ships
 # without the frontend build.
@@ -52,4 +53,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8000/api/health || exit 1
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run database migrations before starting the server.
+# alembic upgrade head is idempotent -- safe to run on every container start.
+CMD alembic upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 4
