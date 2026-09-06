@@ -32,7 +32,7 @@ def seeded_admin():
             db.add(
                 User(
                     username="admin",
-                    password_hash=hash_password("baraqadmin"),
+                    password_hash=hash_password("baraq-test-admin"),
                     role="admin",
                     is_active=True,
                 )
@@ -51,7 +51,7 @@ def cookie_browser(app, seeded_admin):
             "/api/auth/login",
             json={
                 "username": "admin",
-                "password": "baraqadmin",
+                "password": "baraq-test-admin",
             },
         )
         assert resp.status_code == 200, resp.text
@@ -126,7 +126,7 @@ def test_public_login_no_csrf_needed(app, seeded_admin):
             "/api/auth/login",
             json={
                 "username": "admin",
-                "password": "baraqadmin",
+                "password": "baraq-test-admin",
             },
         )
         assert resp.status_code == 200, resp.text
@@ -138,7 +138,7 @@ def test_csrf_cookie_reissued_on_relogin(cookie_browser):
         "/api/auth/login",
         json={
             "username": "admin",
-            "password": "baraqadmin",
+            "password": "baraq-test-admin",
         },
     )
     assert resp.status_code == 200
