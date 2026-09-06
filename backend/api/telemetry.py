@@ -11,6 +11,7 @@ config ``TELEMETRY_V2_ENABLED``.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -42,15 +43,19 @@ router = APIRouter(
 )
 
 
+class IngestRequest(BaseModel):
+    records: list = Field(default_factory=list)
+
+
 @router.post("/ingest")
 def ingest_events(
-    payload: dict,
+    payload: IngestRequest,
     db: Session = Depends(get_db),
 ):
     """Accept a batch of raw records: ``{"records": [...]}``."""
     if not config.TELEMETRY_V2_ENABLED:
         return {"status": "disabled", "detail": "TELEMETRY_V2_ENABLED=0 in production"}
-    records = payload.get("records") or []
+    records = payload.records or []
     if not isinstance(records, list):
         return {"status": "error", "detail": "payload.records must be a list"}
     stats = ingest(db, records)

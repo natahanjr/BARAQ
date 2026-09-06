@@ -11,6 +11,7 @@ database (``TELEMETRY_V2_ENABLED`` gate + engine-level guard).
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -122,16 +123,20 @@ def get_detector(detector_id: str):
     return {"status": "ok", "detector": detector.describe()}
 
 
+class EvaluateRequest(BaseModel):
+    records: list = Field(default_factory=list)
+
+
 @router.post("/evaluate")
 def evaluate_telemetry(
-    payload: dict,
+    payload: EvaluateRequest,
     db: Session = Depends(get_db),
 ):
     """Evaluate supplied telemetry records only. Persists DETECTIONs; never
     creates alerts/incidents/risk/SOAR. Inert on the production DB."""
     if not TELEMETRY_V2_ENABLED:
         return {"status": "disabled", "detections": []}
-    records = payload.get("records") or []
+    records = payload.records or []
     if not isinstance(records, list):
         return {"status": "error", "detail": "payload.records must be a list"}
 

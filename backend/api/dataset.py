@@ -6,6 +6,7 @@ import os
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.audit import client_ip, log_action
@@ -127,9 +128,16 @@ def dataset_export(request: Request, db: Session = Depends(get_db)):
     return result
 
 
+class DatasetConfigRequest(BaseModel):
+    schedule: str | None = Field(None, max_length=64)
+    retention_days: int | None = Field(None, ge=1, le=365)
+    include_patterns: list = Field(default_factory=list)
+    exclude_patterns: list = Field(default_factory=list)
+
+
 @router.post("/config", dependencies=[Depends(require_admin)])
-def dataset_config(body: dict, request: Request, db: Session = Depends(get_db)):
-    result = update_config(db, body)
+def dataset_config(body: DatasetConfigRequest, request: Request, db: Session = Depends(get_db)):
+    result = update_config(db, body.model_dump(exclude_none=True))
     log_action(
         db,
         actor_name(request),
@@ -149,6 +157,8 @@ def dataset_download(file_id: int, db: Session = Depends(get_db)):
     if row is None:
         raise HTTPException(404, "File not found")
     path = os.path.join(DATASET_DIR, row.filename)
+    if not os.path.realpath(path).startswith(os.path.realpath(DATASET_DIR)):
+        raise HTTPException(403, "Access denied")
     if not os.path.exists(path):
         raise HTTPException(404, "File missing on disk")
     return FileResponse(
@@ -170,6 +180,8 @@ def dataset_download_latest(db: Session = Depends(get_db)):
     if row is None:
         raise HTTPException(404, "No CSV files yet")
     path = os.path.join(DATASET_DIR, row.filename)
+    if not os.path.realpath(path).startswith(os.path.realpath(DATASET_DIR)):
+        raise HTTPException(403, "Access denied")
     if not os.path.exists(path):
         raise HTTPException(404, "File missing on disk")
     return FileResponse(

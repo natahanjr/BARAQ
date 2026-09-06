@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -198,17 +199,24 @@ def list_suppressions(db: Session = Depends(get_db)):
     return {"status": "ok", "items": [_suppression_dict(r) for r in rows]}
 
 
+class SuppressionRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=500)
+    expires_at: str = Field(..., min_length=1)
+    policy_id: str = Field("", max_length=128)
+    scope: dict = Field(default_factory=dict)
+
+
 @router.post("/suppressions")
-def add_suppression(request: Request, payload: dict, db: Session = Depends(get_db)):
+def add_suppression(request: Request, payload: SuppressionRequest, db: Session = Depends(get_db)):
     """Create an auditable, expiring suppression rule (spec 3.25/3.26)."""
     if not config.ALERTS_V2_ENABLED:
         return {"status": "disabled", "rule": None}
-    reason = str(payload.get("reason") or "").strip()
+    reason = payload.reason.strip()
     if not reason:
         raise HTTPException(
             status_code=422, detail="suppression requires a documented reason"
         )
-    expires = payload.get("expires_at")
+    expires = payload.expires_at
     if not expires:
         raise HTTPException(
             status_code=422, detail="suppression requires an expiration"
@@ -221,11 +229,11 @@ def add_suppression(request: Request, payload: dict, db: Session = Depends(get_d
         rule = create_rule(
             db,
             policy_id=str(
-                payload.get("policy_id") or f"SUP-{int(datetime.now(UTC).timestamp())}"
+                payload.policy_id or f"SUP-{int(datetime.now(UTC).timestamp())}"
             ),
             reason=reason,
             expires_at=expires_at,
-            scope=payload.get("scope") or {},
+            scope=payload.scope or {},
             created_by=actor_name(request),
         )
     except ValueError as exc:
