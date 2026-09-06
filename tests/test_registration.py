@@ -28,7 +28,7 @@ def _ensure_bootstrap_admin():
             db.add(
                 User(
                     username="admin",
-                    password_hash=hash_password("baraqadmin"),
+                    password_hash=hash_password("baraq-test-admin"),
                     role="admin",
                     is_active=True,
                 )
@@ -73,7 +73,7 @@ def test_register_creates_pending_inactive_analyst(client):
     assert login.status_code == 403
     assert "pending" in login.json()["detail"].lower()
 
-    token = _login(client, "admin", "baraqadmin").json()["token"]
+    token = _login(client, "admin", "baraq-test-admin").json()["token"]
     users = client.get("/api/auth/users", headers=_bearer_headers(token)).json()[
         "items"
     ]
@@ -102,7 +102,7 @@ def test_register_rejects_short_password(client):
 
 def test_admin_approve_activates_account(client):
     _register(client, username="bob")
-    admin = _login(client, "admin", "baraqadmin").json()["token"]
+    admin = _login(client, "admin", "baraq-test-admin").json()["token"]
     users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()[
         "items"
     ]
@@ -122,7 +122,7 @@ def test_admin_approve_activates_account(client):
 
 def test_admin_reject_keeps_account_locked(client):
     _register(client, username="carol")
-    admin = _login(client, "admin", "baraqadmin").json()["token"]
+    admin = _login(client, "admin", "baraq-test-admin").json()["token"]
     users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()[
         "items"
     ]
@@ -142,7 +142,7 @@ def test_admin_reject_keeps_account_locked(client):
 def test_approve_requires_admin(client):
     _register(client, username="dave")
     _register(client, username="analystx")
-    admin = _login(client, "admin", "baraqadmin").json()["token"]
+    admin = _login(client, "admin", "baraq-test-admin").json()["token"]
     users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()[
         "items"
     ]
@@ -165,7 +165,7 @@ def test_approve_requires_admin(client):
 
 def test_change_password_self_service(client):
     _register(client, username="erin")
-    admin = _login(client, "admin", "baraqadmin").json()["token"]
+    admin = _login(client, "admin", "baraq-test-admin").json()["token"]
     users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()[
         "items"
     ]
@@ -194,7 +194,7 @@ def test_change_password_self_service(client):
 
 def test_rename_username_self_service(client):
     _register(client, username="frank")
-    admin = _login(client, "admin", "baraqadmin").json()["token"]
+    admin = _login(client, "admin", "baraq-test-admin").json()["token"]
     users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()[
         "items"
     ]
@@ -240,7 +240,7 @@ def test_settings_require_authentication(client):
 
 def test_registration_and_approval_are_audited(client):
     _register(client, username="grace")
-    admin = _login(client, "admin", "baraqadmin").json()["token"]
+    admin = _login(client, "admin", "baraq-test-admin").json()["token"]
     users = client.get("/api/auth/users", headers=_bearer_headers(admin)).json()[
         "items"
     ]
