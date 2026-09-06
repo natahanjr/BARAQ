@@ -1,4 +1,4 @@
-const BASE = import.meta.env.DEV ? "" : "";
+const BASE = "";
 const API_KEY = import.meta.env.VITE_API_KEY || "";
 
 // The session token is kept in memory only; persistence happens server-side
@@ -92,7 +92,12 @@ async function request(path, options = {}) {
     if (csrf) headers["X-CSRF-Token"] = decodeURIComponent(csrf.split("=")[1]);
   }
 
-  const res = await fetch(`${BASE}${path}`, { ...options, headers, credentials: "include" });
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, { ...options, headers, credentials: "include" });
+  } catch (err) {
+    throw new Error(`Network error: ${err.message}`);
+  }
   if (res.status === 401) {
     window.dispatchEvent(new CustomEvent("baraq:logout"));
   }
@@ -257,23 +262,27 @@ export const api = {
   datasetUpdateConfig: (body) =>
     request("/api/telemetry/dataset/config", { method: "POST", body: JSON.stringify(body) }),
   datasetDownload: async (fileId) => {
-    const headers = {};
-    if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
-    else headers["X-API-Key"] = API_KEY;
-    const res = await fetch(`${BASE}/api/telemetry/dataset/download/${fileId}`, {
-      headers,
-      credentials: "include",
-    });
-    if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
-    const blob = await res.blob();
-    const cd = res.headers.get("Content-Disposition") || "";
-    const name = (cd.match(/filename="?([^";]+)"?/) || [])[1] || `part_${fileId}.csv`;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const headers = {};
+      if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
+      else headers["X-API-Key"] = API_KEY;
+      const res = await fetch(`${BASE}/api/telemetry/dataset/download/${fileId}`, {
+        headers,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      const name = (cd.match(/filename="?([^";]+)"?/) || [])[1] || `part_${fileId}.csv`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      throw new Error(`Download failed: ${err.message}`);
+    }
   },
 
   investigate: (alertId) => request(`/api/investigation/alert/${alertId}`),
@@ -299,7 +308,15 @@ export const api = {
   listReports: () => request("/api/reports/list"),
 
   systemStatus: () => request("/api/system/status"),
-  healthCheck: () => fetch("/api/health", { cache: "no-store", headers: { "Cache-Control": "no-cache" } }).then((r) => { if (!r.ok) throw new Error("unreachable"); return r.json(); }),
+  healthCheck: async () => {
+    try {
+      const r = await fetch("/api/health", { cache: "no-store", headers: { "Cache-Control": "no-cache" } });
+      if (!r.ok) throw new Error("unreachable");
+      return r.json();
+    } catch (err) {
+      throw new Error(`Health check failed: ${err.message}`);
+    }
+  },
   collect: () => request("/api/system/collect", { method: "POST" }),
   dataQuality: () => request("/api/system/data-quality"),
   dataQualityHistory: () => request("/api/system/data-quality/history"),
