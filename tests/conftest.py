@@ -52,6 +52,8 @@ os.environ["BARAQ_AI_API_URL"] = ""
 os.environ["BARAQ_SCHEDULER_ENABLED"] = "0"  # no background collector in tests
 # Never spam Windows toasts / webhooks / email from synthetic test alerts.
 os.environ["BARAQ_TOAST_ENABLED"] = "0"
+# Disable CSRF for tests so cookie-session tests work without tokens.
+os.environ["BARAQ_CSRF_ENABLED"] = "0"
 # Point the Sigma engine at an empty scratch dir: the full community rule set
 # (2,400+ YAML) takes ~25s to parse and would slow every RulesEngine test.
 os.environ["SIGMA_RULES_DIR"] = os.path.join(
@@ -87,7 +89,7 @@ def _reset_database(terminate_stragglers: bool = False):
     """
     session = SessionLocal()
     try:
-        session.execute(text("SET LOCAL lock_timeout = '30s'"))
+        session.execute(text("SET LOCAL lock_timeout = '10s'"))
         if terminate_stragglers:
             session.execute(
                 text(
@@ -120,7 +122,13 @@ def _clean_database():
         _reset_database()
     except Exception:
         engine.dispose()
-        _reset_database(terminate_stragglers=True)
+        import time
+        time.sleep(0.5)
+        try:
+            _reset_database(terminate_stragglers=True)
+        except Exception:
+            engine.dispose()
+            _reset_database(terminate_stragglers=True)
     yield
 
 

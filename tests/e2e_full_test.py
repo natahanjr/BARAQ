@@ -1,4 +1,13 @@
-"""Full E2E test suite — tests all V0.9-V1.4 endpoints against live server."""
+"""Full E2E test suite — tests all V0.9-V1.4 endpoints against live server.
+
+NOTE: This test requires a live BARAQ server running on 127.0.0.1:8001.
+It is excluded from normal pytest runs. To execute:
+    python tests/e2e_full_test.py
+"""
+import pytest
+
+pytest.skip("E2E test requires live server — run manually with: python tests/e2e_full_test.py", allow_module_level=True)
+
 import urllib.request
 import urllib.error
 import json
