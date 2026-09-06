@@ -2027,6 +2027,7 @@ def _load_behavior_features(
     event_ids: set[int],
     with_labels: bool = False,
     cutoff: datetime | None = None,
+    max_samples: int = 10000,
 ):
     """Per-event feature matrix for a behavior stream.
 
@@ -2035,6 +2036,7 @@ def _load_behavior_features(
     ``cutoff`` caps the upper bound so baseline fitting never sees a window.
     ``since=None`` means the FULL history (no lower time bound) - training
     on every collected event instead of a sample window.
+    ``max_samples`` caps the number of rows returned (default 10000).
     """
     from backend.database.connection import SessionLocal as _SL
     _own = session is None
@@ -2047,7 +2049,7 @@ def _load_behavior_features(
             stmt = stmt.where(NormalizedEvent.timestamp >= since)
         if cutoff is not None:
             stmt = stmt.where(NormalizedEvent.timestamp < cutoff)
-        rows = _sess.scalars(stmt.limit(10000)).all()
+        rows = _sess.scalars(stmt.limit(max_samples)).all()
         X = []
         y = []
         verdicts = _verdict_map(_sess) if with_labels else {}
