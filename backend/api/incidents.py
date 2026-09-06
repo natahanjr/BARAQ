@@ -210,6 +210,15 @@ def workload(request: Request, db: Session = Depends(get_db)):
     }
 
 
+@router.get("/stats")
+def incidents_stats_alias(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Alias for /incidents/workload (frontend compat)."""
+    return get_workload(request=request, db=db)
+
+
 @router.get("/{incident_id}")
 def get_incident(incident_id: int, request: Request, db: Session = Depends(get_db)):
     scope = tenant_scope(request)
