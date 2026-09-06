@@ -2,7 +2,6 @@ import { memo, useRef, useEffect } from "react";
 
 function RiskGauge({ value = 0, size = 120, strokeWidth = 8, className = "" }) {
   const circleRef = useRef(null);
-  const textRef = useRef(null);
 
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -59,7 +58,7 @@ function RiskGauge({ value = 0, size = 120, strokeWidth = 8, className = "" }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span ref={textRef} className="text-2xl font-bold tabular-nums text-[var(--fg-primary)]">
+        <span className="text-2xl font-bold tabular-nums text-[var(--fg-primary)]">
           {pct}
         </span>
         <span className="text-[9px] font-bold uppercase tracking-[var(--tracking-widest)]" style={{ color }}>
