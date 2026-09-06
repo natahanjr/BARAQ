@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 import { api } from "../api.js";
 import { Loading, ErrorBanner } from "../components/Feedback.jsx";
 import { PageHeader, Card, CardHeader, CardTitle, CardContent, Badge, Button, Tabs, SearchInput } from "../components/ui/index.js";
+import QRCode from "../components/QRCode.jsx";
 
 function Users() {
   const [users, setUsers] = useState([]);
@@ -242,7 +243,7 @@ function Users() {
                 <p className="text-[13px] text-[var(--fg-secondary)]">Scan with your authenticator app</p>
                 {mfaOtpauth ? (
                   <div className="mx-auto flex max-w-[200px] justify-center rounded-[var(--radius-lg)] bg-white p-2">
-                    <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(mfaOtpauth)}`} alt="QR code" className="h-full w-full" />
+                    <QRCode data={mfaOtpauth} size={196} />
                   </div>
                 ) : (
                   <pre className="overflow-x-auto rounded-[var(--radius-md)] bg-[var(--bg-inset)] p-3 text-center font-mono text-[13px] text-[var(--status-healthy)]">{mfaSecret}</pre>
