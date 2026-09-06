@@ -6,10 +6,13 @@ single Windows 11 laptop (i5 / 12 GB RAM).
 """
 
 import json
+import logging
 import os
 import secrets as _secrets
 import sys
 from pathlib import Path
+
+logger = logging.getLogger("baraq.config")
 
 # --------------------------------------------------------------------------
 # Frozen (PyInstaller) layout
@@ -800,6 +803,8 @@ CORS_ORIGINS = (
 )
 if not CORS_ORIGINS:
     CORS_ORIGINS = ["http://localhost:5173"]
+if any("localhost" in o for o in CORS_ORIGINS):
+    logger.warning("CORS origins contain localhost - restrict for production")
 
 # --------------------------------------------------------------------------
 # Transport security (TLS)
@@ -828,10 +833,9 @@ COOKIE_SECURE = TLS_ENABLED or os.environ.get("BARAQ_COOKIE_SECURE", "0").lower(
 #: Ed25519 public key (base64url) used to verify BARAQ license keys. The
 #: matching private key stays with the vendor (licensing/private_key.pem,
 #: gitignored) and is never shipped. Override for a new product key chain.
-LICENSE_PUBLIC_KEY = os.environ.get(
-    "BARAQ_LICENSE_PUBLIC_KEY",
-    "qNQ73P3pTJhmEljVug4_DwRhf-WhxNs6VmQt3rnopXo",
-)
+LICENSE_PUBLIC_KEY = os.environ.get("BARAQ_LICENSE_PUBLIC_KEY", "")
+if not LICENSE_PUBLIC_KEY:
+    logger.warning("BARAQ_LICENSE_PUBLIC_KEY not set - license verification disabled")
 #: Free-trial length in days before a valid license key is required.
 TRIAL_DAYS = int(os.environ.get("BARAQ_TRIAL_DAYS", "30"))
 #: Product version reported by /api/system/update/check and the API.
@@ -855,6 +859,8 @@ CSRF_ENABLED = os.environ.get("BARAQ_CSRF_ENABLED", "1").lower() in (
     "yes",
     "on",
 )
+if not CSRF_ENABLED:
+    logger.warning("CSRF PROTECTION DISABLED - set BARAQ_CSRF_ENABLED=1 for production")
 
 # --------------------------------------------------------------------------
 # API hardening (roadmap 5.3)
@@ -1023,7 +1029,7 @@ ADMIN_PASSWORD = _secret("BARAQ_ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
 #: MFA enrollment endpoints themselves stay accessible so a fresh deploy can
 #: still be secured on first boot.
 ENFORCE_ADMIN_MFA = os.environ.get(
-    "BARAQ_ENFORCE_ADMIN_MFA", "1" if IS_PRODUCTION else "0"
+    "BARAQ_ENFORCE_ADMIN_MFA", "1"
 ).lower() in ("1", "true", "yes", "on")
 
 
