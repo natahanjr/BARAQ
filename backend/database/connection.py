@@ -147,6 +147,7 @@ _ADDITIVE_MIGRATIONS = {
         ("org", "VARCHAR(64) DEFAULT ''"),
         ("registration_status", "VARCHAR(16) DEFAULT ''"),
         ("must_change_password", "BOOLEAN DEFAULT 0"),
+        ("password_changed_at", "DATETIME"),
     ],
     "endpoints": [
         ("org", "VARCHAR(64) DEFAULT ''"),

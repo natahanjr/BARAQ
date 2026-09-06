@@ -119,6 +119,11 @@ class User(Base):
     #: True while the account still signs in with the default bootstrap
     #: password; the console forces a change before the account is usable.
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: Timestamp of last password change. Tokens issued before this time
+    #: are rejected, so a password change immediately invalidates all sessions.
+    password_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
