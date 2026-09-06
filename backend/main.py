@@ -115,7 +115,8 @@ def _seed_admin_user() -> None:
 
     db = SessionLocal()
     try:
-        if db.scalar(select(User).limit(1)):
+        existing = db.scalar(select(User).where(User.username == ADMIN_USERNAME))
+        if existing:
             return
         admin = User(
             username=ADMIN_USERNAME,
