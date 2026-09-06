@@ -9,4 +9,5 @@ Cybersecurity Professional focused on **Security Operations, Detection Engineeri
 ## 📫 Contact
 
 - GitHub: [@natahanjr](https://github.com/natahanjr)
-- Security: [securitybaraqsoc@gmail.com](mailto:securitybaraqsoc@gmail.com)
+- Organization: [RazForge Lab](https://github.com/natahanjr)
+- Security: [razforge@proton.me](mailto:razforge@proton.me)

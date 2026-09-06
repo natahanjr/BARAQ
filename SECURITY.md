@@ -20,7 +20,7 @@ coordinated disclosure process.
 
 Report vulnerabilities privately to the maintainers:
 
-- **Email:** `securitybaraqsoc@gmail.com`
+- **Email:** `razforge@proton.me`
 
 Include as much of the following as possible:
 
