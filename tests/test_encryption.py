@@ -107,8 +107,10 @@ def test_column_roundtrip_via_orm(encryption_on, tmp_path):
         db.commit()
 
         ev = db.query(NormalizedEvent).first()
+        assert ev is not None
         assert ev.message == "Failed logon for ADM\\bob using password s3cr3t+"
         au = db.query(AuditLog).first()
+        assert au is not None
         assert au.detail == "password rotated"
     finally:
         db.close()  # release the session so the next test's TRUNCATE is not blocked
