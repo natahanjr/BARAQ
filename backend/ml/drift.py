@@ -245,12 +245,9 @@ def check_drift(session=None, hours: int = 12) -> dict:
             baseline = detector.baselines.get(behavior)
             if baseline is None or len(baseline) < 2:
                 continue
-            X, _ = loader(session, since, events, with_labels=True)
+            X, _ = loader(session, since, events, with_labels=True, max_samples=50)
             if len(X) < ML_DRIFT_MIN_SAMPLES:
                 continue
-
-            if len(X) > 2000:
-                X = X[:2000]
 
             # Score-level PSI
             scores = detector._rank_of(
@@ -283,8 +280,8 @@ def check_drift(session=None, hours: int = 12) -> dict:
         if net_baseline is not None and len(net_baseline) >= 2:
             net_X, _rows = _load_network_features(session, since)
             if len(net_X) >= ML_DRIFT_MIN_SAMPLES:
-                if len(net_X) > 2000:
-                    net_X = net_X[:2000]
+                if len(net_X) > 500:
+                    net_X = net_X[:500]
                 model = detector.models.get("network")
                 scores = detector._rank_of(
                     [float(detector._score_with(model, row)) for row in net_X],
