@@ -20,9 +20,11 @@ def db():
 
 def test_chain_grows_and_verifies(db):
     for i in range(3):
-        log_action(
+        entry = log_action(
             db, "admin", f"test.action{i}", "user", str(i), f"detail {i}", "127.0.0.1"
         )
+        assert entry is not None, f"log_action #{i} returned None"
+    db.expire_all()
     result = verify_chain(db)
     assert result["ok"] is True
     assert result["checked"] == 3
