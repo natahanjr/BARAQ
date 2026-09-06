@@ -1,10 +1,9 @@
-import { memo, useCallback, useMemo, useRef, useEffect } from "react";
+import { memo, useMemo, useRef, useEffect } from "react";
 import { useLocation, Link } from "react-router";
 import { useTheme } from "../../context/ThemeContext.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { BellIcon, SunIcon, MoonIcon } from "../icons.jsx";
 import { StatusDot, CountBadge } from "../ui/index.js";
-import { api } from "../../api.js";
 
 const PAGE_TITLES = {
   "/": "Dashboard",
