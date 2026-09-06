@@ -6,7 +6,10 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import RiskBadge from "../components/RiskBadge.jsx";
 import { Loading, ErrorBanner } from "../components/Feedback.jsx";
 
-const MITRE_LINK = (id) => `https://attack.mitre.org/techniques/${id}/`;
+const MITRE_LINK = (id) => {
+  const safeId = String(id || "").replace(/[^a-zA-Z0-9.]/g, "");
+  return `https://attack.mitre.org/techniques/${safeId.replace(".", "/")}/`;
+};
 
 const FEATURE_LABELS = {
   event_id: "Event ID",

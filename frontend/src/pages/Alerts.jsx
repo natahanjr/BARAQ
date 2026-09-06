@@ -371,7 +371,7 @@ export default function Alerts() {
               <p className="text-sm font-semibold text-[var(--fg-primary)]">{clearResult.message}</p>
               {clearResult.report && (
                 <a
-                  href={`/reports/${clearResult.report.file_path.split(/[\\/]/).pop()}`}
+                  href={`/reports/${encodeURIComponent(clearResult.report.file_path.split(/[\\/]/).pop())}`}
                   target="_blank"
                   rel="noreferrer"
                   className="mt-1.5 inline-flex items-center gap-1 text-[13px] font-medium text-[var(--accent-cyan)] transition-colors hover:text-[var(--accent-cyan)]/80"

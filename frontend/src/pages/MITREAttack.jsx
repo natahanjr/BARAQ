@@ -428,7 +428,7 @@ function MITREAttack() {
           {/* MITRE Reference */}
           <div className="flex items-center gap-3 pt-2 border-t border-[var(--border-subtle)]">
             <a
-              href={`https://attack.mitre.org/techniques/${selectedTechnique.id.replace(".", "/")}/`}
+              href={`https://attack.mitre.org/techniques/${String(selectedTechnique.id || "").replace(/[^a-zA-Z0-9.]/g, "").replace(".", "/")}/`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-3 py-1.5 text-[11px] font-semibold text-[var(--fg-muted)] transition-all hover:border-[var(--accent-cyan)]/40 hover:text-[var(--accent-cyan)]"
