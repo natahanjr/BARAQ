@@ -21,7 +21,7 @@ function Modal({ open, onClose, title, children, size = "md", className = "" }) 
       document.removeEventListener("keydown", handler);
       document.body.style.overflow = "";
     };
-  }, [open, onClose]);
+  }, [open]);
 
   const handleBackdrop = useCallback((e) => {
     if (e.target === overlayRef.current) onClose();
