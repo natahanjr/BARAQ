@@ -1,7 +1,6 @@
-import { memo, useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { memo, useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { useTheme } from "../../context/ThemeContext.jsx";
-import { SearchInput } from "../ui/index.js";
 
 const NAV_ITEMS = [
   { label: "Dashboard", path: "/", icon: "◉" },
