@@ -60,11 +60,15 @@ def purge_old_data(
     """
     cutoff = datetime.now(UTC) - timedelta(days=days)
     purged: dict[str, int] = {}
-    for model, column in _PURGE_TARGETS:
-        purged[model.__tablename__] = int(
-            session.execute(delete(model).where(column < cutoff)).rowcount or 0
-        )
-    session.commit()
+    try:
+        for model, column in _PURGE_TARGETS:
+            purged[model.__tablename__] = int(
+                session.execute(delete(model).where(column < cutoff)).rowcount or 0
+            )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     total = sum(purged.values())
     if total:
         logger.info("Retention purge (older than %dd): %s", days, purged)
