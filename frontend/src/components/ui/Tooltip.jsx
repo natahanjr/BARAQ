@@ -3,7 +3,6 @@ import { memo, useState, useRef, useEffect } from "react";
 function Tooltip({ children, content, side = "top", delay = 300, className = "" }) {
   const [open, setOpen] = useState(false);
   const timer = useRef(null);
-  const triggerRef = useRef(null);
 
   const show = () => { timer.current = setTimeout(() => setOpen(true), delay); };
   const hide = () => { clearTimeout(timer.current); setOpen(false); };
@@ -21,7 +20,6 @@ function Tooltip({ children, content, side = "top", delay = 300, className = "" 
 
   return (
     <div
-      ref={triggerRef}
       className={["relative inline-flex", className].join(" ")}
       onMouseEnter={show}
       onMouseLeave={hide}
