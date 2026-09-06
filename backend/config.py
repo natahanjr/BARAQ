@@ -1077,6 +1077,11 @@ def _assert_production_safe() -> None:
             "BARAQ_THREAT_INTEL_ENABLED=1 (the disabled default is a "
             "development convenience)."
         )
+    if any("localhost" in o for o in CORS_ORIGINS):
+        raise RuntimeError(
+            "Production mode forbids localhost in BARAQ_CORS_ORIGINS. "
+            "Set CORS origins to your actual domain(s)."
+        )
 
 
 # --------------------------------------------------------------------------
