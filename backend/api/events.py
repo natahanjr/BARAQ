@@ -113,6 +113,16 @@ def event_statistics(request: Request, db: Session = Depends(get_db)):
     }
 
 
+@router.get("/events/stats")
+def events_stats_alias(
+    request: Request,
+    hours: int = Query(24, ge=1, le=168),
+    db: Session = Depends(get_db),
+):
+    """Alias for /events/statistics (frontend compat)."""
+    return get_events_statistics(request=request, hours=hours, db=db)
+
+
 @router.get("/events/{event_id}")
 def get_event(event_id: int, request: Request, db: Session = Depends(get_db)):
     scope = _events_scope(request)
