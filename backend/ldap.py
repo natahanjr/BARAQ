@@ -109,8 +109,8 @@ def _authenticate_impl(username: str, password: str) -> dict[str, Any] | None:
     if not bind_conn.bound:
         raise LDAPError(f"bind failed: {bind_conn.result}")
 
-    # 2. Locate the user's DN.
-    search_filter = LDAP_USER_FILTER.format(username=username)
+    # 2. Locate the user's DN. Escape username to prevent LDAP injection (RFC 4515).
+    search_filter = LDAP_USER_FILTER.format(username=_escape_ldap_filter(username))
     ok = bind_conn.search(
         search_base=LDAP_BASE_DN,
         search_filter=search_filter,
@@ -150,6 +150,17 @@ def _authenticate_impl(username: str, password: str) -> dict[str, Any] | None:
         "role": _role_for(member_of),
         "groups": member_of,
     }
+
+
+def _escape_ldap_filter(value: str) -> str:
+    """Escape special characters per RFC 4515 to prevent LDAP injection."""
+    # Must escape in this order: backslash first, then the rest
+    value = value.replace("\\", "\\5c")
+    value = value.replace("*", "\\2a")
+    value = value.replace("(", "\\28")
+    value = value.replace(")", "\\29")
+    value = value.replace("\0", "\\00")
+    return value
 
 
 def _server(url: str, timeout: int):
