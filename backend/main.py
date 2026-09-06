@@ -1345,6 +1345,11 @@ if FRONTEND_DIST.is_dir():
 
         stripped = full_path.strip("/")
         static_file = FRONTEND_DIST / stripped
+        # Prevent path traversal: resolve and verify the path is within FRONTEND_DIST
+        if stripped:
+            resolved = static_file.resolve()
+            if not str(resolved).startswith(str(FRONTEND_DIST.resolve())):
+                raise HTTPException(status_code=404, detail="Not Found")
         if stripped and static_file.is_file():
             ext = static_file.suffix.lower()
             ct = _ASSET_TYPES.get(ext, "application/octet-stream")
