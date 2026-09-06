@@ -333,6 +333,29 @@ def _backfill_audit_chain() -> None:
             logger.info("Audit chain backfilled (%d rows)", len(rows))
 
 
+def _alembic_has_run() -> bool:
+    """Check if Alembic has been applied to this database.
+
+    Returns True if the ``alembic_version`` table exists and has at least one
+    row. When Alembic manages migrations, the in-place DDL in
+    ``_ADDITIVE_MIGRATIONS`` is skipped to avoid double-applying changes.
+    """
+    try:
+        with engine.begin() as conn:
+            result = conn.exec_driver_sql(
+                "SELECT 1 FROM information_schema.tables "
+                "WHERE table_name = 'alembic_version'"
+            )
+            if result.fetchone():
+                count = conn.exec_driver_sql(
+                    "SELECT count(*) FROM alembic_version"
+                ).fetchone()
+                return bool(count and count[0] > 0)
+    except Exception:
+        pass
+    return False
+
+
 def init_db() -> None:
     """Create all tables, apply additive migrations and analytics indexes."""
     # Register every model module on the shared Base before DDL so a bare
@@ -347,46 +370,54 @@ def init_db() -> None:
     from backend.telemetry.models import TelemetryEvent as _v2_events  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
-    inspector = inspect(engine)
-    for table, columns in _ADDITIVE_MIGRATIONS.items():
-        existing = (
-            {c["name"] for c in inspector.get_columns(table)}
-            if inspector.has_table(table)
-            else set()
-        )
-        with engine.begin() as conn:
-            for column, ddl_type in columns:
-                if column not in existing:
-                    conn.exec_driver_sql(
-                        f"ALTER TABLE {table} ADD COLUMN {column} {_ddl_default(ddl_type)}"
-                    )
-                    logger.info("Migration: added %s.%s", table, column)
-    # Type repair: columns created before a model gained ``timezone=True``
-    # stay naive TIMESTAMP and poison every aware-datetime comparison
-    # (SLA responded_at arithmetic crashed the workload endpoint). Postgres
-    # casts timestamp -> timestamptz implicitly, so this is idempotent.
-    if engine.dialect.name == "postgresql":
-        with engine.begin() as conn:
-            for table, column in (
-                ("incidents", "responded_at"),
-                ("entity_risk", "last_escalated_at"),
-            ):
-                if not inspector.has_table(table):
-                    continue
-                col = next(
-                    (
-                        c
-                        for c in inspect(engine).get_columns(table)
-                        if c["name"] == column
-                    ),
-                    None,
-                )
-                if (
-                    col is not None
-                    and getattr(col.get("type"), "timezone", True) is False
+
+    # Skip in-place DDL when Alembic is managing migrations. The
+    # ``alembic upgrade head`` command (run at deploy time) applies the same
+    # columns via versioned migration scripts, so running them again here
+    # would create race conditions with multi-replica deployments.
+    if _alembic_has_run():
+        logger.info("Alembic migrations detected - skipping in-place DDL")
+    else:
+        inspector = inspect(engine)
+        for table, columns in _ADDITIVE_MIGRATIONS.items():
+            existing = (
+                {c["name"] for c in inspector.get_columns(table)}
+                if inspector.has_table(table)
+                else set()
+            )
+            with engine.begin() as conn:
+                for column, ddl_type in columns:
+                    if column not in existing:
+                        conn.exec_driver_sql(
+                            f"ALTER TABLE {table} ADD COLUMN {column} {_ddl_default(ddl_type)}"
+                        )
+                        logger.info("Migration: added %s.%s", table, column)
+        # Type repair: columns created before a model gained ``timezone=True``
+        # stay naive TIMESTAMP and poison every aware-datetime comparison
+        # (SLA responded_at arithmetic crashed the workload endpoint). Postgres
+        # casts timestamp -> timestamptz implicitly, so this is idempotent.
+        if engine.dialect.name == "postgresql":
+            with engine.begin() as conn:
+                for table, column in (
+                    ("incidents", "responded_at"),
+                    ("entity_risk", "last_escalated_at"),
                 ):
-                    conn.exec_driver_sql(
-                        f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMPTZ"
+                    if not inspector.has_table(table):
+                        continue
+                    col = next(
+                        (
+                            c
+                            for c in inspect(engine).get_columns(table)
+                            if c["name"] == column
+                        ),
+                        None,
+                    )
+                    if (
+                        col is not None
+                        and getattr(col.get("type"), "timezone", True) is False
+                    ):
+                        conn.exec_driver_sql(
+                            f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMPTZ"
                     )
                     logger.info(
                         "Migration: repaired %s.%s to TIMESTAMPTZ", table, column
