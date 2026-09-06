@@ -1,8 +1,32 @@
 @echo off
-REM Kill any existing instances first
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8001 ^| findstr LISTENING') do taskkill /PID %%a /F >nul 2>&1
-taskkill /IM node.exe /F >nul 2>&1
+title BARAQ Launcher
+echo Starting BARAQ...
+
+REM Kill old processes
+taskkill /F /IM python.exe 2>nul
+taskkill /F /IM node.exe 2>nul
 timeout /t 2 /nobreak >nul
 
-REM Launch everything hidden (no windows)
-cscript //B //Nologo "F:\My Project\Baraq\start_silent.vbs"
+REM Ensure PostgreSQL
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\pg_setup.ps1" -Action ensure
+timeout /t 2 /nobreak >nul
+
+REM Start Backend
+echo Starting Backend...
+cd /d "%~dp0"
+start "BARAQ-Backend" cmd /c "set BARAQ_TELEMETRY_V2=1 && set BARAQ_ALERTS_V2=1 && set BARAQ_CORRELATION=1 && set BARAQ_RISK=1 && set BARAQ_BEHAVIOR_GROUPS=1 && python start_dev.py"
+
+timeout /t 4 /nobreak >nul
+
+REM Start Frontend
+echo Starting Frontend...
+cd /d "%~dp0frontend"
+start "BARAQ-Frontend" cmd /c "npm run dev"
+
+echo.
+echo ========================================
+echo BARAQ is starting...
+echo Backend:  http://127.0.0.1:8001
+echo Frontend: http://127.0.0.1:5173
+echo ========================================
+pause
