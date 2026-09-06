@@ -65,9 +65,8 @@ ENV_PATH = APP_DIR / ".env"
 
 #: Well-known first-run password. Fresh installs seed the admin with this and
 #: mark the account (must_change_password) so the console forces the operator
-#: to replace it before use. Defined up here because _ensure_secure_secrets
-#: runs during module init and must not depend on later constants.
-DEFAULT_ADMIN_PASSWORD = "baraqadmin"
+#: to replace it before use. Generated randomly per install — never hardcoded.
+DEFAULT_ADMIN_PASSWORD = _secrets.token_urlsafe(16)
 
 #: These are *names* of environment variables, kept in one place so the
 #: marker check below and the persisted .env block always stay in sync.
@@ -273,9 +272,12 @@ def _ensure_secure_secrets(env_path: Path = ENV_PATH) -> None:
     else:
         print(f"and saved to: {env_path}")
     print()
-    print(f"  Dashboard login : {username} / {admin_password}")
-    print(f"  Admin API key   : {admin_key}")
-    print(f"  Analyst API key : {analyst_key}")
+    # Show partial password to avoid full credential in logs/CI output
+    masked = admin_password[:3] + "***" + admin_password[-2:] if len(admin_password) > 5 else "***"
+    print(f"  Dashboard login : {username} / {masked}")
+    print(f"  (Full password stored in {'secrets.dat vault' if stored_in_vault else str(env_path)})")
+    print(f"  Admin API key   : {admin_key[:10]}...")
+    print(f"  Analyst API key : {analyst_key[:12]}...")
     print()
     print("Save them now - they will not be shown again.")
     print("=" * 62)
@@ -975,10 +977,10 @@ API_KEYS: dict[str, str] = (
 
 #: Allow the public development keys (baraq-dev-*) to authenticate. In
 #: production they are always rejected regardless of this flag; elsewhere set
-#: BARAQ_ALLOW_DEV_KEYS=0 (or set BARAQ_API_KEYS) so the well-known keys
-#: are rejected. The dashboard setup banner warns while they are accepted.
+#: BARAQ_ALLOW_DEV_KEYS=1 to opt-in to the well-known keys. The dashboard
+#: setup banner warns while they are accepted. Disabled by default for security.
 ALLOW_DEV_KEYS = (not IS_PRODUCTION) and os.environ.get(
-    "BARAQ_ALLOW_DEV_KEYS", "1"
+    "BARAQ_ALLOW_DEV_KEYS", "0"
 ).lower() in ("1", "true", "yes", "on")
 _USING_DEV_KEYS = bool(_env_keys) is False or set(_env_keys) & set(_DEFAULT_API_KEYS)
 if _USING_DEV_KEYS and not ALLOW_DEV_KEYS:
@@ -1301,7 +1303,6 @@ try:
 except (ValueError, TypeError):
     _env_agent_keys = {}
 AGENT_KEYS: dict[str, str] = {
-    "baraq-agent-dev": "agent-dev",
     **{str(k): str(v) for k, v in _env_agent_keys.items()},
 }
 
