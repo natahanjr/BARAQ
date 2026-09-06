@@ -19,7 +19,6 @@ import json
 import logging
 import secrets
 import time
-from collections import defaultdict
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -61,49 +60,45 @@ SESSION_COOKIE = "baraq_session"
 CSRF_COOKIE = "baraq_csrf"
 REFRESH_COOKIE = "baraq_refresh"
 
-#: Brute-force protection on the login endpoint. In-memory sliding window:
-#: at most LOGIN_MAX_ATTEMPTS failures per IP within LOGIN_WINDOW_SECONDS.
+#: Brute-force protection on the login endpoint. Uses Redis when available
+#: (via backend.redis) with in-memory fallback for single-node dev.
 LOGIN_MAX_ATTEMPTS = 5
 LOGIN_WINDOW_SECONDS = 300
-_lockout: dict[str, list[float]] = defaultdict(list)
-#: Per-account lockout: track failures per username to prevent distributed brute-force
-_account_lockout: dict[str, list[float]] = defaultdict(list)
 ACCOUNT_MAX_ATTEMPTS = 10
 ACCOUNT_LOCKOUT_SECONDS = 600
+
+from backend.redis import (
+    lockout_check,
+    lockout_check_account,
+    lockout_clear,
+    lockout_clear_account,
+    lockout_record,
+    lockout_record_account,
+)
 
 
 def _check_login_rate_limit(request: Request) -> None:
     """Track failed login attempts per client IP and raise 429 when exceeded."""
     ip = client_ip(request)
-    now = time.monotonic()
-    failures = [t for t in _lockout.get(ip, []) if now - t < LOGIN_WINDOW_SECONDS]
-    if len(failures) >= LOGIN_MAX_ATTEMPTS:
+    locked, retry = lockout_check(f"ip:{ip}", LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_SECONDS)
+    if locked:
         raise HTTPException(
             status_code=429,
-            detail=(
-                "Too many failed login attempts. Try again in "
-                f"{int(LOGIN_WINDOW_SECONDS - (now - failures[0]))} seconds."
-            ),
+            detail=f"Too many failed login attempts. Try again in {int(retry)} seconds.",
         )
-    _lockout[ip] = failures
 
 
 def _record_login_failure(request: Request, username: str = "") -> None:
     ip = client_ip(request)
-    _lockout.setdefault(ip, []).append(time.monotonic())
-    if len(_lockout) > 10000:
-        _lockout.clear()
-    # Per-account tracking
+    lockout_record(f"ip:{ip}")
     if username:
-        _account_lockout[username.lower()].append(time.monotonic())
-        if len(_account_lockout) > 10000:
-            _account_lockout.clear()
+        lockout_record_account(username)
 
 
 def _clear_login_rate_limit(request: Request, username: str = "") -> None:
-    _lockout.pop(client_ip(request), None)
+    lockout_clear(f"ip:{client_ip(request)}")
     if username:
-        _account_lockout.pop(username.lower(), None)
+        lockout_clear_account(username)
 
 
 class LoginRequest(BaseModel):
@@ -174,15 +169,13 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
     _check_login_rate_limit(request)
     username = body.username.strip()
     # Per-account lockout check
-    now = time.monotonic()
-    account_failures = [t for t in _account_lockout.get(username.lower(), []) if now - t < ACCOUNT_LOCKOUT_SECONDS]
-    if len(account_failures) >= ACCOUNT_MAX_ATTEMPTS:
+    acct_locked, acct_retry = lockout_check_account(
+        username, ACCOUNT_MAX_ATTEMPTS, ACCOUNT_LOCKOUT_SECONDS
+    )
+    if acct_locked:
         raise HTTPException(
             status_code=429,
-            detail=(
-                "Too many failed login attempts for this account. Try again in "
-                f"{int(ACCOUNT_LOCKOUT_SECONDS - (now - account_failures[0]))} seconds."
-            ),
+            detail=f"Too many failed login attempts for this account. Try again in {int(acct_retry)} seconds.",
         )
     user = db.scalar(select(User).where(User.username == username))
     password_ok = bool(user) and verify_password(body.password, user.password_hash)

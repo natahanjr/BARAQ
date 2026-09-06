@@ -802,12 +802,11 @@ async def security_headers(request: Request, call_next):
     return response
 
 
-#: In-memory fixed-window rate tracker: client -> (window_start, count).
-#: Stale windows are pruned on every check (cheap dict ops).
-_RATE_WINDOW_SECONDS = 60
-_rate_buckets: dict[str, list] = {}
-_rate_last_cleanup: float = 0.0
-_RATE_CLEANUP_INTERVAL = 30.0  # seconds between full sweeps
+#: Rate limiting: delegated to backend.redis which uses Redis when
+#: available and falls back to in-memory dicts for single-node dev.
+from backend.redis import rate_increment, rate_cleanup
+
+RATE_WINDOW_SECONDS = 60
 
 
 def _client_identity(request: Request) -> str:
@@ -847,25 +846,10 @@ def _rate_allowed(request: Request, identity: str) -> tuple[bool, int]:
 
     if API_RATE_LIMIT <= 0:
         return True, 0
-    import time as _time
-
-    now = _time.monotonic()
-
-    # Periodic cleanup of stale entries (every 30s)
-    global _rate_last_cleanup
-    if now - _rate_last_cleanup > _RATE_CLEANUP_INTERVAL:
-        stale_threshold = now - _RATE_WINDOW_SECONDS
-        stale_keys = [k for k, v in _rate_buckets.items() if v[0] <= stale_threshold]
-        for k in stale_keys:
-            del _rate_buckets[k]
-        _rate_last_cleanup = now
-
-    window_start, count = _rate_buckets.get(identity, (now, 0))
-    if now - window_start >= _RATE_WINDOW_SECONDS:
-        window_start, count = now, 0
-    if count >= API_RATE_BURST:
-        return False, max(1, int(_RATE_WINDOW_SECONDS - (now - window_start)) + 1)
-    _rate_buckets[identity] = (window_start, count + 1)
+    count, remaining = rate_increment(identity, RATE_WINDOW_SECONDS)
+    if count > API_RATE_BURST:
+        return False, max(1, int(remaining) + 1)
+    rate_cleanup()
     return True, 0
 
 
