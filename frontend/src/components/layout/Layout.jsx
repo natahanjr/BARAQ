@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useEffect, useRef } from "react";
+import { memo, useState, useCallback, useEffect } from "react";
 import { Outlet } from "react-router";
 import { useBackendStatus } from "../../hooks/useBackendStatus.js";
 import { useAuth } from "../../context/AuthContext.jsx";
