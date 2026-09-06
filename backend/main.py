@@ -965,7 +965,7 @@ async def api_key_auth(request: Request, call_next):
             if session:
                 authorization = f"Bearer {session}"
                 from_cookie = True
-        if from_cookie and not CSRF_ENABLED:
+        if from_cookie and not config.CSRF_ENABLED:
             logger.warning("CSRF protection disabled via BARAQ_CSRF_ENABLED=0")
         if authorization.lower().startswith("bearer "):
             secret = authorization[7:].strip()

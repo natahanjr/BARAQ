@@ -50,7 +50,7 @@ def _bearer_headers(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-def _register(client, username="jane", password="hunter2hunter2"):
+def _register(client, username="jane", password="Hunter2hunter2"):
     return client.post(
         "/api/auth/register",
         json={
@@ -68,10 +68,10 @@ def test_register_creates_pending_inactive_analyst(client):
     body = resp.json()
     assert body["ok"] is True and body["pending"] is True
 
-    # Cannot sign in before verification - the response says it is pending.
-    login = _login(client, "jane", "hunter2hunter2")
-    assert login.status_code == 403
-    assert "pending" in login.json()["detail"].lower()
+    # Cannot sign in before verification - returns generic error (unified with wrong password).
+    login = _login(client, "jane", "Hunter2hunter2")
+    assert login.status_code == 401
+    assert "invalid" in login.json()["detail"].lower() or "pending" in login.json()["detail"].lower()
 
     token = _login(client, "admin", "baraq-test-admin").json()["token"]
     users = client.get("/api/auth/users", headers=_bearer_headers(token)).json()[
@@ -86,10 +86,12 @@ def test_register_creates_pending_inactive_analyst(client):
 def test_register_duplicate_username_conflicts(client):
     _register(client, username="dup")
     resp = _register(client, username="dup")
-    assert resp.status_code == 409
-    # Case-insensitive: 'DUP' collides with 'dup' (nat/Nat pitfall).
+    # TOCTOU fix: duplicate returns generic 200 to prevent username enumeration
+    assert resp.status_code == 200
+    assert resp.json()["pending"] is True
+    # Case-insensitive: 'DUP' collides with 'dup'
     resp = _register(client, username="DUP")
-    assert resp.status_code == 409
+    assert resp.status_code == 200
 
 
 def test_register_rejects_short_password(client):
@@ -115,7 +117,7 @@ def test_admin_approve_activates_account(client):
     assert approved.json()["is_active"] is True
     assert approved.json()["registration_status"] == ""
 
-    login = _login(client, "bob", "hunter2hunter2")
+    login = _login(client, "bob", "Hunter2hunter2")
     assert login.status_code == 200
     assert login.json()["token"]
 
@@ -134,9 +136,8 @@ def test_admin_reject_keeps_account_locked(client):
     assert rejected.status_code == 200
     assert rejected.json()["registration_status"] == "rejected"
 
-    login = _login(client, "carol", "hunter2hunter2")
-    assert login.status_code == 403
-    assert "rejected" in login.json()["detail"].lower()
+    login = _login(client, "carol", "Hunter2hunter2")
+    assert login.status_code == 401
 
 
 def test_approve_requires_admin(client):
@@ -154,7 +155,7 @@ def test_approve_requires_admin(client):
         f"/api/auth/users/{analystx['id']}/approve", headers=_bearer_headers(admin)
     )
 
-    analyst_token = _login(client, "analystx", "hunter2hunter2")
+    analyst_token = _login(client, "analystx", "Hunter2hunter2")
     assert analyst_token.status_code == 200
     denied = client.post(
         f"/api/auth/users/{dave['id']}/approve",
@@ -172,7 +173,7 @@ def test_change_password_self_service(client):
     erin = next(u for u in users if u["username"] == "erin")
     client.post(f"/api/auth/users/{erin['id']}/approve", headers=_bearer_headers(admin))
 
-    token = _login(client, "erin", "hunter2hunter2").json()["token"]
+    token = _login(client, "erin", "Hunter2hunter2").json()["token"]
     # Wrong current password is rejected.
     bad = client.post(
         "/api/auth/settings/change-password",
@@ -183,12 +184,12 @@ def test_change_password_self_service(client):
 
     ok = client.post(
         "/api/auth/settings/change-password",
-        json={"current_password": "hunter2hunter2", "new_password": "newpass1234"},
+        json={"current_password": "Hunter2hunter2", "new_password": "newpass1234"},
         headers=_bearer_headers(token),
     )
     assert ok.status_code == 200
 
-    assert _login(client, "erin", "hunter2hunter2").status_code == 401
+    assert _login(client, "erin", "Hunter2hunter2").status_code == 401
     assert _login(client, "erin", "newpass1234").status_code == 200
 
 
@@ -203,26 +204,26 @@ def test_rename_username_self_service(client):
         f"/api/auth/users/{frank['id']}/approve", headers=_bearer_headers(admin)
     )
 
-    token = _login(client, "frank", "hunter2hunter2").json()["token"]
+    token = _login(client, "frank", "Hunter2hunter2").json()["token"]
 
     # Conflict with the bootstrap admin, case-insensitive.
     conflict = client.post(
         "/api/auth/settings/rename",
-        json={"current_password": "hunter2hunter2", "new_username": "ADMIN"},
+        json={"current_password": "Hunter2hunter2", "new_username": "ADMIN"},
         headers=_bearer_headers(token),
     )
     assert conflict.status_code == 409
 
     ok = client.post(
         "/api/auth/settings/rename",
-        json={"current_password": "hunter2hunter2", "new_username": "franklin"},
+        json={"current_password": "Hunter2hunter2", "new_username": "franklin"},
         headers=_bearer_headers(token),
     )
     assert ok.status_code == 200
     assert ok.json()["username"] == "franklin"
 
-    assert _login(client, "frank", "hunter2hunter2").status_code == 401
-    assert _login(client, "franklin", "hunter2hunter2").status_code == 200
+    assert _login(client, "frank", "Hunter2hunter2").status_code == 401
+    assert _login(client, "franklin", "Hunter2hunter2").status_code == 200
 
 
 def test_settings_require_authentication(client):

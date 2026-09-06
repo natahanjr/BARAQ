@@ -69,26 +69,44 @@ def test_login_sets_csrf_cookie(cookie_browser):
 
 
 def test_cookie_state_change_without_token_rejected(cookie_browser):
-    resp = _post(cookie_browser, "/api/system/collect")
-    assert resp.status_code == 403
-    assert "CSRF" in resp.json().get("detail", "")
+    from backend import config
+    old = config.CSRF_ENABLED
+    config.CSRF_ENABLED = True
+    try:
+        resp = _post(cookie_browser, "/api/system/collect")
+        assert resp.status_code == 403
+        assert "CSRF" in resp.json().get("detail", "")
+    finally:
+        config.CSRF_ENABLED = old
 
 
 def test_cookie_state_change_with_valid_token_allowed(cookie_browser):
-    csrf = cookie_browser.cookies["baraq_csrf"]
-    resp = cookie_browser.post(
-        "/api/system/collect",
-        headers={"X-CSRF-Token": csrf},
-    )
-    assert resp.status_code in (200, 201, 202), resp.text
+    from backend import config
+    old = config.CSRF_ENABLED
+    config.CSRF_ENABLED = True
+    try:
+        csrf = cookie_browser.cookies["baraq_csrf"]
+        resp = cookie_browser.post(
+            "/api/system/collect",
+            headers={"X-CSRF-Token": csrf},
+        )
+        assert resp.status_code in (200, 201, 202), resp.text
+    finally:
+        config.CSRF_ENABLED = old
 
 
 def test_cookie_state_change_with_wrong_token_rejected(cookie_browser):
-    resp = cookie_browser.post(
-        "/api/system/collect",
-        headers={"X-CSRF-Token": "attacker-controlled-value"},
-    )
-    assert resp.status_code == 403
+    from backend import config
+    old = config.CSRF_ENABLED
+    config.CSRF_ENABLED = True
+    try:
+        resp = cookie_browser.post(
+            "/api/system/collect",
+            headers={"X-CSRF-Token": "attacker-controlled-value"},
+        )
+        assert resp.status_code == 403
+    finally:
+        config.CSRF_ENABLED = old
 
 
 def test_cookie_get_requests_not_checked(cookie_browser):

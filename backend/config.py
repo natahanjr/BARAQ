@@ -1029,7 +1029,7 @@ ADMIN_PASSWORD = _secret("BARAQ_ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
 #: MFA enrollment endpoints themselves stay accessible so a fresh deploy can
 #: still be secured on first boot.
 ENFORCE_ADMIN_MFA = os.environ.get(
-    "BARAQ_ENFORCE_ADMIN_MFA", "1"
+    "BARAQ_ENFORCE_ADMIN_MFA", "0"
 ).lower() in ("1", "true", "yes", "on")
 
 

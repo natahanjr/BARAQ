@@ -16,7 +16,7 @@ import tempfile
 
 os.environ["BARAQ_DATABASE_URL"] = os.environ.get(
     "BARAQ_TEST_DATABASE_URL",
-    "postgresql+psycopg://postgres:password@127.0.0.1:5432/baraq_test",
+    "postgresql+psycopg://postgres:password@127.0.0.1:55432/baraq_test",
 )
 print(f"[conftest] test DB URL -> {os.environ['BARAQ_DATABASE_URL']}")
 # The v2 telemetry/detection stack is fully enabled in the isolated test
