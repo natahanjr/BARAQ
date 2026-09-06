@@ -35,6 +35,7 @@ spec:
             - { containerPort: 8000, name: http }
           envFrom:
             - configMapRef: { name: baraq-config }
+            - secretRef: { name: baraq-secrets }
           env:
             - { name: BARAQ_ROLE, value: "api" }
           readinessProbe:
@@ -71,6 +72,7 @@ spec:
           args: ["python", "-m", "backend.scheduler_service"]
           envFrom:
             - configMapRef: { name: baraq-config }
+            - secretRef: { name: baraq-secrets }
           env:
             - { name: BARAQ_ROLE, value: "scheduler" }
           resources:
@@ -92,11 +94,31 @@ kind: ConfigMap
 metadata:
   name: baraq-config
 data:
-  BARAQ_DATABASE_URL: "postgresql+psycopg://baraq:CHANGE_ME@postgres:5432/baraq"
-  BARAQ_READONLY_DATABASE_URL: "postgresql+psycopg://baraq:CHANGE_ME@postgres-replica:5432/baraq"
-  BARAQ_REDIS_URL: "redis://redis:6379/0"
   BARAQ_INTERVAL: "15"
   BARAQ_TLS: "0"
   BARAQ_ALLOW_PLAINTEXT_PROD: "0"
   BARAQ_SCHEDULER_ENABLED: "1"
+  BARAQ_ENV: "production"
+---
+# Sensitive values: create this Secret before deploying.
+#   kubectl create secret generic baraq-secrets \
+#     --from-literal=BARAQ_DATABASE_URL='postgresql+psycopg://baraq:STRONG_PASSWORD@postgres:5432/baraq' \
+#     --from-literal=BARAQ_READONLY_DATABASE_URL='postgresql+psycopg://baraq:STRONG_PASSWORD@postgres-replica:5432/baraq' \
+#     --from-literal=BARAQ_REDIS_URL='redis://redis:6379/0' \
+#     --from-literal=BARAQ_ADMIN_PASSWORD='GENERATE_A_STRONG_PASSWORD' \
+#     --from-literal=BARAQ_API_KEYS='{"your-admin-key":"admin"}' \
+#     --from-literal=BARAQ_TOKEN_SECRET='GENERATE_A_RANDOM_SECRET' \
+#     --from-literal=BARAQ_AGENT_KEYS='{}'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: baraq-secrets
+type: Opaque
+stringData:
+  BARAQ_DATABASE_URL: "CHANGE_ME_BEFORE_DEPLOY"
+  BARAQ_READONLY_DATABASE_URL: "CHANGE_ME_BEFORE_DEPLOY"
+  BARAQ_REDIS_URL: "redis://redis:6379/0"
+  BARAQ_ADMIN_PASSWORD: "CHANGE_ME_BEFORE_DEPLOY"
+  BARAQ_API_KEYS: "{}"
+  BARAQ_TOKEN_SECRET: "CHANGE_ME_BEFORE_DEPLOY"
   BARAQ_AGENT_KEYS: "{}"
