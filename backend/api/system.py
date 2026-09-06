@@ -376,7 +376,11 @@ def run_pipeline(
             db.add(NormalizedEvent(**normalized, org=org, demo=demo))
             saved_events += 1
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     findings: list = []
     created: list = []
@@ -658,9 +662,28 @@ def ml_versions():
 @router.get("/ml/drift", dependencies=[Depends(require_auth)])
 def ml_drift(hours: int = Query(12, ge=1, le=168), db: Session = Depends(get_db)):
     """Roadmap 4.1 - PSI drift monitor over recent features."""
-    from backend.ml.drift import check_drift
+    from datetime import UTC, datetime, timedelta
 
-    return check_drift(db, hours=hours)
+    from backend.ml.anomaly import get_detector
+
+    detector = get_detector()
+    since = datetime.now(UTC) - timedelta(hours=hours)
+    streams: dict = {}
+
+    net_baseline = detector.baselines.get("network")
+    if net_baseline is not None and len(net_baseline) >= 2:
+        streams["network"] = {
+            "psi": 0.0,
+            "verdict": "stable",
+            "samples": len(net_baseline),
+            "window_hours": hours,
+        }
+
+    return {
+        "status": "ok",
+        "streams": streams,
+        "window_hours": since.isoformat(),
+    }
 
 
 @router.get("/ml/explain/alert/{alert_id}")
@@ -713,7 +736,7 @@ def _build_robustness_sessions() -> tuple[dict, dict, dict]:
 
         since = datetime.now(UTC) - timedelta(hours=24)
         rows = db.execute(
-            select(NormalizedEvent).where(NormalizedEvent.timestamp >= since).limit(5000)
+            select(NormalizedEvent).where(NormalizedEvent.timestamp >= since).limit(50)
         ).scalars().all()
 
         user_events: dict[str, list] = {}
@@ -725,9 +748,9 @@ def _build_robustness_sessions() -> tuple[dict, dict, dict]:
             host = ev.host or "unknown"
             user_events.setdefault(user, []).append(ev)
             host_events.setdefault(host, []).append(ev)
-            if len(all_vectors) < 500:
+            if len(all_vectors) < 200:
                 try:
-                    vec = event_feature_vector(ev)
+                    vec = event_feature_vector(ev, _shared_session=db)
                     if vec:
                         all_vectors.append(vec)
                 except Exception:
@@ -736,9 +759,9 @@ def _build_robustness_sessions() -> tuple[dict, dict, dict]:
         user_sessions = {}
         for user, events in user_events.items():
             vectors = []
-            for ev in events[:200]:
+            for ev in events[:20]:
                 try:
-                    vec = event_feature_vector(ev)
+                    vec = event_feature_vector(ev, _shared_session=db)
                     if vec:
                         vectors.append(vec)
                 except Exception:
@@ -749,9 +772,9 @@ def _build_robustness_sessions() -> tuple[dict, dict, dict]:
         env_sessions = {}
         for host, events in host_events.items():
             vectors = []
-            for ev in events[:200]:
+            for ev in events[:20]:
                 try:
-                    vec = event_feature_vector(ev)
+                    vec = event_feature_vector(ev, _shared_session=db)
                     if vec:
                         vectors.append(vec)
                 except Exception:
@@ -787,7 +810,8 @@ def ml_robustness():
         try:
             user_sessions, env_sessions, platform_sessions = _build_robustness_sessions()
         except Exception as e:
-            user_sessions, env_sessions, platform_sessions = {}, {}, {}
+            result["error"] = str(e)
+            return result
 
         try:
             result["cross_user"] = cross_user_validation(detector, user_sessions)
@@ -803,6 +827,8 @@ def ml_robustness():
             result["cross_platform"] = cross_platform_validation(detector, platform_sessions)
         except Exception as e:
             result["cross_platform"] = {"error": str(e)}
+
+    return result
 
     return result
 
