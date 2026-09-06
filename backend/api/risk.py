@@ -287,6 +287,31 @@ def factor_registry() -> dict:
     return {"count": len(list_factors()), "factors": list_factors()}
 
 
+@router.get("/entities")
+def risk_entities_list(
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+) -> dict:
+    """List all entities with risk scores (spec 6.46)."""
+    _gate()
+    from backend.risk.service import list_entity_risks
+    items = list_entity_risks(db, limit=limit)
+    return {"items": [e.to_dict() for e in items], "total": len(items)}
+
+
+@router.get("/scores")
+def risk_scores_list(
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+) -> dict:
+    """List top entity risk scores sorted by score desc."""
+    _gate()
+    from backend.risk.service import list_entity_risks
+    items = list_entity_risks(db, limit=limit)
+    sorted_items = sorted(items, key=lambda e: getattr(e, "score", 0), reverse=True)
+    return {"items": [e.to_dict() for e in sorted_items], "total": len(items)}
+
+
 @router.get("/{risk_id}")
 def risk_detail(risk_id: str, db: Session = Depends(get_db)) -> dict:
     """Risk detail with contextual related entities (spec 6.48)."""
