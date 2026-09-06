@@ -11,8 +11,10 @@ or run the uvicorn process in an elevated terminal.
 from __future__ import annotations
 
 import ctypes
+import ipaddress
 import logging
 import os
+import re
 import subprocess
 import shutil
 from pathlib import Path
@@ -36,16 +38,18 @@ def _run(cmd: list[str], timeout: int = 30, elevate: bool = False) -> tuple[bool
     """Run a command safely, returning (success, output).
 
     If elevate=True and not already admin, wraps in PowerShell Start-Process -Verb RunAs.
+    All arguments are passed as a list to prevent shell injection.
     """
     try:
         if elevate and not _is_admin():
-            # Join all args into a single string for -ArgumentList
-            args_str = " ".join(cmd[1:]) if len(cmd) > 1 else ""
+            # Build ArgumentList safely — each arg quoted individually
+            arg_parts = cmd[1:] if len(cmd) > 1 else []
             ps_script = (
-                f"$p = Start-Process -FilePath '{cmd[0]}' "
-                f"-ArgumentList '{args_str}' "
-                f"-Verb RunAs -Wait -PassThru; "
-                f"exit $p.ExitCode"
+                "$p = Start-Process -FilePath '"
+                + cmd[0].replace("'", "''")
+                + "' -ArgumentList "
+                + repr(arg_parts)
+                + " -Verb RunAs -Wait -PassThru; exit $p.ExitCode"
             )
             r = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", ps_script],
@@ -79,6 +83,12 @@ def block_ip(ip: str) -> tuple[str, str]:
     if not ip:
         return "failed", "No IP address provided."
 
+    # Validate IP address to prevent command injection
+    try:
+        ipaddress.ip_address(ip)
+    except ValueError:
+        return "failed", f"Invalid IP address: {ip}"
+
     rule_in = f"{FIREWALL_RULE_PREFIX}-IN-{ip.replace('.', '-')}"
     rule_out = f"{FIREWALL_RULE_PREFIX}-OUT-{ip.replace('.', '-')}"
 
@@ -101,6 +111,10 @@ def block_ip(ip: str) -> tuple[str, str]:
 
 def unblock_ip(ip: str) -> tuple[str, str]:
     """Remove previously created BARAQ firewall rules for an IP."""
+    try:
+        ipaddress.ip_address(ip)
+    except ValueError:
+        return "failed", f"Invalid IP address: {ip}"
     rule_in = f"{FIREWALL_RULE_PREFIX}-IN-{ip.replace('.', '-')}"
     rule_out = f"{FIREWALL_RULE_PREFIX}-OUT-{ip.replace('.', '-')}"
     _run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={rule_in}"], elevate=True)
@@ -114,12 +128,16 @@ def kill_process(target: str) -> tuple[str, str]:
     """Kill a process by name or PID.
 
     If target is numeric, treat as PID. Otherwise treat as process name
-    (e.g. "malware.exe").
+    (e.g. "malware.exe"). Process names are validated to prevent injection.
     """
     if not target:
         return "failed", "No process target provided."
 
     target = target.strip()
+    # Validate: only allow alphanumeric, dots, hyphens, underscores
+    if not re.match(r'^[a-zA-Z0-9._-]+$', target):
+        return "failed", f"Invalid process name: {target}"
+
     if target.isdigit():
         ok, out = _run(["taskkill", "/F", "/PID", target], elevate=True)
     else:
@@ -194,9 +212,19 @@ def quarantine_file(file_path: str) -> tuple[str, str]:
     if not file_path:
         return "failed", "No file path provided."
 
-    src = Path(file_path)
+    src = Path(file_path).resolve()
     if not src.exists():
         return "failed", f"File not found: {file_path}"
+
+    # Prevent path traversal — file must be under allowed directories
+    # (e.g., not /etc/passwd or C:\Windows\System32)
+    allowed_roots = [Path(r).resolve() for r in [
+        os.getenv("BARAQ_QUARANTINE_ALLOWED_ROOT", r"C:\BaraqData"),
+        QUARANTINE_DIR.resolve(),
+        Path.cwd().resolve(),
+    ]]
+    if not any(str(src).startswith(str(root)) for root in allowed_roots if root):
+        return "failed", f"Path not in allowed directories: {file_path}"
 
     QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -224,6 +252,9 @@ def disable_account(username: str) -> tuple[str, str]:
         return "failed", "No username provided."
 
     username = username.strip()
+    # Validate username: alphanumeric, dots, hyphens, underscores only
+    if not re.match(r'^[a-zA-Z0-9_.-]+$', username):
+        return "failed", f"Invalid username: {username}"
 
     # Try local account first
     ok, out = _run(["net", "user", username, "/active:no"], elevate=True)
@@ -234,7 +265,7 @@ def disable_account(username: str) -> tuple[str, str]:
     # If net user fails, try PowerShell
     ok2, out2 = _run([
         "powershell", "-NoProfile", "-Command",
-        f"Disable-LocalUser -Name '{username}' -ErrorAction Stop",
+        "Disable-LocalUser", "-Name", username, "-ErrorAction", "Stop",
     ], elevate=True)
     if ok2:
         logger.info("Disabled account %s via PowerShell", username)
