@@ -1129,6 +1129,7 @@ def update_check(db: Session = Depends(get_db)):
     """
     import hashlib
     import json
+    from urllib.parse import urlparse
     from urllib.request import urlopen
 
     from backend.config import APP_DIR, APP_VERSION
@@ -1137,6 +1138,11 @@ def update_check(db: Session = Depends(get_db)):
     manifest: dict | None = None
     try:
         if source.startswith(("http://", "https://")):
+            parsed = urlparse(source)
+            if parsed.scheme not in ("https",):
+                raise HTTPException(400, "Update manifest must use HTTPS")
+            if parsed.hostname in ("localhost", "127.0.0.1", "0.0.0.0"):
+                raise HTTPException(400, "Update manifest cannot point to localhost")
             with urlopen(source, timeout=10) as resp:
                 raw = resp.read()
         else:
@@ -1154,6 +1160,11 @@ def update_check(db: Session = Depends(get_db)):
     sha256 = str(manifest.get("sha256", ""))
     if url and sha256:
         try:
+            parsed_url = urlparse(url)
+            if parsed_url.scheme not in ("https",):
+                raise HTTPException(400, "Update download must use HTTPS")
+            if parsed_url.hostname in ("localhost", "127.0.0.1", "0.0.0.0"):
+                raise HTTPException(400, "Update download cannot point to localhost")
             with urlopen(url, timeout=30) as resp:
                 actual = hashlib.sha256(resp.read()).hexdigest()
             if actual.lower() != sha256.lower():
