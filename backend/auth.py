@@ -34,7 +34,7 @@ from backend.database.models import TokenRevocation
 
 logger = logging.getLogger("baraq.auth")
 
-_PBKDF2_ITERATIONS = 260_000
+_PBKDF2_ITERATIONS = 600_000
 
 
 def hash_password(password: str, salt: bytes | None = None) -> str:
@@ -154,13 +154,29 @@ def verify_token(token: str) -> dict | None:
         return None
 
 
+def verify_token_for_user(token: str, user) -> dict | None:
+    """Validate a token and reject it if issued before the user's last password change.
+
+    Call this from request handlers where the User object is available.
+    """
+    payload = verify_token(token)
+    if payload is None:
+        return None
+    # Invalidate tokens issued before the last password change
+    if user and user.password_changed_at:
+        token_iat = int(payload.get("iat", 0))
+        changed_at = int(user.password_changed_at.timestamp())
+        if token_iat < changed_at:
+            return None
+    return payload
+
+
 def _is_token_revoked(jti: str) -> bool:
     """True when ``jti`` is in the revocation table.
 
     Uses a fresh DB session so callers (including request middleware)
-    do not have to manage one. Errors are swallowed and treated as
-    'not revoked' -- a single transient DB error must not silently lock
-    every operator out of the platform; the next request retries.
+    do not have to manage one. On DB error, returns True (fail-closed)
+    to prevent revoked tokens from being accepted during outages.
     """
     try:
         db = SessionLocal()
@@ -174,8 +190,8 @@ def _is_token_revoked(jti: str) -> bool:
         finally:
             db.close()
     except Exception as exc:
-        logger.warning("Token revocation lookup failed (fail-open): %s", exc)
-        return False
+        logger.warning("Token revocation lookup failed (fail-closed): %s", exc)
+        return True
 
 
 def revoke_token(
