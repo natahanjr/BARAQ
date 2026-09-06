@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import logging
 import math
-import pickle
 import zlib
 from dataclasses import dataclass, field
 from typing import Any
@@ -23,6 +22,14 @@ from typing import Any
 import numpy as np
 
 logger = logging.getLogger("baraq.ml.federated")
+
+try:
+    import joblib
+    import io
+
+    HAS_JOBLIB = True
+except ImportError:
+    HAS_JOBLIB = False
 
 try:
     from sklearn.ensemble import IsolationForest
@@ -114,7 +121,9 @@ class FederatedAggregator:
             total_weight += weight
 
             try:
-                model_state = pickle.loads(zlib.decompress(update.model_params))
+                decompressed = zlib.decompress(update.model_params)
+                buf = io.BytesIO(decompressed)
+                model_state = joblib.load(buf)
                 if hasattr(model_state, "estimators_"):
                     # IsolationForest ensemble averaging
                     for i, estimator in enumerate(model_state.estimators_):
@@ -258,9 +267,14 @@ class FederatedClient:
         if self._local_model is None:
             return False
 
+        if not HAS_JOBLIB:
+            logger.warning("joblib not available, cannot send model update")
+            return False
+
         try:
-            model_bytes = pickle.dumps(self._local_model)
-            compressed = zlib.compress(model_bytes, level=6)
+            buf = io.BytesIO()
+            joblib.dump(self._local_model, buf)
+            compressed = zlib.compress(buf.getvalue(), level=6)
 
             update = ClientUpdate(
                 client_id=self.client_id,
