@@ -71,8 +71,9 @@ def _token_secret() -> bytes:
 
 
 def create_token(
-    user_id: int, username: str, role: str, org: str = "", ttl_seconds: int = 12 * 3600
+    user_id: int, username: str, role: str, org: str = "", ttl_seconds: int = 15 * 60
 ) -> str:
+    """Create a short-lived access token (15 min default)."""
     now = int(time.time())
     payload = {
         "uid": user_id,
@@ -82,6 +83,27 @@ def create_token(
         "iat": now,
         "exp": now + ttl_seconds,
         "jti": secrets.token_hex(8),
+        "type": "access",
+    }
+    body = (
+        base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8"))
+        .rstrip(b"=")
+        .decode("ascii")
+    )
+    sig = hmac.new(_token_secret(), body.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{body}.{sig}"
+
+
+def create_refresh_token(user_id: int, username: str) -> str:
+    """Create a long-lived refresh token (7 days) that rotates on use."""
+    now = int(time.time())
+    payload = {
+        "uid": user_id,
+        "sub": username,
+        "iat": now,
+        "exp": now + 7 * 24 * 3600,
+        "jti": secrets.token_hex(16),
+        "type": "refresh",
     }
     body = (
         base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8"))
@@ -116,7 +138,7 @@ def create_mfa_challenge(user_id: int, username: str, ttl_seconds: int = 300) ->
     return f"{body}.{sig}"
 
 
-def verify_token(token: str) -> dict | None:
+def verify_token(token: str, expected_type: str = "access") -> dict | None:
     """Validate a session token; return its payload or None.
 
     Four failure paths, in order:
@@ -136,22 +158,23 @@ def verify_token(token: str) -> dict | None:
         now = time.time()
         if int(payload.get("exp", 0)) < now:
             return None
-        # Reject tokens whose ``iat`` is in the future by more than 5
-        # minutes. A small skew window tolerates a real-time clock
-        # adjustment, but a forged token that claims a future iat is
-        # almost certainly hostile.
         iat = int(payload.get("iat", 0))
         if iat > now + 300:
             return None
-        # Server-side revocation check. Done outside the HMAC path so a
-        # revoked-but-otherwise-valid token is rejected. The cost is one
-        # cheap SELECT on a unique index per request.
+        # Verify token type
+        if payload.get("type", "access") != expected_type:
+            return None
         jti = payload.get("jti")
         if jti and _is_token_revoked(jti):
             return None
         return payload
     except (ValueError, TypeError, json.JSONDecodeError):
         return None
+
+
+def verify_refresh_token(token: str) -> dict | None:
+    """Validate a refresh token. Same as verify_token but expects type='refresh'."""
+    return verify_token(token, expected_type="refresh")
 
 
 def verify_token_for_user(token: str, user) -> dict | None:
