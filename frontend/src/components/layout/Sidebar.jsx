@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback } from "react";
 import { NavLink, useLocation } from "react-router";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useTheme } from "../../context/ThemeContext.jsx";
