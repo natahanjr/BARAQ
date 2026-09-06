@@ -26,15 +26,19 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend import ldap as ldap_sso
 from backend.audit import client_ip, log_action
 from backend.auth import (
     create_mfa_challenge,
+    create_refresh_token,
     create_token,
     hash_password,
+    revoke_token,
     verify_password,
+    verify_refresh_token,
     verify_token,
     verify_token_for_user,
 )
@@ -55,6 +59,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 SESSION_COOKIE = "baraq_session"
 CSRF_COOKIE = "baraq_csrf"
+REFRESH_COOKIE = "baraq_refresh"
 
 #: Brute-force protection on the login endpoint. In-memory sliding window:
 #: at most LOGIN_MAX_ATTEMPTS failures per IP within LOGIN_WINDOW_SECONDS.
@@ -263,7 +268,16 @@ def register(body: RegisterRequest, request: Request, db: Session = Depends(get_
         registration_status="pending",
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return {
+            "ok": True,
+            "pending": True,
+            "message": "If this username is available, your request will be "
+            "pending verification by an administrator.",
+        }
     log_action(
         db,
         username,
@@ -280,6 +294,21 @@ def register(body: RegisterRequest, request: Request, db: Session = Depends(get_
         "message": "Account created - it will be activated once an administrator "
         "verifies it.",
     }
+
+
+class PasswordResetRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+
+
+@router.post("/password-reset")
+def password_reset_request(body: PasswordResetRequest, request: Request, db: Session = Depends(get_db)):
+    """Request a password reset. Always returns success to prevent enumeration."""
+    user = db.scalar(select(User).where(User.username == body.username.strip()))
+    if user and user.is_active:
+        reset_token = create_token(user.id, user.username, "reset", ttl_seconds=3600)
+        log_action(db, user.username, "password_reset_requested", "user", str(user.id), "reset token generated", client_ip(request))
+        logger.info("Password reset token for %s: %s", user.username, reset_token[:20] + "...")
+    return {"ok": True, "message": "If this account exists, a reset link has been sent."}
 
 
 def _ldap_login_fallback(
@@ -575,7 +604,8 @@ def mfa_verify(body: MfaVerifyRequest, request: Request, db: Session = Depends(g
         )
         raise HTTPException(401, "Invalid verification code")
     _clear_login_rate_limit(request, user.username)
-    token = create_token(user.id, user.username, user.role, user.org)
+    access_token = create_token(user.id, user.username, user.role, user.org)
+    refresh_token = create_refresh_token(user.id, user.username)
     log_action(
         db,
         user.username,
@@ -587,19 +617,21 @@ def mfa_verify(body: MfaVerifyRequest, request: Request, db: Session = Depends(g
     )
     resp = JSONResponse(
         {
-            "token": token,
+            "token": access_token,
+            "refresh_token": refresh_token,
             "user": _public_user(user),
             "must_change_password": bool(user.must_change_password),
         }
     )
-    _set_session_cookie(resp, token)
+    _set_session_cookie(resp, access_token, refresh_token)
     return resp
 
 
 def _complete_login(request: Request, db: Session, user: User, source: str = "local"):
     user.last_login_at = datetime.now(UTC)
     db.commit()
-    token = create_token(user.id, user.username, user.role, user.org)
+    access_token = create_token(user.id, user.username, user.role, user.org)
+    refresh_token = create_refresh_token(user.id, user.username)
     log_action(
         db,
         user.username,
@@ -611,16 +643,17 @@ def _complete_login(request: Request, db: Session, user: User, source: str = "lo
     )
     resp = JSONResponse(
         {
-            "token": token,
+            "token": access_token,
+            "refresh_token": refresh_token,
             "user": _public_user(user),
             "must_change_password": bool(user.must_change_password),
         }
     )
-    _set_session_cookie(resp, token)
+    _set_session_cookie(resp, access_token, refresh_token)
     return resp
 
 
-def _set_session_cookie(resp: JSONResponse, token: str) -> None:
+def _set_session_cookie(resp: JSONResponse, token: str, refresh_token: str = "") -> None:
     resp.set_cookie(
         SESSION_COOKIE,
         token,
@@ -628,11 +661,18 @@ def _set_session_cookie(resp: JSONResponse, token: str) -> None:
         samesite="strict",
         secure=COOKIE_SECURE,
         path="/",
-        max_age=7 * 24 * 3600,
+        max_age=15 * 60,  # 15 min access token
     )
-    # CSRF double-submit token: readable by JS (not httpOnly) so the SPA can
-    # echo it in X-CSRF-Token on state-changing requests. Re-issued at every
-    # login, so a stolen value never outlives the session.
+    if refresh_token:
+        resp.set_cookie(
+            REFRESH_COOKIE,
+            refresh_token,
+            httponly=True,
+            samesite="strict",
+            secure=COOKIE_SECURE,
+            path="/api/auth/refresh",
+            max_age=7 * 24 * 3600,
+        )
     resp.set_cookie(
         CSRF_COOKIE,
         secrets.token_urlsafe(32),
@@ -772,16 +812,43 @@ def logout(request: Request, db: Session = Depends(get_db)):
         client_ip(request),
     )
     if jti:
-        # Invalidate the token immediately rather than waiting for the
-        # 12-hour TTL. The verify_token path now consults the
-        # token_revocations table so any subsequent request carrying
-        # this token is rejected.
-        from backend.auth import revoke_token
-
         revoke_token(jti, username=actor, reason="logout")
+    # Also revoke the refresh token if present
+    refresh = request.cookies.get(REFRESH_COOKIE, "")
+    if refresh:
+        refresh_payload = verify_refresh_token(refresh)
+        if refresh_payload and refresh_payload.get("jti"):
+            revoke_token(refresh_payload["jti"], username=actor, reason="logout")
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(SESSION_COOKIE, path="/")
     resp.delete_cookie(CSRF_COOKIE, path="/")
+    resp.delete_cookie(REFRESH_COOKIE, path="/api/auth/refresh")
+    return resp
+
+
+@router.post("/refresh")
+def refresh_token(request: Request, db: Session = Depends(get_db)):
+    """Exchange a valid refresh token for a new access + refresh token pair.
+
+    Implements refresh token rotation: the old refresh token is revoked
+    and a new pair is issued, so a stolen refresh token can only be used once.
+    """
+    refresh = request.cookies.get(REFRESH_COOKIE, "")
+    if not refresh:
+        raise HTTPException(401, "No refresh token provided")
+    payload = verify_refresh_token(refresh)
+    if not payload:
+        raise HTTPException(401, "Invalid or expired refresh token")
+    user = db.get(User, payload.get("uid"))
+    if not user or not user.is_active:
+        raise HTTPException(401, "User not found or inactive")
+    # Revoke old refresh token (rotation)
+    revoke_token(payload["jti"], username=user.username, reason="refresh-rotation")
+    # Issue new pair
+    access_token = create_token(user.id, user.username, user.role, user.org)
+    new_refresh = create_refresh_token(user.id, user.username)
+    resp = JSONResponse({"token": access_token, "refresh_token": new_refresh})
+    _set_session_cookie(resp, access_token, new_refresh)
     return resp
 
 
