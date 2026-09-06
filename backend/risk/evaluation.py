@@ -20,7 +20,16 @@ from backend.risk.models import (
 )
 
 
+_ALLOWED_TABLES = frozenset({
+    "entity_risk_v2",
+    "entity_risk_v2_factor",
+    "entity_risk_v2_audit_event",
+})
+
+
 def _table_count(db: Session, table: str) -> int:
+    if table not in _ALLOWED_TABLES:
+        raise ValueError(f"unexpected table name: {table!r}")
     try:
         return db.scalars(select(func.count()).select_from(text(f'"{table}"'))).one()
     except Exception:

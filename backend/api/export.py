@@ -32,6 +32,11 @@ from backend.database.models import (
 )
 from backend.security import require_auth
 
+def _safe_like(value: str) -> str:
+    """Escape LIKE metacharacters to prevent pattern injection."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 router = APIRouter(prefix="/api/export", tags=["export"], dependencies=[Depends(require_auth)])
 
 # ── Registry of exportable data types ──────────────────────────────────────
@@ -205,7 +210,7 @@ def export_data(
 
     # Text search
     if search:
-        search_lower = f"%{search.lower()}%"
+        search_lower = f"%{_safe_like(search.lower())}%"
         if hasattr(model, "message"):
             stmt = stmt.where(func.lower(model.message).like(search_lower))
         elif hasattr(model, "evidence"):

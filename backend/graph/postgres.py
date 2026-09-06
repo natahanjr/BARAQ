@@ -24,6 +24,11 @@ from backend.graph.base import GraphStore
 
 logger = logging.getLogger("baraq.graph")
 
+
+def _safe_like(value: str) -> str:
+    """Escape LIKE metacharacters to prevent pattern injection."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
 _node_columns = {
     "kind",
     "name",
@@ -177,7 +182,7 @@ class PostgresStore(GraphStore):
         if min_risk > 0:
             stmt = stmt.where(EntityNode.risk_score >= min_risk)
         if search:
-            like = f"%{search}%"
+            like = f"%{_safe_like(search)}%"
             stmt = stmt.where(
                 or_(
                     EntityNode.name.ilike(like),

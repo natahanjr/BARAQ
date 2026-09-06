@@ -31,6 +31,13 @@ from backend.database.models import AgentCommand, Endpoint, NormalizedEvent, Ver
 from backend.security import actor_name, require_admin, require_auth, tenant_scope
 
 logger = logging.getLogger("baraq.api.endpoints")
+
+
+def _safe_like(value: str) -> str:
+    """Escape LIKE metacharacters to prevent pattern injection."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 router = APIRouter(
     prefix="/api",
     tags=["endpoints"],
@@ -177,7 +184,7 @@ def list_endpoints(
     if scope is not None:
         stmt = stmt.where(Endpoint.org == scope)
     if tag:
-        stmt = stmt.where(Endpoint.tags.ilike(f"%{tag}%"))
+        stmt = stmt.where(Endpoint.tags.ilike(f"%{_safe_like(tag)}%"))
     rows = db.scalars(stmt.order_by(Endpoint.last_seen.desc()).limit(limit)).all()
     for ep in rows:
         _refresh_health(ep)

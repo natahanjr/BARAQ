@@ -18,6 +18,12 @@ from backend.database.models import (
 )
 from backend.security import require_auth, tenant_scope
 
+
+def _safe_like(value: str) -> str:
+    """Escape LIKE metacharacters to prevent pattern injection."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 router = APIRouter(prefix="/api", tags=["events"], dependencies=[Depends(require_auth)])
 
 
@@ -74,9 +80,9 @@ def list_events(
     if event_id:
         stmt = stmt.where(NormalizedEvent.event_id == event_id)
     if user:
-        stmt = stmt.where(NormalizedEvent.user.ilike(f"%{user}%"))
+        stmt = stmt.where(NormalizedEvent.user.ilike(f"%{_safe_like(user)}%"))
     if category:
-        stmt = stmt.where(NormalizedEvent.category.ilike(f"%{category}%"))
+        stmt = stmt.where(NormalizedEvent.category.ilike(f"%{_safe_like(category)}%"))
     if anomaly is not None:
         stmt = stmt.where(NormalizedEvent.is_anomaly == anomaly)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
@@ -210,7 +216,7 @@ def list_dns(
 ):
     stmt = select(DnsQuery)
     if process:
-        stmt = stmt.where(DnsQuery.process.ilike(f"%{process}%"))
+        stmt = stmt.where(DnsQuery.process.ilike(f"%{_safe_like(process)}%"))
     rows = db.scalars(stmt.order_by(DnsQuery.observed_at.desc()).limit(limit)).all()
     return {"total": len(rows), "items": [d.to_dict() for d in rows]}
 
@@ -224,7 +230,7 @@ def list_http(
 ):
     stmt = select(HttpRequest)
     if host:
-        stmt = stmt.where(HttpRequest.host.ilike(f"%{host}%"))
+        stmt = stmt.where(HttpRequest.host.ilike(f"%{_safe_like(host)}%"))
     if method:
         stmt = stmt.where(HttpRequest.method == method.upper())
     rows = db.scalars(stmt.order_by(HttpRequest.observed_at.desc()).limit(limit)).all()
