@@ -20,10 +20,8 @@ export function useBackendStatus() {
       setStatus(null);
     }
     try {
-      if (api.getOrgs) {
-        const orgs = await api.getOrgs();
-        setOrgOptions(Array.isArray(orgs) ? orgs : []);
-      }
+      const res = await api.get("/api/auth/orgs");
+      setOrgOptions(Array.isArray(res) ? res : []);
     } catch {
       setOrgOptions([]);
     }
