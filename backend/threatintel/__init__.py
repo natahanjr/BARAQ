@@ -174,7 +174,12 @@ def _http_json(
     url: str, headers: dict[str, str] | None = None, timeout: float = 8
 ) -> dict | None:
     import urllib.request
+    from urllib.parse import urlparse
 
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https",):
+        logger.debug("Threat-intel: skipping non-HTTPS URL: %s", url)
+        return None
     req = urllib.request.Request(url, headers=headers or {})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -519,8 +524,13 @@ def _ipdetails(ip_str: str) -> dict[str, Any] | None:
 def _isbadip(indicator: str) -> dict[str, Any] | None:
     """isbadip.com - unlimited free IP/domain reputation (no key needed, no rate limits)."""
     import urllib.request
+    from urllib.parse import urlparse
+
+    url = f"https://api.isbadip.com/api/v1/host/{indicator}"
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https",):
+        return None
     req = urllib.request.Request(
-        f"https://api.isbadip.com/api/v1/host/{indicator}",
         headers={"Accept": "application/json", "User-Agent": "Baraq-SOC/1.0"},
     )
     try:
@@ -552,10 +562,15 @@ def _isbadip(indicator: str) -> dict[str, Any] | None:
 def _ffraud(indicator: str) -> dict[str, Any] | None:
     """FFraud.com - unlimited free IP fraud intelligence (no key needed, no rate limits)."""
     import urllib.request
+    from urllib.parse import urlparse
+
     if not _IPV4_RE.match(indicator):
         return None
+    url = f"https://api.ffraud.com/public/ip/{indicator}"
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https",):
+        return None
     req = urllib.request.Request(
-        f"https://api.ffraud.com/public/ip/{indicator}",
         headers={"Accept": "application/json", "User-Agent": "Baraq-SOC/1.0"},
     )
     try:
@@ -599,10 +614,16 @@ def _threatfox(indicators: list[str]) -> dict[str, Any] | None:
         return None
     import json as _json
     import urllib.request
+    from urllib.parse import urlparse
+
+    feed_url = "https://threatfox-api.abuse.ch/api/v1/"
+    parsed_feed = urlparse(feed_url)
+    if parsed_feed.scheme not in ("https",):
+        return None
     for indicator in indicators:
         body = _json.dumps({"query": "search_ioc", "search_term": indicator, "exact_match": True}).encode()
         req = urllib.request.Request(
-            "https://threatfox-api.abuse.ch/api/v1/",
+            feed_url,
             data=body,
             headers={"Content-Type": "application/json", "Auth-Key": THREAT_INTEL_ABUSECH_KEY},
             method="POST",
@@ -632,9 +653,15 @@ def _urlhaus(indicators: list[str]) -> dict[str, Any] | None:
     """URLhaus malicious URL lookup - by abuse.ch (requires Auth-Key for full access)."""
     import json as _json
     import urllib.request
+    from urllib.parse import urlparse
+
     headers = {"Content-Type": "application/json"}
     if THREAT_INTEL_ABUSECH_KEY:
         headers["Auth-Key"] = THREAT_INTEL_ABUSECH_KEY
+    feed_url = "https://urlhaus-api.abuse.ch/v1/host/"
+    parsed_feed = urlparse(feed_url)
+    if parsed_feed.scheme not in ("https",):
+        return None
     for indicator in indicators:
         body = _json.dumps({"host": indicator}).encode()
         req = urllib.request.Request(
@@ -666,9 +693,15 @@ def _malwarebazaar(indicators: list[str]) -> dict[str, Any] | None:
     """MalwareBazaar sample lookup - by abuse.ch (requires Auth-Key for full access)."""
     import json as _json
     import urllib.request
+    from urllib.parse import urlparse
+
     headers = {"Content-Type": "application/json"}
     if THREAT_INTEL_ABUSECH_KEY:
         headers["Auth-Key"] = THREAT_INTEL_ABUSECH_KEY
+    feed_url = "https://mb-api.abuse.ch/api/v1/"
+    parsed_feed = urlparse(feed_url)
+    if parsed_feed.scheme not in ("https",):
+        return None
     for indicator in indicators:
         if not _HASH_RE.match(indicator):
             continue
