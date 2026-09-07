@@ -58,4 +58,12 @@ test.describe("Authentication E2E", () => {
     });
     expect(isInvalid).toBe(true);
   });
+
+  test("username field accepts valid characters", async ({ page }) => {
+    await page.click("text=New here? Create an account");
+    const usernameInput = page.locator('input[id="reg-username"]');
+    await usernameInput.fill("valid_user-123");
+    const isValid = await usernameInput.evaluate((el) => el.validity.valid);
+    expect(isValid).toBe(true);
+  });
 });
