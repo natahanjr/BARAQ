@@ -347,6 +347,31 @@ export default function AlertDetail() {
             )}
           </div>
 
+          {/* Related Alerts */}
+          {alert.related_alerts && alert.related_alerts.length > 0 && (
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
+              <SectionLabel>Related Alerts ({alert.related_alerts.length})</SectionLabel>
+              <div className="space-y-2">
+                {alert.related_alerts.map((ra) => (
+                  <Link
+                    key={ra.id}
+                    to={`/alerts/${ra.id}`}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4 transition-all hover:border-white/[0.08] hover:bg-white/[0.04]"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-[13px] font-semibold text-slate-300">#{ra.id}</span>
+                      <span className="text-[13px] text-slate-300">{ra.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <SeverityBadge severity={ra.severity} />
+                      <StatusBadge status={ra.status} />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ML Explanation */}
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-6">
             <div className="mb-4 flex items-center justify-between">
