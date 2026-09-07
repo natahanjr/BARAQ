@@ -4,6 +4,32 @@ All notable changes to BARAQ are documented in this
 file. The format is based on [Keep a Changelog](https://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] - 2026-09-08 — "Roadmap Complete"
+
+### Added
+- **Service management**: `start_services.bat` and `stop_services.bat` for PostgreSQL and backend startup/shutdown
+- **Database retry logic**: Connection retry with exponential backoff (10 attempts, 2s backoff) in `init_db()`
+- **Audit log export**: `GET /api/auth/audit/export` endpoint for SIEM integration (JSON/CSV formats)
+- **Secrets migration**: `scripts/migrate_secrets.py` — migrates plaintext credentials to DPAPI vault
+- **Secrets rotation**: `scripts/rotate_secrets.py` — rotates admin password, API keys, JWT secret
+- **Correlation Rules UI**: `frontend/src/pages/CorrelationRules.jsx` — new page at `/correlation-rules`
+- **SOAR Playbook Editor**: `frontend/src/pages/PlaybookEditor.jsx` — new page at `/playbook-editor`
+- **Real-time notifications**: `frontend/src/hooks/useNotifications.js` — WebSocket hook connected to `/api/realtime/ws`
+- **E2E tests**: Dashboard (10 tests), Alerts (10 tests), Users (9 tests) — 46 total passing
+- **Documentation**: Architecture guide, deployment guide, user guide in `docs/`
+
+### Changed
+- `.env` updated with `BARAQ_ALLOW_DEV_KEYS=0` for production security
+- `frontend/src/App.jsx` — added routes for correlation-rules and playbook-editor
+- `frontend/src/components/layout/Layout.jsx` — integrated real-time notifications hook
+- `frontend/e2e/dashboard.spec.js` — improved severity card test reliability
+
+### Fixed
+- Database connection failures on startup (retry logic)
+- Dashboard severity card test flakiness (added wait timeout)
+
+---
+
 ## [0.13.0] - 2026-08-31 — "Gap Analysis Completion"
 
 ### Added
