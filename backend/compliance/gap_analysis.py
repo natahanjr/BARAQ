@@ -1,7 +1,8 @@
 """Compliance gap analysis — framework-specific gap checking."""
-from typing import Optional
+
 from pydantic import BaseModel
-from .frameworks import get_framework, ComplianceControl
+
+from .frameworks import get_framework
 
 
 class GapItem(BaseModel):
@@ -24,7 +25,7 @@ class ComplianceGapReport(BaseModel):
     gaps: list[GapItem]
 
 
-def analyze_gaps(framework_name: str) -> Optional[ComplianceGapReport]:
+def analyze_gaps(framework_name: str) -> ComplianceGapReport | None:
     fw = get_framework(framework_name)
     if not fw:
         return None

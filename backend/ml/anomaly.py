@@ -4060,7 +4060,7 @@ class MLAnomalyDetector:
         base = float(self._rank_of([raw], self.baselines.get(behavior))[0])
 
         # v8: Use multi-contamination ensemble for more robust scoring
-        if behavior in self.ensembles and self.ensembles[behavior]:
+        if self.ensembles.get(behavior):
             ensemble_scores = []
             for ens_model in self.ensembles[behavior]:
                 ens_raw = self._score_with(ens_model, features)

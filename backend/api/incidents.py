@@ -216,7 +216,7 @@ def incidents_stats_alias(
     db: Session = Depends(get_db),
 ):
     """Alias for /incidents/workload (frontend compat)."""
-    return get_workload(request=request, db=db)
+    return workload(request=request, db=db)
 
 
 @router.get("/{incident_id}")

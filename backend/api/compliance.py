@@ -77,8 +77,8 @@ def compliance_report_endpoint(
 ):
     """Framework gap analysis or GDPR Art.30 data inventory."""
     if framework:
-        from backend.compliance.gap_analysis import analyze_gaps
         from backend.compliance.frameworks import get_framework
+        from backend.compliance.gap_analysis import analyze_gaps
 
         report = analyze_gaps(framework.upper())
         if not report:

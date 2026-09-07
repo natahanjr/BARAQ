@@ -1,5 +1,6 @@
 """Base EDR connector."""
 from abc import ABC, abstractmethod
+
 from pydantic import BaseModel
 
 

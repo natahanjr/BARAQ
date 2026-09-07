@@ -1,9 +1,10 @@
 """Attack Path Prediction API — adversary movement prediction."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from backend.security import require_auth
+
 from backend.ml.attack_path import AttackPathPredictor
 from backend.risk.blast_radius import BlastRadiusAnalyzer
+from backend.security import require_auth
 
 router = APIRouter(prefix="/api/attack-path", tags=["attack-path"], dependencies=[Depends(require_auth)])
 

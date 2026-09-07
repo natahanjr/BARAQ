@@ -12,8 +12,6 @@ The deep learning module:
 from __future__ import annotations
 
 import logging
-import math
-from collections import defaultdict
 
 import numpy as np
 
@@ -21,8 +19,7 @@ logger = logging.getLogger("baraq.ml.deep_features")
 
 try:
     import torch
-    import torch.nn as nn
-    import torch.optim as optim
+    from torch import nn, optim
     from torch.utils.data import DataLoader, TensorDataset
 
     HAS_TORCH = True

@@ -1,6 +1,6 @@
 """Multi-framework compliance — SOC2, ISO 27001, NIST CSF templates."""
+
 from pydantic import BaseModel
-from typing import Optional
 
 
 class ComplianceControl(BaseModel):
@@ -90,7 +90,7 @@ FRAMEWORKS = {
 }
 
 
-def get_framework(name: str) -> Optional[ComplianceFramework]:
+def get_framework(name: str) -> ComplianceFramework | None:
     return FRAMEWORKS.get(name)
 
 
@@ -98,7 +98,7 @@ def list_frameworks() -> list[str]:
     return list(FRAMEWORKS.keys())
 
 
-def assess_control(framework_name: str, control_id: str, status: str, evidence: list[str] = None, notes: str = "") -> Optional[ComplianceControl]:
+def assess_control(framework_name: str, control_id: str, status: str, evidence: list[str] = None, notes: str = "") -> ComplianceControl | None:
     fw = FRAMEWORKS.get(framework_name)
     if not fw:
         return None

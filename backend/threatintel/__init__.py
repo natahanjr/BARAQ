@@ -383,7 +383,7 @@ def _greynoise(ip_str: str) -> dict[str, Any] | None:
         if classification == "unknown" and noise:
             return {
                 "category": "suspicious",
-                "label": f"GreyNoise: mass scanning activity detected",
+                "label": "GreyNoise: mass scanning activity detected",
                 "confidence": 0.6,
             }
         if classification == "benign" or riot:
@@ -543,7 +543,6 @@ def _isbadip(indicator: str) -> dict[str, Any] | None:
         threat = data.get("threat", {})
         categories = threat.get("categories", [])
         sources = threat.get("sources", [])
-        score = threat.get("score", 0)
         if is_malicious:
             src_names = ", ".join(sources[:3]) if sources else "multiple feeds"
             cats = ", ".join(categories[:3]) if categories else "threat"

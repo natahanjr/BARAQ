@@ -13,7 +13,6 @@ Supported datasets:
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -75,8 +74,12 @@ class DatasetAdapter:
     def evaluate_model(self, model, X_test: np.ndarray, y_test: np.ndarray) -> EvaluationResult:
         """Evaluate a trained model against this dataset."""
         from sklearn.metrics import (
-            accuracy_score, precision_score, recall_score, f1_score,
-            confusion_matrix, roc_auc_score,
+            accuracy_score,
+            confusion_matrix,
+            f1_score,
+            precision_score,
+            recall_score,
+            roc_auc_score,
         )
 
         y_pred = model.predict(X_test)

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import ipaddress
 import logging
-import math
 import re
 import time
 from collections import defaultdict

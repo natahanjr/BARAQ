@@ -14,17 +14,11 @@ import json
 import logging
 import random
 import re
-import tempfile
-import threading
-import time
 import urllib.error
 import urllib.request
 import zipfile
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
-
-from sqlalchemy.orm import Session
 
 from backend.database.connection import SessionLocal
 from backend.database.models import NormalizedEvent, Verdict, utcnow
@@ -274,7 +268,6 @@ def _generate_synthetic_events(count: int, seed: int = 42) -> list[dict]:
     # Benign login patterns per host
     for _ in range(count):
         host = rng.choice(_HOSTS)
-        dept = _host_to_dept(host)
         user = rng.choice(_USERS)
         ip = _host_to_ip(host)
         ts = datetime(2026, 8, 1, tzinfo=UTC) + timedelta(seconds=rng.randint(0, 30 * 86400))
@@ -350,7 +343,7 @@ def _generate_synthetic_events(count: int, seed: int = 42) -> list[dict]:
                 "source": "process",
                 "category": "Process",
                 "facts": {
-                    "image_path": f"C:\\Windows\\System32\\svchost.exe",
+                    "image_path": "C:\\Windows\\System32\\svchost.exe",
                     "command_line": "svchost.exe",
                     "parent_process": "services.exe",
                     "remote_ip": remote_ip,

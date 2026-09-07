@@ -1,10 +1,10 @@
 """Ingestion throughput and API latency benchmarks."""
-import time
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+import time
+from datetime import UTC, datetime
 from pathlib import Path
+
 from pydantic import BaseModel
 
 logger = logging.getLogger("baraq.benchmarks")
@@ -23,7 +23,7 @@ class BenchmarkResult(BaseModel):
 
 
 class ThroughputBenchmark:
-    def __init__(self, output_dir: Optional[str] = None):
+    def __init__(self, output_dir: str | None = None):
         self.output_dir = Path(output_dir or "benchmark_results")
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._results: list[BenchmarkResult] = []
@@ -51,7 +51,7 @@ class ThroughputBenchmark:
                 p95_ms=round(latencies[int(n * 0.95)], 3),
                 p99_ms=round(latencies[int(n * 0.99)], 3),
                 max_ms=round(latencies[-1], 3),
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
             )
             results.append(result)
             self._results.append(result)
@@ -86,7 +86,7 @@ class ThroughputBenchmark:
                 p95_ms=round(latencies[int(n * 0.95)], 3) if n else 0,
                 p99_ms=round(latencies[int(n * 0.99)], 3) if n else 0,
                 max_ms=round(latencies[-1], 3) if n else 0,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
             )
             results.append(result)
             self._results.append(result)
@@ -98,9 +98,9 @@ class ThroughputBenchmark:
             "results": [r.model_dump() for r in self._results],
         }
 
-    def save_report(self, filename: Optional[str] = None) -> str:
+    def save_report(self, filename: str | None = None) -> str:
         report = self.report()
-        fname = filename or f"benchmark_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
+        fname = filename or f"benchmark_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.json"
         path = self.output_dir / fname
         path.write_text(json.dumps(report, indent=2, default=str))
         return str(path)

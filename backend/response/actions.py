@@ -15,8 +15,9 @@ import ipaddress
 import logging
 import os
 import re
-import subprocess
 import shutil
+import subprocess
+from datetime import UTC
 from pathlib import Path
 
 logger = logging.getLogger("baraq.response.actions")
@@ -229,8 +230,8 @@ def quarantine_file(file_path: str) -> tuple[str, str]:
     QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
 
     # Create unique quarantine name with timestamp
-    from datetime import datetime, timezone
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    from datetime import datetime
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     safe_name = f"{ts}_{src.name}"
     dest = QUARANTINE_DIR / safe_name
 

@@ -27,8 +27,8 @@ from backend.api import (
     attack_path_api,
     auth,
     automation,
-    bookmarks,
     behavior_groups,
+    bookmarks,
     compliance,
     correlations,
     dashboard,
@@ -95,6 +95,7 @@ from backend.observability import setup_observability
 setup_observability()
 
 from backend import config
+
 logger.info("BARAQ starting — env=%s, debug=%s, telemetry_v2=%s, alerts_v2=%s, correlation=%s, risk=%s",
     config.BARAQ_ENV, not config.IS_PRODUCTION, config.TELEMETRY_V2_ENABLED, config.ALERTS_V2_ENABLED, config.CORRELATION_ENABLED, config.RISK_ENABLED)
 
@@ -809,7 +810,7 @@ async def security_headers(request: Request, call_next):
 
 #: Rate limiting: delegated to backend.redis which uses Redis when
 #: available and falls back to in-memory dicts for single-node dev.
-from backend.redis import rate_increment, rate_cleanup
+from backend.redis import rate_cleanup, rate_increment
 
 RATE_WINDOW_SECONDS = 60
 
@@ -1332,7 +1333,6 @@ if FRONTEND_DIST.is_dir():
 
     @app.get("/{full_path:path}")
     async def _spa_fallback(full_path: str):
-        import re as _re
 
         stripped = full_path.strip("/").replace("\\", "/")
         static_file = FRONTEND_DIST / stripped

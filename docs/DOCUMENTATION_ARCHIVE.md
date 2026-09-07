@@ -116,20 +116,20 @@ Consolidated from 25 individual docs. Organized by status.
 
 ### Critical
 
-| Item | Description | Priority |
-|------|-------------|----------|
-| **Runtime bugs** | `text` and `MAX_REQUEST_BYTES` undefined errors | Critical |
-| **PostgreSQL service** | Blocked Windows service startup | Critical |
+| Item | Description | Status |
+|------|-------------|--------|
+| ~~**Runtime bugs**~~ | `text` and `MAX_REQUEST_BYTES` undefined errors | Fixed |
+| ~~**PostgreSQL service**~~ | Blocked Windows service startup | Fixed |
 
 ### High
 
-| Item | Description | Priority |
-|------|-------------|----------|
-| **CI test coverage** | Only 3/1,921 tests running in CI | High |
-| **mypy errors** | 393 type errors need fixing | High |
-| **ruff warnings** | 5,773 lint warnings need fixing | High |
-| **Code signing** | Authenticode certificate needed (~$200-500/year) | High |
-| **Compliance & Export** | Export control (Wassenaar/EAR), GDPR, encryption regs, EU Cyber Resilience Act | High |
+| Item | Description | Status |
+|------|-------------|--------|
+| ~~**CI test coverage**~~ | Only 3/1,921 tests running in CI | Fixed |
+| ~~**mypy errors**~~ | 393 type errors need fixing | Fixed |
+| ~~**ruff warnings**~~ | 5,773 lint warnings need fixing | Fixed |
+| **Code signing** | Authenticode certificate needed (~$200-500/year) | Open |
+| **Compliance & Export** | Export control (Wassenaar/EAR), GDPR, encryption regs, EU Cyber Resilience Act | Open |
 
 ### Medium
 

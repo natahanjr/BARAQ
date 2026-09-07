@@ -1,8 +1,9 @@
 """Fleet Configuration API — agent profile management."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from backend.security import require_auth
+
 from backend.fleet.config_profiles import ConfigProfileManager
+from backend.security import require_auth
 
 router = APIRouter(prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_auth)])
 

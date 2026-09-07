@@ -1,8 +1,9 @@
 """Bookmarks API — save/alert/investigation favorites."""
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional
 from sqlalchemy.exc import IntegrityError
+
 from backend.database.connection import get_db
 from backend.database.models import Bookmark
 from backend.security import require_auth
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/api/bookmarks", tags=["bookmarks"], dependencies=[De
 class BookmarkCreate(BaseModel):
     entity_type: str
     entity_id: int
-    note: Optional[str] = None
+    note: str | None = None
     tags: list[str] = []
 
 
@@ -46,7 +47,7 @@ async def create_bookmark(body: BookmarkCreate, db=Depends(get_db)):
 
 
 @router.get("")
-async def list_bookmarks(entity_type: Optional[str] = None, db=Depends(get_db)):
+async def list_bookmarks(entity_type: str | None = None, db=Depends(get_db)):
     q = db.query(Bookmark)
     if entity_type:
         q = q.filter_by(entity_type=entity_type)

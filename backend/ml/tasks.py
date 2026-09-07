@@ -15,16 +15,23 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
+from sqlalchemy import func, select
 
 from backend.database.connection import SessionLocal
+from backend.database.models import NetworkConnection, NormalizedEvent
 from backend.ml.anomaly import (
-    get_detector, IsolationForest, ML_CONTAMINATION, ML_RANDOM_STATE,
-    _DEFAULT_THRESHOLDS, LOGIN_EVENTS, PROCESS_EVENTS,
-    _NET_ATTACK_PREFIXES, _COMMON_LOGON_TYPES, _NIGHT_HOURS,
+    _COMMON_LOGON_TYPES,
+    _DEFAULT_THRESHOLDS,
+    _NET_ATTACK_PREFIXES,
+    _NIGHT_HOURS,
+    LOGIN_EVENTS,
+    ML_CONTAMINATION,
+    ML_RANDOM_STATE,
+    PROCESS_EVENTS,
+    IsolationForest,
     _ip_subnet_features,
+    get_detector,
 )
-from sqlalchemy import select, func
-from backend.database.models import NormalizedEvent, NetworkConnection
 
 logger = logging.getLogger("baraq.ml.tasks")
 _train_lock = threading.Lock()

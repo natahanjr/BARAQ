@@ -383,7 +383,7 @@ class Settings(BaseSettings):
         return v
 
     @model_validator(mode="after")
-    def weights_must_sum_to_one(self) -> "Settings":
+    def weights_must_sum_to_one(self) -> Settings:
         """Cross-field validation: ML weights must sum to approximately 1.0."""
         total = self.ml_rule_weight + self.ml_detection_weight
         if abs(total - 1.0) > 0.01:
@@ -395,7 +395,7 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def tls_paths_must_exist_if_enabled(self) -> "Settings":
+    def tls_paths_must_exist_if_enabled(self) -> Settings:
         """If TLS is enabled, the certificate and key files must exist."""
         if self.tls_enabled:
             from pathlib import Path

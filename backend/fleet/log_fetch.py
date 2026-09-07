@@ -1,6 +1,6 @@
 """Fleet management — remote log fetch command."""
 import logging
-from typing import Optional
+
 from pydantic import BaseModel
 
 logger = logging.getLogger("baraq.fleet.log_fetch")

@@ -1,8 +1,8 @@
 """SOAR approval workflow — multi-step approval for dangerous actions."""
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Optional
+
 from pydantic import BaseModel
 
 logger = logging.getLogger("baraq.soar.approval")
@@ -36,12 +36,12 @@ class ApprovalRecord(BaseModel):
     rejections: list[str] = []
     created_at: str = ""
     expires_at: str = ""
-    resolved_at: Optional[str] = None
+    resolved_at: str | None = None
 
     def __init__(self, **data):
         super().__init__(**data)
         if not self.created_at:
-            self.created_at = datetime.now(timezone.utc).isoformat()
+            self.created_at = datetime.now(UTC).isoformat()
 
 
 class ApprovalWorkflow:
@@ -74,7 +74,7 @@ class ApprovalWorkflow:
             record.approvals.append(approver)
         if len(record.approvals) >= record.approvers_required:
             record.status = ApprovalStatus.APPROVED
-            record.resolved_at = datetime.now(timezone.utc).isoformat()
+            record.resolved_at = datetime.now(UTC).isoformat()
             logger.info("Approval request %s APPROVED by %s", request_id, approver)
         return record
 
@@ -84,11 +84,11 @@ class ApprovalWorkflow:
             raise ValueError(f"Request {request_id} not found")
         record.status = ApprovalStatus.REJECTED
         record.rejections.append(f"{approver}: {reason}")
-        record.resolved_at = datetime.now(timezone.utc).isoformat()
+        record.resolved_at = datetime.now(UTC).isoformat()
         logger.info("Approval request %s REJECTED by %s: %s", request_id, approver, reason)
         return record
 
-    def get_status(self, request_id: str) -> Optional[ApprovalRecord]:
+    def get_status(self, request_id: str) -> ApprovalRecord | None:
         return self._pending.get(request_id)
 
     def list_pending(self) -> list[ApprovalRecord]:

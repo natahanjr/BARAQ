@@ -11,14 +11,10 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
-import time
 import zlib
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-
-import numpy as np
 
 logger = logging.getLogger("baraq.ml.retention")
 
@@ -146,10 +142,8 @@ class MLDataRetention:
             return {"pruned": 0, "kept": 0}
 
         model_files = sorted(self.model_dir.glob("model_v*.pkl"), key=lambda p: p.stat().st_mtime)
-        archived_files = sorted(self.archive_dir.glob("model_v*.bin.zst"), key=lambda p: p.stat().st_mtime)
 
         pruned_count = 0
-        kept_count = 0
 
         # Prune non-archived models older than max_versions
         if len(model_files) > self.policy.max_versions:

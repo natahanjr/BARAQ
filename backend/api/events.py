@@ -126,7 +126,7 @@ def events_stats_alias(
     db: Session = Depends(get_db),
 ):
     """Alias for /events/statistics (frontend compat)."""
-    return get_events_statistics(request=request, hours=hours, db=db)
+    return event_statistics(request=request, hours=hours, db=db)
 
 
 @router.get("/events/{event_id}")

@@ -359,6 +359,7 @@ def _alembic_has_run() -> bool:
 def init_db() -> None:
     """Create all tables, apply additive migrations and analytics indexes."""
     import time
+
     from sqlalchemy.exc import OperationalError
 
     # Register every model module on the shared Base before DDL so a bare

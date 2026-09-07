@@ -1,11 +1,10 @@
 """BARAQ resource profiling — memory, CPU, and I/O benchmarks."""
-import time
-import os
 import json
 import logging
+import os
+import time
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, timezone
-from typing import Optional
 
 logger = logging.getLogger("baraq.profiling")
 
@@ -13,7 +12,7 @@ logger = logging.getLogger("baraq.profiling")
 class ResourceProfiler:
     """Profile memory, CPU, and I/O for BARAQ subsystems."""
 
-    def __init__(self, output_dir: Optional[str] = None):
+    def __init__(self, output_dir: str | None = None):
         self.output_dir = Path(output_dir or os.getenv("BARAQ_PROFILING_DIR", "profiling_results"))
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._snapshots: list[dict] = []
@@ -27,7 +26,7 @@ class ResourceProfiler:
             cpu = proc.cpu_percent(interval=0.1)
             io = proc.io_counters() if hasattr(proc, 'io_counters') else None
             snapshot = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "label": label,
                 "rss_bytes": mem.rss,
                 "vms_bytes": mem.vms,
@@ -41,7 +40,7 @@ class ResourceProfiler:
             import resource
             usage = resource.getrusage(resource.RUSAGE_SELF)
             snapshot = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "label": label,
                 "rss_bytes": usage.ru_maxrss * 1024,
                 "cpu_percent": None,
@@ -64,7 +63,7 @@ class ResourceProfiler:
         self.snapshot("after_import")
 
         start = time.perf_counter()
-        result = func(*args, **kwargs)
+        func(*args, **kwargs)
         exec_time = time.perf_counter() - start
         self.snapshot("after_exec")
 
@@ -102,10 +101,10 @@ class ResourceProfiler:
             "snapshots": self._snapshots,
         }
 
-    def save_report(self, filename: Optional[str] = None) -> str:
+    def save_report(self, filename: str | None = None) -> str:
         """Save report to JSON file."""
         report = self.report()
-        fname = filename or f"profile_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
+        fname = filename or f"profile_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.json"
         path = self.output_dir / fname
         path.write_text(json.dumps(report, indent=2, default=str))
         logger.info("Profiling report saved to %s", path)

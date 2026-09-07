@@ -13,9 +13,7 @@ Workflow:
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
-import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
@@ -280,9 +278,7 @@ class CommunityRuleManager:
             return
 
         self._storage_dir.mkdir(parents=True, exist_ok=True)
-        if rule.rule_type == RuleType.SIGMA:
-            out_path = self._storage_dir / f"{rule.rule_id}.yml"
-        elif rule.rule_type == RuleType.CORRELATION_YAML:
+        if rule.rule_type == RuleType.SIGMA or rule.rule_type == RuleType.CORRELATION_YAML:
             out_path = self._storage_dir / f"{rule.rule_id}.yml"
         else:
             out_path = self._storage_dir / f"{rule.rule_id}.py"

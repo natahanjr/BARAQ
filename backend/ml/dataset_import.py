@@ -24,7 +24,7 @@ from pathlib import Path
 
 from backend.database.connection import SessionLocal
 from backend.database.models import NormalizedEvent, Verdict, utcnow
-from backend.ml.dataset_adapters import ADAPTERS, AdapterResult
+from backend.ml.dataset_adapters import ADAPTERS
 
 log = logging.getLogger("ml.dataset_import")
 
@@ -277,9 +277,9 @@ class ImportManager:
         max_file_size_mb: int = 50,
     ) -> Path:
         """Download individual files from a GitHub repo via the Trees API."""
+        import json as _json
         import urllib.error
         import urllib.request
-        import json as _json
 
         headers = {"Accept": "application/vnd.github.v3+json"}
         if token:
@@ -324,13 +324,12 @@ class ImportManager:
 
             try:
                 req = urllib.request.Request(raw_url, headers=headers)
-                with urllib.request.urlopen(req, timeout=60) as resp:
-                    with open(local_path, "wb") as f:
-                        while True:
-                            chunk = resp.read(65536)
-                            if not chunk:
-                                break
-                            f.write(chunk)
+                with urllib.request.urlopen(req, timeout=60) as resp, open(local_path, "wb") as f:
+                    while True:
+                        chunk = resp.read(65536)
+                        if not chunk:
+                            break
+                        f.write(chunk)
                 task.progress = 0.4 * ((idx + 1) / total_files)
             except Exception as exc:
                 log.warning("Failed to download %s: %s", path, exc)

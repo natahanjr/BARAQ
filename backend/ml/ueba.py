@@ -1,8 +1,7 @@
 """User and Entity Behavior Analytics (UEBA) — baseline profiling per user."""
 import logging
-import math
 from collections import defaultdict
-from typing import Optional
+
 from pydantic import BaseModel
 
 logger = logging.getLogger("baraq.ueba")
@@ -98,5 +97,5 @@ class UEBAEngine:
             anomalies.append({"type": "event_volume_spike", "current": len(current_events), "baseline_avg": baseline.avg_daily_events, "severity": "high"})
         return anomalies
 
-    def get_baseline(self, username: str) -> Optional[UserBaseline]:
+    def get_baseline(self, username: str) -> UserBaseline | None:
         return self._baselines.get(username)

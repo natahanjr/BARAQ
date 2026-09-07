@@ -561,7 +561,7 @@ def ml_labeling_stats(db: Session = Depends(get_db)):
     Shows how many threat-intel IPs and analyst verdicts are available
     for training, so operators can see the ML is learning from real data.
     """
-    from backend.ml.realworld_labeler import get_threat_intel_stats, get_attack_ips
+    from backend.ml.realworld_labeler import get_attack_ips, get_threat_intel_stats
 
     stats = get_threat_intel_stats(db)
     stats["active_attack_ips"] = len(get_attack_ips(db))
@@ -600,7 +600,7 @@ def ml_rollback(request: Request, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Rollback failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Rollback failed: {e!s}")
 
 
 @router.get("/ml/model-history", dependencies=[Depends(require_auth)])

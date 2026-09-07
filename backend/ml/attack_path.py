@@ -6,7 +6,7 @@ historical alert patterns.
 """
 import logging
 from collections import defaultdict
-from typing import Optional
+
 from pydantic import BaseModel
 
 logger = logging.getLogger("baraq.attack_path")
@@ -96,7 +96,7 @@ class AttackPathPredictor:
         ],
     }
 
-    def __init__(self, historical_alerts: Optional[list[dict]] = None):
+    def __init__(self, historical_alerts: list[dict] | None = None):
         self._historical = historical_alerts or []
         self._transition_counts: dict[tuple, int] = defaultdict(int)
         self._build_transition_counts()

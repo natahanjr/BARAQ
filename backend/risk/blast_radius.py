@@ -1,6 +1,6 @@
 """Blast radius analysis — automated calculation of impact scope."""
 import logging
-from typing import Optional
+
 from pydantic import BaseModel
 
 logger = logging.getLogger("baraq.blast_radius")

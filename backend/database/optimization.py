@@ -1,7 +1,6 @@
 """Query optimization suite — indexes, slow query detection, and recommendations."""
 import logging
-import time
-from typing import Optional
+
 from pydantic import BaseModel
 
 logger = logging.getLogger("baraq.db.optimization")

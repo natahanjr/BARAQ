@@ -1,7 +1,7 @@
 """MITRE ATT&CK gap analysis — automated report of detection coverage."""
 import json
 from pathlib import Path
-from typing import Optional
+
 from pydantic import BaseModel
 
 

@@ -1,8 +1,9 @@
 """SOAR approval workflow API."""
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional
-from backend.response.approval import workflow, ApprovalRequest
+
+from backend.response.approval import ApprovalRequest, workflow
 from backend.security import require_auth
 
 router = APIRouter(prefix="/api/approval", tags=["approval"], dependencies=[Depends(require_auth)])

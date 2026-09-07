@@ -1,7 +1,7 @@
 """Insider threat detection — dedicated scoring and classification."""
 import logging
 from enum import Enum
-from typing import Optional
+
 from pydantic import BaseModel
 
 logger = logging.getLogger("baraq.insider_threat")
@@ -68,7 +68,7 @@ class InsiderThreatDetector:
         self._scores[username] = result
         return result
 
-    def get_score(self, username: str) -> Optional[InsiderThreatScore]:
+    def get_score(self, username: str) -> InsiderThreatScore | None:
         return self._scores.get(username)
 
     def list_high_risk(self) -> list[InsiderThreatScore]:

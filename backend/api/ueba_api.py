@@ -1,6 +1,5 @@
 """UEBA API — user entity behavior analytics endpoints."""
 import logging
-from collections import defaultdict
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select

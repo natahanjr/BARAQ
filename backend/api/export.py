@@ -5,11 +5,11 @@ from __future__ import annotations
 import csv
 import io
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
@@ -31,6 +31,7 @@ from backend.database.models import (
     VulnFinding,
 )
 from backend.security import require_auth
+
 
 def _safe_like(value: str) -> str:
     """Escape LIKE metacharacters to prevent pattern injection."""
@@ -159,7 +160,7 @@ def list_export_types():
 @router.get("/{data_type}")
 def export_data(
     data_type: str,
-    format: str = Query("csv", regex="^(csv|json)$"),
+    format: str = Query("csv", pattern="^(csv|json)$"),
     limit: int = Query(10000, ge=1, le=100000),
     offset: int = Query(0, ge=0),
     since: str | None = Query(None, description="ISO timestamp filter"),
@@ -175,7 +176,6 @@ def export_data(
     spec = EXPORTABLE[data_type]
     model = spec["model"]
     columns = spec["columns"]
-    header = spec["header"]
     label = spec["label"]
 
     # Build query
@@ -252,7 +252,7 @@ def export_data(
 
     serialized = [serialize(r) for r in rows]
 
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     filename = f"baraq_{data_type}_{ts}"
 
     if format == "json":
@@ -263,7 +263,7 @@ def export_data(
                 "total": total,
                 "returned": len(serialized),
                 "offset": offset,
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "data": serialized,
             },
             indent=2,

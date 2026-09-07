@@ -1,7 +1,6 @@
 """Fleet management — multi-profile configuration management."""
-import json
 import logging
-from typing import Optional
+
 from pydantic import BaseModel
 
 logger = logging.getLogger("baraq.fleet.config")
@@ -36,7 +35,7 @@ class ConfigProfileManager:
         logger.info("Config profile created: %s", name)
         return profile
 
-    def get_profile(self, name: str) -> Optional[ConfigProfile]:
+    def get_profile(self, name: str) -> ConfigProfile | None:
         return self._profiles.get(name)
 
     def list_profiles(self) -> list[ConfigProfile]:
@@ -50,13 +49,13 @@ class ConfigProfileManager:
             profile.hosts.append(host_id)
         return True
 
-    def get_host_profile(self, host_id: str) -> Optional[ConfigProfile]:
+    def get_host_profile(self, host_id: str) -> ConfigProfile | None:
         for profile in self._profiles.values():
             if host_id in profile.hosts:
                 return profile
         return self._profiles.get("default")
 
-    def update_profile(self, name: str, settings: dict) -> Optional[ConfigProfile]:
+    def update_profile(self, name: str, settings: dict) -> ConfigProfile | None:
         profile = self._profiles.get(name)
         if not profile:
             return None

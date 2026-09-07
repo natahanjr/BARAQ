@@ -14,18 +14,17 @@ Uses Federated Averaging (FedAvg) algorithm:
 from __future__ import annotations
 
 import logging
-import math
 import zlib
 from dataclasses import dataclass, field
-from typing import Any
 
 import numpy as np
 
 logger = logging.getLogger("baraq.ml.federated")
 
 try:
-    import joblib
     import io
+
+    import joblib
 
     HAS_JOBLIB = True
 except ImportError:

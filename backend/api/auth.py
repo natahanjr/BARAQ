@@ -39,7 +39,6 @@ from backend.auth import (
     verify_password,
     verify_refresh_token,
     verify_token,
-    verify_token_for_user,
 )
 from backend.config import AUTH_TOKEN_SECRET, COOKIE_SECURE, DEFAULT_ADMIN_PASSWORD
 from backend.database.connection import get_db
@@ -1183,7 +1182,7 @@ def clear_audit(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/audit/export", dependencies=[Depends(require_admin)])
 def export_audit(
-    format: str = Query("json", regex="^(json|csv)$"),
+    format: str = Query("json", pattern="^(json|csv)$"),
     action: str | None = None,
     actor: str | None = None,
     limit: int = Query(1000, ge=1, le=10000),
@@ -1192,6 +1191,7 @@ def export_audit(
     """Export audit trail to JSON or CSV for SIEM integration."""
     import csv
     import io
+
     from fastapi.responses import StreamingResponse
 
     stmt = select(AuditLog).order_by(AuditLog.created_at.desc())

@@ -19,7 +19,6 @@ from backend.risk.models import (
     EntityRiskV2Factor,
 )
 
-
 _ALLOWED_TABLES = frozenset({
     "entity_risk_v2",
     "entity_risk_v2_factor",

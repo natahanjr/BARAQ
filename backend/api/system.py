@@ -726,12 +726,14 @@ def _build_robustness_sessions() -> tuple[dict, dict, dict]:
     """Build per-user, per-env, per-platform feature matrices from recent events.
     Single DB query instead of three separate ones."""
     import numpy as np
+
     from backend.database.connection import SessionLocal as SessionLocal
     from backend.ml.anomaly import event_feature_vector
 
     db = SessionLocal()
     try:
         from datetime import UTC, datetime, timedelta
+
         from backend.database.models import NormalizedEvent
 
         since = datetime.now(UTC) - timedelta(hours=24)
@@ -795,9 +797,9 @@ def _build_robustness_sessions() -> tuple[dict, dict, dict]:
 def ml_robustness():
     """Model robustness testing: FGSM evasion, cross-user/env/platform validation."""
     from backend.ml.robustness import (
-        cross_user_validation,
         cross_environment_validation,
         cross_platform_validation,
+        cross_user_validation,
     )
 
     detector = get_detector()
@@ -983,7 +985,6 @@ def ml_comparison():
 @router.get("/ml/retention", dependencies=[Depends(require_auth)])
 def ml_retention():
     """ML data retention and archival status."""
-    import tempfile
 
     from backend.ml.retention import MLDataRetention
 

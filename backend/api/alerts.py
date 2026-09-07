@@ -18,7 +18,13 @@ from backend.database.connection import get_db
 from backend.database.models import Alert, AlertAction, AlertEventLink, AnalystNote
 from backend.detection.workflow import can_transition, is_valid_state, next_states
 from backend.reports.generator import generate_report
-from backend.response.actions import block_ip, unblock_ip, kill_process, isolate_host, unisolate_host, quarantine_file, disable_account
+from backend.response.actions import (
+    block_ip,
+    disable_account,
+    isolate_host,
+    kill_process,
+    quarantine_file,
+)
 from backend.security import actor_name, require_admin, require_auth, tenant_scope
 
 logger = logging.getLogger("baraq.api.alerts")

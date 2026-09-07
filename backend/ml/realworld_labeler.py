@@ -37,7 +37,6 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -182,11 +181,6 @@ def get_threat_intel_stats(session) -> dict:
     """Return stats about the threat-intel labeling data for monitoring."""
     try:
         total = session.scalar(select(ThreatIntelRecord.indicator)) or 0
-        malicious = session.scalar(
-            select(ThreatIntelRecord.indicator).where(
-                ThreatIntelRecord.category.in_(("malicious", "abusive"))
-            )
-        ) or 0
         verdicts = session.execute(select(Verdict.verdict)).all()
         tp = sum(1 for v in verdicts if v[0] == "true_positive")
         fp = sum(1 for v in verdicts if v[0] == "false_positive")
