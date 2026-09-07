@@ -77,6 +77,17 @@ Consolidated from 25 individual docs. Organized by status.
 | **User Guide** | Login, alerts, incidents, automation, settings | Done |
 | **E2E Testing** | Playwright setup, test writing guide | Done |
 | **Documentation Archive** | 25 docs consolidated into single reference | Done |
+| **GDPR Processing** | GDPR/CCPA compliance, data controller/processor roles, 30-day retention, DSAR/erasure | Done |
+| **TLS Production** | HTTPS enforcement, certificate provisioning, Secure cookies, verification checklist | Done |
+| **Agent Fleet** | Remote telemetry collection, provisioning, key management, command channel, health tracking | Done |
+| **Backup Restore** | PostgreSQL backup/restore, cryptographic verification, automated daily backups | Done |
+| **Data Quality** | Auto-fix for corrupted Windows event data, repair sequences, configurable thresholds | Done |
+| **Migrations** | Alembic schema migrations, baseline revision, deployment checklist | Done |
+| **ML Strategy** | 4-layer architecture (IF + supervised + Markov + ensemble), 129K dataset, 99.05% accuracy | Done |
+| **Multinode Ops** | Multi-node deployment, process roles, distributed scheduler lock, read replicas, Kubernetes | Done |
+| **Performance** | Benchmarks: 2.7 events/s ingest, 99.05% accuracy hold-out, resource footprint | Done |
+| **TLS Options** | Self-signed, reverse proxy with Let's Encrypt, SSH tunnel options | Done |
+| **Limitations & Future** | Scope limitations, ML limitations, phased future-work roadmap | Done |
 
 ### Infrastructure
 
@@ -118,6 +129,7 @@ Consolidated from 25 individual docs. Organized by status.
 | **mypy errors** | 393 type errors need fixing | High |
 | **ruff warnings** | 5,773 lint warnings need fixing | High |
 | **Code signing** | Authenticode certificate needed (~$200-500/year) | High |
+| **Compliance & Export** | Export control (Wassenaar/EAR), GDPR, encryption regs, EU Cyber Resilience Act | High |
 
 ### Medium
 
