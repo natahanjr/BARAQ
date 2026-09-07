@@ -358,6 +358,9 @@ def _alembic_has_run() -> bool:
 
 def init_db() -> None:
     """Create all tables, apply additive migrations and analytics indexes."""
+    import time
+    from sqlalchemy.exc import OperationalError
+
     # Register every model module on the shared Base before DDL so a bare
     # import (tests, CLI tools) still creates the full v2 schema - the app
     # entry point imports these transitively, standalone callers may not.
@@ -369,7 +372,21 @@ def init_db() -> None:
     from backend.risk import models as _risk_models  # noqa: F401
     from backend.telemetry.models import TelemetryEvent as _v2_events  # noqa: F401
 
-    Base.metadata.create_all(bind=engine)
+    # Retry database connection with backoff (handles startup race condition)
+    MAX_RETRIES = 10
+    RETRY_DELAY = 2
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            Base.metadata.create_all(bind=engine)
+            break
+        except OperationalError as e:
+            if attempt == MAX_RETRIES - 1:
+                logger.error("Failed to connect to database after %d attempts", MAX_RETRIES)
+                raise
+            logger.warning("Database connection attempt %d/%d failed: %s. Retrying in %ds...",
+                          attempt + 1, MAX_RETRIES, e, RETRY_DELAY)
+            time.sleep(RETRY_DELAY)
 
     # Skip in-place DDL when Alembic is managing migrations. The
     # ``alembic upgrade head`` command (run at deploy time) applies the same
