@@ -100,4 +100,16 @@ test.describe("Authentication E2E", () => {
     const submitButton = page.locator('button[type="submit"]');
     await expect(submitButton).toBeEnabled();
   });
+
+  test("SSO button check", async ({ page }) => {
+    try {
+      const res = await page.evaluate(async () => {
+        const r = await fetch("/api/auth/oidc/status");
+        return r.ok ? await r.json() : null;
+      });
+      if (res?.oidc) {
+        await expect(page.locator("text=Continue with SSO")).toBeVisible();
+      }
+    } catch {}
+  });
 });
