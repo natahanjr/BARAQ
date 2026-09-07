@@ -113,3 +113,18 @@ test.describe("Authentication E2E", () => {
     } catch {}
   });
 });
+
+test.describe("Authentication E2E - requires backend", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto(BASE_URL);
+  });
+
+  test("successful login with valid credentials", async ({ page }) => {
+    await page.fill('input[id="username"]', ADMIN_USER);
+    await page.fill('input[id="password"]', ADMIN_PASS);
+    await page.click('button[type="submit"]');
+    await expect(page.locator('input[id="username"]')).toBeHidden({ timeout: 15000 });
+    const url = page.url();
+    expect(url).toContain("/");
+  });
+});
