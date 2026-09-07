@@ -143,4 +143,18 @@ test.describe("Authentication E2E - requires backend", () => {
     const errorMsg = page.locator('p').filter({ hasText: /401|Invalid|incorrect|wrong|unauthorized/i });
     await expect(errorMsg.first()).toBeVisible({ timeout: 8000 });
   });
+
+  test("registration creates account with valid data", async ({ page }) => {
+    await page.click("text=New here? Create an account");
+    const timestamp = Date.now();
+    const username = `e2e_${timestamp}`;
+    await page.fill('input[id="reg-username"]', username);
+    await page.fill('input[id="reg-name"]', "E2E Test User");
+    await page.fill('input[id="reg-org"]', "E2E Test Org");
+    await page.fill('input[id="reg-password"]', TEST_PASS);
+    await page.fill('input[id="reg-confirm"]', TEST_PASS);
+    await page.click('button[type="submit"]');
+    const successMsg = page.locator('p').filter({ hasText: /created|awaiting|verification/i });
+    await expect(successMsg.first()).toBeVisible({ timeout: 8000 });
+  });
 });
