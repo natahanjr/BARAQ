@@ -28,6 +28,34 @@ Consolidated from 25 individual docs. Organized by status.
 
 ---
 
+## Phase Verification (0–7)
+
+All 8 development phases fully implemented and verified against codebase.
+
+| Phase | Name | Key Deliverables | Status |
+|-------|------|------------------|--------|
+| **Phase 0** | Foundation | SOC contract, environments, metrics registry, baseline snapshot, v1 tag, production DB protection | Done |
+| **Phase 1** | Telemetry | EVENT schema v1.1, fingerprint dedup, normalization, ingestion pipeline, v2_events table, API | Done |
+| **Phase 2** | Detection | DETECTION contract, 5 detectors (D001-D005), registry, engine, FP filter, 98+ tests | Done |
+| **Phase 3** | Alerting | ALERT contract, fingerprint, eligibility, dedup, lifecycle, suppression, feedback, 5 tables, 119+ tests | Done |
+| **Phase 4** | Aggregation | Behavior Group contract, fingerprint, grouping, lifecycle, 4 tables, 99+ tests | Done |
+| **Phase 5** | Correlation | Correlation contract, 9 types, 9 rules, edges, confidence, 5 tables, 107+ tests | Done |
+| **Phase 6** | Entity Risk | Entity Risk contract, 14 factors, calculator, decay, propagation, 5 tables, 27+ scenarios | Done |
+| **Phase 7** | Incidents | Incident contract, 8 eligibility policies, 10+ tables, lifecycle, suppression, 20 scenarios | Done |
+
+### Verification Evidence
+
+Each phase was verified by checking:
+- Contract dataclasses exist in `backend/*/contract.py`
+- Models/tables exist in `backend/*/models.py`
+- Engine logic exists in `backend/*/engine.py`
+- API endpoints exist in `backend/api/*.py`
+- Tests exist in `tests/*/`
+- Evaluation corpora exist in `tests/evaluation/`
+- Isolation boundaries verified (no cross-phase writes)
+
+---
+
 ## Ongoing
 
 | Document | Summary | Remaining Work |
