@@ -40,6 +40,8 @@ const UEBA = lazy(() => import("./pages/UEBA.jsx"));
 const InsiderThreat = lazy(() => import("./pages/InsiderThreat.jsx"));
 const FleetConfig = lazy(() => import("./pages/FleetConfig.jsx"));
 const MitreGapReport = lazy(() => import("./pages/MitreGapReport.jsx"));
+const CorrelationRules = lazy(() => import("./pages/CorrelationRules.jsx"));
+const PlaybookEditor = lazy(() => import("./pages/PlaybookEditor.jsx"));
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -122,6 +124,8 @@ function AppRoutes() {
         <Route path="insider-threat" element={<Suspense fallback={<Loading />}><InsiderThreat /></Suspense>} />
         <Route path="fleet-config" element={<Suspense fallback={<Loading />}><FleetConfig /></Suspense>} />
         <Route path="mitre-gap" element={<Suspense fallback={<Loading />}><MitreGapReport /></Suspense>} />
+        <Route path="correlation-rules" element={<Suspense fallback={<Loading />}><CorrelationRules /></Suspense>} />
+        <Route path="playbook-editor" element={<Suspense fallback={<Loading />}><PlaybookEditor /></Suspense>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
