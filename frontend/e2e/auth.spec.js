@@ -36,4 +36,15 @@ test.describe("Authentication E2E", () => {
     await expect(page.locator('input[id="username"]')).toBeVisible();
     await expect(page.locator('input[id="password"]')).toBeVisible();
   });
+
+  test("registration validates password match", async ({ page }) => {
+    await page.click("text=New here? Create an account");
+    await page.fill('input[id="reg-username"]', TEST_USER);
+    await page.fill('input[id="reg-name"]', "Test User");
+    await page.fill('input[id="reg-org"]', "Test Org");
+    await page.fill('input[id="reg-password"]', TEST_PASS);
+    await page.fill('input[id="reg-confirm"]', "differentpassword");
+    await page.click('button[type="submit"]');
+    await expect(page.locator("text=Passwords do not match")).toBeVisible();
+  });
 });
