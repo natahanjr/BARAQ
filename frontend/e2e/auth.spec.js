@@ -47,4 +47,15 @@ test.describe("Authentication E2E", () => {
     await page.click('button[type="submit"]');
     await expect(page.locator("text=Passwords do not match")).toBeVisible();
   });
+
+  test("username field rejects invalid characters on submit", async ({ page }) => {
+    await page.click("text=New here? Create an account");
+    const form = page.locator("form");
+    await page.fill('input[id="reg-username"]', "user@domain!");
+    const isInvalid = await form.evaluate((el) => {
+      el.reportValidity();
+      return !el.checkValidity();
+    });
+    expect(isInvalid).toBe(true);
+  });
 });
