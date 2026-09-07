@@ -1179,3 +1179,39 @@ def clear_audit(request: Request, db: Session = Depends(get_db)):
         "message": f"Cleared {count} audit record(s). Report generated before clearing.",
         "report": report,
     }
+
+
+@router.get("/audit/export", dependencies=[Depends(require_admin)])
+def export_audit(
+    format: str = Query("json", regex="^(json|csv)$"),
+    action: str | None = None,
+    actor: str | None = None,
+    limit: int = Query(1000, ge=1, le=10000),
+    db: Session = Depends(get_db),
+):
+    """Export audit trail to JSON or CSV for SIEM integration."""
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+
+    stmt = select(AuditLog).order_by(AuditLog.created_at.desc())
+    if action:
+        stmt = stmt.where(AuditLog.action == action)
+    if actor:
+        stmt = stmt.where(AuditLog.actor == actor)
+    rows = db.scalars(stmt.limit(limit)).all()
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["id", "action", "actor", "entity_type", "entity_id", "detail", "ip", "created_at"])
+        for row in rows:
+            writer.writerow([row.id, row.action, row.actor, row.entity_type, row.entity_id, row.detail, row.client_ip, row.created_at])
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=audit_export.csv"},
+        )
+
+    return {"items": [e.to_dict() for e in rows], "total": len(rows), "format": "json"}
