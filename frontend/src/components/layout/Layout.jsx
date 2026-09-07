@@ -1,6 +1,7 @@
 import { memo, useState, useCallback, useEffect } from "react";
 import { Outlet } from "react-router";
 import { useBackendStatus } from "../../hooks/useBackendStatus.js";
+import { useNotifications } from "../../hooks/useNotifications.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import Sidebar from "./Sidebar.jsx";
 import Topbar from "./Topbar.jsx";
@@ -15,6 +16,7 @@ function Layout() {
   const [cmdOpen, setCmdOpen] = useState(false);
   const { user, logout, org, setOrg } = useAuth();
   const { online, activeAlerts, criticalAlerts, openIncidents, criticalIncidents, orgOptions } = useBackendStatus();
+  useNotifications(user?.token);
 
   const toggleSidebarCollapsed = useCallback(() => {
     setSidebarCollapsed((prev) => {
