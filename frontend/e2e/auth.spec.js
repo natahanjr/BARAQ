@@ -66,4 +66,12 @@ test.describe("Authentication E2E", () => {
     const isValid = await usernameInput.evaluate((el) => el.validity.valid);
     expect(isValid).toBe(true);
   });
+
+  test("password field has minLength validation", async ({ page }) => {
+    await page.click("text=New here? Create an account");
+    const passwordInput = page.locator('input[id="reg-password"]');
+    await passwordInput.fill("short");
+    const isTooShort = await passwordInput.evaluate((el) => el.validity.tooShort);
+    expect(isTooShort).toBe(true);
+  });
 });
