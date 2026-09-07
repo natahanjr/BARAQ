@@ -29,4 +29,11 @@ test.describe("Authentication E2E", () => {
     await expect(page.locator('input[id="reg-confirm"]')).toBeVisible();
     await expect(page.locator('button[type="submit"]')).toContainText("Create Account");
   });
+
+  test("back to sign in link returns to login mode", async ({ page }) => {
+    await page.click("text=New here? Create an account");
+    await page.click("text=Back to sign in");
+    await expect(page.locator('input[id="username"]')).toBeVisible();
+    await expect(page.locator('input[id="password"]')).toBeVisible();
+  });
 });
