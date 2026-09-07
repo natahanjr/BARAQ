@@ -127,4 +127,20 @@ test.describe("Authentication E2E - requires backend", () => {
     const url = page.url();
     expect(url).toContain("/");
   });
+
+  test("login fails with invalid credentials", async ({ page }) => {
+    await page.fill('input[id="username"]', "invaliduser");
+    await page.fill('input[id="password"]', "wrongpassword");
+    await page.click('button[type="submit"]');
+    const errorMsg = page.locator('p').filter({ hasText: /401|Invalid|incorrect|wrong/i });
+    await expect(errorMsg.first()).toBeVisible({ timeout: 8000 });
+  });
+
+  test("login fails with wrong password", async ({ page }) => {
+    await page.fill('input[id="username"]', ADMIN_USER);
+    await page.fill('input[id="password"]', "wrongpassword");
+    await page.click('button[type="submit"]');
+    const errorMsg = page.locator('p').filter({ hasText: /401|Invalid|incorrect|wrong|unauthorized/i });
+    await expect(errorMsg.first()).toBeVisible({ timeout: 8000 });
+  });
 });
