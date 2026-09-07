@@ -88,4 +88,16 @@ test.describe("Authentication E2E", () => {
     const isRequired = await usernameInput.evaluate((el) => el.required);
     expect(isRequired).toBe(true);
   });
+
+  test("login button state reflects form state", async ({ page }) => {
+    const submitButton = page.locator('button[type="submit"]');
+    await expect(submitButton).toBeEnabled();
+  });
+
+  test("login button is enabled with credentials", async ({ page }) => {
+    await page.fill('input[id="username"]', "admin");
+    await page.fill('input[id="password"]', "password");
+    const submitButton = page.locator('button[type="submit"]');
+    await expect(submitButton).toBeEnabled();
+  });
 });
