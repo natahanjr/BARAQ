@@ -82,4 +82,10 @@ test.describe("Authentication E2E", () => {
     const isValid = await passwordInput.evaluate((el) => el.validity.valid);
     expect(isValid).toBe(true);
   });
+
+  test("required fields are marked correctly", async ({ page }) => {
+    const usernameInput = page.locator('input[id="username"]');
+    const isRequired = await usernameInput.evaluate((el) => el.required);
+    expect(isRequired).toBe(true);
+  });
 });
