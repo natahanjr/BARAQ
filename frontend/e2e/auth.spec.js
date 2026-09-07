@@ -17,4 +17,8 @@ test.describe("Authentication E2E", () => {
     await expect(page.locator('input[id="password"]')).toBeVisible();
     await expect(page.locator('button[type="submit"]')).toContainText("Sign In");
   });
+
+  test("default credentials hint is displayed", async ({ page }) => {
+    await expect(page.locator("text=Default account:")).toBeVisible();
+  });
 });
