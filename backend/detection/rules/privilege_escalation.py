@@ -40,7 +40,7 @@ class PrivilegeEscalationRule(BaseRule):
             kw.lower() in group.lower() for kw in PRIV_GROUP_KEYWORDS
         )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         covered_event_ids: set[int] = set()
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)

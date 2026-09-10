@@ -132,7 +132,7 @@ class ProxyToolRule(BaseRule):
         "established port-forwards, and audit for additional pivot hosts."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
@@ -166,7 +166,7 @@ class UnusualPortRule(BaseRule):
         "hunt for additional connections to the same infrastructure."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
@@ -221,7 +221,7 @@ class EncryptedChannelRule(BaseRule):
         "that initiated the connection."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
@@ -254,7 +254,7 @@ class ExfilAlternativeProtocolRule(BaseRule):
         "hunt for matching data on the receiving host."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
@@ -287,7 +287,7 @@ class ExfilWebServiceRule(BaseRule):
         "possible, and review the exfiltrating process and file paths."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):

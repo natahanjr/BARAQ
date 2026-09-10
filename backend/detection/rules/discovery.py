@@ -64,7 +64,7 @@ class AccountDiscoveryRule(BaseRule):
         "enumerated accounts."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
@@ -97,7 +97,7 @@ class ShareDiscoveryRule(BaseRule):
         "monitor for access to enumerated share paths."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
@@ -131,7 +131,7 @@ class SystemInfoDiscoveryRule(BaseRule):
         "suggests reconnaissance."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
@@ -166,7 +166,7 @@ class DomainDiscoveryRule(BaseRule):
         "discovered domain controllers."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
@@ -200,7 +200,7 @@ class SecuritySoftwareDiscoveryRule(BaseRule):
         "changes."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
@@ -233,7 +233,7 @@ class FileSystemDiscoveryRule(BaseRule):
         "staging activity this indicates active data collection."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):

@@ -38,7 +38,7 @@ class HiddenArtifactsRule(BaseRule):
         "and hidden files, and review the initiating process chain."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 

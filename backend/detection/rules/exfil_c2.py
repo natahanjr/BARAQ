@@ -43,7 +43,7 @@ class CloudSyncExfilRule(BaseRule):
         re.IGNORECASE,
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         for cmdline, label, user in self.cmdline_candidates(since):
@@ -91,7 +91,7 @@ class WebhookC2Rule(BaseRule):
         re.IGNORECASE,
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
 
@@ -151,7 +151,7 @@ class DnsTunnelingRule(BaseRule):
     _MIN_UNIQUE_QUERIES = 20
     _LARGE_RESPONSE = 400
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
@@ -166,7 +166,7 @@ class DnsTunnelingRule(BaseRule):
         long_label: list[str] = []
         long_query: list[str] = []
         big_responses = 0
-        by_base: Counter[tuple[str, str, int]] = Counter()
+        by_base: Counter[tuple[str, int, str]] = Counter()
         for q in rows:
             query = (q.query or "").lower().rstrip(".")
             if not query:
@@ -217,7 +217,7 @@ class DnsTunnelingRule(BaseRule):
                     event_ids=[],
                 )
             )
-        for process, pid, base in loud:
+        for process, pid, base in loud:  # type: ignore[assignment]
             findings.append(
                 self._result(
                     evidence=(

@@ -43,7 +43,7 @@ class RegistryRunKeyRule(BaseRule):
         "writing process and scan for additional persistence mechanisms."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(

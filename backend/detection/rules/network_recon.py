@@ -36,7 +36,7 @@ class NetworkReconRule(BaseRule):
         self.distinct_ports = distinct_ports
         self.window_seconds = window_seconds
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         since = datetime.now(UTC) - timedelta(seconds=self.window_seconds)
         findings: list[DetectionResult] = []
 

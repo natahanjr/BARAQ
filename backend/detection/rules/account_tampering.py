@@ -40,7 +40,7 @@ class AccountTamperingRule(BaseRule):
         "tampered, re-enable/restore the account and audit who performed the change."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(

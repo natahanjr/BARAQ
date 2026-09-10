@@ -147,7 +147,7 @@ class KillChainCorrelationRule(BaseRule):
         self.window_minutes = window_minutes
         self.max_stage_gap_minutes = max_stage_gap_minutes
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         since = datetime.now(UTC) - timedelta(
             minutes=self.window_minutes or window_minutes
         )

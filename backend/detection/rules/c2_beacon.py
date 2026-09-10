@@ -72,7 +72,7 @@ class C2BeaconRule(BaseRule):
         self.min_connections = min_connections
         self.min_duration_seconds = min_duration_seconds
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(

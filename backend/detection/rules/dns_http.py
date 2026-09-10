@@ -133,7 +133,7 @@ class DnsHttpExfilRule(BaseRule):
         )
         return findings
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         since = datetime.now(UTC) - timedelta(
             minutes=self.window_minutes or window_minutes
         )

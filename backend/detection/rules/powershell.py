@@ -55,7 +55,7 @@ class SuspiciousPowerShellRule(BaseRule):
         "isolate the host and restrict PowerShell to Constrained Language Mode."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         rows = self.session.scalars(
             select(NormalizedEvent).where(

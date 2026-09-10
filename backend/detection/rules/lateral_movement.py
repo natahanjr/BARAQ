@@ -44,7 +44,7 @@ class LateralMovementRule(BaseRule):
         self.failed_logon_targets = failed_logon_targets
         self.window_minutes = window_minutes
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         findings: list[DetectionResult] = []
         window_minutes = self.window_minutes or window_minutes
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)

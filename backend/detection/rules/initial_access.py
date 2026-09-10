@@ -114,7 +114,7 @@ class SpearphishingAttachmentRule(BaseRule):
         "follow-on execution."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         findings: list[DetectionResult] = []
         rows = self.session.scalars(
@@ -156,7 +156,7 @@ class SpearphishingLinkRule(BaseRule):
         "unsolicited, and warn recipients before they click."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         findings: list[DetectionResult] = []
         rows = self.session.scalars(
@@ -201,7 +201,7 @@ class DriveByCompromiseRule(BaseRule):
         "host for recent downloads or injected processes."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         findings: list[DetectionResult] = []
         rows = self.session.scalars(
@@ -250,7 +250,7 @@ class ExternalServiceExploitRule(BaseRule):
         "firewall rules or a VPN."
     )
 
-    def evaluate(self, window_minutes: int) -> list[DetectionResult]:
+    def evaluate(self, window_minutes: int, since_id: int | None = None) -> list[DetectionResult]:
         since = datetime.now(UTC) - timedelta(minutes=window_minutes)
         findings: list[DetectionResult] = []
         rows = self.session.scalars(
