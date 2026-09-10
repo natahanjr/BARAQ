@@ -175,7 +175,7 @@ def feature_importance_stability(
     for b in range(n_bootstrap):
         rankings[b] = np.argsort(np.argsort(-importance_matrix[b]))
     ranking_cv = float(
-        np.mean(np.std(rankings, axis=0) / np.mean(rankings, axis=0 + 1e-9))
+        np.mean(np.std(rankings, axis=0) / (np.mean(rankings, axis=0) + 1e-9))
     )
 
     return {

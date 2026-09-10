@@ -59,7 +59,7 @@ class TimeWindowEnsemble:
         weights = [self.decay_factor ** (n - 1 - i) for i in range(n)]
         # Normalize weights
         total = sum(weights)
-        self._window_weights = [w / total for w in weights] if total > 0 else weights
+        self._window_weights = deque([w / total for w in weights] if total > 0 else weights, maxlen=self.max_windows)
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         """Weighted average prediction across all time window models."""
@@ -117,7 +117,7 @@ class EnsembleStacker:
         self.meta_model = None
         self.gb_model = None
         self.is_trained = False
-        self.meta_weights: dict[str, float] = {}
+        self.meta_weights: dict[str, float | str] = {}
         self._min_samples_for_meta = 30
         self._use_gradient_boosting = True
 

@@ -17,6 +17,7 @@ learned from historical attack patterns.
 from __future__ import annotations
 
 import logging
+from typing import Any
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
@@ -30,7 +31,7 @@ class AttackSequenceDetector:
     """Detects attack sequences across behavior streams using Markov chains."""
 
     # Known attack sequence patterns with transition weights
-    ATTACK_SEQUENCES = {
+    ATTACK_SEQUENCES: dict[str, dict[str, Any]] = {
         "brute_force_lateral": {
             "description": "Failed logons followed by successful logon from same IP",
             "transitions": [

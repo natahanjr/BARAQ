@@ -119,7 +119,7 @@ def _download_zip(url: str, timeout: int = 60) -> bytes | None:
 
 def _extract_events_from_zip(zip_bytes: bytes) -> list[dict]:
     """Extract and parse JSON/JSONL events from a ZIP archive."""
-    events = []
+    events: list[dict] = []
     try:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             for name in zf.namelist():
@@ -179,7 +179,7 @@ def _parse_otrf_event(raw: dict, host_override: str = "") -> dict | None:
     source_ip = str(raw.get("IpAddress", "") or raw.get("SourceAddress", "") or raw.get("source_ip", "") or "")
 
     # Build facts
-    facts = {}
+    facts: dict[str, Any] = {}
 
     # Auth events
     if event_id in (4624, 4625, 4672, 4740, 4634):
@@ -194,13 +194,13 @@ def _parse_otrf_event(raw: dict, host_override: str = "") -> dict | None:
         facts["image_path"] = str(raw.get("Image", "") or raw.get("NewProcessName", "") or "")
         facts["command_line"] = str(raw.get("CommandLine", "") or "")
         facts["parent_process"] = str(raw.get("ParentImage", "") or raw.get("ParentProcessName", "") or "")
-        facts["cmdline_len"] = len(facts.get("command_line", ""))
-        cmdline = facts["command_line"].lower()
-        facts["has_encoded"] = 1 if re.search(r"[A-Za-z0-9+/]{40,}={0,2}", facts["command_line"]) else 0
+        facts["cmdline_len"] = len(facts.get("command_line", ""))  # type: ignore[arg-type]
+        cmdline = str(facts["command_line"]).lower()
+        facts["has_encoded"] = 1 if re.search(r"[A-Za-z0-9+/]{40,}={0,2}", str(facts["command_line"])) else 0
         facts["has_download"] = 1 if any(t in cmdline for t in ("download", "invoke-webrequest", "curl", "wget")) else 0
         facts["has_hidden"] = 1 if "-hidden" in cmdline or "-w hidden" in cmdline else 0
         facts["has_remote"] = 1 if any(t in cmdline for t in ("\\\\", "remote", "psexec")) else 0
-        facts["script_len"] = len(facts["command_line"])
+        facts["script_len"] = len(facts["command_line"])  # type: ignore[arg-type]
         facts["new_process"] = facts["image_path"]
 
         if event_id == 3:  # Network connection
@@ -614,7 +614,8 @@ def build_barqaq_dataset_100k(max_zip_size_mb: int = 10) -> dict:
     log.info("=== BARAQ Dataset 100K Complete ===")
     for k, v in summary.items():
         if k == "hosts":
-            log.info("  %s: %d hosts (%s)", k, v, ", ".join(v[:5]))
+            hosts_list: list[str] = v  # type: ignore[assignment]
+            log.info("  %s: %d hosts (%s)", k, v, ", ".join(hosts_list[:5]))
         else:
             log.info("  %s: %s", k, v)
     return summary

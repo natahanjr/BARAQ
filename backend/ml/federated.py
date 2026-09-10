@@ -72,7 +72,7 @@ class FederatedAggregator:
         self._global_model = None
         self._client_updates: list[ClientUpdate] = []
         self._round_history: list[FederatedRound] = []
-        self._previous_global_params = None
+        self._previous_global_params: dict[str, dict[str, list | float]] | None = None
 
     def receive_update(self, update: ClientUpdate) -> bool:
         """Receive a model update from a client.
@@ -113,7 +113,7 @@ class FederatedAggregator:
 
         # Weighted averaging based on client sample counts and performance
         total_weight = 0.0
-        weighted_params = {}
+        weighted_params: dict[str, dict[str, list | float]] = {}
 
         for update in self._client_updates:
             weight = update.n_samples * max(update.performance_score, 0.1)
@@ -129,12 +129,12 @@ class FederatedAggregator:
                         key = f"estimator_{i}"
                         if key not in weighted_params:
                             weighted_params[key] = {"trees": [], "weight": 0.0}
-                        weighted_params[key]["trees"].extend(
+                        weighted_params[key]["trees"].extend(  # type: ignore[union-attr]
                             estimator.estimators_.tolist()
                             if hasattr(estimator, "estimators_")
                             else []
                         )
-                        weighted_params[key]["weight"] += weight
+                        weighted_params[key]["weight"] += weight  # type: ignore[operator]
                 round_result.client_scores[update.client_id] = update.performance_score
             except Exception as e:
                 logger.warning("Failed to decode update from %s: %s", update.client_id, e)
@@ -143,7 +143,7 @@ class FederatedAggregator:
         if total_weight > 0:
             # Normalize weights
             for key in weighted_params:
-                weighted_params[key]["weight"] /= total_weight
+                weighted_params[key]["weight"] /= total_weight  # type: ignore[operator]
 
         # Compute convergence delta
         if self._previous_global_params is not None:
@@ -221,7 +221,7 @@ class FederatedClient:
         self.client_id = client_id
         self.aggregator = aggregator
         self._local_model = None
-        self._local_data = None
+        self._local_data: dict[str, np.ndarray | None] | None = None
 
     def set_training_data(self, X: np.ndarray, y: np.ndarray | None = None):
         """Set local training data (never leaves the client)."""
@@ -236,15 +236,16 @@ class FederatedClient:
             return {"status": "no-data"}
 
         X = self._local_data["X"]
-        if len(X) < 10:
-            return {"status": "insufficient-data", "n_samples": len(X)}
+        if len(X) < 10:  # type: ignore[arg-type]
+            return {"status": "insufficient-data", "n_samples": len(X)}  # type: ignore[arg-type]
 
         self._local_model = IsolationForest(
             contamination=contamination,
             random_state=42,
             n_estimators=100,
-            max_samples=min(256, len(X)),
+            max_samples=min(256, len(X)),  # type: ignore[arg-type]
         )
+        assert self._local_model is not None
         self._local_model.fit(X)
 
         # Compute local performance score
@@ -253,7 +254,7 @@ class FederatedClient:
 
         return {
             "status": "ok",
-            "n_samples": len(X),
+            "n_samples": len(X),  # type: ignore[arg-type]
             "performance": round(performance, 4),
         }
 

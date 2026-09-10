@@ -82,8 +82,8 @@ class RuleValidator:
 
     def validate_sigma(self, content: str) -> tuple[bool, list[str], list[str]]:
         """Validate a Sigma rule."""
-        errors = []
-        warnings = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         if len(content) > self.MAX_RULE_SIZE:
             errors.append(f"Rule exceeds max size ({len(content)} > {self.MAX_RULE_SIZE})")
@@ -123,8 +123,8 @@ class RuleValidator:
 
     def validate_correlation(self, content: str) -> tuple[bool, list[str], list[str]]:
         """Validate a correlation rule YAML."""
-        errors = []
-        warnings = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         try:
             rule = yaml.safe_load(content)
@@ -157,8 +157,8 @@ class RuleValidator:
 
     def validate_python_native(self, content: str) -> tuple[bool, list[str], list[str]]:
         """Validate a Python native rule (syntax check only)."""
-        errors = []
-        warnings = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         if len(content) > self.MAX_RULE_SIZE:
             errors.append(f"Rule exceeds max size ({len(content)} > {self.MAX_RULE_SIZE})")
@@ -300,10 +300,10 @@ class CommunityRuleManager:
 
     def get_statistics(self) -> dict:
         total = len(self._rules)
-        by_status = {}
+        by_status: dict[str, int] = {}
         for rule in self._rules.values():
             by_status[rule.status.value] = by_status.get(rule.status.value, 0) + 1
-        by_type = {}
+        by_type: dict[str, int] = {}
         for rule in self._rules.values():
             by_type[rule.rule_type.value] = by_type.get(rule.rule_type.value, 0) + 1
 

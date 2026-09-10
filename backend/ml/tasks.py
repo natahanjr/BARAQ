@@ -94,7 +94,7 @@ def _bulk_train(session, hours=None, kind="manual"):
             if _ip:
                 _fail_ip[_ip].append((_e["ts"], _i))
 
-    _lt1h = defaultdict(lambda: defaultdict(int))
+    _lt1h: dict[int, dict[int, int]] = defaultdict(lambda: defaultdict(int))
     _left = 0
     for _k, _idx in enumerate(_login_idx):
         _ev_ts = _events[_idx]["ts"]
@@ -154,7 +154,7 @@ def _bulk_train(session, hours=None, kind="manual"):
     def _cmd_ent(s):
         if not s:
             return 0.0
-        cc = {}
+        cc: dict[str, int] = {}
         for c in s:
             cc[c] = cc.get(c, 0) + 1
         return min(1.0, -sum((v / len(s)) * math.log2(v / len(s)) for v in cc.values()) / 7.0)
@@ -199,7 +199,7 @@ def _bulk_train(session, hours=None, kind="manual"):
                     f15 += 1
                 if dm <= 5:
                     f5 += 1
-        tc = _lt1h.get(idx, {})
+        tc: dict[int, int] = _lt1h.get(idx, {})
         ts_ = sum(tc.values())
         ent = sum(-(c / ts_) * math.log2(c / ts_) for c in tc.values() if c > 0) if tc else 0.0
         me = math.log2(max(len(tc), 1))
@@ -291,12 +291,12 @@ def _bulk_train(session, hours=None, kind="manual"):
     new_sup = {}
     new_sup_name = {}
     for beh in ("login", "process", "network"):
-        X = stream_X.get(beh)
-        y = stream_y.get(beh)
-        if X is None or y is None or len(X) < 4:
+        X_t: np.ndarray | None = stream_X.get(beh)
+        y_t: np.ndarray | None = stream_y.get(beh)
+        if X_t is None or y_t is None or len(X_t) < 4:
             continue
-        atk = X[y.astype(bool)]
-        ben = X[~y.astype(bool)]
+        atk = X_t[y_t.astype(bool)]
+        ben = X_t[~y_t.astype(bool)]
         if len(atk) < 3 or len(ben) < 3:
             continue
         X_all = np.vstack([ben, atk])

@@ -63,11 +63,15 @@ class DatasetAdapter:
         """Get feature matrix in BARAQ's expected format."""
         if not self.is_loaded:
             raise RuntimeError("Dataset not loaded")
+        if self._data is None:
+            raise RuntimeError("Dataset not loaded")
         return self._data
 
     def get_labels(self) -> np.ndarray:
         """Get binary labels (0=benign, 1=attack)."""
         if not self.is_loaded:
+            raise RuntimeError("Dataset not loaded")
+        if self._labels is None:
             raise RuntimeError("Dataset not loaded")
         return self._labels
 
@@ -135,7 +139,7 @@ class CICIDSAdapter(DatasetAdapter):
             self._data = df[feature_cols].fillna(0).values.astype(float)
             self._labels = df["is_attack"].values.astype(int)
             self.is_loaded = True
-            logger.info("Loaded CICIDS dataset: %d samples, %d features", len(self._data), len(feature_cols))
+            logger.info("Loaded CICIDS dataset: %d samples, %d features", len(self._data), len(feature_cols))  # type: ignore[arg-type]
             return True
         except Exception as e:
             logger.warning("Failed to load CICIDS dataset: %s", e)
@@ -162,7 +166,7 @@ class UNSWNB15Adapter(DatasetAdapter):
             self._data = df[feature_cols].fillna(0).values.astype(float)
             self._labels = df["is_attack"].values.astype(int)
             self.is_loaded = True
-            logger.info("Loaded UNSW-NB15 dataset: %d samples", len(self._data))
+            logger.info("Loaded UNSW-NB15 dataset: %d samples", len(self._data))  # type: ignore[arg-type]
             return True
         except Exception as e:
             logger.warning("Failed to load UNSW-NB15 dataset: %s", e)

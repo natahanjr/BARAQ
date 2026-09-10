@@ -94,7 +94,7 @@ BEHAVIOR_KEYS = ("login", "process", "network")
 # Event IDs mapped to the behavior stream they belong to.
 LOGIN_EVENTS = {4624, 4625, 4634, 4647, 4648, 4740, 4771}
 PROCESS_EVENTS = {4688, 4720, 4726, 4732, 7045, 4698, 4104, 4103}
-NETWORK_EVENTS = set()
+NETWORK_EVENTS: set[int] = set()
 
 # Login types that are ordinary for interactive work; anything else is novel.
 _COMMON_LOGON_TYPES = {2, 3, 10, 11}
@@ -2373,7 +2373,7 @@ class MLAnomalyDetector:
     def __init__(self, load_persisted: bool = False):
         self.models: dict[str, IsolationForest] = {}
         self.ensembles: dict[str, list[IsolationForest]] = {}
-        self.supervised = None
+        self.supervised: object = None
         self.supervised_name = "none"
         self.supervised_by_stream: dict[str, object] = {}
         self.supervised_name_by_stream: dict[str, str] = {}
@@ -2660,7 +2660,7 @@ class MLAnomalyDetector:
 
         # Initialize feedback history if not present
         if not hasattr(self, "_feedback_history"):
-            self._feedback_history = {}
+            self._feedback_history: dict[str, int] = {}
 
         # Track feedback count for confidence weighting
         feedback_key = f"{behavior}_{verdict}"
@@ -3401,7 +3401,7 @@ class MLAnomalyDetector:
                         _fail_ip[_ip].append((_e["ts"], _i))
 
             # Logon type entropy (1h)
-            _lt1h = _dd(lambda: _dd(int))
+            _lt1h: dict[int, dict[int, int]] = _dd(lambda: _dd(int))
             _left = 0
             for _k, _idx in enumerate(_login_idx):
                 _ev_ts = _events[_idx]["ts"]
@@ -3495,7 +3495,7 @@ class MLAnomalyDetector:
                             _f15 += 1
                         if _dm <= 5:
                             _f5 += 1
-                _tc = _lt1h.get(_idx, {})
+                _tc: dict[int, int] = _lt1h.get(_idx, {})
                 _ent = sum(-(c / sum(_tc.values())) * math.log2(c / sum(_tc.values())) for c in _tc.values() if c > 0) if _tc else 0.0
                 _me = math.log2(max(len(_tc), 1))
                 _nent = min(1.0, _ent / max(_me, 1)) if _me > 0 else 0.0
@@ -3517,7 +3517,7 @@ class MLAnomalyDetector:
                     if _e2["event_id"] in (4624, 4625) and _e2["user"] == _ev["user"]:
                         _user_ips.add(str(_e2["facts"].get("source_ip", "")))
                 _dist_ips = min(1.0, len(_user_ips) / 10.0)
-                _hour_counts = {}
+                _hour_counts: dict[int, int] = {}
                 for _e2 in _events:
                     if _e2["event_id"] in LOGIN_EVENTS:
                         _eh = _e2["ts"].hour
@@ -3539,7 +3539,7 @@ class MLAnomalyDetector:
             def _cmd_ent(s):
                 if not s:
                     return 0.0
-                cc = {}
+                cc: dict[str, int] = {}
                 for c in s:
                     cc[c] = cc.get(c, 0) + 1
                 return min(1.0, -sum((v / len(s)) * math.log2(v / len(s)) for v in cc.values()) / 7.0)
@@ -3673,12 +3673,12 @@ class MLAnomalyDetector:
             # v7: K-fold cross-validation for each stream model
             cv_results: dict[str, dict] = {}
             for behavior in ("login", "process", "network"):
-                X = stream_X.get(behavior)
-                y = stream_y.get(behavior)
-                if X is not None and y is not None and len(X) >= 10:
+                X_cv: np.ndarray | None = stream_X.get(behavior)
+                y_cv: np.ndarray | None = stream_y.get(behavior)
+                if X_cv is not None and y_cv is not None and len(X_cv) >= 10:
                     cv = _kfold_cross_validate(
-                        IsolationForest, X, y,
-                        n_folds=min(5, len(X) // 2),
+                        IsolationForest, X_cv, y_cv,
+                        n_folds=min(5, len(X_cv) // 2),
                         contamination=ML_CONTAMINATION,
                         random_state=ML_RANDOM_STATE,
                     )
@@ -3692,20 +3692,20 @@ class MLAnomalyDetector:
             augmented_X: dict[str, np.ndarray] = {}
             augmented_y: dict[str, np.ndarray] = {}
             for behavior in ("login", "process", "network"):
-                X = stream_X.get(behavior)
-                y = stream_y.get(behavior)
-                if X is not None and y is not None and len(X) >= 4:
-                    atk_count = int(np.sum(y == 1))
-                    if 2 <= atk_count < len(X) // 2:
+                X_sm: np.ndarray | None = stream_X.get(behavior)
+                y_sm: np.ndarray | None = stream_y.get(behavior)
+                if X_sm is not None and y_sm is not None and len(X_sm) >= 4:
+                    atk_count = int(np.sum(y_sm == 1))
+                    if 2 <= atk_count < len(X_sm) // 2:
                         X_aug, y_aug = _smote_augment(
-                            X, y, minority_class=1,
+                            X_sm, y_sm, minority_class=1,
                             k_neighbors=min(5, atk_count - 1),
                             random_state=ML_RANDOM_STATE,
                         )
                         augmented_X[behavior] = X_aug
                         augmented_y[behavior] = y_aug
                         logger.info(
-                            f"ML SMOTE [{behavior}]: {len(X)} → {len(X_aug)} samples "
+                            f"ML SMOTE [{behavior}]: {len(X_sm)} → {len(X_aug)} samples "
                             f"({atk_count} attacks augmented)"
                         )
                     else:
@@ -3729,14 +3729,14 @@ class MLAnomalyDetector:
             new_supervised = None
             new_supervised_name = "none"
             for behavior in ("login", "process", "network"):
-                X = augmented_X[behavior] if behavior in augmented_X else stream_X.get(behavior)
-                y = augmented_y[behavior] if behavior in augmented_y else stream_y.get(behavior)
-                if X is None or y is None or len(X) < 4:
+                X_sup: np.ndarray | None = augmented_X[behavior] if behavior in augmented_X else stream_X.get(behavior)
+                y_sup: np.ndarray | None = augmented_y[behavior] if behavior in augmented_y else stream_y.get(behavior)
+                if X_sup is None or y_sup is None or len(X_sup) < 4:
                     continue
-                atk_mask = y.astype(bool)
+                atk_mask = y_sup.astype(bool)
                 ben_mask = ~atk_mask
-                atk = X[atk_mask]
-                ben = X[ben_mask]
+                atk = X_sup[atk_mask]
+                ben = X_sup[ben_mask]
                 min_attacks = 3 if behavior == "network" else 10
                 if len(atk) < min_attacks or len(ben) < 3:
                     continue
@@ -4136,9 +4136,9 @@ class MLAnomalyDetector:
             base = self._rank_of(raw, self.baselines.get(behavior))
             classifier = self.supervised_by_stream.get(behavior) or self.supervised
             p = np.zeros(len(idxs), dtype=float)
-            if classifier is not None and X.shape[1] == classifier.n_features_in_:
+            if classifier is not None and X.shape[1] == classifier.n_features_in_:  # type: ignore[attr-defined]
                 try:
-                    proba = classifier.predict_proba(X)
+                    proba = classifier.predict_proba(X)  # type: ignore[attr-defined]
                     if proba.shape[1] > 1:
                         p = proba[:, 1]
                 except Exception:

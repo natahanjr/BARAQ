@@ -703,7 +703,7 @@ def _gen_network_benign(n: int = 60, rng: random.Random | None = None) -> list[d
 
 def _gen_network_attack(n: int = 10, rng: random.Random | None = None) -> list[dict]:
     rng = rng or random.Random(42)
-    events = []
+    events: list[dict] = []
     base = datetime.now(UTC) - timedelta(hours=24)
 
     # Port scan pattern

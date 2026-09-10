@@ -16,6 +16,7 @@ import logging
 import time
 from collections import deque
 from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger("baraq.ml.monitoring")
 
@@ -66,7 +67,7 @@ class ModelMetrics:
             }
         )
 
-    def compute_metrics(self) -> dict[str, float]:
+    def compute_metrics(self) -> dict[str, Any]:
         """Compute current rolling metrics."""
         if not self.predictions or not self.verdicts:
             return self._empty_metrics()
@@ -122,7 +123,7 @@ class ModelMetrics:
             "last_update": datetime.now(UTC).isoformat(),
         }
 
-    def _empty_metrics(self) -> dict[str, float]:
+    def _empty_metrics(self) -> dict[str, Any]:
         return {
             "total_samples": 0,
             "true_positives": 0,

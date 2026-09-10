@@ -331,7 +331,7 @@ def _predict_batch(behavior: str, X) -> np.ndarray:
     if classifier is None:
         return ranks
     try:
-        proba = classifier.predict_proba(arr)
+        proba = classifier.predict_proba(arr)  # type: ignore[attr-defined]
         p = proba[:, 1] if proba.shape[1] > 1 else np.zeros(len(arr))
     except Exception:
         p = np.zeros(len(arr))
@@ -371,7 +371,7 @@ def _lime(
 
 def _shap(
     behavior: str, features: list[float], background: list[list[float]]
-) -> dict[str, list[tuple[int, float]]] | None:
+) -> dict | None:
     """Shapley values via KernelExplainer on the deployed score."""
     try:
         bg = np.asarray(background[-_SHAP_BACKGROUND:], dtype=float)
@@ -432,7 +432,7 @@ def _compute_attribution(
     if HAS_SHAP and background:
         result = _run_budgeted(lambda: _shap(behavior, features, background))
         if result:
-            return result
+            return result  # type: ignore[return-value]
     if HAS_LIME and background:
         result = _run_budgeted(lambda: _lime(behavior, features, background))
         if result:

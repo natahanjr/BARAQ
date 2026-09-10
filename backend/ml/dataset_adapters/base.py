@@ -127,7 +127,7 @@ def shannon_entropy(text: str) -> float:
     return min(1.0, entropy / 7.0)
 
 
-def heuristic_label(event: NormalizedEventDict) -> int:
+def heuristic_label(event: NormalizedEventDict) -> float:
     """Apply BARAQ's heuristic labeling to an event.
 
     Returns 1 (attack) or 0 (benign).  Analyses use this for unsupervised
@@ -235,7 +235,7 @@ class BaseAdapter(ABC):
                 seen.add(fp)
                 # Apply heuristic label if not already labeled
                 if "label" not in parsed:
-                    parsed["label"] = heuristic_label(parsed)
+                    parsed["label"] = int(heuristic_label(parsed))
                 events.append(parsed)
             except Exception as exc:
                 errors.append(f"event {total}: {exc}")

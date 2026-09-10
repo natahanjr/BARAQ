@@ -159,7 +159,7 @@ class ImportManager:
     def _do_import(self, task: ImportTask, github_token: str) -> None:
         """Full import pipeline: download → parse → load."""
         src = DATASET_SOURCES[task.dataset]
-        adapter_cls = ADAPTERS[src["adapter"]]
+        adapter_cls = ADAPTERS[str(src["adapter"])]
 
         # Phase 1: Download
         task.status = ImportStatus.DOWNLOADING
@@ -167,18 +167,18 @@ class ImportManager:
         tmp_dir = Path(tempfile.mkdtemp(prefix="baraq_import_"))
         try:
             zip_path = self._download_github_repo(
-                src["repo"], tmp_dir, github_token, task,
-                branch=src.get("branch", "main"),
-                download_mode=src.get("download_mode", "zip"),
-                path_filter=src.get("path_filter", ""),
-                max_file_size_mb=src.get("max_file_size_mb", 50),
+                str(src["repo"]), tmp_dir, github_token, task,
+                branch=str(src.get("branch", "main")),
+                download_mode=str(src.get("download_mode", "zip")),
+                path_filter=str(src.get("path_filter", "")),
+                max_file_size_mb=int(str(src.get("max_file_size_mb", 50))),
             )
             task.downloaded_path = str(zip_path)
 
             # Phase 2: Parse
             task.status = ImportStatus.PARSING
             task.progress = 0.0
-            adapter = adapter_cls()
+            adapter = adapter_cls()  # type: ignore[abstract]
             result = adapter.load(zip_path, max_events=task.max_events)
             task.total_events = result["total"]
             task.loaded_events = result["loaded"]

@@ -24,10 +24,10 @@ class UEBAEngine:
         self._baselines: dict[str, UserBaseline] = {}
 
     def build_baseline(self, username: str, events: list[dict]) -> UserBaseline:
-        hours = defaultdict(int)
-        hosts = defaultdict(int)
-        processes = defaultdict(int)
-        ips = defaultdict(int)
+        hours: defaultdict[int, int] = defaultdict(int)
+        hosts: defaultdict[str, int] = defaultdict(int)
+        processes: defaultdict[str, int] = defaultdict(int)
+        ips: defaultdict[str, int] = defaultdict(int)
         days = set()
         for e in events:
             ts = e.get("timestamp", "")
@@ -53,9 +53,9 @@ class UEBAEngine:
         baseline = UserBaseline(
             username=username,
             login_hours=sorted(hours.keys()),
-            typical_hosts=sorted(hosts.keys(), key=hosts.get, reverse=True)[:5],
-            typical_processes=sorted(processes.keys(), key=processes.get, reverse=True)[:10],
-            typical_ips=sorted(ips.keys(), key=ips.get, reverse=True)[:5],
+            typical_hosts=sorted(hosts.keys(), key=lambda k: hosts[k], reverse=True)[:5],
+            typical_processes=sorted(processes.keys(), key=lambda k: processes[k], reverse=True)[:10],
+            typical_ips=sorted(ips.keys(), key=lambda k: ips[k], reverse=True)[:5],
             event_count_30d=total,
             avg_daily_events=round(total / max(len(days), 1), 1),
             unique_days_active=len(days),
@@ -67,7 +67,7 @@ class UEBAEngine:
         baseline = self._baselines.get(username)
         if not baseline:
             return []
-        anomalies = []
+        anomalies: list[dict[str, object]] = []
         current_hours = set()
         current_hosts = set()
         current_ips = set()

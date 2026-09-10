@@ -346,7 +346,7 @@ class SOCComparison:
 
         baraq_score = baraq.overall_score()
         best_competitor = None
-        best_score = 0
+        best_score: float = 0
 
         for key, platform in self.platforms.items():
             if key == "baraq":

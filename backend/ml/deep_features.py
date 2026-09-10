@@ -243,21 +243,21 @@ class SequencePatternDetector:
             # Compute inter-event intervals
             intervals = []
             for j in range(1, len(window_ts)):
-                if window_ts[j] and window_ts[j - 1]:
-                    dt = (window_ts[j] - window_ts[j - 1]).total_seconds()
+                if window_ts[j] is not None and window_ts[j - 1] is not None:
+                    dt = (window_ts[j] - window_ts[j - 1]).total_seconds()  # type: ignore[operator]
                     intervals.append(dt)
 
             if not intervals:
                 features_list.append([0.0] * 12)
                 continue
 
-            intervals = np.array(intervals)
+            intervals_arr = np.array(intervals)
 
             # Timing features
-            mean_interval = float(np.mean(intervals))
-            std_interval = float(np.std(intervals))
-            min_interval = float(np.min(intervals))
-            max_interval = float(np.max(intervals))
+            mean_interval = float(np.mean(intervals_arr))
+            std_interval = float(np.std(intervals_arr))
+            min_interval = float(np.min(intervals_arr))
+            max_interval = float(np.max(intervals_arr))
             cv = std_interval / max(mean_interval, 1e-6)
 
             # Burst detection (coefficient of variation of intervals)
@@ -265,7 +265,7 @@ class SequencePatternDetector:
 
             # Periodicity detection (autocorrelation at lag 1)
             if len(intervals) > 1:
-                autocorr = float(np.corrcoef(intervals[:-1], intervals[1:])[0, 1])
+                autocorr = float(np.corrcoef(intervals_arr[:-1], intervals_arr[1:])[0, 1])
             else:
                 autocorr = 0.0
 

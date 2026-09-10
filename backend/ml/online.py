@@ -292,7 +292,7 @@ class ActiveLearner:
         try:
             from backend.ml.anomaly import MLAnomalyDetector
 
-            proba = MLAnomalyDetector.supervised_proba(None, features, model)
+            proba = MLAnomalyDetector.supervised_proba(None, features, model)  # type: ignore[arg-type]
             # Margin sampling: events near 0.5 are most uncertain
             uncertainty = 1.0 - abs(proba - 0.5) * 2.0
             return max(0.0, min(1.0, uncertainty))
@@ -325,8 +325,8 @@ class ActiveLearner:
             )
 
         # Sort by uncertainty (highest first)
-        candidates.sort(key=lambda x: x["uncertainty"], reverse=True)
-        return candidates[: self.top_k]
+        candidates.sort(key=lambda x: x["uncertainty"], reverse=True)  # type: ignore
+        return candidates[: self.top_k]  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------
