@@ -52,7 +52,7 @@ def compute_security_score(
         Alert.status == "open",
         *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
     )
-    counts = dict(session.execute(stmt.group_by(Alert.severity)).all())
+    counts: dict[str, int] = dict(session.execute(stmt.group_by(Alert.severity)).all())  # type: ignore[arg-type]
     for severity, penalty in SECURITY_SCORE_PENALTY.items():
         score -= counts.get(severity, 0) * penalty
     return round(max(0.0, min(100.0, score)), 1)
@@ -217,7 +217,7 @@ def severity_distribution(
         *_conds(_alert_org(org), _demo_expr(Alert, include_demo)),
     )
     rows = session.execute(stmt.group_by(Alert.severity)).all()
-    counts = dict(rows)
+    counts: dict[str, int] = dict(rows)  # type: ignore[arg-type]
     return [{"severity": s, "count": int(counts.get(s, 0))} for s in SEVERITY_ORDER]
 
 
@@ -333,7 +333,7 @@ def risk_distribution(
     rows = session.execute(stmt).all()
     order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
     items = [{"risk_level": r[0] or "LOW", "count": int(r[1])} for r in rows]
-    items.sort(key=lambda x: order.get(x["risk_level"], 9))
+    items.sort(key=lambda x: order.get(str(x["risk_level"]), 9))
     return items
 
 

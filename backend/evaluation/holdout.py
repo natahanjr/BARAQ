@@ -940,8 +940,8 @@ def run_holdout_evaluation(
             "Hold-out evaluation: rule acc=%.3f recall=%.3f | ml acc=%.3f recall=%.3f",
             rule_metrics["accuracy"],
             rule_metrics["recall"],
-            ml_metrics["accuracy"] if detector is not None else 0.0,
-            ml_metrics["recall"] if detector is not None else 0.0,
+            ml_metrics["accuracy"] if ml_metrics is not None else 0.0,
+            ml_metrics["recall"] if ml_metrics is not None else 0.0,
         )
         return result
     finally:

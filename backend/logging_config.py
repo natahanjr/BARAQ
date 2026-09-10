@@ -72,8 +72,8 @@ class _Rfc5424SyslogHandler(logging.handlers.SysLogHandler):
         try:
             if getattr(self, "_sock", None) is not None:
                 self._sock.close()
-                self._sock = None
-                self.socket = None
+                self._sock = None  # type: ignore[assignment]
+                self.socket = None  # type: ignore[assignment]
         except OSError:
             pass
         logging.Handler.close(self)

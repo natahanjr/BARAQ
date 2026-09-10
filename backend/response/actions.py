@@ -219,7 +219,7 @@ def quarantine_file(file_path: str) -> tuple[str, str]:
 
     # Prevent path traversal — file must be under allowed directories
     # (e.g., not /etc/passwd or C:\Windows\System32)
-    allowed_roots = [Path(r).resolve() for r in [
+    allowed_roots = [Path(str(r)).resolve() for r in [
         os.getenv("BARAQ_QUARANTINE_ALLOWED_ROOT", r"C:\BaraqData"),
         QUARANTINE_DIR.resolve(),
         Path.cwd().resolve(),

@@ -68,7 +68,7 @@ class Normalizer(Protocol):
 
     def supports(self, raw: dict[str, Any]) -> bool: ...
 
-    def normalize(self, raw: dict[str, Any]) -> EVENT: ...
+    def normalize(self, raw: dict[str, Any], fallback_ts: datetime) -> EVENT: ...
 
 
 class GenericNormalizer:
@@ -213,7 +213,7 @@ def normalize(raw: dict[str, Any], fallback_ts: datetime | None = None) -> EVENT
     for normalizer in NORMALIZERS:
         try:
             if normalizer.supports(raw):
-                return normalizer.normalize(raw, fallback_ts)
+                return normalizer.normalize(raw, fallback_ts)  # type: ignore[arg-type]
         except (TypeError, ValueError):  # pragma: no cover - defensive
             continue
     return None

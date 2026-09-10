@@ -50,7 +50,7 @@ class QueryOptimizer:
         recs = []
         for idx in RECOMMENDED_INDEXES:
             recs.append(OptimizationRecommendation(
-                table=idx["table"],
+                table=str(idx["table"]),
                 issue="Missing recommended index",
                 recommendation=f"CREATE INDEX {idx['name']} ON {idx['table']} ({', '.join(idx['columns'])})",
                 priority="medium",

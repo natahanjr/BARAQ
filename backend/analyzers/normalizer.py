@@ -595,7 +595,7 @@ class Normalizer:
                 ", ".join(repaired_fields),
             )
 
-        risk_score = RISK_BAND_SCORES.get(meta["risk"], 15)
+        risk_score: int | float = RISK_BAND_SCORES.get(meta["risk"], 15)
         risk_score = min(100, risk_score + self._risk_modifiers(event_id, facts))
 
         return {

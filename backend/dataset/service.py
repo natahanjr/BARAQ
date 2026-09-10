@@ -141,6 +141,7 @@ def stats(session: Session, collection_id: int | None = None) -> dict:
     if coll is None:
         return {}
     coll = session.get(DatasetCollection, coll.id)
+    assert coll is not None
 
     select(DatasetEvent).where(DatasetEvent.collection_id == coll.id)
 
@@ -257,7 +258,7 @@ def exports(session: Session, limit: int = 20) -> dict:
     return {"items": [e.to_dict() for e in rows]}
 
 
-def export_detail(session: Session, export_id: int) -> dict:
+def export_detail(session: Session, export_id: int) -> dict | None:
     export = session.get(DatasetExport, export_id)
     if export is None:
         return None
@@ -290,7 +291,7 @@ def manifest(session: Session) -> dict | None:
         )
         if not files:
             return None
-        return _manifest_from_db(coll, files)
+        return _manifest_from_db(coll, list(files))
     import json
 
     with open(path, "r", encoding="utf-8") as fh:

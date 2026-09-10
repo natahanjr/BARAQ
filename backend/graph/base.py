@@ -37,11 +37,11 @@ class GraphStore(ABC):
         """Provider health + counts (nodes per kind, edge count)."""
 
     @abstractmethod
-    def upsert_entities(self, db, entities: list[dict]) -> None:
+    def upsert_entities(self, db, entities: list[dict], accumulate: bool = False) -> None:
         """Create-or-update entity nodes by (kind, name)."""
 
     @abstractmethod
-    def upsert_edges(self, db, edges: list[dict]) -> None:
+    def upsert_edges(self, db, edges: list[dict], accumulate: bool = False) -> None:
         """Create-or-update directional edges by (src, rel, dst)."""
 
     @abstractmethod

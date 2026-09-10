@@ -412,7 +412,7 @@ def _init_redis() -> None:
                     k: (v if isinstance(v, (str, bytes, int, float)) else json.dumps(v))
                     for k, v in r.items()
                 }
-                pipe.xadd(REDIS_STREAM, fields)
+                pipe.xadd(REDIS_STREAM, fields)  # type: ignore[arg-type]
             return pipe.execute()
 
         _sinks["redis"] = {"kind": "redis", "send": _send_redis}

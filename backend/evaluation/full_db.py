@@ -304,7 +304,7 @@ def run_full_db_evaluation(db: Session, use_ml: bool = True) -> dict:
     rule_detected = 0
     heuristic_detected = 0
 
-    by_event_class = defaultdict(lambda: {"tp": 0, "fp": 0, "tn": 0, "fn": 0, "total": 0})
+    by_event_class: dict[int, dict[str, int]] = defaultdict(lambda: {"tp": 0, "fp": 0, "tn": 0, "fn": 0, "total": 0})
 
     batch_size = 10000
     offset = 0
@@ -322,6 +322,7 @@ def run_full_db_evaluation(db: Session, use_ml: bool = True) -> dict:
 
             # Ground truth: verdicts override, but evidence-based correction
             # for events where verdicts are clearly wrong
+            gt: str | None = None
             if eid in verdict_map:
                 verdict_val = verdict_map[eid]
                 # If verdict says attack but event has no attack indicators,
@@ -382,7 +383,7 @@ def run_full_db_evaluation(db: Session, use_ml: bool = True) -> dict:
     metrics = _metrics(tp, fp, tn, fn)
 
     per_class = []
-    for ec, counts in sorted(by_event_class.items(), key=lambda x: -x[1]["total"])[:20]:
+    for ec, counts in sorted(by_event_class.items(), key=lambda x: -x[1]["total"])[:20]:  # type: ignore[assignment]
         m = _metrics(counts["tp"], counts["fp"], counts["tn"], counts["fn"])
         per_class.append({
             "event_id": ec,

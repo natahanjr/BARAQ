@@ -84,7 +84,7 @@ class Neo4jStore(GraphStore):
             return {"provider": self.name, "nodes": 0, "edges": 0, "error": str(exc)}
         return {"provider": self.name, "nodes": nodes, "edges": edges}
 
-    def upsert_entities(self, db, entities: list[dict]) -> None:
+    def upsert_entities(self, db, entities: list[dict], accumulate: bool = False) -> None:
         if not self._driver:
             return
         for e in entities:
@@ -103,7 +103,7 @@ class Neo4jStore(GraphStore):
                 },
             )
 
-    def upsert_edges(self, db, edges: list[dict]) -> None:
+    def upsert_edges(self, db, edges: list[dict], accumulate: bool = False) -> None:
         if not self._driver:
             return
         for e in edges:

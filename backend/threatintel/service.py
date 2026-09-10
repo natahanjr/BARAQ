@@ -144,16 +144,17 @@ def lookup_indicator(
         result["sources"].append("embedded-ioc")
 
     # 3) Offline classifier (fills in when embedded is a miss)
+    offline_cls: dict[str, Any] | None = None
     if result["category"] == "unknown":
-        offline = classify_indicator(indicator)
-        if offline:
-            result["category"] = offline["category"]
-            result["label"] = offline["label"]
-            result["confidence"] = offline.get("confidence", 0.7)
+        offline_cls = classify_indicator(indicator)
+        if offline_cls:
+            result["category"] = offline_cls["category"]
+            result["label"] = offline_cls["label"]
+            result["confidence"] = offline_cls.get("confidence", 0.7)
             result["sources"].append("offline-baseline")
 
     # 4) Online providers (only for missing or non-benign indicators)
-    if not offline and result["category"] != "benign":
+    if not offline_cls and result["category"] != "benign":
         # Unlimited IP-only providers (no rate limits, highest priority)
         unlimited_ip_providers = (_findip, _ipdetails, _isbadip, _ffraud)
         # Key-gated IP-only providers
@@ -194,10 +195,10 @@ def lookup_indicator(
                 break
 
         # Try list-based providers
-        for provider in list_providers:
+        for provider in list_providers:  # type: ignore[assignment]
             if result["category"] == "malicious":
                 break
-            verdict = provider([indicator])
+            verdict = provider(indicator)
             if not verdict:
                 continue
             if verdict.get("category") == "malicious" or result["category"] == "unknown":

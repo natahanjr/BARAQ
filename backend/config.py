@@ -927,7 +927,7 @@ AUTH_ENABLED = os.environ.get("BARAQ_AUTH_ENABLED", "1").lower() not in (
     "off",
 )
 
-_DEFAULT_API_KEYS = {}
+_DEFAULT_API_KEYS: dict[str, str] = {}
 
 
 # Priorities: vault (DPAPI) > environment > .env. The vault is preferred for

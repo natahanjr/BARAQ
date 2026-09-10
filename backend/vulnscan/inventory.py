@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import platform
+from typing import Any
 
 logger = logging.getLogger("baraq.vulnscan.inventory")
 
@@ -70,7 +71,7 @@ def _windows_products() -> list[dict]:
 
 def host_inventory() -> dict:
     """Full host inventory: OS identity + installed products."""
-    inventory = {
+    inventory: dict[str, Any] = {
         "os": platform.platform(),
         "os_version": platform.version(),
         "os_release": platform.release(),

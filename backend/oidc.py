@@ -194,12 +194,15 @@ def _public_key_from_jwk(jwk: dict):
         e = int.from_bytes(_b64url_decode(jwk["e"]), "big")
         return rsa.RSAPublicNumbers(e, n).public_key()
     if kty == "EC":
-        curve = _EC_CURVES.get(jwk.get("crv"))
+        crv = jwk.get("crv")
+        if not isinstance(crv, str):
+            raise OIDCError(f"missing or invalid EC curve: {crv}")
+        curve = _EC_CURVES.get(crv)
         if curve is None:
             raise OIDCError(f"unsupported EC curve {jwk.get('crv')}")
         x = int.from_bytes(_b64url_decode(jwk["x"]), "big")
         y = int.from_bytes(_b64url_decode(jwk["y"]), "big")
-        return ec.EllipticCurvePublicNumbers(x, y, curve()).public_key()
+        return ec.EllipticCurvePublicNumbers(x, y, curve()).public_key()  # type: ignore[abstract]
     raise OIDCError(f"unsupported JWK key type {kty}")
 
 

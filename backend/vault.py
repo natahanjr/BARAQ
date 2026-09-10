@@ -32,7 +32,7 @@ from typing import Any
 # Windows DPAPI primitives (crypt32)
 # ---------------------------------------------------------------------------
 _CRYPTPROTECT_UI_FORBIDDEN = 0x1
-_crypt32 = None
+_crypt32: Any = None
 _is_windows = os.name == "nt"
 
 

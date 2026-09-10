@@ -13,7 +13,7 @@ class ResourceProfiler:
     """Profile memory, CPU, and I/O for BARAQ subsystems."""
 
     def __init__(self, output_dir: str | None = None):
-        self.output_dir = Path(output_dir or os.getenv("BARAQ_PROFILING_DIR", "profiling_results"))
+        self.output_dir = Path(output_dir if output_dir is not None else os.getenv("BARAQ_PROFILING_DIR", "profiling_results"))
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._snapshots: list[dict] = []
 
@@ -38,7 +38,7 @@ class ResourceProfiler:
             }
         except ImportError:
             import resource
-            usage = resource.getrusage(resource.RUSAGE_SELF)
+            usage = resource.getrusage(resource.RUSAGE_SELF)  # type: ignore[attr-defined]
             snapshot = {
                 "timestamp": datetime.now(UTC).isoformat(),
                 "label": label,

@@ -268,7 +268,7 @@ def _demo_partition(orm_execute_state) -> None:
         if id(node) in seen:
             return
         seen.add(id(node))
-        model = _TABLE_TO_MODEL.get(getattr(node, "name", None))
+        model = _TABLE_TO_MODEL.get(str(getattr(node, "name", None)))
         if model is not None:
             conds.append(model.demo.is_(mode))
             return

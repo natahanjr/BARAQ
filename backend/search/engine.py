@@ -260,7 +260,7 @@ def _parse_aggs(agg_tokens: list[str], fields: dict) -> list[tuple[str, str, str
     for tok in agg_tokens:
         tok = tok.strip().rstrip(",").strip()
         if tok in ("count", "count()"):
-            aggs.append(("count", "count", None))
+            aggs.append(("count", "count", ""))
             continue
         m = re.fullmatch(r"(count|sum|avg|max|min)\(([\w.]+)\)", tok)
         if not m:
@@ -297,7 +297,8 @@ def _build_query(
     if start > end:
         raise SearchError("earliest must be before latest")
     if q.index == "alerts":
-        model, fields = Alert, _ALERT_FIELDS
+        model: type[Alert] | type[NormalizedEvent] = Alert
+        fields = _ALERT_FIELDS
         time_col = Alert.created_at
     elif q.index == "events":
         model, fields = NormalizedEvent, _EVENT_FIELDS
@@ -428,8 +429,8 @@ def execute_search(
                     if fname not in columns:
                         raise SearchError(f"unknown field {fname!r} in sort")
                     keys.append((columns.index(fname), direction))
-                for idx in reversed(range(len(keys))):
-                    col_i, direction = keys[idx]
+                for i in reversed(range(len(keys))):
+                    col_i, direction = keys[i]
                     rows.sort(key=lambda r: r[col_i], reverse=(direction == "desc"))
             elif pipe.name == "where":
                 for cond in pipe.args:
@@ -499,7 +500,7 @@ def _run_stats(db: Session, stmt, model, fields: dict, pipe: _Pipe):
         if field_tok not in fields:
             raise SearchError(f"unknown field {field_tok!r}")
         group_by = [field_tok] + [g.strip().rstrip(",").strip() for g in rest]
-        aggs = [("count", "count", None)]
+        aggs = [("count", "count", "")]
         _order_agg, reverse = "count", name == "top"
     else:
         raise SearchError(f"unknown pipe: {name!r}")

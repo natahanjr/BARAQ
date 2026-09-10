@@ -28,7 +28,7 @@ class ThroughputBenchmark:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._results: list[BenchmarkResult] = []
 
-    def measure_ingestion(self, func, event_counts: list[int] = None) -> list[BenchmarkResult]:
+    def measure_ingestion(self, func, event_counts: list[int] | None = None) -> list[BenchmarkResult]:
         counts = event_counts or [100, 500, 1000, 5000]
         results = []
         for count in counts:

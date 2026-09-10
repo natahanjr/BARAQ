@@ -62,9 +62,8 @@ def purge_old_data(
     purged: dict[str, int] = {}
     try:
         for model, column in _PURGE_TARGETS:
-            purged[model.__tablename__] = int(
-                session.execute(delete(model).where(column < cutoff)).rowcount or 0
-            )
+            result = session.execute(delete(model).where(column < cutoff))
+            purged[model.__tablename__] = int(result.rowcount or 0)  # type: ignore[attr-defined]
         session.commit()
     except Exception:
         session.rollback()

@@ -260,6 +260,7 @@ def export_pending(
                 }
                 row["dataset_event_id"] = event.source_event_id
                 row["timestamp"] = ts.isoformat() if ts else ""
+                assert writer is not None
                 writer.writerow(row)
                 cur_rows += 1
                 total_written += 1

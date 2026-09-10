@@ -172,7 +172,7 @@ def _classify_domain(domain: str) -> dict[str, Any] | None:
 
 def _http_json(
     url: str, headers: dict[str, str] | None = None, timeout: float = 8
-) -> dict | None:
+) -> str | None:
     import urllib.request
     from urllib.parse import urlparse
 
@@ -401,7 +401,7 @@ def _censys(indicator: str) -> dict[str, Any] | None:
     """Censys search - certificate transparency and host discovery."""
     if not THREAT_INTEL_CENSYS_KEY:
         return None
-    kind = "hosts" if _IPV4_RE.match(indicator) else "hosts"
+    kind = "hosts" if _IPV4_RE.match(indicator) else "certificates"
     parts = THREAT_INTEL_CENSYS_KEY.split(":", 1)
     if len(parts) != 2:
         return None
@@ -531,6 +531,7 @@ def _isbadip(indicator: str) -> dict[str, Any] | None:
     if parsed.scheme not in ("https",):
         return None
     req = urllib.request.Request(
+        url,
         headers={"Accept": "application/json", "User-Agent": "Baraq-SOC/1.0"},
     )
     try:
@@ -570,6 +571,7 @@ def _ffraud(indicator: str) -> dict[str, Any] | None:
     if parsed.scheme not in ("https",):
         return None
     req = urllib.request.Request(
+        url,
         headers={"Accept": "application/json", "User-Agent": "Baraq-SOC/1.0"},
     )
     try:

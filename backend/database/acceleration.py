@@ -3,12 +3,10 @@ from datetime import UTC, datetime
 from sqlalchemy import Column, DateTime, Float, Integer, String
 from sqlalchemy.orm import declarative_base
 
-from backend.database.connection import SessionLocal
-
 Base = declarative_base()
 
 
-class SummaryTable(Base):
+class SummaryTable(Base):  # type: ignore[misc,valid-type]
     """
     Accelerated summary table for dashboard KPIs.
     Reduces the need to scan millions of raw events.
@@ -29,7 +27,7 @@ class SummaryTable(Base):
     )
 
 
-def update_summary_metrics(session: SessionLocal):
+def update_summary_metrics(session):
     """
     Computes and persists summary metrics from raw tables.
     This is the 'Acceleration' part of the data model.

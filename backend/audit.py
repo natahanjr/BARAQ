@@ -62,7 +62,7 @@ def log_action(
     entity_id: str = "",
     detail: str = "",
     ip: str = "",
-) -> AuditLog:
+) -> AuditLog | None:
     """Persist an audit entry chained to the previous one. Never raises - the
     audit trail must not break the primary operation."""
     try:

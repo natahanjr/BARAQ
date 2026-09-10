@@ -26,7 +26,7 @@ _START = time.time()
 _otel_started = False
 
 
-def _parse_slo(definition: str) -> tuple[str, str, float] | None:
+def _parse_slo(definition: str) -> tuple[str, int, float] | None:
     """Parse ``name=window=target`` -> (name, window_hours, target_ratio)."""
     try:
         name, window, target = definition.split("=")
@@ -115,7 +115,7 @@ def slo_metrics(session) -> list[str]:
         elif name == "freshness":
             value, _lag = _slo_freshness(session)
         elif name == "alert_volume":
-            value = _slo_alert_volume(session, hours)
+            value = _slo_alert_volume(session, int(hours))
         else:
             continue
         lines.append(

@@ -274,7 +274,7 @@ def prune_revoked_tokens() -> int:
                 delete(TokenRevocation).where(TokenRevocation.expires_at < now)
             )
             db.commit()
-            return int(result.rowcount or 0)
+            return int(result.rowcount or 0)  # type: ignore[attr-defined]
         finally:
             db.close()
     except Exception as exc:
