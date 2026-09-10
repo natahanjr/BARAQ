@@ -178,6 +178,7 @@ class SecurityAssistant:
             self._rag_docs = rows
             self._rag_indexed = len(rows)
         try:
+            assert self._rag_vectorizer is not None
             q = self._rag_vectorizer.transform([query])
             scores = cosine_similarity(q, self._rag_matrix)[0]
         except Exception:
@@ -751,7 +752,8 @@ class SecurityAssistant:
                 "on target hosts and they will appear here automatically."
             )
         now = datetime.now(UTC)
-        online, stale = [], []
+        online: list = []
+        stale: list = []
         for ep in endpoints:
             last = ep.last_seen
             age = (now - last).total_seconds() if last else float("inf")
@@ -847,7 +849,7 @@ class SecurityAssistant:
     def clear_history(self) -> int:
         """Delete all stored conversation turns; returns the number removed."""
         count = self.session.query(AssistantMessage).count()
-        self.session.execute(AssistantMessage.__table__.delete())
+        self.session.execute(AssistantMessage.__table__.delete())  # type: ignore[attr-defined]
         self.session.commit()
         return count
 

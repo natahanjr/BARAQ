@@ -1178,7 +1178,7 @@ def health():
         # but we can change this if needed. For now, we'll keep it as a warning/error in the check.
     checks["data_quality"] = {
         "status": data_quality_status,
-        "corruption_rate": round(rate, 4),
+        "corruption_rate": str(round(rate, 4)),
         "status_message": status_for_rate(rate),
     }
     if data_quality_status == "error" and overall_status == "ok":
