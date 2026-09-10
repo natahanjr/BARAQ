@@ -103,11 +103,11 @@ class _R002(CorrelationRule):
             and later.get("family") == "authentication"
             and primary_phase(earlier) == "INITIAL_ACCESS"
             and primary_phase(later) == "CREDENTIAL_ACCESS"
-            and shared(earlier.get("users"), later.get("users"))
+            and shared(earlier.get("users") or [], later.get("users") or [])
         ):
             return (
                 f"rule R002: credential-access activity against the same account "
-                f"({', '.join(shared(earlier.get('users'), later.get('users')))}) "
+                f"({', '.join(shared(earlier.get('users') or [], later.get('users') or []))}) "
                 f"followed external access"
             )
         return None
@@ -135,10 +135,10 @@ class _R004(CorrelationRule):
 
     def matches(self, earlier: dict, later: dict) -> str | None:
         if (
-            not shared(earlier.get("hosts"), later.get("hosts"))
+            not shared(earlier.get("hosts") or [], later.get("hosts") or [])
             and (
-                shared(earlier.get("users"), later.get("users"))
-                or shared(earlier.get("sources"), later.get("sources"))
+                shared(earlier.get("users") or [], later.get("users") or [])
+                or shared(earlier.get("sources") or [], later.get("sources") or [])
             )
             and primary_phase(later) == "LATERAL_MOVEMENT"
         ):
@@ -157,12 +157,12 @@ class _R005(CorrelationRule):
 
     def matches(self, earlier: dict, later: dict) -> str | None:
         if (
-            shared(earlier.get("sources"), later.get("sources"))
+            shared(earlier.get("sources") or [], later.get("sources") or [])
             and distinct_host_count(earlier, later) >= 2
         ):
             return (
                 f"rule R005: source "
-                f"{', '.join(shared(earlier.get('sources'), later.get('sources')))} "
+                f"{', '.join(shared(earlier.get('sources') or [], later.get('sources') or []))} "
                 f"touched multiple hosts "
                 f"({distinct_host_count(earlier, later)})"
             )
@@ -175,12 +175,12 @@ class _R006(CorrelationRule):
 
     def matches(self, earlier: dict, later: dict) -> str | None:
         if (
-            shared(earlier.get("users"), later.get("users"))
+            shared(earlier.get("users") or [], later.get("users") or [])
             and distinct_host_count(earlier, later) >= 2
         ):
             return (
                 f"rule R006: user "
-                f"{', '.join(shared(earlier.get('users'), later.get('users')))} "
+                f"{', '.join(shared(earlier.get('users') or [], later.get('users') or []))} "
                 f"operated from multiple hosts "
                 f"({distinct_host_count(earlier, later)})"
             )

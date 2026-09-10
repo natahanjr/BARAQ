@@ -48,6 +48,7 @@ from backend.correlation.contract import (
     TYPE_TITLES,
     is_progression,
 )
+from backend.correlation.rules import CorrelationRule
 from backend.correlation.edges import (
     edge_strength,
     meets_minimum,
@@ -162,7 +163,7 @@ def match_pair(earlier: dict, later: dict) -> list[tuple[object, dict, str]]:
 def edges_for_pair(
     earlier: dict,
     later: dict,
-    matches: list[tuple[object, dict, str]],
+    matches: list[tuple[CorrelationRule, dict, str]],
     rel: dict,
 ) -> list[dict]:
     """One edge per relationship type, ordered by EDGE_TYPES (deterministic).
@@ -217,7 +218,7 @@ def resolve_chain_type(
     the creating pair rule's type."""
     if "LATERAL_MOVEMENT" in edge_types:
         return "LATERAL_MOVEMENT"
-    hosts = set()
+    hosts: set[str] = set()
     for member in member_summaries:
         hosts.update(str(h).lower() for h in (member.get("hosts") or []))
     phases = {
@@ -435,7 +436,7 @@ def _write_evidence(
 
 
 def _description(member_ids: list[str], matches: list[tuple[object, dict, str]]) -> str:
-    reasons = [match[0].description for match in matches]
+    reasons = [match[0].description for match in matches]  # type: ignore[attr-defined]
     text = (
         f"This correlation links {len(member_ids)} behavior group(s): "
         f"{', '.join(member_ids)}. "
@@ -491,11 +492,11 @@ def _create_finding(
     actor: str,
 ) -> CorrelationFindingRecord | None:
     primary_rule, primary_rel, primary_reason = matches[0]
-    edges = edges_for_pair(earlier, later, matches, primary_rel)
+    edges = edges_for_pair(earlier, later, matches, primary_rel)  # type: ignore[arg-type]
     edge_types = {edge["relationship_type"] for edge in edges}
     members = [earlier, later]
     correlation_type = resolve_chain_type(
-        members, edge_types, primary_rule.correlation_type
+        members, edge_types, primary_rule.correlation_type  # type: ignore[attr-defined]
     )
     fp = finding_fingerprint(correlation_type, [earlier["id"], later["id"]], edges)
     confidence_value = finding_confidence(members, edges)
@@ -521,6 +522,7 @@ def _create_finding(
     )
     if not created:
         return None
+    assert finding is not None
 
     _write_member(
         db, finding.correlation_id, earlier["id"], primary_reason, "seed", now
@@ -543,7 +545,7 @@ def _create_finding(
         action="CORRELATION_CREATED",
         actor=actor,
         details={
-            "rule_id": primary_rule.rule_id,
+            "rule_id": primary_rule.rule_id,  # type: ignore[attr-defined]
             "correlation_type": correlation_type,
             "fingerprint": fp[:16],
             "member_group_ids": [earlier["id"], later["id"]],
@@ -586,7 +588,7 @@ def _extend_finding(
     the group then stays uncorrelated rather than corrupting the store.
     """
     primary_rule, primary_rel, primary_reason = matches[0]
-    new_edges = edges_for_pair(tail, group, matches, primary_rel)
+    new_edges = edges_for_pair(tail, group, matches, primary_rel)  # type: ignore[arg-type]
     old_members = list(finding.member_group_ids or [])
     new_members = old_members + [group["id"]]
 
@@ -681,7 +683,7 @@ def _extend_finding(
         actor=actor,
         details={
             "group_id": group["id"],
-            "rule_id": primary_rule.rule_id,
+            "rule_id": primary_rule.rule_id,  # type: ignore[attr-defined]
             "membership_reason": primary_reason,
             "status": "reactivated" if was_quiet else "extended",
         },

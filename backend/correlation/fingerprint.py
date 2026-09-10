@@ -44,7 +44,7 @@ def finding_fingerprint(
     payload = {
         "correlation_type": correlation_type,
         "member_group_ids": sorted(member_group_ids),
-        "edges": _normalize_edges(edges),
+        "edges": _normalize_edges(edges or []),
     }
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()

@@ -28,7 +28,7 @@ def _alerts(db: Session, scenario: dict) -> list[AlertRecord]:
     """Fabricate the scenario's alerts, shifted onto the scenario's own
     base time so episodes from different scenarios never overlap."""
     base = T0 + timedelta(minutes=scenario.get("base_minutes", 0))
-    rows = []
+    rows: list[AlertRecord] = []
     for spec in scenario["alerts"]:
         ts = base + timedelta(minutes=spec.get("minutes", 0.0))
         detector_id = spec.get("detector_id", "D001")

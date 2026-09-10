@@ -244,7 +244,7 @@ def _check_scenario(db: Session, scenario: dict) -> dict:
         if "metrics_delta" in expected:
             after = risk_metrics(db)
             for key, delta in expected["metrics_delta"].items():
-                actual = after.get(key, 0) - before.get(key, 0)
+                actual = after.get(key, 0) - (before.get(key, 0) if before is not None else 0)
                 if actual != delta:
                     raise AssertionError(
                         f"{scenario['id']}: metric delta {key} = {actual} "

@@ -117,13 +117,13 @@ def _rule_uses_process_fields(rule: SigmaRule) -> bool:
     return False
 
 
-_cache: dict[tuple, list[SigmaRule]] = {}
+_cache: dict[str, tuple[tuple, list[SigmaRule]]] = {}
 
 
 def _dir_fingerprint(rules_dir: Path) -> tuple:
     if not rules_dir.exists():
         return ("missing", 0, 0)
-    newest = 0
+    newest: float = 0
     count = 0
     for path in rules_dir.rglob("*"):
         if path.is_file() and path.suffix.lower() in (".yml", ".yaml"):

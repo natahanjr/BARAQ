@@ -303,8 +303,8 @@ def build_process_tree(
                     n
                     for n in by_name.get(parent_name.lower(), [])
                     if n.pid != child.pid
-                    and (n.last_seen or child.first_seen)
-                    <= (child.first_seen or n.last_seen)
+                    and (n.last_seen or child.first_seen or datetime.min)
+                    <= (child.first_seen or n.last_seen or datetime.min)
                 ]
                 if candidates:
                     best = min(candidates, key=lambda n: (n.last_seen or datetime.min))
@@ -367,12 +367,13 @@ def build_process_tree(
             "sources": sorted({n.source for n in nodes.values()}),
         }
         all_trees.append(tree)
-        if primary is None or (len(tree["chain"]) > len(primary["chain"])):
+        if primary is None or (len(tree["chain"]) > len(primary["chain"])):  # type: ignore[arg-type]
             primary = tree
 
     if not all_trees:
         return _empty_tree("no process events in window")
 
+    assert primary is not None
     return {
         "trees": all_trees,
         "primary": primary,

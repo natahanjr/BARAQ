@@ -97,7 +97,7 @@ class EventConditions:
 
     def _risk_ge(self) -> list[str]:
         base = self.min_risk.lower()
-        return _RISK_LEVELS[_RISK_LEVELS.index(base) :] if base in _RISK_LEVELS else []
+        return list(_RISK_LEVELS[_RISK_LEVELS.index(base) :]) if base in _RISK_LEVELS else []
 
     def to_dict(self) -> dict:
         return {
@@ -383,7 +383,7 @@ class CorrelationEngine(BaseRule):
         ).all()
 
         for spec in self.specs:
-            matched = self._evaluate_spec(spec, alerts, events)
+            matched = self._evaluate_spec(spec, list(alerts), list(events))
             if matched:
                 findings.append(matched)
         return findings
@@ -422,14 +422,14 @@ class CorrelationEngine(BaseRule):
             key = self._group_event(event, spec.group_by)
             if key is None:
                 continue
-            chosen: tuple[int, bool] | None = None
+            chosen2: tuple[int, bool] | None = None
             for idx, stage in enumerate(spec.stages):
                 if not stage.matches_event(event):
                     continue
-                if chosen is None or idx < chosen[0]:
-                    chosen = (idx, True)
-            if chosen is not None:
-                by_group.setdefault(key, {}).setdefault(chosen[0], []).append(event)
+                if chosen2 is None or idx < chosen2[0]:
+                    chosen2 = (idx, True)
+            if chosen2 is not None:
+                by_group.setdefault(key, {}).setdefault(chosen2[0], []).append(event)
 
         for key, stage_items in by_group.items():
             stage_ok = []
@@ -461,11 +461,11 @@ class CorrelationEngine(BaseRule):
                         f"event_ids={[e.id for e in sample[:5]]}"
                     )
                 else:
-                    sample = [a for a in items if isinstance(a, Alert)]
+                    alert_sample = [a for a in items if isinstance(a, Alert)]
                     evidence_lines.append(
-                        f"  Stage '{stage.label}' (alerts): {len(sample)} alert(s) "
-                        f"[{', '.join(sorted({a.rule for a in sample}))}] "
-                        f"alert_ids={[a.id for a in sample[:5]]}"
+                        f"  Stage '{stage.label}' (alerts): {len(alert_sample)} alert(s) "
+                        f"[{', '.join(sorted({a.rule for a in alert_sample}))}] "  # type: ignore[attr-defined]
+                        f"alert_ids={[a.id for a in alert_sample[:5]]}"
                     )
             return DetectionResult(
                 rule=self.rule_id,

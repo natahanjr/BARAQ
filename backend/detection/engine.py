@@ -101,7 +101,7 @@ def persist(db: Session, detection: DETECTION) -> DetectionRecord:
         existing.description = detection.description
         existing.evidence = [e.to_dict() for e in detection.evidence]
         existing.observables = [dict(o) for o in detection.observables]
-        existing.event_ids = sorted(set(existing.event_ids) | set(detection.event_ids))
+        existing.event_ids = sorted(set(existing.event_ids) | set(detection.event_ids))  # type: ignore[arg-type]
         existing.updated_at = datetime.now(UTC)
         existing.first_seen = min(existing.first_seen, detection.first_seen)
         existing.last_seen = max(existing.last_seen, detection.last_seen)

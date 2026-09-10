@@ -23,6 +23,7 @@ import logging
 import os
 import threading
 import uuid
+from typing import Any
 
 from sqlalchemy.engine import Engine
 
@@ -37,12 +38,12 @@ class InstanceLock:
     def __init__(self, engine: Engine | None = None, name: str = LOCK_NAME):
         self._engine = engine
         self._name = name
-        self._pg_conn = None
-        self._redis = None
-        self._redis_token = None
+        self._pg_conn: Any = None
+        self._redis: Any = None
+        self._redis_token: str | None = None
         self._held = False
-        self._heartbeat_stop = None
-        self._heartbeat_thread = None
+        self._heartbeat_stop: threading.Event | None = threading.Event()
+        self._heartbeat_thread: threading.Thread | None = None
 
     # -- acquisition --------------------------------------------------------
     def acquire(self) -> bool:
@@ -89,8 +90,10 @@ class InstanceLock:
         from backend.config import SCHEDULER_LOCK_TTL_SECONDS
 
         def _beat():
+            assert self._heartbeat_stop is not None
             while not self._heartbeat_stop.is_set():
                 try:
+                    assert self._redis is not None
                     self._redis.set(
                         self._name, self._redis_token, ex=SCHEDULER_LOCK_TTL_SECONDS
                     )
@@ -100,6 +103,7 @@ class InstanceLock:
 
         self._heartbeat_stop = threading.Event()
         self._heartbeat_thread = threading.Thread(target=_beat, daemon=True)
+        assert self._heartbeat_thread is not None
         self._heartbeat_thread.start()
 
     def _acquire_postgres(self) -> bool:

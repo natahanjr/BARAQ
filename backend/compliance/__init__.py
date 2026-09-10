@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import select
 
@@ -53,7 +54,7 @@ def _token(value, salt: str = "baraq-pii") -> str:
 
 def anonymize(record: dict) -> dict:
     """Return a copy of ``record`` with every PII field masked."""
-    out = {}
+    out: dict[str, Any] = {}
     for key, value in record.items():
         if value is None:
             out[key] = value

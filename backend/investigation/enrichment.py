@@ -260,7 +260,7 @@ def enrich_incident(
 
     base_risk = float(incident.risk_score or 0) or max(
         (
-            float(a.risk_score or 0)
+            float(a.alert.risk_score or 0)
             for a in incident.alerts
             if a.alert and a.alert.risk_score
         ),

@@ -132,7 +132,7 @@ class NetworkCollector(BaseCollector):
 
         # Pass 1: collect raw rows + count connections per pid for I/O distribution
         raw = []
-        per_pid = {}
+        per_pid: dict[int, int] = {}
         live_keys = set()
         for conn in conns:
             pid = conn.pid or 0
@@ -142,7 +142,7 @@ class NetworkCollector(BaseCollector):
             rport = conn.raddr.port if conn.raddr else 0
             key = (pid, lip, lport, rip, rport)
             live_keys.add(key)
-            per_pid[pid] = per_pid.get(pid, 0) + 1
+            per_pid[pid] = per_pid.get(pid, 0) + 1  # type: ignore[operator]
             raw.append(
                 {
                     "pid": pid,
@@ -162,16 +162,16 @@ class NetworkCollector(BaseCollector):
         for pid, count in per_pid.items():
             if pid:
                 tot_sent, tot_recv = self._pid_io(pid)
-                pid_io[pid] = (tot_sent // max(count, 1), tot_recv // max(count, 1))
+                pid_io[pid] = (tot_sent // max(count, 1), tot_recv // max(count, 1))  # type: ignore[operator]
 
         self._prune_first_seen(live_keys)
 
         for r in raw:
-            key = r.pop("key")
-            if key not in self._first_seen:
-                self._first_seen[key] = now_ts
-            duration = round(max(0.0, now_ts - self._first_seen[key]), 2)
-            sent, recv = pid_io.get(r["pid"], (0, 0))
+            conn_key: tuple[int, str, int, str, int] = r.pop("key")  # type: ignore[assignment]
+            if conn_key not in self._first_seen:
+                self._first_seen[conn_key] = now_ts
+            duration = round(max(0.0, now_ts - self._first_seen[conn_key]), 2)
+            sent, recv = pid_io.get(r["pid"], (0, 0))  # type: ignore[arg-type]
             records.append(
                 {
                     "source": "network",
@@ -186,7 +186,7 @@ class NetworkCollector(BaseCollector):
                     "bytes_sent": sent,
                     "bytes_recv": recv,
                     "duration_seconds": duration,
-                    "org": _org_for(r["remote_ip"]),
+                    "org": _org_for(str(r["remote_ip"])),
                     "timestamp": now.isoformat(),
                 }
             )

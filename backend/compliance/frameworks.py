@@ -98,7 +98,7 @@ def list_frameworks() -> list[str]:
     return list(FRAMEWORKS.keys())
 
 
-def assess_control(framework_name: str, control_id: str, status: str, evidence: list[str] = None, notes: str = "") -> ComplianceControl | None:
+def assess_control(framework_name: str, control_id: str, status: str, evidence: list[str] | None = None, notes: str = "") -> ComplianceControl | None:
     fw = FRAMEWORKS.get(framework_name)
     if not fw:
         return None

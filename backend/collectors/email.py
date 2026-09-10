@@ -40,7 +40,7 @@ class EmailCollector(BaseCollector):
         self._seen: set[str] = set()
 
     def enabled(self) -> bool:
-        return bool(self.ingest_dir) and self.ingest_dir.is_dir()
+        return self.ingest_dir is not None and self.ingest_dir.is_dir()
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -109,6 +109,8 @@ class EmailCollector(BaseCollector):
         if not self.enabled():
             return []
         out: list[dict] = []
+        if self.ingest_dir is None:
+            return []
         try:
             files = [
                 p

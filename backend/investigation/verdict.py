@@ -58,7 +58,7 @@ def _entity_risk(session, alert: Alert) -> list[dict]:
                     "kind": kind,
                     "name": name,
                     "risk_level": prof.risk_level,
-                    "risk_score": prof.risk_score,
+                    "risk_score": prof.score,
                     "alerts_count": prof.alerts_count,
                 }
             )

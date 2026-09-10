@@ -192,47 +192,47 @@ def _is_suppressed(db, fingerprint: str | None) -> bool:
 
 def _build_graph(db, incident_id: str, incident: IncidentV2) -> None:
     edges: list[IncidentV2GraphEdge] = []
-    for link in incident.alerts:
+    for alert_link in incident.alerts:
         edges.append(
             IncidentV2GraphEdge(
                 incident_id=incident_id,
                 relationship_type="INCIDENT_HAS_ALERT",
                 source_id=incident.incident_id,
-                target_id=link.alert_id,
-                reason=link.membership_reason,
+                target_id=alert_link.alert_id,
+                reason=alert_link.membership_reason,
                 evidence={"source_type": "ALERT"},
             )
         )
-    for link in incident.groups:
+    for group_link in incident.groups:
         edges.append(
             IncidentV2GraphEdge(
                 incident_id=incident_id,
                 relationship_type="INCIDENT_HAS_GROUP",
                 source_id=incident.incident_id,
-                target_id=link.behavior_group_id,
-                reason=link.membership_reason,
+                target_id=group_link.behavior_group_id,  # type: ignore[attr-defined]
+                reason=group_link.membership_reason,
                 evidence={"source_type": "BEHAVIOR_GROUP"},
             )
         )
-    for link in incident.correlations:
+    for corr_link in incident.correlations:
         edges.append(
             IncidentV2GraphEdge(
                 incident_id=incident_id,
                 relationship_type="INCIDENT_HAS_CORRELATION",
                 source_id=incident.incident_id,
-                target_id=link.correlation_finding_id,
-                reason=link.membership_reason,
+                target_id=corr_link.correlation_finding_id,  # type: ignore[attr-defined]
+                reason=corr_link.membership_reason,
                 evidence={"source_type": "CORRELATION"},
             )
         )
-    for link in incident.risks:
+    for risk_link in incident.risks:
         edges.append(
             IncidentV2GraphEdge(
                 incident_id=incident_id,
                 relationship_type="INCIDENT_HAS_RISK",
                 source_id=incident.incident_id,
-                target_id=link.risk_id,
-                reason=link.membership_reason,
+                target_id=risk_link.risk_id,  # type: ignore[attr-defined]
+                reason=risk_link.membership_reason,
                 evidence={"source_type": "RISK"},
             )
         )
@@ -357,8 +357,8 @@ def create_incident(
             primary_entity_type=primary_entity_type,
             primary_entity_id=primary_entity_id,
             relevant_entities=relevant_entities,
-            correlation_finding_ids=correlation_finding_ids,
-            behavior_group_ids=behavior_group_ids,
+            correlation_finding_ids=correlation_finding_ids,  # type: ignore[arg-type]
+            behavior_group_ids=behavior_group_ids,  # type: ignore[arg-type]
             policy_id=policy_id,
         )
 

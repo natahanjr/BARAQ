@@ -397,11 +397,12 @@ def process_alerts(
 
     db.commit()
     seen: set[str] = set()
-    return [
-        g
-        for g in touched
-        if not (g.behavior_group_id in seen or seen.add(g.behavior_group_id))
-    ]
+    result = []
+    for g in touched:
+        if g.behavior_group_id not in seen:
+            seen.add(g.behavior_group_id)
+            result.append(g)
+    return result
 
 
 def expire_groups(

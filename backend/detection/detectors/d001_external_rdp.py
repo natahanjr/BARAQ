@@ -33,6 +33,8 @@ class ExternalRDPDetector(Detector):
         if event.action != "logon":
             return None
         logon_type = event.facts.get("logon_type")
+        if logon_type is None:
+            return None
         try:
             logon_type = int(logon_type)
         except (TypeError, ValueError):

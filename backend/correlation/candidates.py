@@ -52,7 +52,7 @@ def candidate_pairs(summaries: list[dict], now=None) -> list[tuple[dict, dict]]:
                     if summaries[a]["first_seen"] <= summaries[b]["first_seen"]
                     else (b, a)
                 )
-                if later - earlier > max_delta:
+                if summaries[later]["first_seen"] - summaries[earlier]["first_seen"] > max_delta:
                     continue
                 pairs.add((earlier, later))
 

@@ -78,14 +78,14 @@ class RansomwareBehaviorDetector(Detector):
         window = context.events_in_window(
             event.timestamp, WINDOW_MINUTES, host=event.host, limit=10_000
         )
-        file_events = [e for e in window if _is_file_modification(e)]
+        file_events = [e for e in window if _is_file_modification(e)]  # type: ignore[arg-type]
         stored_current = any(e.fingerprint == event.fingerprint() for e in file_events)
         count = len(file_events) + (0 if stored_current else 1)
 
         if count < FILE_THRESHOLD or count % FILE_THRESHOLD != 0:
             return None
 
-        shadow = any(_is_shadow_delete(e) for e in window) or _is_shadow_delete(event)
+        shadow = any(_is_shadow_delete(e) for e in window) or _is_shadow_delete(event)  # type: ignore[arg-type]
 
         confidence = 0.60
         if count >= HIGH_RATE_COUNT:

@@ -37,7 +37,7 @@ def _compile_patterns() -> re.Pattern[str]:
         part = part.strip()
         if part:
             fragments.append(re.escape(part))
-    return re.compile("|".join(fragments), re.IGNORECASE) if fragments else None
+    return re.compile("|".join(fragments), re.IGNORECASE) if fragments else re.compile("(?!)")
 
 
 _TRUSTED_PATH_RE = _compile_patterns()
