@@ -59,19 +59,19 @@ def analyze(session: Session, org: str = "", limit_rules: int = 50) -> dict:
     for alert in alerts:
         by_rule.setdefault(alert.rule, []).append(alert)
 
-    action_count = dict(
+    action_count: dict[int, int] = dict(  # type: ignore[arg-type]
         session.execute(
             select(AlertAction.alert_id, func.count(AlertAction.id))
             .where(AlertAction.alert_id.in_([a.id for a in alerts]))
             .group_by(AlertAction.alert_id)
-        ).all()
+        ).all()  # type: ignore[arg-type]
     )
-    note_count = dict(
+    note_count: dict[int, int] = dict(  # type: ignore[arg-type]
         session.execute(
             select(AnalystNote.alert_id, func.count(AnalystNote.id))
             .where(AnalystNote.alert_id.in_([a.id for a in alerts]))
             .group_by(AnalystNote.alert_id)
-        ).all()
+        ).all()  # type: ignore[arg-type]
     )
 
     items: list[dict] = []

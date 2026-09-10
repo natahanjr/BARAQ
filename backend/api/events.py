@@ -100,7 +100,7 @@ def list_events(
 
 
 @router.get("/events/statistics")
-def event_statistics(request: Request, db: Session = Depends(get_db)):
+def event_statistics(request: Request, hours: int = 24, db: Session = Depends(get_db)):
     scope = _events_scope(request)
     stmt_event = select(NormalizedEvent.event_id, func.count(NormalizedEvent.id))
     stmt_category = select(NormalizedEvent.category, func.count(NormalizedEvent.id))
@@ -202,9 +202,9 @@ def list_network(
                 break
         rows = keep[:limit]
     else:
-        rows = db.scalars(
+        rows = list(db.scalars(
             stmt.order_by(NetworkConnection.observed_at.desc()).limit(limit)
-        ).all()
+        ).all())
     return {"total": len(rows), "items": [c.to_dict() for c in rows]}
 
 

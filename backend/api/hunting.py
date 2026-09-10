@@ -57,11 +57,11 @@ async def hunt_events_get(
     earliest: str | None = None,
     latest: str | None = None,
     limit: int = Query(100, ge=1, le=10000),
-    request: Request = None,
+    request: Request | None = None,
     db: Session = Depends(get_db),
     _auth=Depends(require_auth),
 ):
-    org = getattr(request.state, "org", "") or ""
+    org = getattr(request.state, "org", "") if request is not None else ""
     try:
         result = execute_search(
             db, q, org=org, earliest=earliest, latest=latest, default_limit=limit

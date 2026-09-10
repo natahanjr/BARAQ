@@ -107,7 +107,7 @@ def entity_detail(
     depth: int = Query(1, ge=0, le=3),
 ):
     store = get_graph_store()
-    kind = _normalize_kind(kind)
+    kind = _normalize_kind(kind)  # type: ignore[assignment]
     if kind not in VALID_KINDS:
         raise HTTPException(400, f"unknown entity kind: {kind}")
     entity = store.get_entity(db, kind, name)

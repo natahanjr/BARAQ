@@ -501,7 +501,7 @@ def record_verdict(
         actor_name(request),
         "verdict.record",
         "event",
-        body.event_id,
+        str(body.event_id),
         f"{body.verdict} - {body.note or 'no note'}",
         client_ip(request),
     )

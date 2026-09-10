@@ -22,7 +22,7 @@ router = APIRouter(
 def anonymized_export_endpoint(
     hours: int = Query(24, ge=0, le=720),
     org: str = Query("", max_length=64),
-    request: Request = None,
+    request: Request | None = None,
     db: Session = Depends(get_db),
 ):
     """Anonymized (PII-masked) telemetry + alert export for a window."""
@@ -34,7 +34,7 @@ def anonymized_export_endpoint(
         raise HTTPException(400, str(exc)) from exc
     log_action(
         db,
-        actor_name(request),
+        actor_name(request) if request is not None else "system",
         "compliance.export",
         "dataset",
         f"{hours}h",
@@ -47,7 +47,7 @@ def anonymized_export_endpoint(
 @router.get("/dsar", dependencies=[Depends(require_admin)])
 def dsar_endpoint(
     email: str = Query(..., min_length=2, max_length=128),
-    request: Request = None,
+    request: Request | None = None,
     db: Session = Depends(get_db),
 ):
     """Data subject access request: everything stored about one person."""
@@ -59,7 +59,7 @@ def dsar_endpoint(
         raise HTTPException(400, str(exc)) from exc
     log_action(
         db,
-        actor_name(request),
+        actor_name(request) if request is not None else "system",
         "compliance.dsar",
         "subject",
         email,
@@ -72,7 +72,7 @@ def dsar_endpoint(
 @router.get("/report", dependencies=[Depends(require_admin)])
 def compliance_report_endpoint(
     framework: str = Query("", description="SOC2, ISO27001, or NIST-CSF"),
-    request: Request = None,
+    request: Request | None = None,
     db: Session = Depends(get_db),
 ):
     """Framework gap analysis or GDPR Art.30 data inventory."""
@@ -80,12 +80,12 @@ def compliance_report_endpoint(
         from backend.compliance.frameworks import get_framework
         from backend.compliance.gap_analysis import analyze_gaps
 
-        report = analyze_gaps(framework.upper())
-        if not report:
+        gap_report = analyze_gaps(framework.upper())
+        if not gap_report:
             raise HTTPException(400, f"Unknown framework: {framework}")
         log_action(
             db,
-            actor_name(request),
+            actor_name(request) if request is not None else "system",
             "compliance.gap_report",
             "framework",
             framework,
@@ -93,7 +93,7 @@ def compliance_report_endpoint(
             client_ip(request),
         )
         controls = []
-        for gap in report.gaps:
+        for gap in gap_report.gaps:
             controls.append({
                 "id": gap.control_id,
                 "control": gap.title,
@@ -101,7 +101,9 @@ def compliance_report_endpoint(
                 "gap": gap.gap_description,
                 "remediation": gap.remediation,
             })
-        for ctrl in get_framework(framework.upper()).controls:
+        fw = get_framework(framework.upper())
+        assert fw is not None
+        for ctrl in fw.controls:
             if ctrl.status == "compliant":
                 controls.append({
                     "id": ctrl.control_id,
@@ -111,29 +113,29 @@ def compliance_report_endpoint(
                     "remediation": "",
                 })
         return {
-            "framework": report.framework,
-            "total_controls": report.total_controls,
-            "compliant": report.compliant,
-            "partial": report.partial,
-            "non_compliant": report.non_compliant,
-            "unassessed": report.unassessed,
-            "compliance_pct": report.compliance_pct,
+            "framework": gap_report.framework,
+            "total_controls": gap_report.total_controls,
+            "compliant": gap_report.compliant,
+            "partial": gap_report.partial,
+            "non_compliant": gap_report.non_compliant,
+            "unassessed": gap_report.unassessed,
+            "compliance_pct": gap_report.compliance_pct,
             "controls": controls,
         }
 
     from backend.compliance import compliance_report
 
-    report = compliance_report(db)
+    report_result = compliance_report(db)
     log_action(
         db,
-        actor_name(request),
+        actor_name(request) if request is not None else "system",
         "compliance.report",
         "report",
         "",
         "compliance report generated",
         client_ip(request),
     )
-    return report
+    return report_result
 
 
 @router.get("/audit/retention", dependencies=[Depends(require_admin)])

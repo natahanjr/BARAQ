@@ -6,7 +6,7 @@ import logging
 import re
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -226,7 +226,7 @@ def feedback_stats(request: Request, db: Session = Depends(get_db)):
         "recent": [
             {
                 "alert_id": v.alert_id,
-                "rule": alerts.get(v.alert_id).rule if alerts.get(v.alert_id) else "?",
+                "rule": alerts[v.alert_id].rule if v.alert_id in alerts else "?",
                 "verdict": v.verdict,
                 "note": v.note,
                 "created_by": v.created_by,
@@ -444,7 +444,7 @@ def alert_groups(request: Request, db: Session = Depends(get_db)):
         key = (alert.rule, alert.host or "", user)
         groups.setdefault(key, []).append(alert)
 
-    items = []
+    items: list[dict[str, Any]] = []
     for (rule, host, user), rows in groups.items():
         rows_sorted = sorted(rows, key=lambda a: a.created_at)
         items.append(
@@ -747,15 +747,19 @@ def clear_alerts(request: Request, db: Session = Depends(get_db)):
 
     alert_ids = [a.id for a in open_alerts]
     rules = {a.rule for a in open_alerts}
+    from sqlalchemy import delete
     db.execute(
-        AlertAction.__table__.delete().where(AlertAction.alert_id.in_(alert_ids))
+        delete(AlertAction).where(AlertAction.alert_id.in_(alert_ids))
     )
     if "vulnerability" in rules:
-        db.execute(VulnFinding.__table__.delete())
+        from sqlalchemy import delete
+        db.execute(delete(VulnFinding))
     if "malware_file" in rules:
-        db.execute(FileScan.__table__.delete())
+        from sqlalchemy import delete
+        db.execute(delete(FileScan))
     if "email_phishing" in rules:
-        db.execute(EmailMessage.__table__.delete())
+        from sqlalchemy import delete
+        db.execute(delete(EmailMessage))
     for alert in open_alerts:
         db.delete(alert)
     db.commit()

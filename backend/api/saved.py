@@ -238,6 +238,7 @@ def update_dashboard(
     updates = body.model_dump(exclude_none=True)
     if "panels" in updates:
         panels = []
+        assert body.panels is not None
         for panel in body.panels:
             panel_data = panel.model_dump()
             if not panel_data.get("id"):

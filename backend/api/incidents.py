@@ -318,7 +318,7 @@ def create_incident(
         actor,
         "incident.create",
         "incident",
-        incident.id,
+        str(incident.id),
         f"Created incident '{body.title}'",
         client_ip(request),
     )
@@ -390,7 +390,7 @@ def update_incident(
             actor,
             "incident.update",
             "incident",
-            incident.id,
+            str(incident.id),
             "Updated: " + "; ".join(changes),
             client_ip(request),
         )
@@ -439,7 +439,7 @@ def link_alerts(
             actor,
             "incident.link_alerts",
             "incident",
-            incident_id,
+            str(incident_id),
             f"Linked alerts {linked}",
             client_ip(request),
         )

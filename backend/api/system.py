@@ -595,7 +595,7 @@ def ml_status():
         pass
 
     # v7/v8 enhanced status
-    ensemble_status = detector.ensemble.status()
+    ensemble_status = detector.ensemble.status() if detector.ensemble is not None else None
     online_learning = detector.online_learner is not None
     feature_version = detector.version
 
@@ -743,7 +743,7 @@ def _build_robustness_sessions() -> tuple[dict, dict, dict]:
 
         user_events: dict[str, list] = {}
         host_events: dict[str, list] = {}
-        all_vectors = []
+        all_vectors: list = []
 
         for ev in rows:
             user = ev.user or "unknown"
@@ -851,7 +851,9 @@ def ml_online_learning():
             result["should_update"] = False
 
         try:
-            suggestions = detector.online_learner.active_learner.suggest_for_labeling()
+            suggestions = detector.online_learner.active_learner.suggest_for_labeling(
+                features_list=[], behaviors=[], models={}
+            )
             result["active_learning_suggestions"] = len(suggestions)
             result["suggestions"] = [
                 {"event_id": s[0], "uncertainty": round(s[2], 4)}
@@ -1009,6 +1011,8 @@ def ml_retention():
 def ml_ensemble():
     """Ensemble stacker status and model weights."""
     detector = get_detector()
+    if detector is None or detector.ensemble is None:
+        return {"status": "unavailable", "ensemble": None}
     ensemble_status = detector.ensemble.status()
 
     return {

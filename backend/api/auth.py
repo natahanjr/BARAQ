@@ -177,7 +177,7 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
             detail=f"Too many failed login attempts for this account. Try again in {int(acct_retry)} seconds.",
         )
     user = db.scalar(select(User).where(User.username == username))
-    password_ok = bool(user) and verify_password(body.password, user.password_hash)
+    password_ok = user is not None and verify_password(body.password, user.password_hash)
     source = "local"
     if not password_ok:
         user = _ldap_login_fallback(db, username, body.password, request)
@@ -561,7 +561,7 @@ def oidc_callback(
         client_ip(request),
     )
     resp = RedirectResponse("/", status_code=302)
-    _set_session_cookie(resp, token)
+    _set_session_cookie(resp, token)  # type: ignore[arg-type]
     resp.delete_cookie(OIDC_COOKIE, path="/")
     return resp
 
@@ -861,7 +861,7 @@ def me(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/users", dependencies=[Depends(require_admin)])
 def list_users(
-    request: Request = None,
+    request: Request | None = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -1206,7 +1206,7 @@ def export_audit(
         writer = csv.writer(output)
         writer.writerow(["id", "action", "actor", "entity_type", "entity_id", "detail", "ip", "created_at"])
         for row in rows:
-            writer.writerow([row.id, row.action, row.actor, row.entity_type, row.entity_id, row.detail, row.client_ip, row.created_at])
+            writer.writerow([row.id, row.action, row.actor, row.entity_type, row.entity_id, row.detail, row.ip, row.created_at])
         output.seek(0)
         return StreamingResponse(
             iter([output.getvalue()]),
