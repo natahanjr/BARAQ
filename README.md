@@ -70,7 +70,7 @@ BARAQ/
 ├── frontend/          # React 18 dashboard
 ├── scripts/           # Agent, build, seed_demo, sigma_pull, tune
 ├── tests/             # 1,300+ tests
-└── documentation/     # Full documentation suite
+└── docs/              # Full documentation suite
 ```
 
 ---
@@ -87,11 +87,11 @@ python -m pytest tests -v
 
 | Document | Description |
 |---|---|
-| [`documentation/BARAQ_Combined_Guide.md`](documentation/BARAQ_Combined_Guide.md) | Operator/maintenance walkthrough |
-| [`documentation/user_manual.md`](documentation/user_manual.md) | Complete operator guide |
-| [`documentation/architecture.md`](documentation/architecture.md) | System architecture and data flow |
-| [`documentation/ml_strategy_and_validation.md`](documentation/ml_strategy_and_validation.md) | ML training and validation |
-| [`documentation/deployment_guide.md`](documentation/deployment_guide.md) | Fleet deployment guide |
+| [`docs/BARAQ_Combined_Guide.md`](docs/BARAQ_Combined_Guide.md) | Operator/maintenance walkthrough |
+| [`docs/user-guide.md`](docs/user-guide.md) | Complete operator guide |
+| [`docs/architecture.md`](docs/architecture.md) | System architecture and data flow |
+| [`docs/ml_strategy_and_validation.md`](docs/ml_strategy_and_validation.md) | ML training and validation |
+| [`docs/deployment.md`](docs/deployment.md) | Fleet deployment guide |
 
 ---
 
