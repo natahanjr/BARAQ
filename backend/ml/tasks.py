@@ -7,6 +7,7 @@ single training run at a time; training_active() feeds /ml/status.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import threading
@@ -60,8 +61,7 @@ def _bulk_train(session, hours=None, kind="manual"):
             _raw = _r.raw_json or {}
             if isinstance(_raw, str):
                 try:
-                    import json as _json
-                    _raw = _json.loads(_raw)
+                    _raw = json.loads(_raw)
                 except Exception:
                     _raw = {}
             if not isinstance(_raw, dict):
