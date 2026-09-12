@@ -466,6 +466,9 @@ def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_events_org ON events (org)"
         )
         conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_events_source ON events (source)"
+        )
+        conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS idx_alerts_org ON alerts (org)"
         )
         conn.exec_driver_sql(
