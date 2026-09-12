@@ -20,6 +20,16 @@ class HuntRequest(BaseModel):
     sort_by: str | None = None
     sort_order: str = "desc"
 
+    def model_post_init(self, __context) -> None:
+        """Validate sort parameters."""
+        if self.sort_by:
+            # Only allow alphanumeric characters and underscores to prevent injection
+            import re
+            if not re.match(r'^[a-zA-Z0-9_]+$', self.sort_by):
+                raise ValueError("sort_by must contain only alphanumeric characters and underscores")
+        if self.sort_order not in ("asc", "desc"):
+            raise ValueError("sort_order must be 'asc' or 'desc'")
+
 
 @router.post("/search")
 async def hunt_events(
