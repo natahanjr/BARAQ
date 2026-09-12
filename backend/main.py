@@ -1120,14 +1120,23 @@ def health():
     overall_status = "ok"
     status_code = 200
 
-    # Database check
+    # Database check with connection pool status
     try:
         db = SessionLocal()
         db.execute(text("SELECT 1"))
         db.close()
+        # Get pool status
+        pool = db.get_bind().pool
+        pool_status = {
+            "size": pool.size(),
+            "checked_in": pool.checkedin(),
+            "checked_out": pool.checkedout(),
+            "overflow": pool.overflow(),
+        }
         checks["database"] = {
             "status": "ok",
             "message": "Database connection successful",
+            "pool": pool_status,
         }
     except Exception as e:
         import logging as _log
