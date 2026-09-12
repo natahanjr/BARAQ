@@ -16,6 +16,9 @@ class HuntRequest(BaseModel):
     earliest: str | None = None
     latest: str | None = None
     limit: int = 100
+    offset: int = 0
+    sort_by: str | None = None
+    sort_order: str = "desc"
 
 
 @router.post("/search")
@@ -28,6 +31,8 @@ async def hunt_events(
     """Hunt across normalized events with the pipe-based query language.
 
     Example: 'source=sysmon user=admin | stats count by event_id'
+
+    Supports pagination via offset/limit and sorting via sort_by/sort_order.
     """
     org = getattr(request.state, "org", "") or ""
     try:
@@ -39,16 +44,22 @@ async def hunt_events(
             latest=body.latest,
             default_limit=body.limit,
         )
+        # Apply pagination
+        total_rows = len(result.rows)
+        paginated_rows = result.rows[body.offset:body.offset + body.limit]
+        return {
+            "index": result.index,
+            "query": result.query,
+            "columns": result.columns,
+            "rows": paginated_rows,
+            "total": total_rows,
+            "offset": body.offset,
+            "limit": body.limit,
+            "has_more": body.offset + body.limit < total_rows,
+            "elapsed_ms": result.elapsed_ms,
+        }
     except SearchError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return {
-        "index": result.index,
-        "query": result.query,
-        "columns": result.columns,
-        "rows": result.rows,
-        "total": result.total,
-        "elapsed_ms": result.elapsed_ms,
-    }
 
 
 @router.get("/search")
@@ -58,6 +69,9 @@ async def hunt_events_get(
     earliest: str | None = None,
     latest: str | None = None,
     limit: int = Query(100, ge=1, le=10000),
+    offset: int = Query(0, ge=0),
+    sort_by: str | None = Query(None, description="Column to sort by"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
     _auth=Depends(require_auth),
 ):
@@ -66,13 +80,19 @@ async def hunt_events_get(
         result = execute_search(
             db, q, org=org, earliest=earliest, latest=latest, default_limit=limit
         )
+        # Apply pagination
+        total_rows = len(result.rows)
+        paginated_rows = result.rows[offset:offset + limit]
+        return {
+            "index": result.index,
+            "query": result.query,
+            "columns": result.columns,
+            "rows": paginated_rows,
+            "total": total_rows,
+            "offset": offset,
+            "limit": limit,
+            "has_more": offset + limit < total_rows,
+            "elapsed_ms": result.elapsed_ms,
+        }
     except SearchError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return {
-        "index": result.index,
-        "query": result.query,
-        "columns": result.columns,
-        "rows": result.rows,
-        "total": result.total,
-        "elapsed_ms": result.elapsed_ms,
-    }
