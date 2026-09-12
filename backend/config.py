@@ -544,7 +544,16 @@ MAIL_INGEST_DIR = os.environ.get("BARAQ_MAIL_DIR", "")
 MAIL_INGEST_EXTENSIONS = (".eml", ".msg", ".json")
 
 #: Mark the session cookie Secure (requires HTTPS; set to 1 in production).
-#: TLS_ENABLED below forces it to 1 automatically — see "Transport security".
+#: TLS_ENABLED below forces it to 1 automatically - see "Transport security".
+
+# --------------------------------------------------------------------------
+# CORS (Cross-Origin Resource Sharing)
+# --------------------------------------------------------------------------
+# SECURITY WARNING: The default CORS_ORIGINS below include localhost entries
+# intended ONLY for local development. In production, you MUST restrict
+# CORS origins to your actual domain(s) via BARAQ_CORS_ORIGINS to prevent
+# unauthorized cross-origin requests. Allowing localhost in production
+# enables CSRF-like attacks from any local process.
 
 # --------------------------------------------------------------------------
 # Detection tuning
