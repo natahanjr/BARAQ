@@ -373,9 +373,9 @@ def init_db() -> None:
     from backend.risk import models as _risk_models  # noqa: F401
     from backend.telemetry.models import TelemetryEvent as _v2_events  # noqa: F401
 
-    # Retry database connection with backoff (handles startup race condition)
+    # Retry database connection with exponential backoff
     MAX_RETRIES = 10
-    RETRY_DELAY = 2
+    BASE_DELAY = 2  # seconds
 
     for attempt in range(MAX_RETRIES):
         try:
@@ -385,9 +385,10 @@ def init_db() -> None:
             if attempt == MAX_RETRIES - 1:
                 logger.error("Failed to connect to database after %d attempts", MAX_RETRIES)
                 raise
+            delay = BASE_DELAY * (2 ** attempt)  # Exponential backoff
             logger.warning("Database connection attempt %d/%d failed: %s. Retrying in %ds...",
-                          attempt + 1, MAX_RETRIES, e, RETRY_DELAY)
-            time.sleep(RETRY_DELAY)
+                          attempt + 1, MAX_RETRIES, e, delay)
+            time.sleep(delay)
 
     # Skip in-place DDL when Alembic is managing migrations. The
     # ``alembic upgrade head`` command (run at deploy time) applies the same
