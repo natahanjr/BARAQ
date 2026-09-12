@@ -80,6 +80,21 @@ class ExternalRemoteServicesRule(BaseRule):
 
         return base
 
+    def _compute_severity(self, confidence: float, source_ip: str) -> str:
+        """Map detection confidence and IP reputation to alert severity.
+
+        Severity levels:
+        - critical: known attack IP with high confidence
+        - high: external RDP from unknown IP (default)
+        - medium: repeated external connections
+        """
+        known_critical_ips = {"203.0.113.66", "203.0.113.77"}
+        if source_ip in known_critical_ips and confidence >= 0.9:
+            return "critical"
+        if confidence >= 0.85:
+            return "high"
+        return self.severity
+
     def evaluate(
         self, window_minutes: int, since_id: int | None = None
     ) -> list[DetectionResult]:
@@ -123,11 +138,13 @@ class ExternalRemoteServicesRule(BaseRule):
                 f"'{ev.host or 'unknown'}' at {ev.timestamp.isoformat()}."
             )
             confidence = self._compute_confidence(str(source_ip), logon_type)
+            severity = self._compute_severity(confidence, str(source_ip))
             findings.append(
                 self._result(
                     evidence=evidence,
                     event_ids=[ev.id],
                     confidence=confidence,
+                    severity=severity,
                 )
             )
 
