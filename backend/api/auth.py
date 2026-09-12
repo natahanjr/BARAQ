@@ -240,7 +240,10 @@ def register(body: RegisterRequest, request: Request, db: Session = Depends(get_
     ``pending``; they cannot sign in until an administrator verifies them
     (``POST /api/auth/users/{id}/approve``). This keeps account creation
     open on the login screen without handing out access.
+
+    Rate limited: 5 registration attempts per IP per 5 minutes.
     """
+    _check_login_rate_limit(request)  # Reuse login rate limiter for registration
     username = body.username.strip()
     if _username_taken(db, username):
         # Return generic message to prevent username enumeration
