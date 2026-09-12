@@ -20,9 +20,9 @@ router = APIRouter(
 
 @router.get("/export", dependencies=[Depends(require_admin)])
 def anonymized_export_endpoint(
+    request: Request,
     hours: int = Query(24, ge=0, le=720),
     org: str = Query("", max_length=64),
-    request: Request | None = None,
     db: Session = Depends(get_db),
 ):
     """Anonymized (PII-masked) telemetry + alert export for a window."""
@@ -34,7 +34,7 @@ def anonymized_export_endpoint(
         raise HTTPException(400, str(exc)) from exc
     log_action(
         db,
-        actor_name(request) if request is not None else "system",
+        actor_name(request),
         "compliance.export",
         "dataset",
         f"{hours}h",
@@ -46,8 +46,8 @@ def anonymized_export_endpoint(
 
 @router.get("/dsar", dependencies=[Depends(require_admin)])
 def dsar_endpoint(
+    request: Request,
     email: str = Query(..., min_length=2, max_length=128),
-    request: Request | None = None,
     db: Session = Depends(get_db),
 ):
     """Data subject access request: everything stored about one person."""
@@ -59,7 +59,7 @@ def dsar_endpoint(
         raise HTTPException(400, str(exc)) from exc
     log_action(
         db,
-        actor_name(request) if request is not None else "system",
+        actor_name(request),
         "compliance.dsar",
         "subject",
         email,
@@ -71,8 +71,8 @@ def dsar_endpoint(
 
 @router.get("/report", dependencies=[Depends(require_admin)])
 def compliance_report_endpoint(
+    request: Request,
     framework: str = Query("", description="SOC2, ISO27001, or NIST-CSF"),
-    request: Request | None = None,
     db: Session = Depends(get_db),
 ):
     """Framework gap analysis or GDPR Art.30 data inventory."""
@@ -85,7 +85,7 @@ def compliance_report_endpoint(
             raise HTTPException(400, f"Unknown framework: {framework}")
         log_action(
             db,
-            actor_name(request) if request is not None else "system",
+            actor_name(request),
             "compliance.gap_report",
             "framework",
             framework,
@@ -128,7 +128,7 @@ def compliance_report_endpoint(
     report_result = compliance_report(db)
     log_action(
         db,
-        actor_name(request) if request is not None else "system",
+        actor_name(request),
         "compliance.report",
         "report",
         "",

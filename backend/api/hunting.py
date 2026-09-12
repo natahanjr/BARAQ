@@ -53,15 +53,15 @@ async def hunt_events(
 
 @router.get("/search")
 async def hunt_events_get(
+    request: Request,
     q: str = Query(..., description="query"),
     earliest: str | None = None,
     latest: str | None = None,
     limit: int = Query(100, ge=1, le=10000),
-    request: Request | None = None,
     db: Session = Depends(get_db),
     _auth=Depends(require_auth),
 ):
-    org = getattr(request.state, "org", "") if request is not None else ""
+    org = getattr(request.state, "org", "") or ""
     try:
         result = execute_search(
             db, q, org=org, earliest=earliest, latest=latest, default_limit=limit

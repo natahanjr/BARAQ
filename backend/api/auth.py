@@ -861,7 +861,7 @@ def me(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/users", dependencies=[Depends(require_admin)])
 def list_users(
-    request: Request | None = None,
+    request: Request,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
