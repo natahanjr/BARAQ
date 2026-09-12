@@ -292,6 +292,8 @@ def _bulk_train(session, hours=None, kind="manual"):
                 login_X.shape, process_X.shape, network_X.shape, time.time() - t0)
 
     # --- Train models ---
+    logger.info("Bulk train: starting model training for %d streams", 
+                sum(1 for X in [login_X, process_X, network_X] if len(X) >= 3))
     detector = get_detector()
     new_models = {}
     new_thresholds = dict(_DEFAULT_THRESHOLDS)
@@ -301,7 +303,9 @@ def _bulk_train(session, hours=None, kind="manual"):
 
     for beh, X, y in [("login", login_X, login_y), ("process", process_X, process_y), ("network", network_X, network_y)]:
         if len(X) < 3:
+            logger.info("Bulk train: skipping %s stream (only %d samples)", beh, len(X))
             continue
+        logger.info("Bulk train: training %s IsolationForest on %d samples", beh, len(X))
         m = IsolationForest(contamination=ML_CONTAMINATION, random_state=ML_RANDOM_STATE,
                             n_estimators=100, max_samples=min(256, len(X)))
         m.fit(X)
@@ -310,7 +314,10 @@ def _bulk_train(session, hours=None, kind="manual"):
         stream_y[beh] = y
 
     if not new_models:
+        logger.warning("Bulk train: no streams had enough data for training")
         return {"status": "insufficient-data", "trained": False}
+
+    logger.info("Bulk train: training supervised classifiers for %d streams", len(new_models))
 
     new_sup = {}
     new_sup_name = {}
