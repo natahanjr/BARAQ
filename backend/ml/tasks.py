@@ -69,8 +69,13 @@ def _bulk_train(session, hours=None, kind="manual"):
         _events.append({"id": _r.id, "event_id": _r.event_id, "ts": _ts, "facts": _facts, "user": _r.user or ""})
     _N = len(_events)
 
+    logger.info("Bulk train: loaded %d events from DB (%.1fs)", _N, time.time() - t0)
+
     _login_idx = [i for i, e in enumerate(_events) if e["event_id"] in LOGIN_EVENTS]
     _proc_idx = [i for i, e in enumerate(_events) if e["event_id"] in PROCESS_EVENTS]
+
+    logger.info("Bulk train: login_events=%d process_events=%d (%.1fs)",
+                len(_login_idx), len(_proc_idx), time.time() - t0)
 
     # --- Pre-compute temporal lookups (O(N) sliding window) ---
     _tsp = {}
