@@ -83,7 +83,7 @@ class ExternalRemoteServicesRule(BaseRule):
             )
 
             try:
-                logon_type = int(logon_type)
+                logon_type = int(logon_type)  # type: ignore[arg-type]
             except (TypeError, ValueError):
                 continue
 
