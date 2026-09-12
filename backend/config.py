@@ -303,6 +303,19 @@ for _d in (DATABASE_DIR, LOG_DIR, REPORT_DIR, DATASET_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # --------------------------------------------------------------------------
+# OTRF Security-Datasets import
+# --------------------------------------------------------------------------
+#: Directory containing OTRF Security-Datasets for ML training.
+#: Defaults to APP_DIR/datasets/otrf. Set BARAQ_OTRF_DATA_DIR to override.
+OTRF_DATA_DIR = Path(
+    os.environ.get(
+        "BARAQ_OTRF_DATA_DIR",
+        str(DATASET_DIR / "otrf"),
+    )
+)
+OTRF_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# --------------------------------------------------------------------------
 # Research dataset collector
 # --------------------------------------------------------------------------
 #: Defaults for a new dataset collection session (overridable per session
