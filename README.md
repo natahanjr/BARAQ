@@ -92,6 +92,26 @@ python -m pytest tests -v
 | [`docs/architecture.md`](docs/architecture.md) | System architecture and data flow |
 | [`docs/ml_strategy_and_validation.md`](docs/ml_strategy_and_validation.md) | ML training and validation |
 | [`docs/deployment.md`](docs/deployment.md) | Fleet deployment guide |
+| [`docs/dataset-import.md`](docs/dataset-import.md) | External dataset import guide |
+| [`docs/ml-training.md`](docs/ml-training.md) | ML training configuration |
+
+---
+
+## Dataset Statistics
+
+BARAQ supports importing external security datasets for ML training:
+
+| Dataset | Events | Format | Source |
+|---|---|---|---|
+| OTRF Security-Datasets | 100K+ | JSON/CSV | [OTRF](https://github.com/OTRF/Security-Datasets) |
+| BOTSv1 | 1.8M | CSV | [Splunk](https://github.com/splunk/botsv1) |
+| BOTES | 2M+ | CSV | [Splunk](https://github.com/splunk/botes) |
+
+View imported dataset statistics:
+```bash
+curl -X GET "http://localhost:8001/api/datasets/status" \
+  -H "Authorization: Bearer <token>"
+```
 
 ---
 
