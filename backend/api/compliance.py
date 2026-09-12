@@ -4,6 +4,7 @@ retention, compliance report. All admin-only."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,31 @@ router = APIRouter(
     tags=["compliance"],
     dependencies=[Depends(require_auth)],
 )
+
+
+class ComplianceReportRequest(BaseModel):
+    """Request body for compliance report generation."""
+    framework: str = Field(
+        "",
+        description="Compliance framework: SOC2, ISO27001, or NIST-CSF",
+        max_length=32,
+    )
+
+
+class DSARRequest(BaseModel):
+    """Request body for Data Subject Access Request."""
+    email: str = Field(
+        ...,
+        min_length=2,
+        max_length=128,
+        description="Email address of the data subject",
+    )
+
+
+class ExportRequest(BaseModel):
+    """Request body for anonymized data export."""
+    hours: int = Field(24, ge=0, le=720, description="Time window in hours")
+    org: str = Field("", max_length=64, description="Organization filter")
 
 
 @router.get("/export", dependencies=[Depends(require_admin)])
