@@ -54,20 +54,32 @@ def _bulk_train(session, hours=None, kind="manual"):
     _stmt = _stmt.order_by(NormalizedEvent.timestamp)
     _rows = session.execute(_stmt).all()
     _events = []
+    _skipped = 0
     for _r in _rows:
-        _raw = _r.raw_json or {}
-        if isinstance(_raw, str):
-            try:
-                import json as _json
-                _raw = _json.loads(_raw)
-            except Exception:
+        try:
+            _raw = _r.raw_json or {}
+            if isinstance(_raw, str):
+                try:
+                    import json as _json
+                    _raw = _json.loads(_raw)
+                except Exception:
+                    _raw = {}
+            if not isinstance(_raw, dict):
                 _raw = {}
-        _facts = _raw.get("facts") or _raw  # Handle both nested and flat format
-        _ts = _r.timestamp
-        if _ts.tzinfo is None:
-            _ts = _ts.replace(tzinfo=UTC)
-        _events.append({"id": _r.id, "event_id": _r.event_id, "ts": _ts, "facts": _facts, "user": _r.user or ""})
+            _facts = _raw.get("facts") or _raw  # Handle both nested and flat format
+            if not isinstance(_facts, dict):
+                _facts = {}
+            _ts = _r.timestamp
+            if _ts.tzinfo is None:
+                _ts = _ts.replace(tzinfo=UTC)
+            _events.append({"id": _r.id, "event_id": _r.event_id, "ts": _ts, "facts": _facts, "user": _r.user or ""})
+        except Exception as _exc:
+            _skipped += 1
+            logger.debug("Skipping event %s during training load: %s", _r.id, _exc)
     _N = len(_events)
+
+    if _skipped:
+        logger.warning("Bulk train: skipped %d events with invalid raw_json", _skipped)
 
     logger.info("Bulk train: loaded %d events from DB (%.1fs)", _N, time.time() - t0)
 
