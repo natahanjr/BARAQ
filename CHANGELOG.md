@@ -4,6 +4,19 @@ All notable changes to BARAQ are documented in this
 file. The format is based on [Keep a Changelog](https://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-09-12 — "Dataset Import"
+
+### Added
+- **OTRF dataset import**: Support for importing OTRF Security-Datasets for ML training
+- **Dataset import documentation**: Guide for importing external datasets in `docs/dataset-import.md`
+- **Dataset status endpoint**: `GET /api/datasets/status` for dataset statistics
+
+### Changed
+- Enhanced CORS configuration with production security warnings
+- Added `BARAQ_OTRF_DATA_DIR` environment variable for dataset directory path
+
+---
+
 ## [1.0.0] - 2026-09-08 — "Roadmap Complete"
 
 ### Added
