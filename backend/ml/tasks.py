@@ -55,7 +55,14 @@ def _bulk_train(session, hours=None, kind="manual"):
     _rows = session.execute(_stmt).all()
     _events = []
     for _r in _rows:
-        _facts = (_r.raw_json or {}).get("facts") or {}
+        _raw = _r.raw_json or {}
+        if isinstance(_raw, str):
+            try:
+                import json as _json
+                _raw = _json.loads(_raw)
+            except Exception:
+                _raw = {}
+        _facts = _raw.get("facts") or _raw  # Handle both nested and flat format
         _ts = _r.timestamp
         if _ts.tzinfo is None:
             _ts = _ts.replace(tzinfo=UTC)
