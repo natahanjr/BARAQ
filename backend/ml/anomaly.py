@@ -115,8 +115,8 @@ _XGB_MIN_SAMPLES = 400
 _IF_PARAM_GRID: list[dict] = [
     {
         "n_estimators": [100, 150],
-        "max_samples": ["auto", 128, 256],
-        "contamination": [0.03, 0.05, 0.08],
+        "max_samples": ["auto", 256],
+        "contamination": [0.03, 0.05],
     }
 ]
 
@@ -3360,11 +3360,24 @@ class MLAnomalyDetector:
             _rows = session.execute(_stmt).all()
             _events = []
             for _r in _rows:
-                _facts = (_r.raw_json or {}).get("facts") or {}
-                _ts = _r.timestamp
-                if _ts.tzinfo is None:
-                    _ts = _ts.replace(tzinfo=UTC)
-                _events.append({"id": _r.id, "event_id": _r.event_id, "ts": _ts, "facts": _facts, "user": _r.user or ""})
+                try:
+                    _raw = _r.raw_json or {}
+                    if isinstance(_raw, str):
+                        try:
+                            _raw = json.loads(_raw)
+                        except Exception:
+                            _raw = {}
+                    if not isinstance(_raw, dict):
+                        _raw = {}
+                    _facts = _raw.get("facts") or _raw
+                    if not isinstance(_facts, dict):
+                        _facts = {}
+                    _ts = _r.timestamp
+                    if _ts.tzinfo is None:
+                        _ts = _ts.replace(tzinfo=UTC)
+                    _events.append({"id": _r.id, "event_id": _r.event_id, "ts": _ts, "facts": _facts, "user": _r.user or ""})
+                except Exception:
+                    continue
             _N = len(_events)
 
             # Index by stream
@@ -3444,24 +3457,62 @@ class MLAnomalyDetector:
                 _sg = (sum((_g - _mg) ** 2 for _g in _gaps) / len(_gaps)) ** 0.5
                 _lz[_idx] = 0.0 if _sg == 0 else min(1.0, max(0.0, abs((_gaps[-1] - _mg) / _sg) / 3.0))
 
-            # Cross-stream (1h counts)
+            # Cross-stream (1h counts) - O(N) sliding window
             _all_sorted = sorted(range(_N), key=lambda _i: _events[_i]["ts"])
             _cross = {}
             _left = 0
+            _cs_fail = 0
+            _cs_proc = 0
+            _cs_types: set[int] = set()
             for _k, _idx in enumerate(_all_sorted):
                 _ev_ts = _events[_idx]["ts"]
                 while _left < _k and (_ev_ts - _events[_all_sorted[_left]]["ts"]).total_seconds() > 3600:
+                    _le = _events[_all_sorted[_left]]
+                    if _le["event_id"] == 4625:
+                        _cs_fail -= 1
+                    if _le["event_id"] in PROCESS_EVENTS:
+                        _cs_proc -= 1
+                    _cs_types.discard(_le["event_id"])
                     _left += 1
-                _failed = sum(1 for _j in range(_left, _k + 1) if _events[_all_sorted[_j]]["event_id"] == 4625)
-                _procs = sum(1 for _j in range(_left, _k + 1) if _events[_all_sorted[_j]]["event_id"] in PROCESS_EVENTS)
-                _types = len(set(_events[_all_sorted[_j]]["event_id"] for _j in range(_left, _k + 1)))
+                _cur_eid = _events[_idx]["event_id"]
+                if _cur_eid == 4625:
+                    _cs_fail += 1
+                if _cur_eid in PROCESS_EVENTS:
+                    _cs_proc += 1
+                _cs_types.add(_cur_eid)
                 _ts = (_events[_all_sorted[-1]]["ts"] - _ev_ts).total_seconds() / 3600.0 if _k < len(_all_sorted) - 1 else 0.0
                 _cross[_idx] = [
-                    min(_failed / 10, 1), min(_procs / 10, 1), 0.0,
-                    min(_failed / max(_procs, 1), 1), min(_ts, 1),
-                    1.0 if _failed > 0 and _procs > 0 else 0.0, 0.0,
-                    min(_types / 5, 1),
+                    min(_cs_fail / 10, 1), min(_cs_proc / 10, 1), 0.0,
+                    min(_cs_fail / max(_cs_proc, 1), 1), min(_ts, 1),
+                    1.0 if _cs_fail > 0 and _cs_proc > 0 else 0.0, 0.0,
+                    min(len(_cs_types) / 5, 1),
                 ]
+
+            # Pre-compute O(N) features (moved from O(N²) inside _build_login)
+            _precomp_fs_ratio = 0.0
+            _fail_count_total = sum(1 for _e2 in _events if _e2["event_id"] == 4625)
+            _succ_count_total = sum(1 for _e2 in _events if _e2["event_id"] == 4624)
+            _total_ls = _fail_count_total + _succ_count_total
+            if _total_ls > 0:
+                _precomp_fs_ratio = _fail_count_total / _total_ls
+
+            _precomp_user_ips: dict[str, set[str]] = _dd(set)
+            for _e2 in _events:
+                if _e2["event_id"] in (4624, 4625):
+                    _precomp_user_ips[_e2["user"]].add(str(_e2["facts"].get("source_ip", "")))
+            _precomp_dist_ips = {u: min(1.0, len(ips) / 10.0) for u, ips in _precomp_user_ips.items()}
+
+            _hour_counts: dict[int, int] = {}
+            for _e2 in _events:
+                if _e2["event_id"] in LOGIN_EVENTS:
+                    _eh = _e2["ts"].hour
+                    _hour_counts[_eh] = _hour_counts.get(_eh, 0) + 1
+            _precomp_hdist = 0.0
+            if _hour_counts:
+                _htotal = sum(_hour_counts.values())
+                _hent = sum(-(_c / _htotal) * math.log2(_c / _htotal) for _c in _hour_counts.values() if _c > 0)
+                _hmax = math.log2(max(len(_hour_counts), 1))
+                _precomp_hdist = min(1.0, _hent / max(_hmax, 1)) if _hmax > 0 else 0.0
 
             # Build login feature matrix
             def _build_login(_ev, _idx):
@@ -3506,28 +3557,9 @@ class MLAnomalyDetector:
                 # v7 features: auth protocol, failed/success ratio, distinct IPs, hour distribution
                 _lp = str(_f.get("logon_process", "") or "").lower()
                 _auth = 0.7 if "ntlm" in _lp else (0.1 if "kerberos" in _lp else 0.5)
-                _fs_ratio = 0.0
-                _fail_count = sum(1 for _e2 in _events if _e2["event_id"] == 4625)
-                _succ_count = sum(1 for _e2 in _events if _e2["event_id"] == 4624)
-                _total_ls = _fail_count + _succ_count
-                if _total_ls > 0:
-                    _fs_ratio = _fail_count / _total_ls
-                _user_ips = set()
-                for _e2 in _events:
-                    if _e2["event_id"] in (4624, 4625) and _e2["user"] == _ev["user"]:
-                        _user_ips.add(str(_e2["facts"].get("source_ip", "")))
-                _dist_ips = min(1.0, len(_user_ips) / 10.0)
-                _hour_counts: dict[int, int] = {}
-                for _e2 in _events:
-                    if _e2["event_id"] in LOGIN_EVENTS:
-                        _eh = _e2["ts"].hour
-                        _hour_counts[_eh] = _hour_counts.get(_eh, 0) + 1
-                _hdist = 0.0
-                if _hour_counts:
-                    _htotal = sum(_hour_counts.values())
-                    _hent = sum(-(_c / _htotal) * math.log2(_c / _htotal) for _c in _hour_counts.values() if _c > 0)
-                    _hmax = math.log2(max(len(_hour_counts), 1))
-                    _hdist = min(1.0, _hent / max(_hmax, 1)) if _hmax > 0 else 0.0
+                _fs_ratio = _precomp_fs_ratio
+                _dist_ips = _precomp_dist_ips.get(_ev["user"], 0.0)
+                _hdist = _precomp_hdist
                 return [_ev["event_id"], _lt, _sub / 100,
                         (int(_sip.split(".")[0]) << 24 | int(_sip.split(".")[1]) << 16 | int(_sip.split(".")[2]) << 8 | int(_sip.split(".")[3])) / 4294967296.0 if _sip and _sip.count(".") == 3 else 0.0,
                         _locked, _hs, _hc, _night, _we, _unusual,
@@ -3740,6 +3772,11 @@ class MLAnomalyDetector:
                 min_attacks = 3 if behavior == "network" else 10
                 if len(atk) < min_attacks or len(ben) < 3:
                     continue
+                # Cap supervised training to 5000 samples for speed
+                max_sup = 5000
+                if len(ben) > max_sup:
+                    _rng = np.random.RandomState(ML_RANDOM_STATE)
+                    ben = ben[_rng.choice(len(ben), max_sup, replace=False)]
                 X_all = np.vstack([ben, atk])
                 y_all = np.array([0] * len(ben) + [1] * len(atk))
                 stream_model, stream_name = self._build_classifier(X_all, y_all)
@@ -3805,7 +3842,8 @@ class MLAnomalyDetector:
             if self.ensemble is not None and len(new_models) >= 2:
                 try:
                     self._train_ensemble_meta(
-                        session, new_models, new_supervised_by_stream, new_baselines
+                        session, new_models, new_supervised_by_stream, new_baselines,
+                        stream_X=stream_X, stream_y=stream_y,
                     )
                 except Exception:
                     logger.debug(
@@ -3906,8 +3944,14 @@ class MLAnomalyDetector:
         new_models: dict,
         new_supervised_by_stream: dict,
         new_baselines: dict,
+        stream_X: dict | None = None,
+        stream_y: dict | None = None,
     ) -> None:
-        """Train the ensemble stacking meta-learner on base model predictions."""
+        """Train the ensemble stacking meta-learner on base model predictions.
+
+        Uses pre-computed stream_X/stream_y when available to avoid re-querying
+        the full event table via _labeled_samples().
+        """
         if self.ensemble is None or not HAS_ENSEMBLE:
             return
 
@@ -3916,16 +3960,26 @@ class MLAnomalyDetector:
         all_labels = []
 
         for behavior, model in new_models.items():
-            labeled = self._labeled_samples(session)
-            if behavior not in labeled:
-                continue
-            atk, ben = labeled[behavior]
-            if not atk or not ben:
-                continue
-            X = np.vstack([ben, atk])
-            y = np.array([0] * len(ben) + [1] * len(atk))
+            # Prefer pre-computed features over expensive _labeled_samples
+            if stream_X and behavior in stream_X and stream_y and behavior in stream_y:
+                X = stream_X[behavior]
+                y = stream_y[behavior]
+            else:
+                labeled = self._labeled_samples(session)
+                if behavior not in labeled:
+                    continue
+                atk, ben = labeled[behavior]
+                if not atk or not ben:
+                    continue
+                X = np.vstack([ben, atk])
+                y = np.array([0] * len(ben) + [1] * len(atk))
             if len(X) < 10:
                 continue
+            # Cap ensemble training to 3000 samples for speed
+            if len(X) > 3000:
+                _rng = np.random.RandomState(ML_RANDOM_STATE)
+                _sel = _rng.choice(len(X), 3000, replace=False)
+                X, y = X[_sel], y[_sel]
 
             try:
                 raws = np.array(

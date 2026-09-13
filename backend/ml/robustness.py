@@ -338,9 +338,12 @@ def evaluate_robustness(
         if model is None or X is None or len(X) < 5:
             continue
 
-        stability = prediction_stability_test(model, X)
-        importance = feature_importance_stability(model, X)
-        evasion = fgsm_evasion_test(model, X, epsilon=0.1, n_samples=min(100, len(X)))
+        # Cap to 2000 samples for speed
+        X_eval = X[:2000] if len(X) > 2000 else X
+
+        stability = prediction_stability_test(model, X_eval)
+        importance = feature_importance_stability(model, X_eval)
+        evasion = fgsm_evasion_test(model, X_eval, epsilon=0.1, n_samples=min(100, len(X_eval)))
 
         stream_score = (
             stability["mean_stability"] * 0.5

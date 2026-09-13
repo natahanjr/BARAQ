@@ -1,0 +1,112 @@
+124: def _grid_search_if(
+204: def _behavior_of(event_id: int) -> str:
+212: def _ip_subnet_features(ip: str) -> list[float]:
+289: def _fact(event, key: str, default: float = 0.0) -> float:
+316: def _bool_fact(event, key: str) -> int:
+320: def _ip_feature(event, key: str) -> float:
+345: def _digits(s: str) -> float:
+364: def _time_features(event) -> tuple[float, float, float, float, float]:
+401: def _get_recent_events_count(session, behavior: str, hours: int = 24) -> int:
+425: def _get_failed_login_velocity_per_ip(
+450: def _get_logon_type_entropy(session, hours: int = 24) -> float:
+488: def _get_source_ip_diversity(session, target_user: str, hours: int = 24) -> float:
+517: def _get_time_between_logins_zscore(session, hours: int = 24) -> float:
+563: def _get_privilege_escalation_indicator(session, hours: int = 1) -> float:
+605: def _get_parent_child_anomaly_score(event) -> float:
+647: def _get_commandline_entropy(event) -> float:
+683: def _get_process_frequency_per_user(session, event, hours: int = 1) -> float:
+713: def _get_lolbin_abuse_indicator(event) -> float:
+758: def _get_new_process_path_indicator(session, event, hours: int = 24) -> float:
+814: def _get_executable_path_entropy(event) -> float:
+843: def _get_system_directory_indicator(event) -> float:
+865: def _get_parent_process_risk_score(event) -> float:
+896: def _get_commandline_token_count(event) -> float:
+917: def _get_process_chain_depth(session, event, hours: int = 1) -> float:
+951: def _get_time_since_last_event(session, behavior: str) -> float:
+980: def _get_threat_intel_score(event) -> float:
+1055: def _get_behavioral_velocity(session, behavior: str, hours: int = 1) -> float:
+1079: def _get_failed_success_ratio(session, source_ip: str, hours: int = 24) -> float:
+1107: def _get_auth_protocol_indicator(event) -> float:
+1130: def _get_distinct_source_ips(session, target_user: str, hours: int = 24) -> float:
+1152: def _get_hour_distribution_entropy(session, hours: int = 24) -> float:
+1183: def _get_cross_stream_features(
+1283: def _get_connection_velocity_per_ip(
+1302: def _get_port_scan_indicator(session, remote_ip: str, minutes: int = 60) -> float:
+1321: def _get_exfiltration_indicator(session, remote_ip: str, hours: int = 1) -> float:
+1348: def _get_beaconing_indicator(session, remote_ip: str, hours: int = 1) -> float:
+1396: def _get_dns_query_pattern(session, hours: int = 1) -> float:
+1455: def _get_dns_tunnel_indicator(session, hours: int = 1) -> float:
+1482: def _get_dns_long_label_indicator(session, hours: int = 1) -> float:
+1507: def _get_protocol_anomaly_score(session, remote_ip: str, remote_port: int) -> float:
+1524: def _get_tls_https_ratio(session, hours: int = 1) -> float:
+1550: def _get_connection_diversity_score(session, hours: int = 1) -> float:
+1575: def _get_data_volume_asymmetry(session, remote_ip: str, hours: int = 1) -> float:
+1597: def _get_connection_regularity_score(session, remote_ip: str, hours: int = 1) -> float:
+1628: def _get_outbound_connection_ratio(session, hours: int = 1) -> float:
+1654: def event_feature_vector(event, _shared_session=None) -> list[float] | None:
+1856: def _get_business_hours_indicator(event) -> float:
+1864: def _get_user_session_deviation(
+1907: def _get_event_burst_score(session, behavior: str, minutes: int = 5) -> float:
+1946: def _get_kill_chain_phase(event) -> float:
+1970: def _get_user_attack_frequency(session, user: str, hours: int = 168) -> float:
+2010: def _verdict_map(session) -> dict[int, int]:
+2024: def _load_behavior_features(
+2086: def _load_network_features(
+2187: def _kfold_cross_validate(
+2245: def _multi_contamination_ensemble(
+2267: def _calibrate_anomaly_scores(
+2283: def _select_optimal_threshold(
+2317: def _smote_augment(
+2370: class MLAnomalyDetector:
+2373: def __init__(self, load_persisted: bool = False):
+2412: def _bundle_path(self) -> Path:
+2415: def _prev_bundle_path(self) -> Path:
+2419: def _meta_path(self):
+2422: def _load_meta(self) -> None:
+2447: def _save_meta(self) -> None:
+2473: def _save_bundle(self) -> None:
+2504: def _load_bundle(self) -> bool:
+2543: def rollback(self) -> bool:
+2578: def _load_bootstrap(self) -> bool:
+2641: def apply_feedback(
+2717: def _weighted_score(self, behavior: str, score: float) -> float:
+2722: def get_feedback_stats(self) -> dict:
+2735: def shadow_score_events(
+2773: def compare_models(
+2790: def compute_metrics(scores, threshold=0.5):
+2835: def version_info(self) -> dict:
+2846: def _events_since_train(self, session) -> int:
+2862: def _drift_result(self, session=None) -> tuple[bool, str]:
+2910: def is_stale(self, session=None) -> tuple[bool, str]:
+2948: def is_ready(self) -> bool:
+2953: def _compact_baseline(raws: np.ndarray, max_points: int = 1024) -> np.ndarray:
+2963: def _rank_of(cls, raws, baseline: np.ndarray | None) -> np.ndarray:
+2986: def _tune_threshold(
+3068: def _is_attack_sample(event_id: int, raw_json: dict) -> bool:
+3197: def _labeled_network_samples(
+3218: def _labeled_samples(
+3262: def _validation_data(
+3308: def train(
+3467: def _build_login(_ev, _idx):
+3539: def _cmd_ent(s):
+3547: def _build_process(_ev, _idx):
+3588: def _hybrid_label(ev):
+3877: def _gate_replacement(self, session, since, new_models) -> bool:
+3903: def _train_ensemble_meta(
+3962: def _build_classifier(X, y):
+4054: def _combined_score(self, behavior: str, model, features: list[float]) -> float:
+4083: def score_event(self, features: list[float]) -> float:
+4103: def score_events(self, features_list: list[list[float]]) -> list[float]:
+4156: def score_event_for_behavior(self, behavior: str, features: list[float]) -> float:
+4164: def score_network_connection(
+4246: def _score_with(model, features: list[float]) -> float:
+4260: def analyze_events(self, session=None, hours: int = 1) -> dict:
+4340: def supervised_proba(self, features: list[float], classifier=None) -> float:
+4354: def status(self, session=None) -> dict:
+4385: class _QuickModelProxy:
+4388: def __init__(self, models: dict, baselines: dict):
+4393: def models(self):
+4396: def decision_function(self, X):
+4401: def predict(self, X):
+4406: def score(self, X, y=None):
+4418: def get_detector() -> MLAnomalyDetector:
