@@ -3,6 +3,8 @@ import os, sys, time, logging
 
 os.chdir(r"F:\My Project\Baraq")
 sys.path.insert(0, ".")
+from dotenv import load_dotenv
+load_dotenv()
 os.environ["BARAQ_TELEMETRY_V2"] = "1"
 os.environ["BARAQ_NO_SCHEDULER"] = "1"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")

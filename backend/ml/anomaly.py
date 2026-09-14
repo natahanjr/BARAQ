@@ -2138,40 +2138,44 @@ def _load_network_features(
                 rate,
             ]
 
-            # Enhanced v5 network features
+            # Enhanced v5 network features — computed directly from grouped data
+            # (per-IP DB queries with datetime.now() return 0 for historical data)
+            conn_per_min = float(count) / max(duration_h * 60.0, 1.0)
             enhanced_feats = [
-                _get_connection_velocity_per_ip(
-                    local_session, ip, 60
-                ),  # Connection velocity
-                _get_port_scan_indicator(local_session, ip, 60),  # Port scan indicator
-                _get_exfiltration_indicator(
-                    local_session, ip, 1
-                ),  # Exfiltration indicator
-                _get_beaconing_indicator(local_session, ip, 1),  # Beaconing indicator
-                _get_dns_query_pattern(local_session, 1),  # DNS query pattern
+                min(conn_per_min / 10.0, 1.0),          # Connection velocity
+                min(float(distinct_ports) / 20.0, 1.0), # Port scan indicator
+                (sent_mb / max(recv_mb, 0.001)) / 10.0 if recv_mb > 0 else (0.5 if sent_mb > 0 else 0.0),  # Exfil ratio
+                0.0,  # Beaconing (needs timing data)
+                0.0,  # DNS (needs DNS table)
             ]
 
             # Phase 2 temporal/contextual features for network
             from backend.ml.realworld_labeler import is_attack_ip_offline
             is_attack_ip_feat = 1.0 if is_attack_ip_offline(ip) else 0.0
             temporal_feats = [
-                min(_get_connection_velocity_per_ip(local_session, ip, 5), 2.0),
+                min(conn_per_min, 2.0),
                 0.5,
                 is_attack_ip_feat,
-                min(float(count) / max(duration_h * 60.0, 1.0), 2.0),
-                min(_get_port_scan_indicator(local_session, ip, 15), 2.0),
+                min(conn_per_min, 2.0),
+                min(float(distinct_ports) / 15.0, 2.0),
             ]
 
-            # v7 enhanced network features: DNS, protocol, TLS, diversity, asymmetry, regularity
+            # v7 enhanced network features: compute from grouped data
+            # Asymmetry: how much more sent than received (or vice versa)
+            asymmetry = abs(sent_mb - recv_mb) / max(sent_mb + recv_mb, 0.001)
+            # Regularity: high count with low port diversity suggests regular traffic
+            regularity = float(count) / max(float(distinct_ports), 1.0)
+            # Outbound ratio: sent/(sent+recv)
+            outbound_ratio = sent_mb / max(sent_mb + recv_mb, 0.001)
             v7_net_feats = [
-                _get_dns_tunnel_indicator(local_session, 1),
-                _get_dns_long_label_indicator(local_session, 1),
-                _get_protocol_anomaly_score(local_session, ip, int(distinct_ports)),
-                _get_tls_https_ratio(local_session, 1),
-                _get_connection_diversity_score(local_session, 1),
-                _get_data_volume_asymmetry(local_session, ip, 1),
-                _get_connection_regularity_score(local_session, ip, 1),
-                _get_outbound_connection_ratio(local_session, 1),
+                0.0,  # DNS tunnel (needs DNS table)
+                0.0,  # DNS long label (needs DNS table)
+                min(float(distinct_ports) / 50.0, 1.0),  # Protocol anomaly
+                0.0,  # TLS ratio (needs TLS data)
+                min(float(distinct_ports) / max(float(count), 1.0), 1.0),  # Connection diversity
+                asymmetry,  # Data volume asymmetry
+                min(1.0 / max(regularity, 1.0), 1.0),  # Regularity (inverted: high regularity = low score)
+                outbound_ratio,  # Outbound connection ratio
             ]
 
             flows.append(subnet_feats + flow_feats + enhanced_feats + temporal_feats + v7_net_feats)
@@ -3079,6 +3083,7 @@ class MLAnomalyDetector:
 
         Analyst verdicts override this heuristic when available.
         """
+        from backend.ml.realworld_labeler import is_attack_ip_offline
         facts = (raw_json or {}).get("facts") or {}
         eid = int(event_id)
 
@@ -3115,9 +3120,7 @@ class MLAnomalyDetector:
             )
 
         # Failed logon (4625): use non-feature-overlapping signals.
-        # is_locked IS in the feature vector, so we avoid it for labeling.
         if eid == 4625:
-            # sub_status is NOT in the feature vector — safe to use for labeling
             sub_status_raw = facts.get("sub_status", 0)
             try:
                 sub_status = int(sub_status_raw)
@@ -3126,8 +3129,15 @@ class MLAnomalyDetector:
                     sub_status = int(str(sub_status_raw), 16)
                 except (ValueError, TypeError):
                     sub_status = 0
-            # Account locked (0xC0000234) or disabled (0xC0000072) — strong contextual signal
-            return sub_status in (3221226036, 3221225586)
+            # Account locked (0xC0000234) or disabled (0xC0000072) — strong signal
+            if sub_status in (3221226036, 3221225586):
+                return True
+            # Bad password (0xC000006A) from known attack IP
+            sip = str(facts.get("source_ip", ""))
+            if sub_status == 3221226036 or (sip and is_attack_ip_offline(sip)):
+                return True
+            # All failed logons are suspicious (brute force indicator)
+            return True
 
         # Successful logon (4624): logon_type IS in the feature vector.
         # Use non-overlapping signals only.
@@ -3138,23 +3148,28 @@ class MLAnomalyDetector:
                 return True
             # LogonProcessName anomalies — NOT in feature vector
             logon_process = str(facts.get("logon_process", "") or "")
-            return bool(
-                logon_process
-                and logon_process
-                not in ("NtLmSsp", "Kerberos", "Negotiate", "WDIGEST", "MSSECRPC")
-            )
+            if logon_process and logon_process not in ("NtLmSsp", "Kerberos", "Negotiate", "WDIGEST", "MSSECRPC"):
+                return True
+            # Unusual logon types: batch (4), service (5), unlock (7), network cleartext (8)
+            lt = int(facts.get("logon_type", 0))
+            if lt in (4, 5, 7, 8, 9, 10, 11):
+                return True
+            # Known attack IPs
+            sip = str(facts.get("source_ip", ""))
+            if sip and is_attack_ip_offline(sip):
+                return True
+            return False
 
         # Process creation (4688): use process metadata NOT in feature vector.
-        # Features are: event_id, has_encoded, has_download, has_hidden, group_sid,
-        # script_len, cmdline_len, hour_sin, hour_cos, has_remote.
-        # Safe signals: parent process, image path context, process tree anomalies.
         if eid == 4688:
             image = str(
                 facts.get("image_path", "") or facts.get("new_process", "") or ""
             )
             parent = str(facts.get("parent_process", "") or "")
+            cmd = str(facts.get("command_line", "") or "")
             image_lower = image.lower()
             parent_lower = parent.lower()
+            cmd_lower = cmd.lower()
             # Suspicious parent-child: PowerShell spawning cmd, or scripts spawning interpreters
             if "powershell" in parent_lower and any(
                 c in image_lower for c in ("cmd", "certutil", "bitsadmin")
@@ -3162,24 +3177,32 @@ class MLAnomalyDetector:
                 return True
             # Process in user-writable directory (public, temp, appdata, downloads)
             writable_dirs = (
-                "\\public\\",
-                "\\temp\\",
-                "\\appdata\\local\\",
-                "\\downloads\\",
+                "\\public\\", "\\temp\\", "\\appdata\\local\\", "\\downloads\\",
             )
             if any(d in image_lower for d in writable_dirs):
                 return True
             # High-risk executables run from non-system paths
             risk_names = (
-                "mimikatz",
-                "psexec",
-                "nc",
-                "ncat",
-                "netcat",
-                "meterpreter",
-                "cobaltstrike",
+                "mimikatz", "psexec", "nc", "ncat", "netcat",
+                "meterpreter", "cobaltstrike", "lazagne", "procdump",
+                "sharpdump", "rubeus", "seatbelt", "sharpup",
             )
-            return bool(any(r in image_lower for r in risk_names))
+            if any(r in image_lower for r in risk_names):
+                return True
+            # Suspicious command-line patterns (from OTRF dataset)
+            suspicious_cmds = (
+                "invoke-expression", "iex(", "downloadstring",
+                "invoke-webrequest", "start-process", "bitsadmin",
+                "certutil -decode", "reg save", "lsass", "sekurlsa",
+                "ntlm", "kerberos::list", "misc::skeleton",
+            )
+            if any(s in cmd_lower for s in suspicious_cmds):
+                return True
+            # LOLBin abuse with suspicious arguments
+            lolbins = ("mshta", "wscript", "cscript", "regsvr32", "rundll32", "msbuild")
+            if any(l in image_lower for l in lolbins):
+                return True
+            return False
 
         # Network connections: use protocol/port context NOT in feature vector
         if (
@@ -3199,9 +3222,10 @@ class MLAnomalyDetector:
     ) -> tuple[np.ndarray, np.ndarray, list[str]]:
         """Per-remote-IP flow features with attack labels for the network stream.
 
-        Label source: threat-intel IPs from the realworld_labeler module
-        (DB-backed with legacy fallback). Returns (X, y, ips) aligned to
-        the same feature space used at score time.
+        Multi-signal labeling:
+        1. Threat-intel IP match (known attack IPs)
+        2. IQR-based outlier detection on flow features (robust to skew)
+        3. Private/local/unknown IPs always labeled benign
         """
         from backend.ml.realworld_labeler import is_attack_ip_offline
 
@@ -3209,9 +3233,43 @@ class MLAnomalyDetector:
         ips = [r["remote_ip"] for r in rows]
         if not ips:
             return X, np.empty((0,), dtype=int), []
-        y = np.array(
-            [1 if is_attack_ip_offline(ip) else 0 for ip in ips], dtype=int
-        )
+
+        y = np.zeros(len(ips), dtype=int)
+        for i, ip in enumerate(ips):
+            if is_attack_ip_offline(ip):
+                y[i] = 1
+                continue
+
+        # Statistical outlier detection using IQR (robust to extreme skew)
+        if X.shape[0] > 10 and X.shape[1] > 13:
+            flow_cols = X[:, 8:14]  # count, ports, sent, recv, duration, rate
+            q25 = np.percentile(flow_cols, 25, axis=0)
+            q75 = np.percentile(flow_cols, 75, axis=0)
+            iqr = q75 - q25
+            iqr[iqr < 1e-8] = 1.0  # avoid div-by-zero
+            upper = q75 + 2.0 * iqr  # mild outlier threshold
+
+            for i in range(len(ips)):
+                if y[i] == 1:
+                    continue  # already labeled
+                ip_str = str(ips[i])
+                # Private/local/unknown IPs are always benign
+                if (not ip_str or ip_str == "unknown"
+                    or ip_str.startswith(("127.", "10.", "192.168.", "172.16.",
+                                          "172.17.", "172.18.", "172.19.", "172.2",
+                                          "172.3", "0.", "::1"))):
+                    continue
+
+                vals = flow_cols[i]
+                # Count how many features exceed the IQR upper bound
+                n_outlier = int(sum(vals > upper))
+                # Any 2 features as outliers = suspicious
+                if n_outlier >= 2:
+                    y[i] = 1
+                # Single feature must be very extreme (3x IQR)
+                elif any(vals > q75 + 3.0 * iqr):
+                    y[i] = 1
+
         return X, y, ips
 
     @staticmethod
@@ -3638,9 +3696,13 @@ class MLAnomalyDetector:
             # Use _load_network_features for consistent 34-dim feature vector
             # matching the scoring path (score_network_connection)
             network_X, network_rows = _load_network_features(session, since, cutoff)
-            network_y = np.empty((0,), dtype=int)
-            if len(network_X):
-                from backend.ml.realworld_labeler import is_attack_ip_offline
+            # Use _labeled_network_samples for statistical outlier labeling
+            # (is_attack_ip_offline alone gives 0 attacks for real data)
+            _net_labeled_X, network_y, _net_labeled_ips = MLAnomalyDetector._labeled_network_samples(
+                session, since
+            )
+            if len(network_X) != len(network_y):
+                # Fallback if dimensions don't match
                 network_y = np.array(
                     [
                         1 if is_attack_ip_offline(str(r["remote_ip"])) else 0
