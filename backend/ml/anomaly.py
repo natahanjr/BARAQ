@@ -3669,7 +3669,7 @@ class MLAnomalyDetector:
                         _pe, _sysdir, _prisk, _ctokens, _cdepth]
 
             login_X = np.array([_build_login(_events[i], i) for i in _login_idx], dtype=float) if _login_idx else np.empty((0, 38))
-            process_X = np.array([_build_process(_events[i], i) for i in _proc_idx], dtype=float) if _proc_idx else np.empty((0, 29))
+            process_X = np.array([_build_process(_events[i], i) for i in _proc_idx], dtype=float) if _proc_idx else np.empty((0, 34))
 
             # ── Hybrid labeling: analyst verdicts + threat intel + heuristic ──
             from backend.ml.realworld_labeler import get_analyst_labels, is_attack_ip_offline

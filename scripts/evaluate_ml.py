@@ -134,21 +134,28 @@ def ip_f(ip):
 def build_login(ev, idx):
     f = ev["facts"]; lt = int(f.get("logon_type",0)); sip = str(f.get("source_ip",""))
     h = ev["ts"].hour
+    lp = str(f.get("logon_process","") or "").lower()
+    auth = 0.7 if "ntlm" in lp else (0.1 if "kerberos" in lp else 0.5)
     return [ev["event_id"], lt, int(f.get("sub_status",0))/100, ip_f(sip),
             int(bool(f.get("is_locked",0))),
             math.sin(2*math.pi*h/24), math.cos(2*math.pi*h/24),
             1.0 if h in _NIGHT_HOURS else 0.0, 1.0 if ev["ts"].weekday()>=5 else 0.0,
             1.0 if lt>0 and lt not in _COMMON_LOGON_TYPES else 0.0,
             min(tsp.get(idx,0)/24,1), min(r1h.get(idx,0)/10,1),
-            min(r24h.get(idx,0)/100,1), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            min(r24h.get(idx,0)/100,1), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
             *cross.get(idx,[0]*8),
             1.0 if 8<=h<18 and ev["ts"].weekday()<5 else 0.0,
-            0.5, 0.3, 0.0, 0.0]
+            0.5, 0.3, 0.0, 0.0,
+            auth, 0.0, 0.0, 0.0]
 
 def build_process(ev, idx):
     f = ev["facts"]; h = ev["ts"].hour
     img = str(f.get("image_path","")).lower(); cmd = str(f.get("command_line",""))
     par = str(f.get("parent_process","")).lower()
+    pe = cmd_ent(img) if img else 0.0
+    sysdir = 1.0 if "system32" in img or "syswow64" in img else (0.5 if "windows" in img else 0.0)
+    prisk = 0.9 if any(x in par for x in ["powershell","cmd","wscript","cscript","mshta"]) else (0.6 if any(x in par for x in ["winword","excel","outlook"]) else 0.3)
+    ctokens = min(1.0, len(cmd.split()) / 30.0) if cmd else 0.0
     return [ev["event_id"],
             math.sin(2*math.pi*h/24), math.cos(2*math.pi*h/24),
             1.0 if h in _NIGHT_HOURS else 0.0, 1.0 if ev["ts"].weekday()>=5 else 0.0,
@@ -161,12 +168,13 @@ def build_process(ev, idx):
             min(r24h_p.get(idx,0)/100,1), min(r1h_p.get(idx,0)/50,1),
             *cross.get(idx,[0]*8),
             1.0 if 8<=h<18 and ev["ts"].weekday()<5 else 0.0,
-            0.5, 0.5, 0.0, 0.0]
+            0.5, 0.5, 0.0, 0.0,
+            pe, sysdir, prisk, ctokens, 0.0]
 
 # 4. Build matrices
-login_X = np.array([build_login(events[i], i) for i in login_idx], dtype=float) if login_idx else np.empty((0,28))
+login_X = np.array([build_login(events[i], i) for i in login_idx], dtype=float) if login_idx else np.empty((0,38))
 login_y = np.array([1 if is_attack(events[i]) else 0 for i in login_idx], dtype=int) if login_idx else np.empty((0,),dtype=int)
-proc_X = np.array([build_process(events[i], i) for i in proc_idx], dtype=float) if proc_idx else np.empty((0,24))
+proc_X = np.array([build_process(events[i], i) for i in proc_idx], dtype=float) if proc_idx else np.empty((0,34))
 proc_y = np.array([1 if is_attack(events[i]) else 0 for i in proc_idx], dtype=int) if proc_idx else np.empty((0,),dtype=int)
 
 # Network
