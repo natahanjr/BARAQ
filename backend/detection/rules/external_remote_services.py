@@ -112,7 +112,7 @@ class ExternalRemoteServicesRule(BaseRule):
 
         findings: list[DetectionResult] = []
         for ev in self.session.scalars(stmt).all():
-            facts = (ev.raw_json or {}).get("facts", {}) if ev.raw_json else {}
+            facts = ev.facts or {}
             logon_type = facts.get("logon_type") or facts.get("LogonType")
             source_ip = (
                 facts.get("source_ip")
