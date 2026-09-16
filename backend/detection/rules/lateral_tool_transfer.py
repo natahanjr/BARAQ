@@ -77,7 +77,7 @@ class LateralToolTransferRule(BaseRule):
             if ev.id in seen:
                 continue
 
-            facts = (ev.raw_json or {}).get("facts", {}) if ev.raw_json else {}
+            facts = ev.facts or {}
             cmdline = (
                 facts.get("command_line")
                 or facts.get("cmdline")
