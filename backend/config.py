@@ -636,7 +636,7 @@ ML_MODEL_BUNDLE = Path(
 #: ``(1 - ML_TARGET_FPR)`` quantile of the training score distribution, so the
 #: detector flags ~ML_TARGET_FPR of the locally-learned baseline while still
 #: catching distribution tails (constant-false-alarm-rate calibration).
-ML_TARGET_FPR = float(os.environ.get("BARAQ_ML_TARGET_FPR", "0.03"))
+ML_TARGET_FPR = float(os.environ.get("BARAQ_ML_TARGET_FPR", "0.10"))
 
 # --------------------------------------------------------------------------
 # ML drift guard (anti "attacker becomes normal")
