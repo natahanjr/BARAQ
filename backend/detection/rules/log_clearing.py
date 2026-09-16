@@ -55,7 +55,7 @@ class LogClearingRule(BaseRule):
                 continue
 
             # Sysmon Event 23 - file deleted
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             path = facts.get("file_path") or ""
             if not path.lower().endswith(".evtx"):
                 continue
