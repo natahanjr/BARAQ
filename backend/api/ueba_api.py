@@ -44,11 +44,12 @@ def _build_baselines(db: Session, limit: int = 50):
 
         events = []
         for ev in events_q:
+            rj = ev.parsed_json
             events.append({
                 "timestamp": ev.timestamp.isoformat() if ev.timestamp else "",
                 "host": ev.host or "",
-                "process_name": (ev.raw_json or {}).get("process_name", (ev.raw_json or {}).get("NewProcessName", "")),
-                "src_ip": (ev.raw_json or {}).get("src_ip", (ev.raw_json or {}).get("IpAddress", "")),
+                "process_name": rj.get("process_name", rj.get("NewProcessName", "")),
+                "src_ip": rj.get("src_ip", rj.get("IpAddress", "")),
             })
 
         baseline = engine.build_baseline(username, events)
@@ -97,11 +98,12 @@ def _detect_anomalies(db: Session, baselines: list, ueba_engine):
 
         events = []
         for ev in user_events:
+            rj = ev.parsed_json
             events.append({
                 "timestamp": ev.timestamp.isoformat() if ev.timestamp else "",
                 "host": ev.host or "",
-                "process_name": (ev.raw_json or {}).get("process_name", ""),
-                "src_ip": (ev.raw_json or {}).get("src_ip", ""),
+                "process_name": rj.get("process_name", ""),
+                "src_ip": rj.get("src_ip", ""),
             })
 
         detected = ueba_engine.detect_anomalies(username, events)
