@@ -17,7 +17,7 @@ from backend.detection.rules.base import BaseRule, DetectionResult
 
 
 def _facts(event) -> dict:
-    return (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+    return event.facts or {}
 
 
 class BloodHoundReconRule(BaseRule):
