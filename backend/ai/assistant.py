@@ -414,18 +414,20 @@ class SecurityAssistant:
                             content_parts.append(content)
 
                 if reasoning_parts:
+                    safe_reasoning = "".join(reasoning_parts)[:500].encode("ascii", "replace").decode("ascii")
                     logger.info(
                         "BARAQ AI entity reasoning (%d tokens): %s",
                         len("".join(reasoning_parts)),
-                        "".join(reasoning_parts)[:500],
+                        safe_reasoning,
                     )
 
                 answer = "".join(content_parts).strip()
                 if answer:
                     return answer
             except Exception as exc:
+                safe_exc = str(exc).encode("ascii", "replace").decode("ascii")
                 logger.warning(
-                    "BARAQ AI entity explanation failed (%s); using local", exc
+                    "BARAQ AI entity explanation failed (%s); using local", safe_exc
                 )
 
         return "\n".join(header + body)
@@ -1000,14 +1002,16 @@ class SecurityAssistant:
 
             answer = "".join(content_parts).strip()
             if answer:
-                logger.info("BARAQ AI response (%.1fs): %s", elapsed, answer[:200])
+                safe_answer = answer[:200].encode("ascii", "replace").decode("ascii")
+                logger.info("BARAQ AI response (%.1fs): %s", elapsed, safe_answer)
                 return answer
             raise RuntimeError("Empty response from BARAQ AI")
 
         except Exception as exc:
+            safe_exc = str(exc).encode("ascii", "replace").decode("ascii")
             logger.warning(
                 "BARAQ AI remote completion failed (%s: %s); using local engine",
                 type(exc).__name__,
-                exc,
+                safe_exc,
             )
             return self._respond(self._keyword_intent(message), message)
