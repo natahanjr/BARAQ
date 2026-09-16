@@ -40,7 +40,7 @@ class AlertRecord(Base):
     #: Deterministic dedup key (spec 3.7).
     alert_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
 
-    detector_id: Mapped[str] = mapped_column(String(16), index=True)
+    detector_id: Mapped[str] = mapped_column(String(64), index=True)
     detector_version: Mapped[str] = mapped_column(String(16), default="1.0.0")
 
     title: Mapped[str] = mapped_column(String(256), default="")
@@ -63,7 +63,7 @@ class AlertRecord(Base):
     destination_ip: Mapped[str] = mapped_column(String(64), default="")
 
     mitre_tactic: Mapped[str] = mapped_column(String(64), default="")
-    mitre_technique: Mapped[str] = mapped_column(String(16), index=True, default="")
+    mitre_technique: Mapped[str] = mapped_column(String(64), index=True, default="")
 
     evidence: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     observables: Mapped[list | None] = mapped_column(JSONB, nullable=True)
