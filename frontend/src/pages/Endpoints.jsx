@@ -26,10 +26,11 @@ function EndpointDetail({ endpoint, alerts, commands, onClose, onSendCommand }) 
   const online = Date.now() - new Date(endpoint.last_seen).getTime() < 2 * 60 * 1000;
 
   const epAlerts = alerts.filter((a) => {
-    const src = (a.source || "").toLowerCase();
-    const host = hostname.toLowerCase();
+    const hn = (a.host_name || "").toLowerCase();
+    const hid = (a.host_id || "").toLowerCase();
     const aid = (endpoint.agent_id || "").toLowerCase();
-    return src.includes(host) || src.includes(aid) || (a.agent_id || "").toLowerCase() === aid;
+    const host = hostname.toLowerCase();
+    return hn === host || hid === aid || hn.includes(aid) || hid.includes(host);
   });
 
   const epCommands = commands.filter((c) => c.agent_id === endpoint.agent_id);
@@ -118,22 +119,26 @@ function EndpointDetail({ endpoint, alerts, commands, onClose, onSendCommand }) 
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-t border-[var(--border-subtle)]">
+                  <tr className="border-t border-[var(--border-subtle)]">
                   <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">Severity</th>
-                  <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">Rule</th>
-                  <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">Source</th>
+                  <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">Title</th>
+                  <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">Host</th>
+                  <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">Source IP</th>
+                  <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">MITRE</th>
                   <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">Time</th>
                 </tr>
               </thead>
               <tbody>
                 {epAlerts.slice(0, 20).map((a, i) => (
-                  <tr key={a.id || i} className="border-t border-[var(--border-subtle)]/50 hover:bg-[var(--bg-inset)]">
+                  <tr key={a.alert_id || i} className="border-t border-[var(--border-subtle)]/50 hover:bg-[var(--bg-inset)]">
                     <td className="px-5 py-2.5">
                       <Badge severity={a.severity || "info"} size="sm">{a.severity || "info"}</Badge>
                     </td>
-                    <td className="px-5 py-2.5 font-mono text-[11px] text-[var(--fg-primary)]">{a.rule_name || a.rule || "—"}</td>
-                    <td className="px-5 py-2.5 font-mono text-[11px] text-[var(--fg-muted)]">{a.source || "—"}</td>
-                    <td className="px-5 py-2.5 text-[11px] text-[var(--fg-muted)]">{new Date(a.timestamp || a.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
+                    <td className="px-5 py-2.5 text-[11px] text-[var(--fg-primary)]">{a.title || a.detector_id || "—"}</td>
+                    <td className="px-5 py-2.5 font-mono text-[11px] text-[var(--fg-secondary)]">{a.host_name || "—"}</td>
+                    <td className="px-5 py-2.5 font-mono text-[11px] text-[var(--fg-muted)]">{a.source_ip || "—"}</td>
+                    <td className="px-5 py-2.5 font-mono text-[10px] text-[var(--accent-cyan)]">{a.mitre_technique || "—"}</td>
+                    <td className="px-5 py-2.5 text-[11px] text-[var(--fg-muted)]">{new Date(a.created_at || a.first_seen).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
                   </tr>
                 ))}
               </tbody>
@@ -195,7 +200,7 @@ function Endpoints() {
       const [eps, cmds, alts] = await Promise.allSettled([
         api.endpoints(),
         api.listCommands(30),
-        api.get("/api/alerts?limit=200"),
+        api.alerts({ limit: 200 }),
       ]);
       setEndpoints(eps.status === "fulfilled" ? eps.value?.items || [] : []);
       setCommands(cmds.status === "fulfilled" ? cmds.value?.items || [] : []);
