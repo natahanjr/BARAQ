@@ -95,7 +95,7 @@ def _seed_pids(events: list[NormalizedEvent]) -> set[str]:
     """PIDs of processes directly mentioned in the alert's evidence events."""
     seeds: set[str] = set()
     for ev in events:
-        facts = (ev.raw_json or {}).get("facts", {}) if ev.raw_json else {}
+        facts = ev.facts or {}
         pid = _norm_pid(_fact(facts, "NewProcessId", "ProcessId", "pid"))
         if pid:
             seeds.add(pid)
@@ -167,7 +167,7 @@ def build_process_tree(
 
     for ev in proc_events:
         host = ev.host or "?"
-        facts = (ev.raw_json or {}).get("facts", {}) if ev.raw_json else {}
+        facts = ev.facts or {}
         child_pid = _norm_pid(_fact(facts, "NewProcessId", "ProcessId"))
         if not child_pid:
             continue
