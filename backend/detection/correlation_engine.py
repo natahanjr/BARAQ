@@ -282,6 +282,9 @@ def parse_correlation_yaml(data: dict, source: str = "inline") -> CorrelationSpe
     return spec
 
 
+_RULES_CACHE: list[CorrelationSpec] | None = None
+
+
 def load_correlation_rules(
     directory: str | Path | None = None,
 ) -> list[CorrelationSpec]:
@@ -289,7 +292,12 @@ def load_correlation_rules(
 
     Files with a ``.disabled`` suffix (``rule.yml.disabled``) are skipped so
     analysts can disable rules by renaming, like ``systemctl mask``.
+    Cached after first load for the process lifetime.
     """
+    global _RULES_CACHE
+    if _RULES_CACHE is not None and directory is None:
+        return _RULES_CACHE
+
     import yaml
 
     directory = Path(directory or CORRELATION_RULES_DIR)
@@ -311,6 +319,8 @@ def load_correlation_rules(
                 )
         except Exception as exc:
             logger.warning("Correlation rule %s skipped: %s", path.name, exc)
+    if directory == Path(CORRELATION_RULES_DIR):
+        _RULES_CACHE = specs
     return specs
 
 
