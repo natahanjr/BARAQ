@@ -20,7 +20,7 @@ _SYSTEM32 = re.compile(r"\\Windows\\(?:System32|SysWOW64|system32)\\", re.IGNORE
 
 
 def _facts(event) -> dict:
-    return (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+    return event.facts or {}
 
 
 class DllSideloadingRule(BaseRule):
