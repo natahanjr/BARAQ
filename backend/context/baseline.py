@@ -85,7 +85,7 @@ def learn_chains(db: Session, hours: int = 24, org: str = "") -> dict:
     seen: dict[tuple[str, str, str], int] = {}
     hosts: set[str] = set()
     for ev in rows:
-        facts = (ev.raw_json or {}).get("facts") or {}
+        facts = ev.facts or {}
         parent, child = _chain_of(facts)
         if not parent or not child or parent == child:
             continue
@@ -178,7 +178,7 @@ def rebuild(db: Session, days: int = 7, org: str = "") -> dict:
         ).all()
         agg: dict[tuple[str, str, str], int] = {}
         for ev in rows:
-            facts = (ev.raw_json or {}).get("facts") or {}
+            facts = ev.facts or {}
             parent, child = _chain_of(facts)
             if not parent or not child or parent == child:
                 continue
