@@ -92,7 +92,7 @@ def event_data_integrity(event) -> dict:
 
 def build_event_fields(event) -> dict[str, str]:
     """Flatten a normalized event into Sigma-matchable string fields."""
-    facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+    facts = event.facts or {}
     raw_json = event.raw_json or {}
     out: dict[str, str] = {"event_id": str(event.event_id)}
     out["channel"] = str(raw_json.get("channel", "")).lower()
