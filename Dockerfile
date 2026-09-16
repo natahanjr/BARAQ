@@ -1,58 +1,66 @@
-# BARAQ SOC - Linux API/scheduler image (roadmap 5.1 CI-CD).
+# BARAQ SOC - Production multi-stage Dockerfile.
 #
-# The collectors are Windows-native (Sysmon / ETW / DPAPI vault / toasts), so
-# this image targets the stateless roles only:
-#   * BARAQ_ROLE=api       - uvicorn serving backend.main:app
-#   * BARAQ_ROLE=scheduler - python -m backend.scheduler_service
-# Agent / host data still comes from Windows agents (scripts/agent.py) and
-# the on-prem PostgreSQL primary.
+# Multi-stage: Node builds the SPA, Python serves everything.
+# Supports both API-only and combined API+scheduler modes.
 #
 # Build:
 #   docker build -t baraq/soc:latest .
-# Multi-stage: node builds the SPA into frontend/dist, python serves it.
+# Run:
+#   docker run -p 8001:8001 -e BARAQ_DATABASE_URL=... baraq/soc:latest
 
-# ---------- Stage 1: frontend -------------------------------------------------
-FROM node:20-alpine AS web
+# ---------- Stage 1: frontend build -----------------------------------------
+FROM node:22-alpine AS web
 WORKDIR /src
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci || npm install --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
-# ---------- Stage 2: backend --------------------------------------------------
-FROM python:3.12-slim
+# ---------- Stage 2: backend ------------------------------------------------
+FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    BARAQ_ROLE=api
+    PYTHONDONTWRITEBYTECODE=1 \
+    BARAQ_ROLE=api \
+    BARAQ_TELEMETRY_V2=1 \
+    BARAQ_ALERTS_V2=1 \
+    BARAQ_CORRELATION=1 \
+    BARAQ_RISK=1 \
+    BARAQ_BEHAVIOR_GROUPS=1 \
+    BARAQ_V2_ENGINES_ALLOW_PROD=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgomp1 \
         curl \
+        tini \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 baraq
 
 WORKDIR /app
-COPY requirements.txt ./
+
+# Install Python dependencies (use Docker-specific requirements without pywin32)
+COPY requirements-docker.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy application code
 COPY backend ./backend
-COPY alembic.ini alembic/ ./alembic/
+COPY alembic.ini ./
+COPY alembic ./alembic/
+COPY start_dev.py ./
+
+# Copy frontend build from Stage 1
 COPY --from=web /src/dist ./frontend/dist
-# The SPA mount requires the directory to exist even when a deployment ships
-# without the frontend build.
-RUN mkdir -p frontend/dist reports logs
+
+# Create runtime directories
+RUN mkdir -p frontend/dist reports logs backups datasets \
+    && chown -R baraq:baraq /app
 
 USER baraq
-EXPOSE 8000
+EXPOSE 8001
 
-# Healthcheck hits the unauthenticated /api/health endpoint. Anything
-# under /api/system/* requires X-API-Key (BARAQ_AUTH_ENABLED=1 default),
-# so using /api/system/status here would 401 and the container would be
-# marked unhealthy on every start.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8001/api/health || exit 1
 
-# Run database migrations before starting the server.
-# alembic upgrade head is idempotent -- safe to run on every container start.
-CMD alembic upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 4
+ENTRYPOINT ["tini", "--"]
+CMD ["python", "start_dev.py"]
