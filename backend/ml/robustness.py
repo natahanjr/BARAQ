@@ -122,7 +122,7 @@ def prediction_stability_test(
 def feature_importance_stability(
     model,
     X: np.ndarray,
-    n_bootstrap: int = 20,
+    n_bootstrap: int = 5,
 ) -> dict:
     """Measure feature importance stability via bootstrap resampling.
 
@@ -338,8 +338,8 @@ def evaluate_robustness(
         if model is None or X is None or len(X) < 5:
             continue
 
-        # Cap to 2000 samples for speed
-        X_eval = X[:2000] if len(X) > 2000 else X
+        # Cap to 500 samples for speed
+        X_eval = X[:500] if len(X) > 500 else X
 
         stability = prediction_stability_test(model, X_eval)
         importance = feature_importance_stability(model, X_eval)
