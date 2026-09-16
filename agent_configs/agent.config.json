@@ -1,0 +1,12 @@
+{
+  "server": "http://localhost:8001",
+  "key": "baraq-agent-dev",
+  "interval": 15,
+  "org": "default",
+  "tls_ca": "",
+  "no_verify": false,
+  "log": "",
+  "max_batch_size": 500,
+  "retry_attempts": 3,
+  "retry_delay": 5
+}
