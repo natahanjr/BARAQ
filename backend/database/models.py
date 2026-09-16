@@ -246,6 +246,38 @@ class NormalizedEvent(Base):
     )
     raw_json: Mapped[dict | None] = mapped_column(JSONColumnType, nullable=True)
     is_anomaly: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
+    @property
+    def facts(self) -> dict:
+        """Safely parsed facts dict from raw_json (handles str or dict)."""
+        rj = self.raw_json
+        if rj is None:
+            return {}
+        if isinstance(rj, dict):
+            return rj.get("facts") or {}
+        if isinstance(rj, str):
+            try:
+                import json
+                return (json.loads(rj) or {}).get("facts") or {}
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        return {}
+
+    @property
+    def parsed_json(self) -> dict:
+        """Safely parsed raw_json (handles str or dict)."""
+        rj = self.raw_json
+        if rj is None:
+            return {}
+        if isinstance(rj, dict):
+            return rj
+        if isinstance(rj, str):
+            try:
+                import json
+                return json.loads(rj) or {}
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        return {}
     ml_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     risk_score: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
 
