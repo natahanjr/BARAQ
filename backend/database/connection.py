@@ -158,6 +158,10 @@ _ADDITIVE_MIGRATIONS = {
         ("update_status", "VARCHAR(16) DEFAULT 'none'"),
         ("errors_total", "INTEGER DEFAULT 0"),
     ],
+    "v2_alerts": [
+        ("detector_id", "VARCHAR(64) DEFAULT ''"),
+        ("mitre_technique", "VARCHAR(64) DEFAULT ''"),
+    ],
 }
 
 
