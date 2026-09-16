@@ -1,28 +1,89 @@
+# Dependencies
 node_modules/
-.git/
-.github/
+venv/
+.venv/
 __pycache__/
 *.pyc
 *.pyo
-.pytest_cache/
-.venv/
-venv/
-tests/
-*.md
-.env
-.env.*
+*.egg-info/
+
+# Build artifacts
 dist/
 frontend/dist/
 frontend/node_modules/
-*.egg-info/
+build/
 .mypy_cache/
 .ruff_cache/
+.pytest_cache/
 htmlcov/
 .coverage
 coverage.xml
-*.log
-pg/
-certs/
-secrets.dat
+
+# Git
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# IDE
 .vscode/
 .idea/
+.opencode/
+
+# Logs
+*.log
+backend.log
+backend_err.log
+backend_out.log
+server.log
+server_err.log
+
+# Secrets
+.env
+.env.*
+secrets.dat
+certs/
+
+# Data (persisted via volumes)
+pg/
+database/
+backups/
+datasets/
+logs/
+reports/
+tmp_data/
+
+# Tests
+tests/
+e2e_status.json
+playwright-report/
+test-results/
+
+# Docs (not needed in image)
+*.md
+docs/
+LICENSE
+CONTRIBUTING.md
+SECURITY.md
+SECURITY_AUDIT.md
+ROADMAP.md
+CHANGELOG.md
+CONTRIBUTORS
+
+# Windows-specific
+*.bat
+*.ps1
+*.spec
+*.exe
+rename_pg_service.ps1
+
+# Docker (avoid recursive builds)
+Dockerfile
+compose.yml
+.dockerignore
+
+# Misc
+.editorconfig
+.aider.*
+profile_readme/
+tools/
