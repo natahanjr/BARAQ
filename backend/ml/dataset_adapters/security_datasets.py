@@ -230,51 +230,97 @@ class SecurityDatasetsAdapter(BaseAdapter):
 
         # Try mapping from class_uid if class_name not found
         if not baraq_event_id and class_uid:
-            # OCSF class_uid is a hash; try activity-based mapping
-            if category_uid == 1:  # System Activity
+            if category_uid == 1:
                 if activity_id == 1:
-                    baraq_event_id = 1  # Process Create
+                    baraq_event_id = 1
                 elif activity_id == 2:
-                    baraq_event_id = 3  # Network
+                    baraq_event_id = 3
                 elif activity_id == 3:
-                    baraq_event_id = 13  # Registry
-            elif category_uid == 2:  # Identity and Access Management
+                    baraq_event_id = 13
+            elif category_uid == 2:
                 if activity_id == 1:
-                    baraq_event_id = 4624  # Auth
+                    baraq_event_id = 4624
                 elif activity_id == 2:
-                    baraq_event_id = 4625  # Failed Auth
-            elif category_uid == 3:  # Network Activity
+                    baraq_event_id = 4625
+            elif category_uid == 3:
                 baraq_event_id = (
                     3 if activity_id == 1 else 22 if activity_id == 2 else 0
                 )
 
-        # Channel from category
-        channel = _OCSF_CATEGORY_MAP.get(
-            category_name.lower().replace(" ", "_"), f"OCSF:{category_name}"
-        )
+        # Raw Windows Event Log format (Mordor/Sysmon) — use EventID directly
+        if not baraq_event_id:
+            raw_eid = int(event.get("EventID", 0) or 0)
+            if raw_eid:
+                baraq_event_id = raw_eid
+
+        # Channel from category, or raw Channel field
+        raw_channel = str(event.get("Channel", "") or "")
+        if category_name:
+            channel = _OCSF_CATEGORY_MAP.get(
+                category_name.lower().replace(" ", "_"), raw_channel or f"OCSF:{category_name}"
+            )
+        elif raw_channel:
+            channel = raw_channel
+        else:
+            channel = "other"
 
         # Source stream
-        source_stream = _OCSF_CATEGORY_MAP.get(
-            category_name.lower().replace(" ", "_"), "other"
-        )
+        if category_name:
+            source_stream = _OCSF_CATEGORY_MAP.get(
+                category_name.lower().replace(" ", "_"), "other"
+            )
+        elif raw_channel:
+            _rc = raw_channel.lower()
+            if "security" in _rc:
+                source_stream = "login"
+            elif "sysmon" in _rc or "process" in _rc:
+                source_stream = "process"
+            else:
+                source_stream = "other"
+        else:
+            source_stream = "other"
 
         # Build facts dict
         facts: dict[str, Any] = {}
+        facts["source_ip"] = source_ip
 
-        # Authentication fields
-        if baraq_event_id in (4624, 4625, 4672, 4740, 4634):
+        # Authentication fields (OCSF + raw Windows Security events)
+        if baraq_event_id in (4624, 4625, 4672, 4740, 4634, 4647, 4648):
             facts["logon_type"] = int(
                 event.get("logon_type", 0) or event.get("LogonType", 0) or 0
             )
             facts["source_ip"] = source_ip
             facts["target_user"] = user
-            facts["sub_status"] = event.get("Sub_Status", event.get("sub_status", 0))
+            facts["sub_status"] = int(event.get("Sub_Status", event.get("sub_status", 0)) or 0)
             facts["is_locked"] = baraq_event_id == 4740
+            # Parse raw Message for Sub_Status / LogonType if zero
+            if not facts["logon_type"] or not facts["sub_status"]:
+                msg = str(event.get("Message", "") or "")
+                if "Logon Type:" in msg:
+                    m = re.search(r"Logon Type:\s*(\d+)", msg)
+                    if m:
+                        facts["logon_type"] = int(m.group(1))
+                if "Sub Status:" in msg:
+                    m = re.search(r"Sub Status:\s*(0x[\da-fA-F]+)", msg)
+                    if m:
+                        facts["sub_status"] = int(m.group(1), 16)
+                # Also grab TargetUserName from Message
+                if not user and "TargetUserName:" in msg:
+                    m = re.search(r"TargetUserName:\s*(\S+)", msg)
+                    if m:
+                        facts["target_user"] = m.group(1)
+                        user = m.group(1)
+                # SourceNetworkAddress from Message
+                if "Source Network Address:" in msg:
+                    m = re.search(r"Source Network Address:\s*(\S+)", msg)
+                    if m and m.group(1) != "-":
+                        facts["source_ip"] = m.group(1)
+                        source_ip = m.group(1)
 
         # Process fields
-        if baraq_event_id in (1, 10, 11, 13, 17, 19, 7):
+        if baraq_event_id in (1, 10, 11, 13, 17, 19, 7, 23, 25, 8):
             process = event.get("process", {})
-            if isinstance(process, dict):
+            if isinstance(process, dict) and process:
                 facts["image_path"] = str(
                     process.get("executable", "") or process.get("name", "") or ""
                 )
@@ -289,14 +335,27 @@ class SecurityDatasetsAdapter(BaseAdapter):
                     facts["parent_process"] = str(parent_raw["name"])
             else:
                 facts["image_path"] = str(
-                    event.get("Image", "") or event.get("NewProcessName", "") or ""
+                    event.get("Image", "")
+                    or event.get("SourceImage", "")
+                    or event.get("NewProcessName", "")
+                    or event.get("TargetImage", "")
+                    or ""
                 )
-                facts["command_line"] = str(event.get("CommandLine", "") or "")
+                facts["command_line"] = str(
+                    event.get("CommandLine", "")
+                    or event.get("ProcessCommandLine", "")
+                    or ""
+                )
                 facts["parent_process"] = str(
                     event.get("ParentImage", "")
                     or event.get("ParentProcessName", "")
                     or ""
                 )
+                # Sysmon Process Access (EventID 10)
+                if baraq_event_id == 10:
+                    facts["target_image"] = str(event.get("TargetImage", "") or "")
+                    facts["granted_access"] = str(event.get("GrantedAccess", "") or "")
+                    facts["call_trace"] = str(event.get("CallTrace", "") or "")[:500]
 
             facts["cmdline_len"] = len(facts.get("command_line", ""))
             cmdline = facts["command_line"].lower()
