@@ -1,68 +1,110 @@
-# Prometheus + Grafana observability stack for BARAQ.
+# BARAQ SOC Platform - Full Stack
 #
-# BARAQ itself stays on the host (it is Windows-native: Sysmon
-# collectors, toast notifications, DPAPI vault); these containers only:
-#   - scrape /api/system/metrics (authenticated with an API key), and
-#   - serve Grafana dashboards fed by that Prometheus instance.
-#
-# Start:
+# Start (development):
 #   docker compose up -d
-#   open http://localhost:3000   (Grafana)
-#   prometheus: http://localhost:9090
+#   open http://localhost:8001
 #
-# An optional Linux API container (roadmap 5.1) runs the stateless
-# BARAQ_ROLE=api image for CI-CD / blue-green canary testing:
-#   docker compose --profile api up -d --build
-#   http://localhost:8000/api/system/status
+# Start (production):
+#   docker compose --profile production up -d
+#   open http://localhost:8001
 #
-# Production requirements (enforced via compose profile "secure"):
-#   GRAFANA_ADMIN_PASSWORD=<strong password>     (default "admin" is refused)
-#   GRAFANA_ROOT_URL=https://grafana.example.org
-#   PROMETHEUS_SCRAPE_KEY=<baraq API key>     (default dev key is refused)
-# Start the hardened stack:
-#   docker compose --profile secure up -d
+# Stop:
+#   docker compose down
 #
-# ${VAR:-default} spans are filled from your .env file (or the shell) by
-# docker compose itself; defaults match the development setup.
+# Reset (wipe data):
+#   docker compose down -v
 
 services:
+  # ── PostgreSQL 16 ──────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: baraq-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-baraq}
+      POSTGRES_USER: ${POSTGRES_USER:-baraq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-baraq_secret_2026}
+    volumes:
+      - baraq-pg-data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-baraq} -d ${POSTGRES_DB:-baraq}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - baraq-net
+
+  # ── Redis 7 (caching, rate limiting, sessions) ─────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: baraq-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - baraq-redis-data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - baraq-net
+
+  # ── BARAQ Backend (API + Scheduler) ────────────────────────────────────
   api:
     build:
       context: .
       dockerfile: Dockerfile
-    image: baraq/soc:local
+    image: baraq/soc:latest
     container_name: baraq-api
     restart: unless-stopped
-    profiles: ["api"]
-    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       BARAQ_ROLE: api
       BARAQ_AUTH_ENABLED: "1"
       BARAQ_API_KEYS: ${BARAQ_API_KEYS:-{"baraq-dev-admin":"admin"}}
-      BARAQ_DATABASE_URL: ${BARAQ_DATABASE_URL:-postgresql+psycopg://baraq:CHANGE_ME@host.docker.internal:55432/baraq}
+      BARAQ_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-baraq}:${POSTGRES_PASSWORD:-baraq_secret_2026}@db:5432/${POSTGRES_DB:-baraq}
+      BARAQ_REDIS_URL: redis://redis:6379/0
       BARAQ_INTERVAL: "15"
       BARAQ_TLS: "0"
-      BARAQ_ALLOW_PLAINTEXT_PROD: "0"
-      BARAQ_SCHEDULER_ENABLED: "0"
+      BARAQ_SCHEDULER_ENABLED: "1"
+      BARAQ_TELEMETRY_V2: "1"
+      BARAQ_ALERTS_V2: "1"
+      BARAQ_CORRELATION: "1"
+      BARAQ_RISK: "1"
+      BARAQ_BEHAVIOR_GROUPS: "1"
+      BARAQ_V2_ENGINES_ALLOW_PROD: "1"
       BARAQ_SKIP_SECRET_GEN: "1"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      BARAQ_ALLOW_PLAINTEXT_PROD: "1"
     ports:
-      - "${BARAQ_API_PORT:-8000}:8000"
+      - "${BARAQ_PORT:-8001}:8001"
+    volumes:
+      - baraq-logs:/app/logs
+      - baraq-reports:/app/reports
     healthcheck:
-      # /api/health is unauthenticated; /api/system/status requires
-      # BARAQ_API_KEYS and would 401 on every container start.
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      start_period: 40s
+    networks:
+      - baraq-net
 
+  # ── Prometheus (monitoring) ────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v3.3.1
     container_name: baraq-prometheus
     restart: unless-stopped
-    profiles: ["secure"]
+    profiles: ["monitoring"]
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -70,43 +112,42 @@ services:
       - --web.enable-lifecycle
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./deploy/prometheus/.scrape-key:/etc/prometheus/.scrape-key:ro
       - baraq-prometheus-data:/prometheus
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "9090:9090"
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - baraq-net
 
+  # ── Grafana (dashboards) ──────────────────────────────────────────────
   grafana:
     image: grafana/grafana:11.6.1
     container_name: baraq-grafana
     restart: unless-stopped
-    profiles: ["secure"]
+    profiles: ["monitoring"]
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set (no default "admin" in production)}
-      GF_SECURITY_DISABLE_INITIAL_ADMIN_PASSWORD_HINT: "true"
-      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:?GRAFANA_ROOT_URL must be set}"
-      # Provision the Prometheus datasource automatically.
-      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
     volumes:
-      - ./deploy/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./deploy/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - baraq-grafana-data:/var/lib/grafana
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     depends_on:
       prometheus:
         condition: service_healthy
+    networks:
+      - baraq-net
 
 volumes:
+  baraq-pg-data:
+  baraq-redis-data:
+  baraq-logs:
+  baraq-reports:
   baraq-prometheus-data:
   baraq-grafana-data:
+
+networks:
+  baraq-net:
+    driver: bridge
