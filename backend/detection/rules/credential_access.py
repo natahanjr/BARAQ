@@ -61,7 +61,7 @@ class CredentialAccessRule(BaseRule):
         ).all()
 
         for event in rows:
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             target = (facts.get("target_image") or "").lower()
             if not _LSASS.search(target):
                 continue
