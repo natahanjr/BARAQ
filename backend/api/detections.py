@@ -139,6 +139,12 @@ def list_detectors():
             })
     except Exception as exc:
         logger.warning("Failed to enumerate v1 rules: %s", exc)
+
+    try:
+        from backend.detection.rules.realtime_registry import REALTIME_RULES
+        detectors.extend(REALTIME_RULES)
+    except Exception as exc:
+        logger.warning("Failed to enumerate realtime rules: %s", exc)
     return {
         "status": "ok",
         "detectors": detectors,
