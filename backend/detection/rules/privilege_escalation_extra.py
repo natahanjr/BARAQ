@@ -177,7 +177,7 @@ class UnquotedServicePathRule(BaseRule):
             )
         ).all()
         for event in rows:
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             path = facts.get("image_path") or facts.get("service_file") or ""
             if not _UNQUOTED_PATH.search(path):
                 continue
@@ -219,7 +219,7 @@ class AlwaysInstallElevatedRule(BaseRule):
             )
         ).all()
         for event in rows:
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             target = facts.get("target_object") or ""
             if "AlwaysInstallElevated" not in target:
                 continue
