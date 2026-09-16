@@ -4,23 +4,35 @@ AI-Powered Security Operations Platform for Windows endpoints.
 
 > Self-hosted SOC: telemetry collection, hybrid rule + ML detection, MITRE ATT&CK mapping, investigation, SOAR automation, threat intelligence, and AI-assisted analysis.
 
-[![Python](https://img.shields.io/badge/Python-3.13%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/React%2018-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![React](https://img.shields.io/badge/React%2019-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![CI](https://github.com/natahanjr/BARAQ/actions/workflows/python-package.yml/badge.svg)](https://github.com/natahanjr/BARAQ/actions)
+[![License](https://img.shields.io/badge/license-RazForge-blue)](LICENSE)
 
 ---
 
 ## Quick Start
 
-### Requirements
+### Option 1: Docker (Recommended)
 
-- **Windows 10/11**
-- **Python 3.13+**
-- **Node.js 18+** (for dashboard build)
-- **PostgreSQL 16+** on `127.0.0.1:5432`
+```bash
+git clone https://github.com/natahanjr/BARAQ.git
+cd BARAQ
+docker compose up -d
+```
 
-### Launch
+That's it. Backend on `http://localhost:8001`, PostgreSQL and Redis included.
+
+**One-liner install (Linux/macOS):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/natahanjr/BARAQ/main/install.sh | bash
+```
+
+### Option 2: Windows (Native)
+
+**Requirements:** Windows 10/11, Python 3.12+, Node.js 22+, PostgreSQL 16+
 
 ```powershell
 git clone https://github.com/natahanjr/BARAQ.git
@@ -28,15 +40,43 @@ cd BARAQ
 .\start.bat
 ```
 
-On first run: creates venv, installs deps, builds dashboard, provisions PostgreSQL, generates bootstrap ML model, prints admin credentials, starts backend on `http://127.0.0.1:8001`.
-
 ### URLs
 
 | What | URL |
 |---|---|
-| Dashboard | `http://127.0.0.1:8001` |
-| API docs | `http://127.0.0.1:8001/docs` |
-| Health check | `http://127.0.0.1:8001/api/health` |
+| Dashboard | `http://localhost:8001` |
+| API docs (Swagger) | `http://localhost:8001/docs` |
+| API docs (ReDoc) | `http://localhost:8001/redoc` |
+| Health check | `http://localhost:8001/api/health` |
+
+### Default Credentials
+
+| User | Password | Role |
+|---|---|---|
+| `admin` | `BaraqAdmin2026!` | Admin |
+
+---
+
+## Docker Compose Services
+
+| Service | Port | Description |
+|---|---|---|
+| `api` | 8001 | FastAPI backend (API + scheduler) |
+| `db` | 5432 | PostgreSQL 16 |
+| `redis` | 6379 | Redis 7 (caching, rate limiting) |
+| `prometheus` | 9090 | Metrics (opt-in: `--profile monitoring`) |
+| `grafana` | 3000 | Dashboards (opt-in: `--profile monitoring`) |
+
+```bash
+# Development (API + DB + Redis)
+docker compose up -d
+
+# With monitoring (Prometheus + Grafana)
+docker compose --profile monitoring up -d
+
+# Production
+docker compose --profile production up -d
+```
 
 ---
 
@@ -44,9 +84,10 @@ On first run: creates venv, installs deps, builds dashboard, provisions PostgreS
 
 | Layer | Technology |
 |---|---|
-| Backend | Python 3.13+, FastAPI, SQLAlchemy, psycopg3 |
-| Frontend | React 18, Tailwind CSS 4, Recharts, WebSocket |
-| Database | PostgreSQL 16+ |
+| Backend | Python 3.12+, FastAPI, SQLAlchemy, psycopg3 |
+| Frontend | React 19, Tailwind CSS 4, Recharts, Vite 8 |
+| Database | PostgreSQL 16 |
+| Cache | Redis 7 |
 | Detection | 100 native rules + 2,512 Sigma rules + 11 correlation chains |
 | ML | Isolation Forest + XGBoost + Cross-Stream Markov + Ensemble Meta-Learner |
 | Intelligence | IOC enrichment from 9 providers (AbuseIPDB, OTX, VirusTotal, abuse.ch, etc.) |
@@ -67,19 +108,49 @@ BARAQ/
 │   ├── response/      # SOAR actions (Windows-native)
 │   ├── threatintel/   # IOC enrichment (9 providers)
 │   └── vulnscan/      # CVE matching engine
-├── frontend/          # React 18 dashboard
+├── frontend/          # React 19 dashboard
 ├── scripts/           # Agent, build, seed_demo, sigma_pull, tune
 ├── tests/             # 1,300+ tests
+├── deploy/            # Docker, Prometheus, Grafana configs
 └── docs/              # Full documentation suite
 ```
 
 ---
 
-## Running Tests
+## Development
 
-```powershell
+```bash
+# Clone and setup
+git clone https://github.com/natahanjr/BARAQ.git
+cd BARAQ
+
+# Docker (recommended)
+docker compose up -d
+
+# Or native (Windows)
+.\start.bat
+
+# Run tests
 python -m pytest tests -v
+
+# Lint
+ruff check .
+
+# Type check
+pyright backend
 ```
+
+---
+
+## API Documentation
+
+BARAQ auto-generates OpenAPI documentation:
+
+| Format | URL |
+|---|---|
+| Swagger UI | `http://localhost:8001/docs` |
+| ReDoc | `http://localhost:8001/redoc` |
+| OpenAPI JSON | `http://localhost:8001/openapi.json` |
 
 ---
 
@@ -103,15 +174,20 @@ BARAQ supports importing external security datasets for ML training:
 
 | Dataset | Events | Format | Source |
 |---|---|---|---|
-| OTRF Security-Datasets | 100K+ | JSON/CSV | [OTRF](https://github.com/OTRF/Security-Datasets) |
+| OTRF Security-Datasets | 310K+ | JSON/CSV | [OTRF](https://github.com/OTRF/Security-Datasets) |
 | BOTSv1 | 1.8M | CSV | [Splunk](https://github.com/splunk/botsv1) |
 | BOTES | 2M+ | CSV | [Splunk](https://github.com/splunk/botes) |
 
-View imported dataset statistics:
-```bash
-curl -X GET "http://localhost:8001/api/datasets/status" \
-  -H "Authorization: Bearer <token>"
-```
+---
+
+## ML Performance
+
+| Model | AUC | Recall | Samples |
+|---|---|---|---|
+| Network (v12) | 0.999 | 99.7% | 310K |
+| Process (v10) | 0.865 | 86.5% | 310K |
+| Login (v37) | 0.870 | 21.4% | 995 |
+| **Full-DB Eval** | **0.999** | **100%** | **310K** |
 
 ---
 
