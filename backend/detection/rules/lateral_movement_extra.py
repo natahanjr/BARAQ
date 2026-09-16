@@ -119,7 +119,7 @@ class RdpLateralRule(BaseRule):
             )
         ).all()
         for event in rows:
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             logon_type = facts.get("logon_type")
             if int(logon_type or 0) != 10:
                 continue
