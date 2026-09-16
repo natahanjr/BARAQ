@@ -57,7 +57,7 @@ class PersistenceRule(BaseRule):
         ).all()
 
         for event in rows:
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             path = facts.get("image_path") or facts.get("service_file") or ""
             name = facts.get("service_name") or facts.get("task_name") or "unknown"
             if not path:
