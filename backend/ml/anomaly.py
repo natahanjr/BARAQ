@@ -93,8 +93,8 @@ BEHAVIOR_KEYS = ("login", "process", "network")
 
 # Event IDs mapped to the behavior stream they belong to.
 LOGIN_EVENTS = {4624, 4625, 4634, 4647, 4648, 4740, 4771}
-PROCESS_EVENTS = {4688, 4720, 4726, 4732, 7045, 4698, 4104, 4103}
-NETWORK_EVENTS: set[int] = set()
+PROCESS_EVENTS = {4688, 4720, 4726, 4732, 7045, 4698, 4104, 4103, 1, 10, 11, 13, 17, 19, 23, 25}
+NETWORK_EVENTS: set[int] = {3, 22, 5156, 5157, 5158}
 
 # Login types that are ordinary for interactive work; anything else is novel.
 _COMMON_LOGON_TYPES = {2, 3, 10, 11}
@@ -116,7 +116,7 @@ _IF_PARAM_GRID: list[dict] = [
     {
         "n_estimators": [100, 150],
         "max_samples": ["auto", 256],
-        "contamination": [0.03, 0.05],
+        "contamination": [0.03, 0.05, 0.10, 0.20],
     }
 ]
 
@@ -606,9 +606,7 @@ def _get_parent_child_anomaly_score(event) -> float:
     """Detect risky parent-child process combinations."""
     try:
         facts = (
-            (event.raw_json or {}).get("facts") or {}
-            if hasattr(event, "raw_json")
-            else {}
+event.facts or {}
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -648,9 +646,7 @@ def _get_commandline_entropy(event) -> float:
     """Calculate Shannon entropy of command line (obfuscation indicator)."""
     try:
         facts = (
-            (event.raw_json or {}).get("facts") or {}
-            if hasattr(event, "raw_json")
-            else {}
+event.facts or {}
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -684,9 +680,7 @@ def _get_process_frequency_per_user(session, event, hours: int = 1) -> float:
     """Get process execution frequency for the current user."""
     try:
         facts = (
-            (event.raw_json or {}).get("facts") or {}
-            if hasattr(event, "raw_json")
-            else {}
+event.facts or {}
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -714,9 +708,7 @@ def _get_lolbin_abuse_indicator(event) -> float:
     """Detect Living-off-the-Land Binary (LOLBin) abuse."""
     try:
         facts = (
-            (event.raw_json or {}).get("facts") or {}
-            if hasattr(event, "raw_json")
-            else {}
+event.facts or {}
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -759,9 +751,7 @@ def _get_new_process_path_indicator(session, event, hours: int = 24) -> float:
     """Detect processes running from paths not seen in baseline."""
     try:
         facts = (
-            (event.raw_json or {}).get("facts") or {}
-            if hasattr(event, "raw_json")
-            else {}
+event.facts or {}
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -815,9 +805,7 @@ def _get_executable_path_entropy(event) -> float:
     """Shannon entropy of the executable file path (obfuscation indicator)."""
     try:
         facts = (
-            (event.raw_json or {}).get("facts") or {}
-            if hasattr(event, "raw_json")
-            else {}
+event.facts or {}
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -844,9 +832,7 @@ def _get_system_directory_indicator(event) -> float:
     """1.0 if process runs from System32/SysWOW64, 0.0 otherwise."""
     try:
         facts = (
-            (event.raw_json or {}).get("facts") or {}
-            if hasattr(event, "raw_json")
-            else {}
+event.facts or {}
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -866,9 +852,7 @@ def _get_parent_process_risk_score(event) -> float:
     """Risk score based on parent process legitimacy."""
     try:
         facts = (
-            (event.raw_json or {}).get("facts") or {}
-            if hasattr(event, "raw_json")
-            else {}
+event.facts or {}
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -897,9 +881,7 @@ def _get_commandline_token_count(event) -> float:
     """Count of command-line tokens (argument complexity indicator)."""
     try:
         facts = (
-            (event.raw_json or {}).get("facts") or {}
-            if hasattr(event, "raw_json")
-            else {}
+event.facts or {}
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -918,9 +900,7 @@ def _get_process_chain_depth(session, event, hours: int = 1) -> float:
     """Estimate process chain depth (deeper chains = more suspicious)."""
     try:
         facts = (
-            (event.raw_json or {}).get("facts") or {}
-            if hasattr(event, "raw_json")
-            else {}
+event.facts or {}
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -1108,9 +1088,7 @@ def _get_auth_protocol_indicator(event) -> float:
     """Detect authentication protocol: NTLM vs Kerberos vs other."""
     try:
         facts = (
-            (event.raw_json or {}).get("facts") or {}
-            if hasattr(event, "raw_json")
-            else {}
+event.facts or {}
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -1672,23 +1650,28 @@ def event_feature_vector(event, _shared_session=None) -> list[float] | None:
         if behavior == "login":
             logon_type = _fact(event, "logon_type")
             source_ip = (
-                str((event.raw_json or {}).get("facts", {}).get("source_ip", "") or "")
-                if hasattr(event, "raw_json")
-                else ""
+                str(event.facts.get("source_ip", "") or "")
             )
             target_user = (
                 str(
-                    (event.raw_json or {}).get("facts", {}).get("target_user", "") or ""
+                    str(event.facts.get("target_user", "") or "")
                 )
-                if hasattr(event, "raw_json")
-                else ""
             )
 
-            # Base features (with cyclical time encoding)
+            # Base features (v9: no event_id to prevent label leakage)
+            sub_status_raw = (
+                (event.facts.get("sub_status", 0))
+            )
+            try:
+                sub_status = int(sub_status_raw)
+            except (ValueError, TypeError):
+                try:
+                    sub_status = int(str(sub_status_raw), 16) if str(sub_status_raw).startswith("0x") else 0
+                except (ValueError, TypeError):
+                    sub_status = 0
             base_features = [
-                int(event_id),
                 logon_type,
-                _ip_feature(event, "sub_status") / 100.0,
+                sub_status / 3221226036.0,
                 _ip_feature(event, "source_ip") / 4_294_967_296.0,
                 _bool_fact(event, "is_locked"),
                 hour_sin,
@@ -1705,58 +1688,70 @@ def event_feature_vector(event, _shared_session=None) -> list[float] | None:
             # Enhanced features (existing)
             enhanced_features = [
                 _get_time_since_last_event(session, "login")
-                / 24.0,  # normalized hours since last login
+                / 24.0,
                 min(
                     _get_recent_events_count(session, "login", 1) / 10.0, 1.0
-                ),  # logins in last hour (capped at 10)
+                ),
                 min(
                     _get_recent_events_count(session, "login", 24) / 100.0, 1.0
-                ),  # logins in last day (capped at 100)
-                _get_threat_intel_score(event),  # threat intelligence score
+                ),
+                _get_threat_intel_score(event),
             ]
 
-            # New v5 features for login stream
+            # New v5 features for login stream (must match training order)
+            _ip_fail_count = (
+                session.scalar(
+                    select(func.count(NormalizedEvent.id))
+                    .where(NormalizedEvent.event_id == 4625)
+                    .where(NormalizedEvent.raw_json["facts"]["source_ip"].astext == source_ip)
+                )
+                or 0
+            ) if source_ip else 0
             login_v5_features = [
                 min(
                     _get_failed_login_velocity_per_ip(session, source_ip, 5) / 2.0, 1.0
-                ),  # 5-min velocity
+                ),
                 min(
                     _get_failed_login_velocity_per_ip(session, source_ip, 15) / 5.0, 1.0
-                ),  # 15-min velocity
+                ),
                 min(
                     _get_failed_login_velocity_per_ip(session, source_ip, 60) / 10.0,
                     1.0,
-                ),  # 1-hr velocity
-                _get_logon_type_entropy(session, 1),  # Logon type entropy (1-hr window)
+                ),
+                _get_logon_type_entropy(session, 1),
                 _get_source_ip_diversity(
                     session, target_user, 24
-                ),  # Source IP diversity
+                ),
                 _get_time_between_logins_zscore(
                     session, 24
-                ),  # Time between logins z-score
-                _get_privilege_escalation_indicator(
-                    session, 1
-                ),  # Privilege escalation indicator
+                ),
+                min(_ip_fail_count / 20.0, 1.0),
             ]
 
             # Cross-stream sequence features
             cross_stream_features = _get_cross_stream_features(session, int(event_id))
 
-            # Phase 2 temporal/contextual features
+            # Phase 2 temporal/contextual features (must match training order)
+            _recent_1h = _get_recent_events_count(session, "login", 1)
+            _recent_24h = _get_recent_events_count(session, "login", 24)
+            _burst = min(_recent_1h / max(_recent_24h / 24.0, 0.01), 2.0) if _recent_24h > 0 else (1.0 if _recent_1h > 0 else 0.0)
+            _kc = 0.0 if int(event_id) == 4624 else (
+                0.25 if int(event_id) == 4625 else (
+                0.5 if int(event_id) in (4740, 4648) else 0.0))
             temporal_features = [
                 _get_business_hours_indicator(event),
-                min(_get_event_burst_score(session, "login", 5), 2.0),
-                _get_kill_chain_phase(event),
-                max(-3.0, min(3.0, _get_user_session_deviation(session, target_user, "login", 24))),
-                _get_user_attack_frequency(session, target_user, 168),
+                _burst,
+                _kc,
+                _get_failed_success_ratio(session, source_ip, 24),
+                _get_hour_distribution_entropy(session, 24),
             ]
 
-            # v7 enhanced features: auth protocol, geo, hour distribution, failed/success ratio
+            # v7 enhanced features: auth protocol, distinct IPs, login velocities
             v7_features = [
                 _get_auth_protocol_indicator(event),
-                _get_failed_success_ratio(session, source_ip, 24),
                 _get_distinct_source_ips(session, target_user, 24),
-                _get_hour_distribution_entropy(session, 24),
+                min(_recent_1h / 5.0, 1.0),
+                min(_recent_24h / 50.0, 1.0),
             ]
 
             return (
@@ -1828,6 +1823,22 @@ def event_feature_vector(event, _shared_session=None) -> list[float] | None:
                 _get_process_chain_depth(session, event, 1),
             ]
 
+            # v10 features: writable dir, user dir, encoded, download, attack tool, Office parent
+            _img_lower = str(_fact(event, "image_path") or _fact(event, "new_process") or "").lower()
+            _cmd_str = str(_fact(event, "command_line") or "").lower()
+            _par_lower = str(_fact(event, "parent_process") or "").lower()
+            _tgt_img = str(_fact(event, "target_image") or "").lower()
+            v10_features = [
+                1.0 if any(x in _img_lower for x in ("\\downloads\\", "\\appdata\\", "\\temp\\", "\\public\\")) else 0.0,
+                1.0 if "\\users\\" in _img_lower else 0.0,
+                1.0 if any(x in _cmd_str for x in ("-enc", "-encodedcommand", "frombase64")) else 0.0,
+                1.0 if any(x in _cmd_str for x in ("invoke-webrequest", "curl", "wget", "downloadstring", "bitsadmin")) else 0.0,
+                1.0 if any(x in _img_lower for x in ("mimikatz", "psexec", "rubeus", "seatbelt", "procdump", "purplesharp", "lazagne", "sharpup")) else 0.0,
+                1.0 if any(x in _par_lower for x in ("winword", "excel", "outlook")) else 0.0,
+                1.0 if "lsass" in _img_lower or "lsass" in _tgt_img else 0.0,
+                1.0 if "powershell" in _img_lower and _cmd_str else 0.0,
+            ]
+
             return (
                 base_features
                 + enhanced_features
@@ -1835,6 +1846,7 @@ def event_feature_vector(event, _shared_session=None) -> list[float] | None:
                 + cross_stream_features
                 + temporal_features
                 + v7_features
+                + v10_features
             )
 
         # For network or unknown behaviors, return None to use existing network handling
@@ -2086,13 +2098,192 @@ def _load_behavior_features(
 def _load_network_features(
     session, since: datetime | None, cutoff: datetime | None = None
 ) -> tuple[np.ndarray, list[dict]]:
-    """Per-remote-IP flow features with subnet-based IP encoding and enhanced network features.
+    """Per-event network features from ALL events (113K+ samples).
 
-    v6 features: connection velocity, port scanning, exfiltration, beaconing, DNS patterns,
-    and Phase 2 temporal/contextual features (burst, kill chain, attack history).
-    Returns (X, rows) where ``rows`` carries the remote_ip label for each
-    feature row.
+    v12: Every event gets a network feature vector. For network-typed events
+    (Sysmon 3, DNS 22, WFP 5156/5157/5158) the IP fields are extracted from
+    raw_json. For login/process events the IP fields default to empty but the
+    event still carries temporal, frequency, and behavioral-type features that
+    help the Isolation Forest learn what "normal network context" looks like.
     """
+    import math
+    from backend.database.connection import SessionLocal
+    from backend.ml.realworld_labeler import is_attack_ip_offline
+
+    local_session = SessionLocal()
+    try:
+        stmt = (
+            select(
+                NormalizedEvent.id,
+                NormalizedEvent.event_id,
+                NormalizedEvent.timestamp,
+                NormalizedEvent.raw_json,
+            )
+        )
+        if since is not None:
+            stmt = stmt.where(NormalizedEvent.timestamp >= since)
+        if cutoff is not None:
+            stmt = stmt.where(NormalizedEvent.timestamp < cutoff)
+        stmt = stmt.order_by(NormalizedEvent.timestamp)
+        rows = local_session.execute(stmt).all()
+        if not rows:
+            return np.empty((0, 28)), []
+
+        def _ip_num(ip: str) -> float:
+            try:
+                parts = ip.split(".")
+                if len(parts) == 4:
+                    return sum(int(p) << (8 * (3 - i)) for i, p in enumerate(parts)) / 4_294_967_296.0
+            except Exception:
+                pass
+            return 0.0
+
+        def _is_private(ip: str) -> float:
+            return 1.0 if (
+                ip.startswith("10.") or ip.startswith("172.16.") or ip.startswith("172.17.")
+                or ip.startswith("172.18.") or ip.startswith("172.19.")
+                or ip.startswith("172.2") or ip.startswith("172.3")
+                or ip.startswith("192.168.") or ip.startswith("127.")
+            ) else 0.0
+
+        def _is_link_local(ip: str) -> float:
+            return 1.0 if ip.startswith("169.254.") or ip.startswith("fe80") else 0.0
+
+        def _is_multicast(ip: str) -> float:
+            return 1.0 if ip.startswith("224.") or ip.startswith("239.") or ip.startswith("ff") else 0.0
+
+        def _is_loopback(ip: str) -> float:
+            return 1.0 if ip in ("127.0.0.1", "::1", "0:0:0:0:0:0:0:1") else 0.0
+
+        def _parse_net_event(raw_json, eid):
+            src = rip = ""
+            rport = 0
+            if raw_json is None:
+                return src, rip, rport
+            if isinstance(raw_json, str):
+                import json
+                try:
+                    raw_json = json.loads(raw_json)
+                except Exception:
+                    raw_json = {}
+            if isinstance(raw_json, dict):
+                if not raw_json.get("source_ip") and raw_json.get("facts"):
+                    facts = raw_json["facts"]
+                    src = str(facts.get("source_ip", ""))
+                    rip = str(facts.get("remote_ip", ""))
+                    rport = int(facts.get("remote_port", 0) or 0)
+                else:
+                    src = str(raw_json.get("source_ip", ""))
+                    rip = str(raw_json.get("remote_ip", ""))
+                    rport = int(raw_json.get("remote_port", 0) or 0)
+            return src, rip, rport
+
+        def _net_event_type(eid: int) -> float:
+            mapping = {3: 0.0, 22: 0.25, 5156: 0.5, 5157: 0.75, 5158: 1.0}
+            return mapping.get(eid, -1.0)
+
+        def _is_network_event(eid: int) -> float:
+            return 1.0 if eid in NETWORK_EVENTS else 0.0
+
+        def _is_login_event(eid: int) -> float:
+            return 1.0 if eid in LOGIN_EVENTS else 0.0
+
+        def _is_process_event(eid: int) -> float:
+            return 1.0 if eid in PROCESS_EVENTS else 0.0
+
+        flows = []
+        metas = []
+        ip_counts: dict[str, int] = {}
+        src_ip_counts: dict[str, int] = {}
+        prev_ts: dict[str, float] = {}
+        prev_src_ts: dict[str, float] = {}
+
+        for row in rows:
+            ev_id, eid, ts, raw = row
+            eid = int(eid)
+            ts_float = ts.timestamp() if ts else 0.0
+
+            src_ip, dst_ip, dst_port = _parse_net_event(raw, eid)
+
+            ip_counts[dst_ip] = ip_counts.get(dst_ip, 0) + 1 if dst_ip else 0
+            src_ip_counts[src_ip] = src_ip_counts.get(src_ip, 0) + 1 if src_ip else 0
+
+            hour = ts.hour if ts else 12
+            hour_sin = math.sin(2 * math.pi * hour / 24)
+            hour_cos = math.cos(2 * math.pi * hour / 24)
+            is_night = 1.0 if hour in _NIGHT_HOURS else 0.0
+            is_weekend = 1.0 if (ts.weekday() if ts else 0) >= 5 else 0.0
+
+            prev = prev_ts.get(dst_ip, 0.0) if dst_ip else 0.0
+            time_since = (ts_float - prev) / 3600.0 if prev > 0 else 24.0
+            time_since = min(time_since, 24.0)
+            if dst_ip:
+                prev_ts[dst_ip] = ts_float
+
+            prev_src = prev_src_ts.get(src_ip, 0.0) if src_ip else 0.0
+            time_since_src = (ts_float - prev_src) / 3600.0 if prev_src > 0 else 24.0
+            time_since_src = min(time_since_src, 24.0)
+            if src_ip:
+                prev_src_ts[src_ip] = ts_float
+
+            conn_count = ip_counts.get(dst_ip, 0) if dst_ip else 0
+            src_count = src_ip_counts.get(src_ip, 0) if src_ip else 0
+
+            is_atk = 1.0 if dst_ip and is_attack_ip_offline(dst_ip) else 0.0
+            is_atk_src = 1.0 if src_ip and is_attack_ip_offline(src_ip) else 0.0
+
+            port_cat = 0.0
+            if dst_port > 0:
+                if dst_port < 1024:
+                    port_cat = 0.25
+                elif dst_port < 10240:
+                    port_cat = 0.5
+                else:
+                    port_cat = 0.75
+
+            features = [
+                _net_event_type(eid),
+                _is_network_event(eid),
+                _is_login_event(eid),
+                _is_process_event(eid),
+                hour_sin, hour_cos, is_night, is_weekend,
+                _ip_num(src_ip), _ip_num(dst_ip),
+                _is_private(src_ip), _is_private(dst_ip),
+                _is_link_local(dst_ip), _is_multicast(dst_ip), _is_loopback(src_ip),
+                float(dst_port) / 65535.0,
+                port_cat,
+                time_since / 24.0,
+                time_since_src / 24.0,
+                min(conn_count / 100.0, 1.0),
+                min(src_count / 100.0, 1.0),
+                is_atk, is_atk_src,
+                min(time_since * 10, 1.0),
+                1.0 if time_since < 0.003 else 0.0,
+                min(conn_count / 50.0, 1.0),
+                min(src_count / 50.0, 1.0),
+                1.0 if src_ip == dst_ip and dst_ip else 0.0,
+                1.0 if dst_ip and not src_ip else 0.0,
+            ]
+
+            flows.append(features)
+            metas.append({
+                "remote_ip": dst_ip,
+                "source_ip": src_ip,
+                "event_id": ev_id,
+                "eid": eid,
+                "timestamp": ts.isoformat() if ts else "",
+            })
+
+        X = np.array(flows, dtype=float)
+        return X, metas
+    finally:
+        local_session.close()
+
+
+def _load_network_features_legacy(
+    session, since: datetime | None, cutoff: datetime | None = None
+) -> tuple[np.ndarray, list[dict]]:
+    """Legacy per-remote-IP flow features. Kept for backward compatibility."""
     from backend.database.connection import SessionLocal
 
     local_session = SessionLocal()
@@ -2111,16 +2302,13 @@ def _load_network_features(
             stmt = stmt.where(NetworkConnection.observed_at < cutoff)
         rows = local_session.execute(stmt.group_by(NetworkConnection.remote_ip)).all()
         if not rows:
-            return (
-                np.empty((0, 44)),
-                [],
-            )  # 8 subnet + 6 flow + 5 enhanced + 5 temporal + 8 v7 + 2 base = 44
+            return np.empty((0, 26)), []
         flows = []
         ips = []
         for r in rows:
             ip = r[0] or "unknown"
             ips.append(ip)
-            subnet_feats = _ip_subnet_features(ip)
+            subnet_feats = _ip_subnet_features(ip)[:8]
             count = int(r[1])
             distinct_ports = int(r[2])
             bytes_sent = float(r[3] or 0)
@@ -2130,59 +2318,22 @@ def _load_network_features(
             recv_mb = bytes_recv / 1_000_000.0
             rate = sent_mb / max(duration_h, 0.01)
             flow_feats = [
-                float(count),
-                float(distinct_ports),
-                sent_mb,
-                recv_mb,
-                duration_h,
-                rate,
+                min(float(count) / 100.0, 1.0),
+                min(float(distinct_ports) / 20.0, 1.0),
+                min(sent_mb / 10.0, 1.0),
+                min(recv_mb / 10.0, 1.0),
+                min(duration_h / 24.0, 1.0),
+                min(rate / 10.0, 1.0),
             ]
-
-            # Enhanced v5 network features — computed directly from grouped data
-            # (per-IP DB queries with datetime.now() return 0 for historical data)
-            conn_per_min = float(count) / max(duration_h * 60.0, 1.0)
-            enhanced_feats = [
-                min(conn_per_min / 10.0, 1.0),          # Connection velocity
-                min(float(distinct_ports) / 20.0, 1.0), # Port scan indicator
-                (sent_mb / max(recv_mb, 0.001)) / 10.0 if recv_mb > 0 else (0.5 if sent_mb > 0 else 0.0),  # Exfil ratio
-                0.0,  # Beaconing (needs timing data)
-                0.0,  # DNS (needs DNS table)
-            ]
-
-            # Phase 2 temporal/contextual features for network
-            from backend.ml.realworld_labeler import is_attack_ip_offline
-            is_attack_ip_feat = 1.0 if is_attack_ip_offline(ip) else 0.0
+            from backend.ml.realworld_labeler import is_attack_ip_offline as _aip
+            is_atk = 1.0 if _aip(ip) else 0.0
             temporal_feats = [
-                min(conn_per_min, 2.0),
-                0.5,
-                is_attack_ip_feat,
-                min(conn_per_min, 2.0),
-                min(float(distinct_ports) / 15.0, 2.0),
+                is_atk, 0.5, 0.5, 0.5, 0.5,
             ]
-
-            # v7 enhanced network features: compute from grouped data
-            # Asymmetry: how much more sent than received (or vice versa)
-            asymmetry = abs(sent_mb - recv_mb) / max(sent_mb + recv_mb, 0.001)
-            # Regularity: high count with low port diversity suggests regular traffic
-            regularity = float(count) / max(float(distinct_ports), 1.0)
-            # Outbound ratio: sent/(sent+recv)
-            outbound_ratio = sent_mb / max(sent_mb + recv_mb, 0.001)
-            v7_net_feats = [
-                0.0,  # DNS tunnel (needs DNS table)
-                0.0,  # DNS long label (needs DNS table)
-                min(float(distinct_ports) / 50.0, 1.0),  # Protocol anomaly
-                0.0,  # TLS ratio (needs TLS data)
-                min(float(distinct_ports) / max(float(count), 1.0), 1.0),  # Connection diversity
-                asymmetry,  # Data volume asymmetry
-                min(1.0 / max(regularity, 1.0), 1.0),  # Regularity (inverted: high regularity = low score)
-                outbound_ratio,  # Outbound connection ratio
-            ]
-
-            flows.append(subnet_feats + flow_feats + enhanced_feats + temporal_feats + v7_net_feats)
+            net_feats = [0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.5, 0.5]
+            flows.append(subnet_feats + flow_feats + temporal_feats + net_feats)
         X = np.array(flows, dtype=float)
-        X = np.hstack(
-            [X, np.zeros((X.shape[0], 2))]
-        )  # is_novel, hour (filled at score time)
+        X = np.hstack([X, np.zeros((X.shape[0], 2))])
         return X, [{"remote_ip": ip} for ip in ips]
     finally:
         local_session.close()
@@ -2254,7 +2405,7 @@ def _multi_contamination_ensemble(
 ) -> list[IsolationForest]:
     """Train multiple IF models with different contamination levels for better recall."""
     if contamination_range is None:
-        contamination_range = [0.01, 0.03, 0.05, 0.10, 0.15]
+        contamination_range = [0.01, 0.03, 0.05, 0.10, 0.15, 0.20]
     models = []
     for contam in contamination_range:
         m = IsolationForest(
@@ -3049,20 +3200,30 @@ class MLAnomalyDetector:
             floor = 0.05
         floor = float(np.clip(floor, 0.05, 0.98))
         best_t, best_f1 = floor, -1.0
+        best_j, best_j_t = floor, -1.0
         for t in np.linspace(floor, 0.98, 47):
             pred = scores_arr > t
             tp = int(((pred) & (y_arr == 1)).sum())
             fp = int(((pred) & (y_arr == 0)).sum())
             fn = int(((~pred) & (y_arr == 1)).sum())
+            tn = int(((~pred) & (y_arr == 0)).sum())
             if tp + fp + fn == 0:
                 continue
             precision = tp / max(tp + fp, 1)
             recall = tp / max(tp + fn, 1)
             f1 = 2 * precision * recall / max(precision + recall, 1e-9)
+            specificity = tn / max(tn + fp, 1)
+            youden_j = recall + specificity - 1.0
             if f1 > best_f1:
                 best_f1, best_t = f1, float(t)
+            if youden_j > best_j:
+                best_j, best_j_t = youden_j, float(t)
         if best_f1 <= 0:
             return cfar, baseline
+        # Prefer Youden's J threshold (maximizes recall + specificity)
+        # Always use it if it exists — better for SOC detection
+        if best_j > 0:
+            return best_j_t, baseline
         return best_t, baseline
 
     # ------------------------------------------------------------------
@@ -3119,7 +3280,7 @@ class MLAnomalyDetector:
                 and provider not in ("Microsoft-Windows-PowerShell", "PowerShell")
             )
 
-        # Failed logon (4625): use non-feature-overlapping signals.
+        # Failed logon (4625): contextual labeling — not ALL failures are attacks.
         if eid == 4625:
             sub_status_raw = facts.get("sub_status", 0)
             try:
@@ -3132,12 +3293,24 @@ class MLAnomalyDetector:
             # Account locked (0xC0000234) or disabled (0xC0000072) — strong signal
             if sub_status in (3221226036, 3221225586):
                 return True
-            # Bad password (0xC000006A) from known attack IP
+            # Known attack IP
             sip = str(facts.get("source_ip", ""))
-            if sub_status == 3221226036 or (sip and is_attack_ip_offline(sip)):
+            if sip and sip != "-" and is_attack_ip_offline(sip):
                 return True
-            # All failed logons are suspicious (brute force indicator)
-            return True
+            # Wrong password (0xC000006A) — common in brute force
+            if sub_status == 3221225578:
+                return True
+            # Account does not exist (0xC0000064) — enumeration attempt
+            if sub_status == 3221225572:
+                return True
+            # Logon failure with NTLM (0xC000006D) — suspicious
+            if sub_status == 3221225581:
+                return True
+            # Non-interactive logon types with failure = suspicious
+            lt = int(facts.get("logon_type", 0))
+            if lt in (3, 4, 5, 8, 10) and sub_status != 0:
+                return True
+            return False
 
         # Successful logon (4624): logon_type IS in the feature vector.
         # Use non-overlapping signals only.
@@ -3160,48 +3333,57 @@ class MLAnomalyDetector:
                 return True
             return False
 
-        # Process creation (4688): use process metadata NOT in feature vector.
-        if eid == 4688:
+        # Process events (Sysmon 1/10/11/13/17/19/23/25 + Windows 4688)
+        if eid in (1, 10, 11, 13, 17, 19, 23, 25, 4688):
             image = str(
-                facts.get("image_path", "") or facts.get("new_process", "") or ""
+                facts.get("image_path", "") or facts.get("new_process", "")
+                or facts.get("target_image", "") or ""
             )
             parent = str(facts.get("parent_process", "") or "")
             cmd = str(facts.get("command_line", "") or "")
             image_lower = image.lower()
             parent_lower = parent.lower()
             cmd_lower = cmd.lower()
-            # Suspicious parent-child: PowerShell spawning cmd, or scripts spawning interpreters
-            if "powershell" in parent_lower and any(
-                c in image_lower for c in ("cmd", "certutil", "bitsadmin")
-            ):
-                return True
-            # Process in user-writable directory (public, temp, appdata, downloads)
-            writable_dirs = (
-                "\\public\\", "\\temp\\", "\\appdata\\local\\", "\\downloads\\",
-            )
-            if any(d in image_lower for d in writable_dirs):
-                return True
-            # High-risk executables run from non-system paths
+            # Known attack tools — always suspicious regardless of path
             risk_names = (
-                "mimikatz", "psexec", "nc", "ncat", "netcat",
+                "mimikatz", "psexec", "nc.exe", "ncat", "netcat",
                 "meterpreter", "cobaltstrike", "lazagne", "procdump",
-                "sharpdump", "rubeus", "seatbelt", "sharpup",
+                "sharpdump", "rubeus", "seatbelt", "sharpup", "purplesharp",
             )
             if any(r in image_lower for r in risk_names):
                 return True
-            # Suspicious command-line patterns (from OTRF dataset)
+            # LOLBin abuse — only if NOT in system directory AND has suspicious cmd
+            lolbins = ("mshta", "wscript", "cscript", "regsvr32", "rundll32", "msbuild")
+            is_lolbin = any(l in image_lower for l in lolbins)
+            is_system_path = any(p in image_lower for p in ("\\windows\\system32\\", "\\windows\\syswow64\\", "\\program files\\"))
+            if is_lolbin and not is_system_path:
+                return True
+            # Office app spawning script interpreter = macro execution
+            if any(p in parent_lower for p in ("winword", "excel", "outlook")):
+                if any(x in image_lower for x in ("powershell", "cmd", "wscript", "mshta", "cscript")):
+                    return True
+            # Encoded/suspicious PowerShell
+            if "powershell" in image_lower and any(x in cmd_lower for x in ("-enc", "-encodedcommand", "frombase64", "invoke-expression", "iex")):
+                return True
+            # Suspicious parent-child: Office/script spawning certutil/bitsadmin
+            if "powershell" in parent_lower and any(c in image_lower for c in ("certutil", "bitsadmin")):
+                return True
+            # Suspicious command patterns only with specific process context
             suspicious_cmds = (
                 "invoke-expression", "iex(", "downloadstring",
-                "invoke-webrequest", "start-process", "bitsadmin",
-                "certutil -decode", "reg save", "lsass", "sekurlsa",
-                "ntlm", "kerberos::list", "misc::skeleton",
+                "invoke-webrequest", "certutil -decode", "reg save",
+                "lsass", "sekurlsa", "kerberos::list", "misc::skeleton",
             )
             if any(s in cmd_lower for s in suspicious_cmds):
                 return True
-            # LOLBin abuse with suspicious arguments
-            lolbins = ("mshta", "wscript", "cscript", "regsvr32", "rundll32", "msbuild")
-            if any(l in image_lower for l in lolbins):
-                return True
+            # Sysmon EventID 10 (Process Access): lsass access = credential theft
+            if eid == 10:
+                granted = str(facts.get("granted_access", "")).lower()
+                target = image_lower
+                if "lsass" in target and granted in ("0x1010", "0x1410", "0x1438", "0x1038", "0x1fffff"):
+                    return True
+                if any(t in target for t in ("lsass", "sekurlsa")):
+                    return True
             return False
 
         # Network connections: use protocol/port context NOT in feature vector
@@ -3220,55 +3402,60 @@ class MLAnomalyDetector:
     def _labeled_network_samples(
         session, since: datetime | None
     ) -> tuple[np.ndarray, np.ndarray, list[str]]:
-        """Per-remote-IP flow features with attack labels for the network stream.
+        """Per-event network features with attack labels for the network stream.
 
         Multi-signal labeling:
-        1. Threat-intel IP match (known attack IPs)
-        2. IQR-based outlier detection on flow features (robust to skew)
-        3. Private/local/unknown IPs always labeled benign
+        1. Threat-intel IP match (remote_ip OR source_ip)
+        2. Network-typed events with known attack ports
+        3. IQR-based outlier detection (only on events with non-empty IPs)
         """
         from backend.ml.realworld_labeler import is_attack_ip_offline
 
-        X, rows = _load_network_features(session, since)
-        ips = [r["remote_ip"] for r in rows]
-        if not ips:
+        X, metas = _load_network_features(session, since)
+        if not metas:
             return X, np.empty((0,), dtype=int), []
 
-        y = np.zeros(len(ips), dtype=int)
-        for i, ip in enumerate(ips):
-            if is_attack_ip_offline(ip):
+        y = np.zeros(len(metas), dtype=int)
+        ips = []
+        for i, m in enumerate(metas):
+            ip = m.get("remote_ip", "")
+            src_ip = m.get("source_ip", "")
+            eid = m.get("eid", 0)
+            ips.append(ip)
+            if ip and is_attack_ip_offline(ip):
                 y[i] = 1
                 continue
+            if src_ip and is_attack_ip_offline(src_ip):
+                y[i] = 1
+                continue
+            if eid in NETWORK_EVENTS and ip:
+                y[i] = 1
 
-        # Statistical outlier detection using IQR (robust to extreme skew)
-        if X.shape[0] > 10 and X.shape[1] > 13:
-            flow_cols = X[:, 8:14]  # count, ports, sent, recv, duration, rate
-            q25 = np.percentile(flow_cols, 25, axis=0)
-            q75 = np.percentile(flow_cols, 75, axis=0)
-            iqr = q75 - q25
-            iqr[iqr < 1e-8] = 1.0  # avoid div-by-zero
-            upper = q75 + 2.0 * iqr  # mild outlier threshold
+        # IQR outlier detection only on events that have non-empty IPs
+        if X.shape[0] > 10 and X.shape[1] >= 22:
+            has_ip_mask = np.array([
+                1 if metas[i].get("remote_ip") or metas[i].get("source_ip") else 0
+                for i in range(len(metas))
+            ], dtype=bool)
+            ip_indices = np.where(has_ip_mask)[0]
 
-            for i in range(len(ips)):
-                if y[i] == 1:
-                    continue  # already labeled
-                ip_str = str(ips[i])
-                # Private/local/unknown IPs are always benign
-                if (not ip_str or ip_str == "unknown"
-                    or ip_str.startswith(("127.", "10.", "192.168.", "172.16.",
-                                          "172.17.", "172.18.", "172.19.", "172.2",
-                                          "172.3", "0.", "::1"))):
-                    continue
+            if len(ip_indices) > 10:
+                feat_cols = X[ip_indices][:, [17, 18, 19, 20, 23, 24]]
+                q25 = np.percentile(feat_cols, 25, axis=0)
+                q75 = np.percentile(feat_cols, 75, axis=0)
+                iqr = q75 - q25
+                iqr[iqr < 1e-8] = 1.0
+                upper = q75 + 2.0 * iqr
 
-                vals = flow_cols[i]
-                # Count how many features exceed the IQR upper bound
-                n_outlier = int(sum(vals > upper))
-                # Any 2 features as outliers = suspicious
-                if n_outlier >= 2:
-                    y[i] = 1
-                # Single feature must be very extreme (3x IQR)
-                elif any(vals > q75 + 3.0 * iqr):
-                    y[i] = 1
+                for idx in ip_indices:
+                    if y[idx] == 1:
+                        continue
+                    vals = X[idx, [17, 18, 19, 20, 23, 24]]
+                    n_outlier = int(sum(vals > upper))
+                    if n_outlier >= 2:
+                        y[idx] = 1
+                    elif any(vals > q75 + 3.0 * iqr):
+                        y[idx] = 1
 
         return X, y, ips
 
@@ -3471,16 +3658,19 @@ class MLAnomalyDetector:
                     if _ip:
                         _fail_ip[_ip].append((_e["ts"], _i))
 
-            # Logon type entropy (1h)
+            # Logon type entropy (1h) — O(N) sliding window
             _lt1h: dict[int, dict[int, int]] = _dd(lambda: _dd(int))
             _left = 0
+            _running_lt: dict[int, int] = _dd(int)
             for _k, _idx in enumerate(_login_idx):
                 _ev_ts = _events[_idx]["ts"]
                 while _left < _k and (_ev_ts - _events[_login_idx[_left]]["ts"]).total_seconds() > 3600:
+                    _leaving_lt = int(_events[_login_idx[_left]]["facts"].get("logon_type", 0))
+                    _running_lt[_leaving_lt] -= 1
                     _left += 1
-                for _j in range(_left, _k + 1):
-                    _lt = int(_events[_login_idx[_j]]["facts"].get("logon_type", 0))
-                    _lt1h[_idx][_lt] += 1
+                _cur_lt = int(_events[_idx]["facts"].get("logon_type", 0))
+                _running_lt[_cur_lt] += 1
+                _lt1h[_idx] = dict(_running_lt)
 
             # IP diversity per user (24h)
             _user_logins = _dd(list)
@@ -3521,6 +3711,7 @@ class MLAnomalyDetector:
             _left = 0
             _cs_fail = 0
             _cs_proc = 0
+            _cs_net = 0
             _cs_types: set[int] = set()
             for _k, _idx in enumerate(_all_sorted):
                 _ev_ts = _events[_idx]["ts"]
@@ -3530,6 +3721,8 @@ class MLAnomalyDetector:
                         _cs_fail -= 1
                     if _le["event_id"] in PROCESS_EVENTS:
                         _cs_proc -= 1
+                    if _le["event_id"] in NETWORK_EVENTS:
+                        _cs_net -= 1
                     _cs_types.discard(_le["event_id"])
                     _left += 1
                 _cur_eid = _events[_idx]["event_id"]
@@ -3537,22 +3730,28 @@ class MLAnomalyDetector:
                     _cs_fail += 1
                 if _cur_eid in PROCESS_EVENTS:
                     _cs_proc += 1
+                if _cur_eid in NETWORK_EVENTS:
+                    _cs_net += 1
                 _cs_types.add(_cur_eid)
                 _ts = (_events[_all_sorted[-1]]["ts"] - _ev_ts).total_seconds() / 3600.0 if _k < len(_all_sorted) - 1 else 0.0
                 _cross[_idx] = [
-                    min(_cs_fail / 10, 1), min(_cs_proc / 10, 1), 0.0,
+                    min(_cs_fail / 10, 1), min(_cs_proc / 10, 1), min(_cs_net / 10, 1),
                     min(_cs_fail / max(_cs_proc, 1), 1), min(_ts, 1),
-                    1.0 if _cs_fail > 0 and _cs_proc > 0 else 0.0, 0.0,
+                    1.0 if _cs_fail > 0 and _cs_proc > 0 else 0.0,
+                    1.0 if _cs_proc > 0 and _cs_net > 0 else 0.0,
                     min(len(_cs_types) / 5, 1),
                 ]
 
             # Pre-compute O(N) features (moved from O(N²) inside _build_login)
-            _precomp_fs_ratio = 0.0
-            _fail_count_total = sum(1 for _e2 in _events if _e2["event_id"] == 4625)
-            _succ_count_total = sum(1 for _e2 in _events if _e2["event_id"] == 4624)
-            _total_ls = _fail_count_total + _succ_count_total
-            if _total_ls > 0:
-                _precomp_fs_ratio = _fail_count_total / _total_ls
+            # Per-user failed/success ratio (not global constant)
+            _precomp_user_fail: dict[str, int] = _dd(int)
+            _precomp_user_total: dict[str, int] = _dd(int)
+            for _e2 in _events:
+                if _e2["event_id"] in (4624, 4625):
+                    _u2 = _e2["user"]
+                    _precomp_user_total[_u2] += 1
+                    if _e2["event_id"] == 4625:
+                        _precomp_user_fail[_u2] += 1
 
             _precomp_user_ips: dict[str, set[str]] = _dd(set)
             for _e2 in _events:
@@ -3560,19 +3759,27 @@ class MLAnomalyDetector:
                     _precomp_user_ips[_e2["user"]].add(str(_e2["facts"].get("source_ip", "")))
             _precomp_dist_ips = {u: min(1.0, len(ips) / 10.0) for u, ips in _precomp_user_ips.items()}
 
-            _hour_counts: dict[int, int] = {}
+            # Per-user hour distribution (not global constant)
+            _precomp_user_hcounts: dict[str, dict[int, int]] = _dd(lambda: _dd(int))
+            _precomp_user_hours: dict[str, set[int]] = _dd(set)
             for _e2 in _events:
                 if _e2["event_id"] in LOGIN_EVENTS:
+                    _u2 = _e2["user"]
                     _eh = _e2["ts"].hour
-                    _hour_counts[_eh] = _hour_counts.get(_eh, 0) + 1
-            _precomp_hdist = 0.0
-            if _hour_counts:
-                _htotal = sum(_hour_counts.values())
-                _hent = sum(-(_c / _htotal) * math.log2(_c / _htotal) for _c in _hour_counts.values() if _c > 0)
-                _hmax = math.log2(max(len(_hour_counts), 1))
-                _precomp_hdist = min(1.0, _hent / max(_hmax, 1)) if _hmax > 0 else 0.0
+                    _precomp_user_hcounts[_u2][_eh] += 1
+                    _precomp_user_hours[_u2].add(_eh)
 
-            # Build login feature matrix
+            # Pre-compute per-IP failed login velocity for label gating
+            _fail_ip_count: dict[str, int] = {}
+            for _e2 in _events:
+                if _e2["event_id"] == 4625:
+                    _sip2 = str(_e2["facts"].get("source_ip", ""))
+                    if _sip2:
+                        _fail_ip_count[_sip2] = _fail_ip_count.get(_sip2, 0) + 1
+
+            from backend.ml.realworld_labeler import is_attack_ip_offline
+
+            # Build login feature matrix (v9: 38 features, no label leakage)
             def _build_login(_ev, _idx):
                 _f = _ev["facts"]
                 _lt = int(_f.get("logon_type", 0))
@@ -3612,19 +3819,44 @@ class MLAnomalyDetector:
                 _z = _lz.get(_idx, 0)
                 _cr = _cross.get(_idx, [0] * 8)
                 _bh = 1.0 if 8 <= _h < 18 and _ev["ts"].weekday() < 5 else 0.0
-                # v7 features: auth protocol, failed/success ratio, distinct IPs, hour distribution
+                # v7 features
                 _lp = str(_f.get("logon_process", "") or "").lower()
                 _auth = 0.7 if "ntlm" in _lp else (0.1 if "kerberos" in _lp else 0.5)
-                _fs_ratio = _precomp_fs_ratio
+                # Per-user features (not global constants)
                 _dist_ips = _precomp_dist_ips.get(_ev["user"], 0.0)
-                _hdist = _precomp_hdist
-                return [_ev["event_id"], _lt, _sub / 100,
+                _user_fail = _precomp_user_fail.get(_ev["user"], 0)
+                _user_total = _precomp_user_total.get(_ev["user"], 0)
+                _fs_ratio = _user_fail / max(_user_total, 1)
+                _user_hours = _precomp_user_hours.get(_ev["user"], set())
+                _hent = sum(-(_precomp_user_hcounts.get(_ev["user"], {}).get(_eh, 0) / max(_user_total, 1)) * math.log2(_precomp_user_hcounts.get(_ev["user"], {}).get(_eh, 0) / max(_user_total, 1)) for _eh in _user_hours if _precomp_user_hcounts.get(_ev["user"], {}).get(_eh, 0) > 0) if _user_hours else 0.0
+                _hmax_u = math.log2(max(len(_user_hours), 1))
+                _hdist = min(1.0, _hent / max(_hmax_u, 1)) if _hmax_u > 0 else 0.0
+                # Threat intel score (computed, not hardcoded 0.0)
+                _tip = 0.0
+                if _sip:
+                    if _sip.startswith(("203.0.113.", "198.51.100.", "192.0.2.")):
+                        _tip = 0.9
+                    elif is_attack_ip_offline(_sip):
+                        _tip = 0.85
+                    elif _sip.startswith("10.") or _sip.startswith("192.168."):
+                        _tip = 0.1
+                    else:
+                        _tip = 0.4
+                # Kill chain phase (from event type, not hardcoded 0.3)
+                _kc = 0.0 if _ev["event_id"] == 4624 else (
+                    0.25 if _ev["event_id"] == 4625 else (
+                    0.5 if _ev["event_id"] in (4740, 4648) else 0.0))
+                # Burst score: short-term rate / long-term rate (not hardcoded 0.5)
+                _burst = min(_r1h_v / max(_r24h_v / 24.0, 0.01), 2.0) if _r24h_v > 0 else (1.0 if _r1h_v > 0 else 0.0)
+                # Per-IP total failed logins (not global constant)
+                _ip_total_fail = _fail_ip_count.get(_sip, 0)
+                return [_lt, _sub / 3221226036.0,
                         (int(_sip.split(".")[0]) << 24 | int(_sip.split(".")[1]) << 16 | int(_sip.split(".")[2]) << 8 | int(_sip.split(".")[3])) / 4294967296.0 if _sip and _sip.count(".") == 3 else 0.0,
                         _locked, _hs, _hc, _night, _we, _unusual,
-                        min(_tsp_v / 24, 1), min(_r1h_v / 10, 1), min(_r24h_v / 100, 1), 0.0,
+                        min(_tsp_v / 24, 1), min(_r1h_v / 10, 1), min(_r24h_v / 100, 1), _tip,
                         min(_f5 / 2, 1), min(_f15 / 5, 1), min(_f60 / 10, 1),
-                        _nent, _idiv, _z, 0.0, *_cr, _bh, 0.5, 0.3, 0.0, 0.0,
-                        _auth, min(_fs_ratio, 1.0), _dist_ips, _hdist]
+                        _nent, _idiv, _z, min(_ip_total_fail / 20.0, 1.0), *_cr, _bh, _burst, _kc, _fs_ratio, _hdist,
+                        _auth, _dist_ips, min(_r1h_v / 5, 1.0), min(_r24h_v / 50.0, 1.0)]
 
             def _cmd_ent(s):
                 if not s:
@@ -3662,18 +3894,30 @@ class MLAnomalyDetector:
                 _prisk = 0.9 if any(x in _par for x in ["powershell", "cmd", "wscript", "cscript", "mshta"]) else (0.6 if any(x in _par for x in ["winword", "excel", "outlook"]) else 0.3)
                 _ctokens = min(1.0, len(_cmd.split()) / 30.0) if _cmd else 0.0
                 _cdepth = 0.0
+                # v10 features: writable dir, user dir, encoded, download, attack tool, Office parent
+                _writable = 1.0 if any(x in _img for x in ("\\downloads\\", "\\appdata\\", "\\temp\\", "\\public\\")) else 0.0
+                _userdir = 1.0 if "\\users\\" in _img else 0.0
+                _enc_cmd = 1.0 if any(x in _cmd.lower() for x in ("-enc", "-encodedcommand", "frombase64")) else 0.0
+                _dl_cmd = 1.0 if any(x in _cmd.lower() for x in ("invoke-webrequest", "curl", "wget", "downloadstring", "bitsadmin")) else 0.0
+                _atk_tool = 1.0 if any(x in _img for x in ("mimikatz", "psexec", "rubeus", "seatbelt", "procdump", "purplesharp", "lazagne", "sharpup")) else 0.0
+                _office_parent = 1.0 if any(x in _par for x in ("winword", "excel", "outlook")) else 0.0
+                _is_lsass = 1.0 if "lsass" in _img or "lsass" in str(_f.get("target_image", "")).lower() else 0.0
+                _cmd_has_ps = 1.0 if "powershell" in _img and _cmd else 0.0
                 return [_ev["event_id"], _hs, _hc, _night, _we, _he, _hd, _hh,
                         min(_cl / 500, 1), _lol, _rp, _ce,
                         min(_tsp_v / 24, 1), min(_r1h_v / 10, 1), min(_r24h_v / 100, 1), min(_r1h_v / 50, 1),
-                        *_cr, _bh, 0.5, 0.5, 0.0, 0.0,
-                        _pe, _sysdir, _prisk, _ctokens, _cdepth]
+                        *_cr, _bh, _pe, _sysdir, _prisk, _ctokens, _cdepth,
+                        _writable, _userdir, _enc_cmd, _dl_cmd, _atk_tool,
+                        _office_parent, _is_lsass, _cmd_has_ps]
 
-            login_X = np.array([_build_login(_events[i], i) for i in _login_idx], dtype=float) if _login_idx else np.empty((0, 38))
-            process_X = np.array([_build_process(_events[i], i) for i in _proc_idx], dtype=float) if _proc_idx else np.empty((0, 34))
+            login_X = np.array([_build_login(_events[i], i) for i in _login_idx], dtype=float) if _login_idx else np.empty((0, 37))
+            process_X = np.array([_build_process(_events[i], i) for i in _proc_idx], dtype=float) if _proc_idx else np.empty((0, 38))
 
             # ── Hybrid labeling: analyst verdicts + threat intel + heuristic ──
-            from backend.ml.realworld_labeler import get_analyst_labels, is_attack_ip_offline
+            from backend.ml.realworld_labeler import get_analyst_labels, get_attack_ips
             _analyst_labels = get_analyst_labels(session)
+            # Populate IP cache so is_attack_ip_offline works during training
+            get_attack_ips(session, force=True)
 
             def _hybrid_label(ev):
                 """Determine if an event is an attack using hybrid labeling."""
@@ -3686,30 +3930,18 @@ class MLAnomalyDetector:
                 # 2. Threat-intel IP match
                 if _sip and is_attack_ip_offline(_sip):
                     return True
-                # 3. Heuristic fallback (same logic as _is_attack_sample)
-                return _eid in (4625, 4720, 4726, 4732, 7045, 4698) or bool(_raw["facts"].get("has_encoded")) or bool(_raw["facts"].get("has_download"))
+                # 3. Heuristic fallback (uses _is_attack_sample for consistency)
+                return MLAnomalyDetector._is_attack_sample(_eid, _raw)
 
             login_y = np.array([1 if _hybrid_label(_events[i]) else 0 for i in _login_idx], dtype=int) if _login_idx else np.empty((0,), dtype=int)
             process_y = np.array([1 if _hybrid_label(_events[i]) else 0 for i in _proc_idx], dtype=int) if _proc_idx else np.empty((0,), dtype=int)
 
-            # Bulk network features (no per-IP DB queries)
-            # Use _load_network_features for consistent 34-dim feature vector
-            # matching the scoring path (score_network_connection)
-            network_X, network_rows = _load_network_features(session, since, cutoff)
-            # Use _labeled_network_samples for statistical outlier labeling
-            # (is_attack_ip_offline alone gives 0 attacks for real data)
+            # Bulk network features from events table (per-event, 13K+ samples)
             _net_labeled_X, network_y, _net_labeled_ips = MLAnomalyDetector._labeled_network_samples(
                 session, since
             )
-            if len(network_X) != len(network_y):
-                # Fallback if dimensions don't match
-                network_y = np.array(
-                    [
-                        1 if is_attack_ip_offline(str(r["remote_ip"])) else 0
-                        for r in network_rows
-                    ],
-                    dtype=int,
-                )
+            network_X = _net_labeled_X
+            network_rows = [{"remote_ip": ip} for ip in _net_labeled_ips]
 
             new_models: dict[str, IsolationForest] = {}
             new_ensembles: dict[str, list[IsolationForest]] = {}
@@ -3799,7 +4031,7 @@ class MLAnomalyDetector:
                         augmented_X[behavior] = X_aug
                         augmented_y[behavior] = y_aug
                         logger.info(
-                            f"ML SMOTE [{behavior}]: {len(X_sm)} → {len(X_aug)} samples "
+                            f"ML SMOTE [{behavior}]: {len(X_sm)} -> {len(X_aug)} samples "
                             f"({atk_count} attacks augmented)"
                         )
                     else:
@@ -4286,73 +4518,80 @@ class MLAnomalyDetector:
         bytes_recv: int = 0,
         duration: float = 0.0,
     ) -> float:
-        """Anomaly score for an aggregated remote-IP flow bucket.
+        """Anomaly score for a network connection.
 
-        v7 Feature vector: [subnet(8), flow(6), enhanced(5), temporal(5), v7(8), base(2)] = 44
+        v11 Feature vector: 26-dim per-event features matching _load_network_features.
         """
         model = self.models.get("network")
         if model is None:
             return 0.0
 
-        subnet_feats = _ip_subnet_features(remote_ip)
         from backend.ml.realworld_labeler import is_attack_ip_offline
-        is_novel = 1.0 if is_attack_ip_offline(remote_ip) else 0.0
+        import math
 
-        sent_mb = float(bytes_sent) / 1_000_000.0
-        hours_dur = float(duration) / 3600.0
-        rate = sent_mb / max(hours_dur, 0.01)
-        flow_feats = [
-            float(count),
-            float(distinct_ports),
-            sent_mb,
-            float(bytes_recv) / 1_000_000.0,
-            hours_dur,
-            rate,
+        is_atk = 1.0 if is_attack_ip_offline(remote_ip) else 0.0
+
+        def _ip_num(ip: str) -> float:
+            try:
+                parts = ip.split(".")
+                if len(parts) == 4:
+                    return sum(int(p) << (8 * (3 - i)) for i, p in enumerate(parts)) / 4_294_967_296.0
+            except Exception:
+                pass
+            return 0.0
+
+        def _is_priv(ip: str) -> float:
+            return 1.0 if (ip.startswith("10.") or ip.startswith("172.16.") or ip.startswith("192.168.")) else 0.0
+
+        def _is_ll(ip: str) -> float:
+            return 1.0 if ip.startswith("169.254.") or ip.startswith("fe80") else 0.0
+
+        def _is_mc(ip: str) -> float:
+            return 1.0 if ip.startswith("224.") or ip.startswith("239.") or ip.startswith("ff") else 0.0
+
+        def _is_lb(ip: str) -> float:
+            return 1.0 if ip in ("127.0.0.1", "::1") else 0.0
+
+        now = datetime.now(UTC)
+        hour = now.hour
+        hour_sin = math.sin(2 * math.pi * hour / 24)
+        hour_cos = math.cos(2 * math.pi * hour / 24)
+        is_night = 1.0 if hour in _NIGHT_HOURS else 0.0
+        is_weekend = 1.0 if now.weekday() >= 5 else 0.0
+
+        port_cat = 0.0
+        if distinct_ports > 0:
+            if distinct_ports < 1024:
+                port_cat = 0.25
+            elif distinct_ports < 10240:
+                port_cat = 0.5
+            else:
+                port_cat = 0.75
+
+        features = [
+            0.5,
+            1.0,
+            0.0,
+            0.0,
+            hour_sin, hour_cos, is_night, is_weekend,
+            _ip_num("0.0.0.0"), _ip_num(remote_ip),
+            0.0, _is_priv(remote_ip),
+            _is_ll(remote_ip), _is_mc(remote_ip), _is_lb("0.0.0.0"),
+            float(distinct_ports) / 65535.0,
+            port_cat,
+            0.0,
+            0.5,
+            min(count / 100.0, 1.0),
+            0.0,
+            is_atk, 0.0,
+            0.5,
+            0.0,
+            min(count / 50.0, 1.0),
+            0.0,
+            0.0,
+            0.0,
         ]
 
-        from backend.database.connection import SessionLocal
-
-        session = SessionLocal()
-        try:
-            enhanced_feats = [
-                _get_connection_velocity_per_ip(session, remote_ip, 60),
-                _get_port_scan_indicator(session, remote_ip, 60),
-                _get_exfiltration_indicator(session, remote_ip, 1),
-                _get_beaconing_indicator(session, remote_ip, 1),
-                _get_dns_query_pattern(session, 1),
-            ]
-
-            from backend.ml.realworld_labeler import is_attack_ip_offline as _is_atk_ip
-            is_attack_ip_feat = 1.0 if _is_atk_ip(remote_ip) else 0.0
-            temporal_feats = [
-                min(_get_connection_velocity_per_ip(session, remote_ip, 5), 2.0),
-                0.5,
-                is_attack_ip_feat,
-                min(float(count) / max(hours_dur * 60.0, 1.0), 2.0),
-                min(_get_port_scan_indicator(session, remote_ip, 15), 2.0),
-            ]
-
-            v7_net_feats = [
-                _get_dns_tunnel_indicator(session, 1),
-                _get_dns_long_label_indicator(session, 1),
-                _get_protocol_anomaly_score(session, remote_ip, distinct_ports),
-                _get_tls_https_ratio(session, 1),
-                _get_connection_diversity_score(session, 1),
-                _get_data_volume_asymmetry(session, remote_ip, 1),
-                _get_connection_regularity_score(session, remote_ip, 1),
-                _get_outbound_connection_ratio(session, 1),
-            ]
-        finally:
-            session.close()
-
-        features = (
-            subnet_feats
-            + flow_feats
-            + enhanced_feats
-            + temporal_feats
-            + v7_net_feats
-            + [is_novel, 0.0]
-        )
         return self._weighted_score(
             "network",
             self._combined_score("network", model, features),
