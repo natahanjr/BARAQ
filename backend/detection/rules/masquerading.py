@@ -98,7 +98,7 @@ class MasqueradingRule(BaseRule):
                 *self._org_conds(NormalizedEvent),
             )
         ).all():
-            facts = (ev.raw_json or {}).get("facts", {}) if ev.raw_json else {}
+            facts = ev.facts or {}
             image_path = str(facts.get("image_path") or ev.message or "").strip()
             if not image_path:
                 continue
