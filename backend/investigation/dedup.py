@@ -102,7 +102,7 @@ def _root_process(session, alert: Alert, window_minutes: int = 90) -> str:
         parent_of: dict[str, str] = {}
         name_of: dict[str, str] = {}
         for ev in session.scalars(q).all():
-            facts = (ev.raw_json or {}).get("facts", {}) if ev.raw_json else {}
+            facts = ev.facts or {}
             child = parent = name = None
             for key in ("NewProcessId", "ProcessId", "pid"):
                 for k, v in facts.items():
