@@ -69,6 +69,7 @@ def prediction_stability_test(
     try:
         baseline_pred = model.predict(X)
     except Exception:
+        logger.exception("Unexpected error")
         return {
             "mean_stability": 0.0,
             "stability_by_noise": {},
@@ -86,6 +87,7 @@ def prediction_stability_test(
                 unchanged += int(np.sum(perturbed_pred == baseline_pred))
                 total += len(baseline_pred)
             except Exception:
+                logger.exception("Unexpected error")
                 continue
         stability_by_noise[noise_std] = unchanged / max(total, 1)
 
@@ -108,6 +110,7 @@ def prediction_stability_test(
             flip_rate = float(np.mean(base_pred != perturbed_pred))
             critical_sensitivity[feat_idx] = flip_rate
         except Exception:
+            logger.exception("Unexpected error")
             critical_sensitivity[feat_idx] = 1.0
 
     return {
@@ -151,7 +154,7 @@ def feature_importance_stability(
     try:
         (model.score(X, np.zeros(len(X))) if hasattr(model, "score") else None)
     except Exception:
-        pass
+        logger.exception("Unexpected error")
 
     for b in range(n_bootstrap):
         idx = rng.choice(len(X), size=len(X), replace=True)
@@ -165,6 +168,7 @@ def feature_importance_stability(
                 perm_dec = np.mean(np.abs(model.decision_function(X_perm)))
                 importance_matrix[b, f] = abs(base_dec - perm_dec)
             except Exception:
+                logger.exception("Unexpected error")
                 importance_matrix[b, f] = 0.0
 
     mean_importance = np.mean(importance_matrix, axis=0)
@@ -234,6 +238,7 @@ def fgsm_evasion_test(
     try:
         baseline_scores = model.decision_function(X_test)
     except Exception:
+        logger.exception("Unexpected error")
         return {
             "evasion_success_rate": 0.0,
             "mean_score_drop": 0.0,
@@ -250,6 +255,7 @@ def fgsm_evasion_test(
             perm_scores = model.decision_function(X_perm)
             feature_importance[f] = np.mean(np.abs(baseline_scores - perm_scores))
         except Exception:
+            logger.exception("Unexpected error")
             feature_importance[f] = 0.0
 
     # Normalize importance to use as perturbation direction
@@ -407,6 +413,7 @@ def cross_user_validation(
                 normalized = 0.5 - raw_scores
                 user_scores.extend(normalized.tolist())
             except Exception:
+                logger.exception("Unexpected error")
                 continue
 
         if user_scores:
@@ -469,6 +476,7 @@ def cross_environment_validation(
                 normalized = 0.5 - raw_scores
                 env_anomaly_scores.extend(normalized.tolist())
             except Exception:
+                logger.exception("Unexpected error")
                 continue
 
         if env_anomaly_scores:
@@ -527,6 +535,7 @@ def cross_platform_validation(
                 normalized = 0.5 - raw_scores
                 platform_anomaly_scores.extend(normalized.tolist())
             except Exception:
+                logger.exception("Unexpected error")
                 continue
 
         if platform_anomaly_scores:

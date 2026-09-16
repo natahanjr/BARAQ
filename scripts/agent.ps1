@@ -1,24 +1,36 @@
 # BARAQ standalone telemetry agent + remote control (single file, no installation)
 #
+# LIGHTWEIGHT MODE — This PowerShell agent collects basic process and network
+# telemetry. For full telemetry coverage (Windows Event Logs, Sysmon, DNS,
+# USB, registry, scheduled tasks, PowerShell transcripts), deploy the full
+# Python agent via scripts/install_agent.ps1.
+#
 # Run on any Windows 10/11 host to stream telemetry to a central BARAQ
 # and execute remote commands queued by the SOC operator:
 #
-#   powershell -ExecutionPolicy Bypass -File agent.ps1 -Server http://10.0.0.1:8000 -Key baraq-agent-laptop2
+#   powershell -ExecutionPolicy Bypass -File agent.ps1 -Server http://10.0.0.1:8001 -Key YOUR-AGENT-KEY
 #
 # Options:
-#   -Server   central BARAQ URL   (default http://localhost:8000)
-#   -Key      agent key (X-Agent-Key)   (default baraq-agent-laptop2)
+#   -Server   central BARAQ URL   (default http://localhost:8001)
+#   -Key      agent key (X-Agent-Key)   (required — no default, use your provisioned key)
 #   -Interval seconds between cycles    (default 15)
 #   -Once     send a single batch and exit (for testing / Task Scheduler)
 
 param(
     [string]$Server = "http://localhost:8001",
-    [string]$Key = "baraq-agent-laptop2",
+    [string]$Key = "",
     [int]$Interval = 15,
     [switch]$Once
 )
 
 $ErrorActionPreference = "Stop"
+
+if (-not $Key) {
+    Write-Host "ERROR: No agent key provided. Run with -Key YOUR-AGENT-KEY" -ForegroundColor Red
+    Write-Host "Usage: powershell -ExecutionPolicy Bypass -File agent.ps1 -Server http://YOUR-SERVER:8001 -Key YOUR-AGENT-KEY" -ForegroundColor Yellow
+    exit 1
+}
+
 $hostname = [Environment]::MachineName
 $seenProcesses = @{}
 

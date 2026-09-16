@@ -226,7 +226,7 @@ def _abuseipdb(ip_str: str) -> dict[str, Any] | None:
                 "confidence": 0.6,
             }
     except Exception:
-        pass
+        logger.exception("Unexpected error")
     return None
 
 
@@ -260,6 +260,7 @@ def _otx(indicators: list[str]) -> dict[str, Any] | None:
                     }
                 )
         except Exception:
+            logger.exception("Unexpected error")
             continue
     return hits[0] if hits else None
 
@@ -313,6 +314,7 @@ def _vt(indicators: list[str]) -> dict[str, Any] | None:
                         "confidence": min(0.99, 0.6 + malicious * 0.03),
                     }
         except Exception:
+            logger.exception("Unexpected error")
             continue
     return None
 
@@ -353,7 +355,7 @@ def _shodan(ip_str: str) -> dict[str, Any] | None:
                 "confidence": 0.3,
             }
     except Exception:
-        pass
+        logger.exception("Unexpected error")
     return None
 
 
@@ -393,7 +395,7 @@ def _greynoise(ip_str: str) -> dict[str, Any] | None:
                 "confidence": 0.8,
             }
     except Exception:
-        pass
+        logger.exception("Unexpected error")
     return None
 
 
@@ -432,7 +434,7 @@ def _censys(indicator: str) -> dict[str, Any] | None:
                 "confidence": 0.3,
             }
     except Exception:
-        pass
+        logger.exception("Unexpected error")
     return None
 
 
@@ -476,7 +478,7 @@ def _findip(ip_str: str) -> dict[str, Any] | None:
                 "confidence": 0.6,
             }
     except Exception:
-        pass
+        logger.exception("Unexpected error")
     return None
 
 
@@ -517,7 +519,7 @@ def _ipdetails(ip_str: str) -> dict[str, Any] | None:
                 "confidence": 0.3,
             }
     except Exception:
-        pass
+        logger.exception("Unexpected error")
     return None
 
 
@@ -555,7 +557,7 @@ def _isbadip(indicator: str) -> dict[str, Any] | None:
                 "confidence": conf,
             }
     except Exception:
-        pass
+        logger.exception("Unexpected error")
     return None
 
 
@@ -605,7 +607,7 @@ def _ffraud(indicator: str) -> dict[str, Any] | None:
                 "confidence": 0.5,
             }
     except Exception:
-        pass
+        logger.exception("Unexpected error")
     return None
 
 
@@ -646,6 +648,7 @@ def _threatfox(indicators: list[str]) -> dict[str, Any] | None:
                     "confidence": min(0.95, confidence / 100.0),
                 }
         except Exception:
+            logger.exception("Unexpected error")
             continue
     return None
 
@@ -686,6 +689,7 @@ def _urlhaus(indicators: list[str]) -> dict[str, Any] | None:
                     "confidence": min(0.95, 0.6 + url_count * 0.02),
                 }
         except Exception:
+            logger.exception("Unexpected error")
             continue
     return None
 
@@ -731,6 +735,7 @@ def _malwarebazaar(indicators: list[str]) -> dict[str, Any] | None:
                     "confidence": 0.95,
                 }
         except Exception:
+            logger.exception("Unexpected error")
             continue
     return None
 

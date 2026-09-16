@@ -297,6 +297,7 @@ class ActiveLearner:
             uncertainty = 1.0 - abs(proba - 0.5) * 2.0
             return max(0.0, min(1.0, uncertainty))
         except Exception:
+            logger.exception("Unexpected error")
             logger.debug("uncertainty_score fallback to 0.5", exc_info=True)
             return 0.5
 
@@ -399,6 +400,7 @@ class OnlineLearner:
             try:
                 score = self.detector.score_event(features)
             except Exception:
+                logger.exception("Unexpected error")
                 logger.debug("score_event failed in online learner", exc_info=True)
 
         # Track prequential scores
@@ -483,6 +485,7 @@ class OnlineLearner:
                 pre_scores = self.detector.models[stream].decision_function(X)
                 pre_update_scores[stream] = float(np.mean(pre_scores))
             except Exception:
+                logger.exception("Unexpected error")
                 logger.debug("pre-update score failed for %s", stream, exc_info=True)
                 pre_update_scores[stream] = 0.0
 
@@ -515,6 +518,7 @@ class OnlineLearner:
                 self.detector._save_meta()
                 self.detector._save_bundle()
             except Exception:
+                logger.exception("Unexpected error")
                 logger.warning("Failed to persist online update", exc_info=True)
 
         return {
@@ -566,6 +570,7 @@ class OnlineLearner:
             if new_auc >= old_auc * 0.95:
                 self.detector.models[stream] = new_if
         except Exception:
+            logger.exception("Unexpected error")
             logger.debug("IF comparison failed, accepting new model for %s", stream, exc_info=True)
             self.detector.models[stream] = new_if
 
@@ -585,6 +590,7 @@ class OnlineLearner:
             )
             self.detector.baselines[stream] = self.detector._compact_baseline(raws)
         except Exception:
+            logger.exception("Unexpected error")
             logger.debug("baseline CDF update failed for %s", stream, exc_info=True)
 
         # Update threshold
@@ -598,6 +604,7 @@ class OnlineLearner:
                 )
                 self.detector.thresholds[stream] = new_threshold
         except Exception:
+            logger.exception("Unexpected error")
             logger.debug("threshold tuning failed for %s", stream, exc_info=True)
 
     def _warm_start_supervised(
@@ -624,6 +631,7 @@ class OnlineLearner:
                     self.detector.supervised_by_stream[stream] = old_sup
                     return
             except Exception:
+                logger.exception("Unexpected error")
                 logger.debug("calibration failed for %s, using uncalibrated model", stream, exc_info=True)
 
         # Train new classifier from scratch on weighted buffer
@@ -669,6 +677,7 @@ class OnlineLearner:
                 self.detector.supervised_name_by_stream[stream] = name + "+calibrated"
                 return
             except Exception:
+                logger.exception("Unexpected error")
                 logger.debug("calibration failed for %s, using uncalibrated model", stream, exc_info=True)
 
         self.detector.supervised_by_stream[stream] = model
@@ -734,6 +743,7 @@ class OnlineLearner:
                     )
                     return True
             except Exception:
+                logger.exception("Unexpected error")
                 logger.debug("post-update validation failed for %s", stream, exc_info=True)
                 continue
         return False
@@ -773,6 +783,7 @@ class OnlineLearner:
                     "n_samples": len(labels_arr),
                 }
             except Exception:
+                logger.exception("Unexpected error")
                 logger.debug("quality report failed for %s", stream, exc_info=True)
                 continue
         return report

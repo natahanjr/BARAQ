@@ -26,6 +26,9 @@ from backend.detection.registry import default_registry
 from backend.security import require_auth
 from backend.telemetry.ingestion.pipeline import normalize as normalize_event
 
+import logging
+logger = logging.getLogger("baraq.api.detections")
+
 router = APIRouter(
     prefix="/api/detections",
     tags=["detections-v2"],
@@ -106,10 +109,79 @@ def list_detections(
 def list_detectors():
     if not TELEMETRY_V2_ENABLED:
         return {"status": "disabled", "detectors": []}
+    detectors = []
+    for d in default_registry().all():
+        info = d.describe()
+        info["id"] = info["detector_id"]
+        info["mitre_technique"] = ""
+        info["category"] = "detection"
+        info["severity"] = "medium"
+        detectors.append(info)
+    try:
+        from backend.detection.rules_engine import build_rules
+        from backend.database.connection import SessionLocal
+        with SessionLocal() as session:
+            rules = build_rules(session)
+        for r in rules:
+            detectors.append({
+                "id": r.rule_id,
+                "detector_id": r.rule_id,
+                "name": r.name,
+                "description": r.description,
+                "severity": r.severity,
+                "mitre_technique": r.mitre_id,
+                "mitre_id": r.mitre_id,
+                "confidence": r.confidence,
+                "enabled": True,
+                "category": _categorize_mitre(r.mitre_id),
+                "version": "1.0.0",
+                "source": "v1",
+            })
+    except Exception as exc:
+        logger.warning("Failed to enumerate v1 rules: %s", exc)
     return {
         "status": "ok",
-        "detectors": [d.describe() for d in default_registry().all()],
+        "detectors": detectors,
     }
+
+
+MITRE_TACTIC_MAP = {
+    "T1566": "initial-access", "T1190": "initial-access", "T1133": "initial-access",
+    "T1078": "initial-access", "T1195": "initial-access",
+    "T1059": "execution", "T1047": "execution", "T1053": "execution",
+    "T1204": "execution", "T1106": "execution", "T1569": "execution",
+    "T1055": "defense-evasion", "T1027": "defense-evasion", "T1140": "defense-evasion",
+    "T1036": "defense-evasion", "T1574": "defense-evasion", "T1218": "defense-evasion",
+    "T1562": "defense-evasion", "T1070": "defense-evasion", "T1202": "defense-evasion",
+    "T1222": "defense-evasion", "T1112": "defense-evasion", "T1211": "defense-evasion",
+    "T1553": "defense-evasion", "T1480": "defense-evasion", "T1056": "credential-access",
+    "T1003": "credential-access", "T1110": "credential-access", "T1558": "credential-access",
+    "T1557": "credential-access", "T1555": "credential-access", "T1539": "credential-access",
+    "T1528": "credential-access", "T1552": "credential-access",
+    "T1021": "lateral-movement", "T1570": "lateral-movement", "T1563": "lateral-movement",
+    "T1080": "lateral-movement", "T1550": "lateral-movement",
+    "T1018": "discovery", "T1082": "discovery", "T1083": "discovery",
+    "T1087": "discovery", "T1135": "discovery", "T1046": "discovery",
+    "T1069": "discovery", "T1518": "discovery", "T1049": "discovery",
+    "T1486": "impact", "T1485": "impact", "T1490": "impact",
+    "T1489": "impact", "T1498": "impact", "T1499": "impact",
+    "T1041": "exfiltration", "T1048": "exfiltration", "T1567": "exfiltration",
+    "T1029": "exfiltration", "T1030": "exfiltration",
+    "T1071": "command-and-control", "T1105": "command-and-control",
+    "T1572": "command-and-control", "T1090": "command-and-control",
+    "T1571": "command-and-control", "T1095": "command-and-control",
+    "T1547": "persistence", "T1136": "persistence", "T1053": "persistence",
+    "T1543": "persistence", "T1546": "persistence", "T1098": "persistence",
+    "T1076": "persistence", "T1505": "persistence", "T1137": "persistence",
+    "T1542": "persistence",
+}
+
+
+def _categorize_mitre(mitre_id: str) -> str:
+    for prefix, tactic in sorted(MITRE_TACTIC_MAP.items(), key=lambda x: -len(x[0])):
+        if mitre_id.startswith(prefix):
+            return tactic
+    return "general"
 
 
 @router.get("/detectors/{detector_id}")

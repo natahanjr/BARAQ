@@ -419,6 +419,7 @@ def _get_recent_events_count(session, behavior: str, hours: int = 24) -> int:
         )
         return count
     except Exception:
+        logger.exception("Unexpected error")
         return 0
 
 
@@ -444,6 +445,7 @@ def _get_failed_login_velocity_per_ip(
         )
         return count / max(minutes, 1.0)
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -482,6 +484,7 @@ def _get_logon_type_entropy(session, hours: int = 24) -> float:
         max_entropy = math.log2(max(len(type_counts), 1))
         return min(1.0, entropy / max(max_entropy, 1.0))
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -511,6 +514,7 @@ def _get_source_ip_diversity(session, target_user: str, hours: int = 24) -> floa
 
         return min(1.0, len(ips) / max(total, 1))
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -557,6 +561,7 @@ def _get_time_between_logins_zscore(session, hours: int = 24) -> float:
         # Normalize to [0, 1] range (clip extreme values)
         return min(1.0, max(0.0, abs(z_score) / 3.0))
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -596,6 +601,7 @@ def _get_privilege_escalation_indicator(session, hours: int = 1) -> float:
 
         return 0.0
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -639,6 +645,7 @@ event.facts or {}
 
         return 0.0
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -673,6 +680,7 @@ event.facts or {}
         # High entropy indicates obfuscation
         return min(1.0, entropy / 7.0)
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -701,6 +709,7 @@ event.facts or {}
 
         return min(1.0, count / 50.0)  # Normalize to [0, 1] (50 processes/hour = max)
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -744,6 +753,7 @@ event.facts or {}
 
         return 0.0
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -798,6 +808,7 @@ event.facts or {}
         else:
             return 1.0
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -825,6 +836,7 @@ event.facts or {}
                 entropy -= p * math.log2(p)
         return min(1.0, entropy / 7.0)
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -845,6 +857,7 @@ event.facts or {}
             return 0.5
         return 0.0
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -874,6 +887,7 @@ event.facts or {}
             return 0.1
         return 0.3
     except Exception:
+        logger.exception("Unexpected error")
         return 0.3
 
 
@@ -893,6 +907,7 @@ event.facts or {}
         tokens = cmdline.split()
         return min(1.0, len(tokens) / 30.0)
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -925,6 +940,7 @@ event.facts or {}
             break
         return min(1.0, depth / 5.0)
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -954,6 +970,7 @@ def _get_time_since_last_event(session, behavior: str) -> float:
         delta = datetime.now(UTC) - last_event
         return max(0.0, min(24.0, delta.total_seconds() / 3600.0))  # cap at 24 hours
     except Exception:
+        logger.exception("Unexpected error")
         return 24.0
 
 
@@ -1029,6 +1046,7 @@ def _get_threat_intel_score(event) -> float:
         return 0.4
 
     except Exception:
+        logger.exception("Unexpected error")
         return 0.3
 
 
@@ -1053,6 +1071,7 @@ def _get_behavioral_velocity(session, behavior: str, hours: int = 1) -> float:
         )
         return count / max(hours, 1.0)  # events per hour
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1081,6 +1100,7 @@ def _get_failed_success_ratio(session, source_ip: str, hours: int = 24) -> float
             return 0.0
         return failed / total
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1102,6 +1122,7 @@ event.facts or {}
             return 0.3
         return 0.5
     except Exception:
+        logger.exception("Unexpected error")
         return 0.5
 
 
@@ -1124,6 +1145,7 @@ def _get_distinct_source_ips(session, target_user: str, hours: int = 24) -> floa
                     ips.add(ip)
         return min(1.0, len(ips) / 10.0)
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1155,6 +1177,7 @@ def _get_hour_distribution_entropy(session, hours: int = 24) -> float:
         max_entropy = math.log2(max(len(hour_counts), 1))
         return min(1.0, entropy / max(max_entropy, 1.0))
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1252,6 +1275,7 @@ def _get_cross_stream_features(
             min(event_diversity / 5.0, 1.0),  # Event diversity (normalized)
         ]
     except Exception:
+        logger.exception("Unexpected error")
         return [0.0] * 8
 
 
@@ -1274,6 +1298,7 @@ def _get_connection_velocity_per_ip(
         )
         return min(1.0, count / (minutes * 10.0))  # Normalize: 10 connections/min = max
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1293,6 +1318,7 @@ def _get_port_scan_indicator(session, remote_ip: str, minutes: int = 60) -> floa
         # Port scan indicator: >10 unique ports in short time = suspicious
         return min(1.0, unique_ports / 20.0)  # Normalize: 20 ports = max
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1320,6 +1346,7 @@ def _get_exfiltration_indicator(session, remote_ip: str, hours: int = 1) -> floa
         # Normalize: ratio > 10 = high exfiltration indicator
         return min(1.0, ratio / 10.0)
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1368,6 +1395,7 @@ def _get_beaconing_indicator(session, remote_ip: str, hours: int = 1) -> float:
         # Invert so high score = more beaconing-like
         return max(0.0, min(1.0, 1.0 - cv))
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1427,6 +1455,7 @@ def _get_dns_query_pattern(session, hours: int = 1) -> float:
 
         return min(1.0, 0.4 * rate_score + 0.3 * size_score + 0.3 * diversity_score)
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1454,6 +1483,7 @@ def _get_dns_tunnel_indicator(session, hours: int = 1) -> float:
         queries_per_domain = total / unique_domains
         return min(1.0, queries_per_domain / 50.0)
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1479,6 +1509,7 @@ def _get_dns_long_label_indicator(session, hours: int = 1) -> float:
                 long_labels += 1
         return min(1.0, long_labels / max(len(rows), 1))
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1522,6 +1553,7 @@ def _get_tls_https_ratio(session, hours: int = 1) -> float:
             return 0.0
         return https / total
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1547,6 +1579,7 @@ def _get_connection_diversity_score(session, hours: int = 1) -> float:
             return 0.0
         return min(1.0, unique_ips / total)
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1569,6 +1602,7 @@ def _get_data_volume_asymmetry(session, remote_ip: str, hours: int = 1) -> float
         asymmetry = abs(sent - recv) / max(sent + recv, 1)
         return min(1.0, asymmetry)
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1600,6 +1634,7 @@ def _get_connection_regularity_score(session, remote_ip: str, hours: int = 1) ->
         cv = std_int / mean_int
         return max(0.0, min(1.0, 1.0 - cv))
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1626,6 +1661,7 @@ def _get_outbound_connection_ratio(session, hours: int = 1) -> float:
             return 0.0
         return outbound / total
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1852,10 +1888,11 @@ def event_feature_vector(event, _shared_session=None) -> list[float] | None:
         # For network or unknown behaviors, return None to use existing network handling
         return None
     except Exception:
+        logger.exception("Unexpected error")
         try:
             session.rollback()
         except Exception:
-            pass
+            logger.exception("Unexpected error")
         return None
     finally:
         if owns_session:
@@ -1913,6 +1950,7 @@ def _get_user_session_deviation(
         latest = durations[-1]
         return max(-3.0, min(3.0, (latest - mu) / sigma))
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -1952,6 +1990,7 @@ def _get_event_burst_score(session, behavior: str, minutes: int = 5) -> float:
         extrapolated = float(recent_count) * (60.0 / max(minutes, 1))
         return min(2.0, extrapolated / max(float(hourly_count), 1.0))
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -2013,6 +2052,7 @@ def _get_user_attack_frequency(session, user: str, hours: int = 168) -> float:
             return 0.0
         return min(1.0, attacks / total)
     except Exception:
+        logger.exception("Unexpected error")
         return 0.0
 
 
@@ -2083,6 +2123,7 @@ def _load_behavior_features(
                         else 0
                     )
             except Exception:
+                logger.exception("Unexpected error")
                 continue
         if with_labels:
             return (
@@ -2135,7 +2176,7 @@ def _load_network_features(
                 if len(parts) == 4:
                     return sum(int(p) << (8 * (3 - i)) for i, p in enumerate(parts)) / 4_294_967_296.0
             except Exception:
-                pass
+                logger.exception("Unexpected error")
             return 0.0
 
         def _is_private(ip: str) -> float:
@@ -2165,6 +2206,7 @@ def _load_network_features(
                 try:
                     raw_json = json.loads(raw_json)
                 except Exception:
+                    logger.exception("Unexpected error")
                     raw_json = {}
             if isinstance(raw_json, dict):
                 if not raw_json.get("source_ip") and raw_json.get("facts"):
@@ -2654,6 +2696,7 @@ class MLAnomalyDetector:
             joblib.dump(bundle, path, compress=3)
             self._persisted = True
         except Exception:
+            logger.exception("Unexpected error")
             logger.warning("Could not persist ML model bundle", exc_info=True)
 
     def _load_bundle(self) -> bool:
@@ -2692,6 +2735,7 @@ class MLAnomalyDetector:
             self.model_source = "user" if not bundle.get("bootstrap") else "bootstrap"
             return bool(self.models)
         except Exception:
+            logger.exception("Unexpected error")
             logger.warning("Could not load ML model bundle; retraining", exc_info=True)
             return False
 
@@ -2727,6 +2771,7 @@ class MLAnomalyDetector:
             logger.info("Rolled back to model version %d", self.version)
             return True
         except Exception:
+            logger.exception("Unexpected error")
             logger.warning("Failed to rollback model bundle", exc_info=True)
             return False
 
@@ -2787,6 +2832,7 @@ class MLAnomalyDetector:
             )
             return True
         except Exception:
+            logger.exception("Unexpected error")
             logger.warning("Could not load bootstrap ML bundle", exc_info=True)
             return False
 
@@ -2859,6 +2905,7 @@ class MLAnomalyDetector:
                 bundle["feedback_history"] = self._feedback_history
                 joblib.dump(bundle, path, compress=3)
         except Exception:
+            logger.exception("Unexpected error")
             logger.warning("Could not persist feedback weights", exc_info=True)
         logger.info(
             "ML feedback %s -> %s weight %.3f (score=%.3f, confidence=%d)",
@@ -2922,6 +2969,7 @@ class MLAnomalyDetector:
                     return proba[:, 1].tolist()
             return [0.0] * len(features_list)
         except Exception:
+            logger.exception("Unexpected error")
             logger.warning("Shadow scoring failed", exc_info=True)
             return [0.0] * len(features_list)
 
@@ -3174,6 +3222,7 @@ class MLAnomalyDetector:
                 proba = supervised.predict_proba(X)
                 p = proba[:, 1] if proba.shape[1] > 1 else np.zeros(len(X))
             except Exception:
+                logger.exception("Unexpected error")
                 p = np.zeros(len(X))
             scores = 0.6 * ranks + 0.4 * p
         else:
@@ -3611,6 +3660,7 @@ class MLAnomalyDetector:
                         try:
                             _raw = json.loads(_raw)
                         except Exception:
+                            logger.exception("Unexpected error")
                             _raw = {}
                     if not isinstance(_raw, dict):
                         _raw = {}
@@ -3622,6 +3672,7 @@ class MLAnomalyDetector:
                         _ts = _ts.replace(tzinfo=UTC)
                     _events.append({"id": _r.id, "event_id": _r.event_id, "ts": _ts, "facts": _facts, "user": _r.user or ""})
                 except Exception:
+                    logger.exception("Unexpected error")
                     continue
             _N = len(_events)
 
@@ -4140,6 +4191,7 @@ class MLAnomalyDetector:
                         stream_X=stream_X, stream_y=stream_y,
                     )
                 except Exception:
+                    logger.exception("Unexpected error")
                     logger.debug(
                         "Ensemble meta-learner training skipped", exc_info=True
                     )
@@ -4154,6 +4206,7 @@ class MLAnomalyDetector:
                         X_network=stream_X.get("network"),
                     )
                 except Exception:
+                    logger.exception("Unexpected error")
                     logger.debug("Robustness evaluation skipped", exc_info=True)
 
             if self.n_samples < ML_TRAIN_MIN_SAMPLES:
@@ -4281,6 +4334,7 @@ class MLAnomalyDetector:
                 )
                 if_ranks = self._rank_of(raws, new_baselines.get(behavior))
             except Exception:
+                logger.exception("Unexpected error")
                 continue
 
             sup = new_supervised_by_stream.get(behavior)
@@ -4291,7 +4345,7 @@ class MLAnomalyDetector:
                     if proba.shape[1] > 1:
                         sup_probas = proba[:, 1]
                 except Exception:
-                    pass
+                    logger.exception("Unexpected error")
 
             all_if_scores.append(if_ranks)
             all_sup_probas.append(sup_probas)
@@ -4382,10 +4436,10 @@ class MLAnomalyDetector:
                         cal_platt.fit(X, y)
                         return cal_platt, name + "+platt"
                     except Exception:
-                        pass
+                        logger.exception("Unexpected error")
                 return cal, name + "+calibrated"
             except Exception:
-                pass
+                logger.exception("Unexpected error")
         elif len(y) >= 12 and min(pos, neg) >= 3:
             # Minimum calibration with Platt scaling only (small sample)
             try:
@@ -4395,7 +4449,7 @@ class MLAnomalyDetector:
                 cal.fit(X, y)
                 return cal, name + "+platt"
             except Exception:
-                pass
+                logger.exception("Unexpected error")
         return model, name
 
     # ------------------------------------------------------------------
@@ -4480,6 +4534,7 @@ class MLAnomalyDetector:
             try:
                 raw = 0.5 - model.decision_function(X)
             except Exception:
+                logger.exception("Unexpected error")
                 continue
             base = self._rank_of(raw, self.baselines.get(behavior))
             classifier = self.supervised_by_stream.get(behavior) or self.supervised
@@ -4490,6 +4545,7 @@ class MLAnomalyDetector:
                     if proba.shape[1] > 1:
                         p = proba[:, 1]
                 except Exception:
+                    logger.exception("Unexpected error")
                     p = np.zeros(len(idxs), dtype=float)
             # Phase 2.4: Use ensemble meta-learner when available
             if self.ensemble is not None and self.ensemble.is_trained:
@@ -4537,7 +4593,7 @@ class MLAnomalyDetector:
                 if len(parts) == 4:
                     return sum(int(p) << (8 * (3 - i)) for i, p in enumerate(parts)) / 4_294_967_296.0
             except Exception:
-                pass
+                logger.exception("Unexpected error")
             return 0.0
 
         def _is_priv(ip: str) -> float:
@@ -4641,6 +4697,7 @@ class MLAnomalyDetector:
                         behavior, self._combined_score(behavior, model, features)
                     )
                 except Exception:
+                    logger.exception("Unexpected error")
                     continue
                 ev.ml_score = round(score, 4)
                 scored += 1
@@ -4680,6 +4737,7 @@ class MLAnomalyDetector:
                             float(duration or 0.0),
                         )
                     except Exception:
+                        logger.exception("Unexpected error")
                         continue
                     scored += 1
                     if score > self.thresholds.get("network", 0.5):
@@ -4703,6 +4761,7 @@ class MLAnomalyDetector:
         try:
             proba = classifier.predict_proba(arr)[0]
         except Exception:
+            logger.exception("Unexpected error")
             return 0.0
         return float(proba[1] if len(proba) > 1 else 0.0)
 
@@ -4763,6 +4822,7 @@ class _QuickModelProxy:
             try:
                 return model.score(X, y) if y is not None else model.score(X)
             except Exception:
+                logger.exception("Unexpected error")
                 continue
         return 0.0
 
