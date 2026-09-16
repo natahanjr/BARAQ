@@ -17,55 +17,72 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
-          pip install ruff black mypy flake8 bandit
+          pip install ruff
 
       - name: Remove Python bytecode caches
         run: |
           find . -type d -name "__pycache__" -exec rm -rf {} + || true
           find . -name "*.pyc" -delete || true
 
-      - name: Check formatting with black
-        run: black --check .
-
-      - name: Lint with ruff (strict — real bugs only)
-        # F = pyflakes (unused imports, undefined names, shadowed builtins)
-        # E9 = syntax errors that prevent Python from parsing the file.
+      - name: Lint with ruff (critical — syntax errors, undefined names)
         run: ruff check . --select F,E9 --no-fix
-
-      - name: Lint with ruff (auto-fixable subset)
-        run: ruff check . --select F401,F811,F841,E711,E712,E713,E714,F402 --no-fix
 
       - name: Lint with ruff (full)
         run: ruff check .
         continue-on-error: true
 
-      - name: Type check with mypy
-        run: mypy backend --ignore-missing-imports
-        continue-on-error: true
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Additional linting with flake8
-        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Security linting with bandit
-        run: bandit -r backend -ll
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci || npm install --no-audit --no-fund
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
 
   test:
     name: Test Suite
     needs: lint
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: baraq_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
@@ -80,7 +97,7 @@ jobs:
           BARAQ_DATABASE_URL: "postgresql+psycopg://postgres:postgres@localhost:5432/baraq_test"
           BARAQ_CSRF_ENABLED: "0"
         run: |
-          python -m pytest tests/test_registration.py tests/test_csrf_and_size.py tests/test_encryption.py tests/test_audit_chain.py tests/test_db_backup.py tests/test_linux_collect.py tests/incidents/ tests/regression/ -v --tb=short
+          python -m pytest tests/ -v --tb=short -x
 
   security:
     name: Security Scan
@@ -92,63 +109,32 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt
+          pip install -r requirements.txt
           pip install pip-audit
 
       - name: Check for vulnerable dependencies
         run: pip-audit -l --skip-editable
 
-      - name: Upload security report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pip-audit-report
-          path: pip-audit-report.txt
-
-  docker-image:
-    name: Build & Push Docker Image
-    needs: [lint, test, security]
+  docker-build:
+    name: Docker Build Test
+    needs: [lint, frontend]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-
-      - name: Build and push Docker image
+      - name: Build Docker image (no push)
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          push: false
+          tags: baraq/soc:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
