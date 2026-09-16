@@ -148,7 +148,7 @@ class BaseRule(ABC):
                 *self._org_conds(NormalizedEvent),
             )
         ).all():
-            facts = (ev.raw_json or {}).get("facts", {}) if ev.raw_json else {}
+            facts = ev.facts or {}
             cl = facts.get("command_line") or facts.get("cmdline") or ""
             if cl:
                 out.append((cl, f"Event {ev.event_id} (user '{ev.user}')", ev.user))
