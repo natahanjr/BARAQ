@@ -74,7 +74,7 @@ class StartupFolderRule(BaseRule):
             )
         ).all()
         for event in rows:
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             target = facts.get("target_filename") or facts.get("target_object") or ""
             if not _STARTUP_FOLDERS.search(target):
                 continue
@@ -116,7 +116,7 @@ class ServiceImagePathPersistenceRule(BaseRule):
             )
         ).all()
         for event in rows:
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             target = facts.get("target_object") or ""
             if not _SERVICE_IMAGE.search(target):
                 continue
@@ -164,7 +164,7 @@ class AppInitDllRule(BaseRule):
             )
         ).all()
         for event in rows:
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             target = facts.get("target_object") or ""
             if not _APPINIT.search(target):
                 continue
@@ -211,7 +211,7 @@ class AccessibilityFeatureRule(BaseRule):
             )
         ).all()
         for event in rows:
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             target = facts.get("target_filename") or facts.get("image_path") or ""
             if not _ACC_FEATURE.search(target):
                 continue
@@ -234,7 +234,7 @@ class AccessibilityFeatureRule(BaseRule):
             )
         ).all()
         for event in rows:
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             target = facts.get("target_object") or ""
             if not (_ACC_FEATURE.search(target) and _IFEO.search(target)):
                 continue
@@ -276,7 +276,7 @@ class IfeoDebuggerRule(BaseRule):
             )
         ).all()
         for event in rows:
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             target = facts.get("target_object") or ""
             if not _IFEO.search(target):
                 continue
@@ -354,7 +354,7 @@ class LogonScriptRule(BaseRule):
             )
         ).all()
         for event in rows:
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             target = facts.get("target_object") or ""
             if not _LOGON_SCRIPT.search(target):
                 continue
