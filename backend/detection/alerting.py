@@ -520,6 +520,15 @@ class AlertingService:
                     result.severity = dynamic["severity"]
 
             if alert:
+                # Re-trigger cooldown: if the alert was already updated in the
+                # last 30 seconds, skip re-processing to prevent oscillation
+                # and unbounded trigger_count growth from the same events.
+                last_update = alert.updated_at
+                if (
+                    last_update
+                    and (datetime.now(UTC) - last_update).total_seconds() < 30
+                ):
+                    continue
                 alert.evidence = evidence_display
                 alert.event_count = max(alert.event_count or 0, len(result.event_ids))
                 alert.trigger_count = (alert.trigger_count or 1) + 1
@@ -722,7 +731,25 @@ class AlertingService:
             return ""
         if current >= len(SEVERITY_LADDER) - 1:
             return ""
+        # Don't escalate beyond the finding's own severity — if the rule
+        # itself only rates this as "high", bumping the alert to "critical"
+        # creates an oscillation with the context engine that immediately
+        # downgrades it back.  Only escalate when the finding severity
+        # justifies a higher level (e.g. repeated critical findings).
+        try:
+            result_idx = SEVERITY_LADDER.index(str(result.severity))
+        except ValueError:
+            result_idx = current
         new_severity = SEVERITY_LADDER[current + 1]
+        new_idx = SEVERITY_LADDER.index(new_severity)
+        if new_idx > result_idx:
+            return ""
+        # Don't re-escalate if the context engine previously demoted this
+        # alert below the finding severity.  Once context says "this alert
+        # is not actually that severe", repeated triggers should NOT push it
+        # back up — the severity stays capped at the demoted level.
+        if new_idx == result_idx and current < result_idx:
+            return ""
         alert.severity = new_severity
         alert.score = SEVERITY_SCORES.get(new_severity, alert.score)
         alert.confidence = max(alert.confidence or 0.0, result.confidence)
