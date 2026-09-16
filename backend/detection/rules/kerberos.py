@@ -33,7 +33,7 @@ _REPLICATION_MASKS = ("0x100", "0x200", "0x300", "0x101", "0x201", "0x301")
 
 
 def _facts(event) -> dict:
-    return (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+    return event.facts or {}
 
 
 def _events(session, since, event_ids, org_conds) -> list:
