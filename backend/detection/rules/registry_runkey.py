@@ -55,7 +55,7 @@ class RegistryRunKeyRule(BaseRule):
         ).all()
 
         for event in rows:
-            facts = (event.raw_json or {}).get("facts", {}) if event.raw_json else {}
+            facts = event.facts or {}
             target = facts.get("target_object") or ""
             if not _RUN_KEY.search(target):
                 continue
