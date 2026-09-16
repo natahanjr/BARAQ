@@ -33,10 +33,18 @@ function MITREAttack() {
 
   const load = useCallback(async () => {
     try {
-      const [alertsData, ml] = await Promise.all([
-        api.alerts({ page_size: 500 }).catch(() => ({ items: [] })),
-        api.mlStatus().catch(() => ({})),
-      ]);
+      let allAlerts = [];
+      let page = 1;
+      const pageSize = 100;
+      while (true) {
+        const batch = await api.alerts({ page, page_size: pageSize }).catch(() => ({ items: [], total: 0 }));
+        allAlerts = allAlerts.concat(batch.items || []);
+        if (!batch.items || batch.items.length < pageSize || allAlerts.length >= (batch.total || 0)) break;
+        page++;
+        if (page > 20) break;
+      }
+      const alertsData = { items: allAlerts };
+      const ml = await api.mlStatus().catch(() => ({}));
       setAlerts(alertsData.items || []);
       setMlStatus(ml || {});
       setError("");

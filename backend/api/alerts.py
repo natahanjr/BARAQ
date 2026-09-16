@@ -97,7 +97,7 @@ def list_alerts(
     status: AlertStatus | None = None,
     severity: str | None = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(25, ge=1, le=100),
+    page_size: int = Query(25, ge=1, le=500),
     include_demo: int = Query(0, ge=0, le=1),
     db: Session = Depends(get_db),
 ):
