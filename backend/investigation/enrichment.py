@@ -30,7 +30,7 @@ MAX_EVENTS = 300
 
 
 def _fact(ev: NormalizedEvent, *keys: str) -> str:
-    facts = (ev.raw_json or {}).get("facts", {}) if ev.raw_json else {}
+    facts = ev.facts or {}
     for key in keys:
         for k, v in facts.items():
             if k.lower() == key.lower():
