@@ -543,7 +543,7 @@ def list_verdicts(
         ev = events.get(v.event_id)
         item["event_id"] = v.event_id
         item["event_type"] = ev.event_id if ev else None
-        item["category"] = (ev.raw_json or {}).get("category") if ev else None
+        item["category"] = ev.parsed_json.get("category") if ev else None
         item["risk_score"] = ev.risk_score if ev else None
         item["timestamp"] = ev.timestamp.isoformat() if (ev and ev.timestamp) else None
         items.append(item)
