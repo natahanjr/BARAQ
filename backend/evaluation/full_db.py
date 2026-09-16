@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger("baraq.evaluation.full_db")
 
+
 # Known attack infrastructure subnets (RFC 5737 documentation ranges + OTRF)
 _ATTACK_SUBNETS = [
     ipaddress.ip_network("203.0.113.0/24"),
@@ -98,7 +99,7 @@ def _infer_ground_truth(event) -> str | None:
     - Everything else → benign
     """
     eid = event.event_id
-    facts = (event.raw_json or {}).get("facts") or {}
+    facts = event.facts or {}
     src_ip = str(facts.get("source_ip", "") or "")
     dst_ip = str(facts.get("destination_ip", "") or "")
 
@@ -182,7 +183,7 @@ def _heuristic_predict(event) -> bool:
     Returns True if the event has strong attack signals.
     """
     eid = event.event_id
-    facts = (event.raw_json or {}).get("facts") or {}
+    facts = event.facts or {}
     src_ip = str(facts.get("source_ip", "") or "")
     dst_ip = str(facts.get("destination_ip", "") or "")
 
