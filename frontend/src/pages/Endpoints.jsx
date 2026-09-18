@@ -200,7 +200,7 @@ function Endpoints() {
       const [eps, cmds, alts] = await Promise.allSettled([
         api.endpoints(),
         api.listCommands(30),
-        api.alerts({ limit: 200 }),
+        api.alerts({ page_size: 200 }),
       ]);
       setEndpoints(eps.status === "fulfilled" ? eps.value?.items || [] : []);
       setCommands(cmds.status === "fulfilled" ? cmds.value?.items || [] : []);
