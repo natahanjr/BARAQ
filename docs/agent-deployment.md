@@ -11,14 +11,15 @@
 
 1. [How It Works](#how-it-works)
 2. [Prerequisites](#prerequisites)
-3. [Quick Start (5 Minutes)](#quick-start-5-minutes)
-4. [Step-by-Step Deployment](#step-by-step-deployment)
-5. [Department Seeding](#department-seeding)
-6. [Manual Installation](#manual-installation)
-7. [Verifying Agents](#verifying-agents)
-8. [Troubleshooting](#troubleshooting)
-9. [Uninstalling](#uninstalling)
-10. [Security Notes](#security-notes)
+3. [Two Agent Types](#two-agent-types)
+4. [Quick Start (5 Minutes)](#quick-start-5-minutes)
+5. [Step-by-Step Deployment](#step-by-step-deployment)
+6. [Department Seeding](#department-seeding)
+7. [Manual Installation](#manual-installation)
+8. [Verifying Agents](#verifying-agents)
+9. [Troubleshooting](#troubleshooting)
+10. [Uninstalling](#uninstalling)
+11. [Security Notes](#security-notes)
 
 ---
 
@@ -65,9 +66,44 @@ BARAQ uses an **agent-based architecture**:
 
 ### On Each Endpoint (Laptop/PC)
 - Windows 10 or 11
-- Python 3.8+ installed ([download](https://www.python.org/downloads/))
 - Network access to the BARAQ server
 - Administrator privileges (for installing the scheduled task)
+- **Python NOT required** (PowerShell agent works without it)
+
+---
+
+## Two Agent Types
+
+BARAQ provides two agent options depending on your needs:
+
+| Feature | PowerShell Agent (Recommended) | Python Agent (Full) |
+|---|---|---|
+| **File** | `agent.ps1` | `agent.py` + `install_agent.ps1` |
+| **Python Required** | No | Yes (3.8+) |
+| **Installation** | None — run directly | Install script + scheduled task |
+| **Processes** | First 300, delta only | Full process tree with hashes |
+| **Network** | TCP connections only | TCP + UDP + DNS + HTTP |
+| **Event Logs** | Not collected | Security, System, PowerShell, Sysmon |
+| **Registry Changes** | Not collected | Monitored |
+| **Scheduled Tasks** | Not collected | Monitored |
+| **USB Events** | Not collected | Monitored |
+| **File Integrity** | Not collected | Monitored |
+| **Background Mode** | Manual or scheduled task | Scheduled task with auto-start |
+| **Best For** | Quick deployment, low-resource PCs | Full SOC visibility |
+
+### When to Use Which
+
+**Use PowerShell Agent when:**
+- You need quick deployment (no Python install required)
+- Target PCs have limited resources
+- You only need process and network data
+- You want to test the system before full deployment
+
+**Use Python Agent when:**
+- You need complete SOC visibility (Event Logs, Sysmon, DNS, USB, etc.)
+- You want automatic persistence via scheduled task
+- You need richer telemetry for ML anomaly detection
+- This is a production security monitoring deployment
 
 ---
 
@@ -75,34 +111,32 @@ BARAQ uses an **agent-based architecture**:
 
 If you already have the BARAQ server running, deploy to one laptop in 3 steps:
 
-### Step 1: Seed the departments (on the server)
+### Option A: PowerShell Agent (No Python Required)
 
 ```powershell
-# Navigate to BARAQ directory
-cd "C:\path\to\BARAQ"
+# On the target laptop, open PowerShell and run:
+powershell -ExecutionPolicy Bypass -File \\SERVER\BARAQ-Deploy\agent.ps1 `
+    -Server http://192.168.1.5:8001 `
+    -Key "YOUR-AGENT-KEY"
 
-# Generate keys for all departments
-venv\Scripts\python scripts\seed_departments.py --server http://YOUR-SERVER-IP:8001
-
-# This prints a manifest with commands for every endpoint
+# For background mode (runs until you close the window):
+Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File \\SERVER\BARAQ-Deploy\agent.ps1 -Server http://192.168.1.5:8001 -Key YOUR-AGENT-KEY" -WindowStyle Hidden
 ```
 
-### Step 2: Copy the installer to a network share
+### Option B: Python Agent (Full Telemetry)
 
 ```powershell
-# Copy install_agent.ps1 to a shared folder
+# Step 1: Seed departments (on server)
+cd "C:\path\to\BARAQ"
+venv\Scripts\python scripts\seed_departments.py --server http://192.168.1.5:8001
+
+# Step 2: Copy installer to network share
 copy scripts\install_agent.ps1 \\SERVER\Shared\BARAQ\
 copy scripts\agent.py \\SERVER\Shared\BARAQ\
-```
 
-### Step 3: Run the installer on each laptop
-
-On the target laptop, open PowerShell and run the command from the manifest:
-
-```powershell
-# Example for a library PC:
+# Step 3: Run on target laptop
 powershell -ExecutionPolicy Bypass -File \\SERVER\Shared\BARAQ\install_agent.ps1 `
-    -Server http://192.168.1.100:8001 `
+    -Server http://192.168.1.5:8001 `
     -Key "baraq-library-ws-lib-01" `
     -Org library
 ```
@@ -162,8 +196,11 @@ Create a shared folder accessible by all department laptops:
 ```powershell
 # On the server, create a shared folder
 mkdir C:\BARAQ-Deploy
+
+# Copy BOTH agent types
 copy scripts\install_agent.ps1 C:\BARAQ-Deploy\
 copy scripts\agent.py C:\BARAQ-Deploy\
+copy scripts\agent.ps1 C:\BARAQ-Deploy\
 
 # Share the folder (run as Administrator)
 net share BARAQ-Deploy=C:\BARAQ-Deploy /GRANT:Everyone,READ
@@ -171,25 +208,31 @@ net share BARAQ-Deploy=C:\BARAQ-Deploy /GRANT:Everyone,READ
 
 ### Step 3: Install on Each Endpoint
 
-**Method A: From Network Share (Recommended)**
+**Method A: PowerShell Agent (Recommended for quick deployment)**
 
-On each laptop, open PowerShell and run the command from the manifest:
+No installation needed — just run directly:
 
 ```powershell
-# Example: Library PC #1
+# On the target laptop:
+powershell -ExecutionPolicy Bypass -File \\SERVER\BARAQ-Deploy\agent.ps1 `
+    -Server http://192.168.1.100:8001 `
+    -Key "YOUR-AGENT-KEY"
+
+# To run in background (hidden window):
+Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File \\SERVER\BARAQ-Deploy\agent.ps1 -Server http://192.168.1.100:8001 -Key YOUR-AGENT-KEY" -WindowStyle Hidden
+```
+
+**Method B: Python Agent (Full telemetry)**
+
+```powershell
+# On the target laptop:
 powershell -ExecutionPolicy Bypass -File \\SERVER\BARAQ-Deploy\install_agent.ps1 `
     -Server http://192.168.1.100:8001 `
     -Key "baraq-library-ws-lib-01" `
     -Org library
-
-# Example: Finance PC #2
-powershell -ExecutionPolicy Bypass -File \\SERVER\BARAQ-Deploy\install_agent.ps1 `
-    -Server http://192.168.1.100:8001 `
-    -Key "baraq-finance-ws-fin-02" `
-    -Org finance
 ```
 
-**Method B: Manual Python Installation**
+**Method C: Manual Python Installation**
 
 If Python is available but the installer script is not:
 
@@ -210,7 +253,7 @@ copy \\SERVER\BARAQ-Deploy\agent.py C:\BARAQAgent\
 python C:\BARAQAgent\agent.py --config C:\BARAQAgent\agent.config.json --install
 ```
 
-**Method C: Group Policy (Advanced)**
+**Method D: Group Policy (Advanced)**
 
 For large deployments, push via Group Policy:
 
@@ -278,7 +321,19 @@ venv\Scripts\python scripts\seed_departments.py --server http://YOUR-SERVER:8001
 
 ## Manual Installation
 
-### Agent Command Reference
+### PowerShell Agent Command Reference
+
+```
+agent.ps1 [OPTIONS]
+
+Options:
+  -Server URL       BARAQ server URL (default: http://localhost:8001)
+  -Key KEY          Agent API key for authentication (required)
+  -Interval SECONDS Collection interval (default: 15)
+  -Once             Send a single batch and exit (for testing)
+```
+
+### Python Agent Command Reference
 
 ```
 python scripts/agent.py [OPTIONS]
@@ -295,18 +350,6 @@ Options:
   --uninstall          Remove the Scheduled Task
   --purge              Also delete config directory
   --verbose            Enable debug logging
-```
-
-### PowerShell Agent (No Python Required)
-
-For systems without Python, use the PowerShell agent:
-
-```powershell
-# Run directly (no installation needed):
-powershell -ExecutionPolicy Bypass -File scripts\agent.ps1 `
-    -Server http://YOUR-SERVER:8001 `
-    -Key "baraq-agent-laptop2" `
-    -Interval 15
 ```
 
 ---
@@ -326,7 +369,7 @@ curl http://YOUR-SERVER:8001/api/endpoints
 ### Check Agent Status (Client Side)
 
 ```powershell
-# Check if the scheduled task is running
+# For Python agent - check if the scheduled task is running
 Get-ScheduledTask -TaskName "BARAQ Agent"
 
 # View the agent log
@@ -356,25 +399,26 @@ curl -X POST http://YOUR-SERVER:8001/api/endpoints/EP_ID/commands `
 | "Server unreachable" | Network/firewall | Check firewall allows port 8001 |
 | "401 Unauthorized" | Wrong key | Verify key matches `seed_departments.py` output |
 | "Connection refused" | Server not running | Start BARAQ server on the host |
+| "No agent key provided" | Missing -Key parameter | Add `-Key YOUR-AGENT-KEY` to command |
 | Agent stops after a while | Python crash | Check log: `%LOCALAPPDATA%\BARAQAgent\agent.log` |
 
 ### Common Fixes
 
 ```powershell
-# Restart the agent
+# Restart the Python agent
 Restart-ScheduledTask -TaskName "BARAQ Agent"
 
-# Reinstall the agent
+# Reinstall the Python agent
 python C:\BARAQAgent\agent.py --config C:\BARAQAgent\agent.config.json --install
 
-# Check agent log for errors
+# Check Python agent log for errors
 Get-Content "$env:LOCALAPPDATA\BARAQAgent\agent.log" -Tail 50
 
 # Test server connectivity
 Test-NetConnection -ComputerName YOUR-SERVER -Port 8001
 ```
 
-### Python Not Found
+### Python Not Found (Python Agent Only)
 
 ```powershell
 # Check Python is in PATH
@@ -385,13 +429,25 @@ $env:PATH += ";C:\Python312;C:\Python312\Scripts"
 
 # Or use full path in the install command:
 C:\Python312\python.exe C:\BARAQAgent\agent.py --install
+
+# OR just use the PowerShell agent instead (no Python needed)!
 ```
 
 ---
 
 ## Uninstalling
 
-### From Each Laptop
+### PowerShell Agent
+
+```powershell
+# Just stop the process
+taskkill /F /IM powershell.exe /FI "WINDOWTITLE eq *agent.ps1*"
+
+# Or if running as scheduled task
+Unregister-ScheduledTask -TaskName "BARAQ Agent" -Confirm:$false
+```
+
+### Python Agent
 
 ```powershell
 # Option 1: Use the installer with -Uninstall flag
@@ -420,7 +476,7 @@ venv\Scripts\python scripts\provision_university.py revoke-org library
 ## Security Notes
 
 - **Agent keys are secrets** — treat them like passwords. Never commit to git or share in plain text.
-- **Use HTTPS** in production — the agent supports TLS certificate pinning with `--tls-ca`.
+- **Use HTTPS** in production — see `docs/tls-setup.md` for TLS configuration.
 - **Least privilege** — agents only read logs, they cannot modify files or execute commands (except approved mitigations like `block_ip`).
 - **Network isolation** — if possible, place the BARAQ server on a management VLAN separate from user traffic.
 - **Key rotation** — rotate agent keys periodically using `provision_agent.py`.
@@ -447,5 +503,5 @@ venv\Scripts\python scripts\provision_university.py revoke-org library
 
 - **Dashboard:** `http://YOUR-SERVER:8001`
 - **API Docs:** `http://YOUR-SERVER:8001/docs`
-- **Logs:** Check `%LOCALAPPDATA%\BARAQAgent\agent.log` on each endpoint
+- **Logs:** Check `%LOCALAPPDATA%\BARAQAgent\agent.log` on each endpoint (Python agent)
 - **GitHub:** https://github.com/natahanjr/BARAQ
