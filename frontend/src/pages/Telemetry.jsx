@@ -1017,6 +1017,11 @@ export default function Telemetry() {
       .events({ page: 1, page_size: 1 })
       .then((r) => setEventsTotal(r.total))
       .catch(() => setEventsTotal(null));
+    const iv = setInterval(() => {
+      api.processes().then((p) => setProcesses(p.items || [])).catch(() => {});
+      api.network().then((n) => setNetwork(n.items || [])).catch(() => {});
+    }, 15000);
+    return () => clearInterval(iv);
   }, []);
 
   const tabClass = (active) =>
