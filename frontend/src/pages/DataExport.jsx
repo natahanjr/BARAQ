@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { api } from "../api.js";
+import { api, authStore } from "../api.js";
 
 const DATA_TYPE_META = {
   events: { icon: "⚡", color: "from-cyan-500 to-blue-500", desc: "Normalized security events from all collectors" },
@@ -25,7 +25,7 @@ function ExportCard({ type, meta, onExport, exporting }) {
 
   useEffect(() => {
     const url = api.exportData(type, { format, limit: 1 });
-    const token = localStorage.getItem("baraq_token") || sessionStorage.getItem("baraq_token");
+    const token = authStore.token;
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((d) => setCount(d.total ?? null))
@@ -97,7 +97,7 @@ export default function DataExport() {
 
   const handleExport = useCallback((type, format) => {
     setExporting(type);
-    const token = localStorage.getItem("baraq_token") || sessionStorage.getItem("baraq_token");
+    const token = authStore.token;
     const url = api.exportData(type, { format, limit: 100000 });
 
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
