@@ -1,3 +1,8 @@
+/**
+ * @deprecated This full dashboard is not used in production.
+ * The active dashboard is AppleDashboard.jsx at components/minimalist/AppleDashboard.jsx
+ * This file is kept for reference only.
+ */
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { api, authStore } from "../api.js";
