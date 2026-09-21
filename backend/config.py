@@ -359,7 +359,8 @@ DATABASE_URL = os.environ.get("BARAQ_DATABASE_URL", "")
 if not DATABASE_URL:
     raise RuntimeError(
         "BARAQ requires BARAQ_DATABASE_URL. The SQLite fallback has "
-        "been removed - set it to a postgresql:// URL (e.g. "
+        "been removed - set it to a postgresql:// URL via the DPAPI vault "
+        "(recommended) or BARAQ_DATABASE_URL env var (e.g. "
         "postgresql+psycopg://user:pass@host:5432/baraq)."
     )
 ECHO_SQL = False
