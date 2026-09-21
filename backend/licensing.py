@@ -136,6 +136,20 @@ def get_license_info() -> dict:
     }
 
 
+def enforce_license(db=None) -> None:
+    """Enforce license at startup. Logs warning if invalid, never blocks dev."""
+    try:
+        info = get_license_info()
+        if not info["is_valid"]:
+            import logging
+            logging.getLogger("baraq").warning(
+                "License is invalid/expired (tier=%s). Running in degraded mode.", info["tier"]
+            )
+    except Exception:
+        import logging
+        logging.getLogger("baraq").info("No license file found — running in free/dev mode.")
+
+
 def get_tier_info() -> dict:
     """Get all available tiers and their limits."""
     return {
