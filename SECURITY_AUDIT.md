@@ -175,3 +175,53 @@ criteria). Commercial compliance documents: `COMPLIANCE_AND_EXPORT.md`,
 
 Last verified: 2026-08-13 (full `pytest tests` suite 380 passed, 1 warning;
 12 licensing tests; live activation/update-check verified on TLS 8443).
+
+---
+
+## Security gap fixes (2026-09-21)
+
+### 2. Secrets (updated)
+
+- [x] Plaintext DB password removed from `.env` (now commented out)
+- [x] `DATABASE_URL` read from DPAPI vault first (`config.py` `_secret()` fallback)
+- [x] `scripts/migrate_secrets.py` enhanced: scans all 17 credential env vars,
+      comments out migrated lines, validates vault contents
+- [x] Vault cross-platform support: Fernet AES-256-GCM on Linux/macOS
+      (`vault.py` `_load_or_create_fernet_key` + `_restrict_key_file` chmod 0600)
+
+### 6. Input validation & API hygiene (verified)
+
+- [x] CSRF double-submit cookie pattern: `main.py:920-988`, `CSRF_ENABLED=1` default
+- [x] Request size cap: `main.py:1006-1057`, `MAX_REQUEST_BYTES=16MB` default
+
+### 7. Host-level (updated)
+
+- [x] Firewall exclusions documented: `docs/firewall_exclusions.md`
+      (port 8001/8443 TCP inbound, Domain+Private profiles only)
+- [x] `start.bat` hardened: PostgreSQL readiness check (30s poll via psql),
+      pg_ctl fallback, structured startup phases
+
+### 8. Incident response (new)
+
+- [x] Incident response runbook: `docs/incident_response_runbook.md`
+      (6-phase procedure: triage → contain → investigate → eradicate → recover → lessons)
+- [x] SOAR action reference: isolate host, kill process, quarantine, block IP, disable account
+
+### 9. Secrets rotation (new)
+
+- [x] Key rotation workflow documented: `docs/key_rotation_workflow.md`
+      (schedule, individual rotation, agent keys, emergency rotation)
+- [x] `scripts/rotate_secrets.py`: admin-password, api-keys, token-secret, all
+
+### 10. Backup & recovery (verified)
+
+- [x] `scripts/backup_db.bat`: pg_dump + gzip + 30-day retention
+- [x] `docs/backup_restore.md`: full backup/restore procedure with verification
+- [x] Vault backup: `Copy-Item secrets.dat backups\secrets.dat.bak`
+
+### 11. Deployment reliability (fixed)
+
+- [x] Database retry logic: `database/connection.py:380-395` — 10 retries,
+      exponential backoff (2s base), OperationalError catch
+- [x] `start.bat` PostgreSQL readiness: polls `psql -c "SELECT 1"` up to 30s
+- [x] `start.bat` pg_ctl fallback when Windows service unavailable

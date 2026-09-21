@@ -355,7 +355,7 @@ DATASET_COLLECTOR_VERSION = "v1"
 # --------------------------------------------------------------------------
 # Database
 # --------------------------------------------------------------------------
-DATABASE_URL = os.environ.get("BARAQ_DATABASE_URL", "")
+DATABASE_URL = _secret("BARAQ_DATABASE_URL", os.environ.get("BARAQ_DATABASE_URL", ""))
 if not DATABASE_URL:
     raise RuntimeError(
         "BARAQ requires BARAQ_DATABASE_URL. The SQLite fallback has "
