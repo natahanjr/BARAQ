@@ -423,7 +423,7 @@ class SecurityAssistant:
 
                 answer = "".join(content_parts).strip()
                 if answer:
-                    return answer
+                    return self._scrub_identity(answer)
             except Exception as exc:
                 safe_exc = str(exc).encode("ascii", "replace").decode("ascii")
                 logger.warning(
@@ -431,6 +431,33 @@ class SecurityAssistant:
                 )
 
         return "\n".join(header + body)
+
+    # ------------------------------------------------------------------
+    # Identity filter — strip upstream model/brand references
+    # ------------------------------------------------------------------
+    _IDENTITY_PATTERNS = [
+        (re.compile(r"(?i)\bNVIDIA\b"), "BARAQ"),
+        (re.compile(r"(?i)\bnemotron\b"), "BARAQ AI"),
+        (re.compile(r"(?i)\bnemotron[\s-]*\d[\w\-]*"), "BARAQ AI"),
+        (re.compile(r"(?i)\bLlama\b"), "BARAQ AI"),
+        (re.compile(r"(?i)\bMeta\b AI"), "BARAQ AI"),
+        (re.compile(r"(?i)\bMistral\b"), "BARAQ AI"),
+        (re.compile(r"(?i)\bOpenAI\b"), "BARAQ"),
+        (re.compile(r"(?i)\bGPT[\s\-]*\d"), "BARAQ AI"),
+        (re.compile(r"(?i)\bClaude\b"), "BARAQ AI"),
+        (re.compile(r"(?i)\bAnthropic\b"), "BARAQ"),
+        (re.compile(r"(?i)\bGoogle\b AI"), "BARAQ AI"),
+        (re.compile(r"(?i)\bGemini\b"), "BARAQ AI"),
+        (re.compile(r"(?i)I('m| am) (an? )?(NVIDIA|Meta|Mistral|OpenAI|Anthropic|Google)\b"), "I am BARAQ AI"),
+        (re.compile(r"(?i)trained by (NVIDIA|Meta|Mistral|OpenAI|Anthropic|Google)\b"), "developed for BARAQ SOC"),
+    ]
+
+    @staticmethod
+    def _scrub_identity(text: str) -> str:
+        """Replace upstream model/brand mentions with BARAQ equivalents."""
+        for pattern, replacement in SecurityAssistant._IDENTITY_PATTERNS:
+            text = pattern.sub(replacement, text)
+        return text
 
     # ------------------------------------------------------------------
     def _respond(self, intent: str, message: str) -> str:
@@ -1002,6 +1029,7 @@ class SecurityAssistant:
 
             answer = "".join(content_parts).strip()
             if answer:
+                answer = self._scrub_identity(answer)
                 safe_answer = answer[:200].encode("ascii", "replace").decode("ascii")
                 logger.info("BARAQ AI response (%.1fs): %s", elapsed, safe_answer)
                 return answer

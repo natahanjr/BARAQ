@@ -1104,6 +1104,14 @@ def _assert_production_safe() -> None:
             "Production mode forbids localhost in BARAQ_CORS_ORIGINS. "
             "Set CORS origins to your actual domain(s)."
         )
+    db_url = DATABASE_URL
+    if "password" in db_url.lower() or "123" in db_url:
+        import warnings as _w
+        _w.warn(
+            "BARAQ: Database URL contains a weak/default password! "
+            "Change it before deploying to any network.",
+            stacklevel=2,
+        )
 
 
 # --------------------------------------------------------------------------
