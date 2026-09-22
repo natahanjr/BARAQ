@@ -128,6 +128,24 @@ def _get_vault():
     return SecretVault(APP_DIR / "secrets.dat")
 
 
+# Priorities: vault (DPAPI) > environment > .env. The vault is preferred for
+# secrets so they never need to live in plaintext on disk.
+def _secret(name: str, default: str = "") -> str:
+    """Return a secret preferring the DPAPI vault, then the environment."""
+    legacy = _legacy_name(name)
+    for key in (name, legacy):
+        value = os.environ.get(key)
+        if value:
+            return value
+        try:
+            value = _get_vault().get(key)
+        except Exception:
+            value = None
+        if value:
+            return value
+    return default
+
+
 def _migrate_env_secrets_to_vault(vault, env_path: Path) -> None:
     """Move plaintext secrets found in .env into the DPAPI vault.
 
@@ -951,24 +969,6 @@ AUTH_ENABLED = os.environ.get("BARAQ_AUTH_ENABLED", "1").lower() not in (
 )
 
 _DEFAULT_API_KEYS: dict[str, str] = {}
-
-
-# Priorities: vault (DPAPI) > environment > .env. The vault is preferred for
-# secrets so they never need to live in plaintext on disk.
-def _secret(name: str, default: str = "") -> str:
-    """Return a secret preferring the DPAPI vault, then the environment."""
-    legacy = _legacy_name(name)
-    for key in (name, legacy):
-        value = os.environ.get(key)
-        if value:
-            return value
-        try:
-            value = _get_vault().get(key)
-        except Exception:
-            value = None
-        if value:
-            return value
-    return default
 
 
 # --------------------------------------------------------------------------
