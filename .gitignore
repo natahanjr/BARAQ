@@ -15,9 +15,14 @@ dist/
 *.db-shm
 *.db-wal
 *.sqlite*
-database/
-pg/
-pgsql/
+
+# Anchored with a leading slash on purpose. As a bare "database/" this also
+# matched backend/database/ - the core source package holding models.py and
+# connection.py - so `git add` refused those paths and any NEW file added to
+# backend/database/ would have silently failed to commit.
+/database/
+/pg/
+/pgsql/
 postgres*.zip
 postgres*.log
 
@@ -41,10 +46,27 @@ certs/baraq.thumbprint
 certs/_c.pub
 certs/_k.pub
 
+# Any key material, anywhere, regardless of name.
+# This repository is PUBLIC: a committed private key or a still-valid server
+# certificate is world-readable and must never be pushed. Use a company-issued
+# certificate path supplied through BARAQ_TLS_CERTFILE / BARAQ_TLS_KEYFILE at
+# runtime instead. *.pub stays committable - it is the pinned public half.
+certs/
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+*.crt
+*.cer
+*.der
+*.pem
+
 # Environment & secrets
 .env
 .env.*
 secrets.dat
+secrets.key
 secrets.tmp
 
 # Per-host agent configs / keys (generated; never commit real keys)
