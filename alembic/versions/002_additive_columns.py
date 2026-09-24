@@ -18,9 +18,15 @@ depends_on = None
 
 
 def _add_column_safe(table: str, column: str, coltype: sa.types.TypeEngine) -> None:
-    """Add a column only if it does not exist (idempotent)."""
+    """Add a column only if it does not exist (idempotent).
+
+    Tables absent from this deployment (the baseline only creates what the
+    models declare) are skipped instead of aborting the whole upgrade.
+    """
     bind = op.get_bind()
     insp = sa.inspect(bind)
+    if table not in set(insp.get_table_names()):
+        return
     existing = [c["name"] for c in insp.get_columns(table)]
     if column not in existing:
         op.add_column(table, sa.Column(column, coltype))
@@ -117,6 +123,15 @@ def upgrade() -> None:
     _add_column_safe("audit_log", "prev_hash", sa.String(64))
     _add_column_safe("audit_log", "hash", sa.String(64))
 
+    # reports
+    _add_column_safe("reports", "org", sa.String(64))
+
+    # assistant_messages
+    _add_column_safe("assistant_messages", "user_id", sa.Integer())
+
+    # agent_commands
+    _add_column_safe("agent_commands", "sha256", sa.String(64))
+
     # users
     _add_column_safe("users", "totp_secret", sa.Text())
     _add_column_safe("users", "totp_enabled", sa.Boolean())
@@ -125,6 +140,7 @@ def upgrade() -> None:
     _add_column_safe("users", "registration_status", sa.String(16))
     _add_column_safe("users", "must_change_password", sa.Boolean())
     _add_column_safe("users", "password_changed_at", sa.DateTime(timezone=True))
+    _add_column_safe("users", "sessions_valid_after", sa.DateTime(timezone=True))
 
     # endpoints
     _add_column_safe("endpoints", "org", sa.String(64))

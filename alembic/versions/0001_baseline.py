@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from alembic import op
 
-revision = "ac765816b06d"
+revision = "0001_baseline"
 down_revision = None
 branch_labels = None
 depends_on = None

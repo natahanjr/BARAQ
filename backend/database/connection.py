@@ -140,6 +140,15 @@ _ADDITIVE_MIGRATIONS = {
         ("prev_hash", "VARCHAR(64) DEFAULT '" + ("0" * 64) + "'"),
         ("hash", "VARCHAR(64) DEFAULT '" + ("0" * 64) + "'"),
     ],
+    "reports": [
+        ("org", "VARCHAR(64) DEFAULT ''"),
+    ],
+    "assistant_messages": [
+        ("user_id", "INTEGER"),
+    ],
+    "agent_commands": [
+        ("sha256", "VARCHAR(64) DEFAULT ''"),
+    ],
     "users": [
         ("totp_secret", "TEXT DEFAULT ''"),
         ("totp_enabled", "BOOLEAN DEFAULT 0"),
@@ -148,6 +157,7 @@ _ADDITIVE_MIGRATIONS = {
         ("registration_status", "VARCHAR(16) DEFAULT ''"),
         ("must_change_password", "BOOLEAN DEFAULT 0"),
         ("password_changed_at", "DATETIME"),
+        ("sessions_valid_after", "DATETIME"),
     ],
     "endpoints": [
         ("org", "VARCHAR(64) DEFAULT ''"),
@@ -166,10 +176,17 @@ _ADDITIVE_MIGRATIONS = {
 
 
 def _ddl_default(ddl_type: str) -> str:
-    """Translate boolean defaults for PostgreSQL (BOOLEAN DEFAULT 0 requires
-    TRUE/FALSE)."""
+    """Translate SQLite-flavored DDL types/defaults for PostgreSQL.
+
+    ``BOOLEAN DEFAULT 0`` requires TRUE/FALSE, and ``DATETIME`` is not a
+    PostgreSQL type (use TIMESTAMP) - passing it through made the startup
+    migration loop crash on ``users.sessions_valid_after`` whenever
+    ``alembic_version`` was absent and the in-place DDL path ran.
+    """
     if "BOOLEAN" in ddl_type.upper() and "DEFAULT 0" in ddl_type.upper():
         return ddl_type.replace("DEFAULT 0", "DEFAULT FALSE")
+    if "DATETIME" in ddl_type.upper():
+        return ddl_type.upper().replace("DATETIME", "TIMESTAMP")
     return ddl_type
 
 
@@ -531,7 +548,12 @@ def init_db() -> None:
                 f"CREATE INDEX IF NOT EXISTS idx_{_aux_table}_org ON {_aux_table} (org)"
             )
     _backfill_audit_chain()
-    logger.info("Database initialised at %s", settings.database_url)
+    from sqlalchemy.engine import make_url
+
+    logger.info(
+        "Database initialised at %s",
+        make_url(settings.database_url).render_as_string(hide_password=True),
+    )
 
 
 def get_session():

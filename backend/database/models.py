@@ -124,6 +124,11 @@ class User(Base):
     password_changed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    #: Session epoch watermark. Access tokens must be issued strictly after
+    #: this instant; NULL means no session-wide invalidation has occurred.
+    sessions_valid_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
@@ -822,6 +827,7 @@ class ReportRecord(Base):
     format: Mapped[str] = mapped_column(String(16))  # pdf | html | json | csv
     title: Mapped[str] = mapped_column(String(256))
     file_path: Mapped[str] = mapped_column(Text)
+    org: Mapped[str] = mapped_column(String(64), default="", index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
@@ -832,7 +838,9 @@ class ReportRecord(Base):
             "report_type": self.report_type,
             "format": self.format,
             "title": self.title,
-            "file_path": self.file_path,
+            "filename": self.file_path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1],
+            "download_url": f"/api/reports/{self.id}/download",
+            "org": self.org,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -917,6 +925,9 @@ class AssistantMessage(Base):
     __tablename__ = "assistant_messages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     role: Mapped[str] = mapped_column(String(16))  # user | assistant
     content: Mapped[str] = mapped_column(EncryptedColumn())  # AssistantMessage
     created_at: Mapped[datetime] = mapped_column(
@@ -984,6 +995,7 @@ class AgentCommand(Base):
         String(32)
     )  # block_ip | kill_process | quarantine | escalate
     target: Mapped[str] = mapped_column(String(256), default="")
+    sha256: Mapped[str] = mapped_column(String(64), default="")
     status: Mapped[str] = mapped_column(
         String(16), index=True, default="pending"
     )  # pending | success | failed
@@ -1001,6 +1013,7 @@ class AgentCommand(Base):
             "agent_id": self.agent_id,
             "action": self.action,
             "target": self.target,
+            "sha256": self.sha256,
             "status": self.status,
             "detail": self.detail,
             "created_at": self.created_at.isoformat() if self.created_at else None,
