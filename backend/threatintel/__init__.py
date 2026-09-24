@@ -20,6 +20,8 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
+import sys
+from pathlib import Path
 from typing import Any
 
 from backend.config import (
@@ -47,6 +49,47 @@ _DOMAIN_RE = re.compile(
     r"^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$", re.IGNORECASE
 )
 _HASH_RE = re.compile(r"^[a-f0-9]{32}(?:[a-f0-9]{32})?$|^[a-f0-9]{64}$", re.IGNORECASE)
+
+#: Shared SSL context for outbound threat-intel calls. Uses certifi's CA
+#: bundle when available so miniconda/embedded Python installs (which often
+#: ship without a system CA store) can still verify public HTTPS feeds.
+_ssl_ctx: Any = None
+
+
+def _ssl_context() -> Any:
+    """Return a verified SSLContext (built once per process)."""
+    global _ssl_ctx
+    if _ssl_ctx is not None:
+        return _ssl_ctx
+    import ssl
+
+    cafile = None
+    try:
+        import certifi
+
+        cafile = certifi.where()
+    except Exception:
+        # Fall back to common venv/system locations, then the platform default.
+        for candidate in (
+            Path(__file__).resolve().parents[2] / "venv" / "Lib" / "site-packages" / "certifi" / "cacert.pem",
+            Path(sys.prefix) / "Lib" / "site-packages" / "certifi" / "cacert.pem",
+        ):
+            if candidate.is_file():
+                cafile = str(candidate)
+                break
+    try:
+        _ssl_ctx = ssl.create_default_context(cafile=cafile) if cafile else ssl.create_default_context()
+    except Exception as exc:
+        logger.warning("Threat-intel SSL context fallback: %s", exc)
+        _ssl_ctx = ssl.create_default_context()
+    return _ssl_ctx
+
+
+def _urlopen(req: Any, timeout: float) -> Any:
+    """urllib GET/POST with a verified SSL context (never bare urlopen)."""
+    import urllib.request
+
+    return urllib.request.urlopen(req, timeout=timeout, context=_ssl_context())
 
 #: High-confidence embedded IOC baseline (IPs / domains / hashes known-bad).
 _EMBEDDED_IOCS: dict[str, dict[str, str]] = {
@@ -182,7 +225,7 @@ def _http_json(
         return None
     req = urllib.request.Request(url, headers=headers or {})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _urlopen(req, timeout=timeout) as resp:
             return resp.read().decode("utf-8")
     except Exception as exc:
         logger.debug("Threat-intel request failed for %s: %s", url, exc)
@@ -452,11 +495,13 @@ def _findip(ip_str: str) -> dict[str, Any] | None:
     try:
         import json
         data = json.loads(raw)
-        intel = data.get("intelligence", {})
-        threat = intel.get("threat", {})
+        if not isinstance(data, dict):
+            return None
+        intel = data.get("intelligence") or {}
+        threat = intel.get("threat") or {}
         is_malicious = threat.get("is_malicious", False)
         risk_score = threat.get("risk_score", 0)
-        categories = threat.get("categories", [])
+        categories = threat.get("categories") or []
         if is_malicious or risk_score > 70:
             cats = ", ".join(categories[:3]) if categories else "threat detected"
             return {
@@ -493,10 +538,12 @@ def _ipdetails(ip_str: str) -> dict[str, Any] | None:
     try:
         import json
         data = json.loads(raw)
-        threat = data.get("threat", {})
+        if not isinstance(data, dict):
+            return None
+        threat = data.get("threat") or {}
         is_malicious = threat.get("is_malicious", False)
         risk_score = threat.get("risk_score", 0)
-        categories = threat.get("categories", [])
+        categories = threat.get("categories") or []
         if is_malicious or risk_score > 70:
             cats = ", ".join(categories[:3]) if categories else "threat detected"
             return {
@@ -510,9 +557,9 @@ def _ipdetails(ip_str: str) -> dict[str, Any] | None:
                 "label": f"IPDetails: risk {risk_score}/100",
                 "confidence": 0.5,
             }
-        is_hosting = data.get("network", {}).get("is_hosting", False)
-        if is_hosting:
-            org = data.get("network", {}).get("org", "Unknown")
+        network = data.get("network") or {}
+        if network.get("is_hosting", False):
+            org = network.get("org", "Unknown")
             return {
                 "category": "unknown",
                 "label": f"IPDetails: hosting provider ({org})",
@@ -537,15 +584,17 @@ def _isbadip(indicator: str) -> dict[str, Any] | None:
         headers={"Accept": "application/json", "User-Agent": "Baraq-SOC/1.0"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
+        with _urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
             raw = resp.read().decode("utf-8")
         import json
         data = json.loads(raw)
+        if not isinstance(data, dict):
+            return None
         is_malicious = data.get("malicious", False)
         confidence = data.get("confidence")
-        threat = data.get("threat", {})
-        categories = threat.get("categories", [])
-        sources = threat.get("sources", [])
+        threat = data.get("threat") or {}
+        categories = threat.get("categories") or []
+        sources = threat.get("sources") or []
         if is_malicious:
             src_names = ", ".join(sources[:3]) if sources else "multiple feeds"
             cats = ", ".join(categories[:3]) if categories else "threat"
@@ -577,7 +626,7 @@ def _ffraud(indicator: str) -> dict[str, Any] | None:
         headers={"Accept": "application/json", "User-Agent": "Baraq-SOC/1.0"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
+        with _urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
             raw = resp.read().decode("utf-8")
         import json
         data = json.loads(raw)
@@ -632,7 +681,7 @@ def _threatfox(indicators: list[str]) -> dict[str, Any] | None:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
+            with _urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
                 raw = resp.read().decode("utf-8")
             data = _json.loads(raw)
             if data.get("query_status") == "no_result":
@@ -675,7 +724,7 @@ def _urlhaus(indicators: list[str]) -> dict[str, Any] | None:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
+            with _urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
                 raw = resp.read().decode("utf-8")
             data = _json.loads(raw)
             status = data.get("query_status", "")
@@ -718,7 +767,7 @@ def _malwarebazaar(indicators: list[str]) -> dict[str, Any] | None:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
+            with _urlopen(req, timeout=THREAT_INTEL_TIMEOUT) as resp:
                 raw = resp.read().decode("utf-8")
             data = _json.loads(raw)
             status = data.get("query_status", "")

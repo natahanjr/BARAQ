@@ -5093,6 +5093,73 @@ class MLAnomalyDetector:
             return 0.0
         return float(proba[1] if len(proba) > 1 else 0.0)
 
+    def _contribution_result(self, session=None) -> dict:
+        """Operator-facing ML contribution signal (0-anomaly cold start).
+
+        Fresh deployments flag no ML anomalies until enough real telemetry
+        trains (``ML_TRAIN_MIN_SAMPLES``); until then detections are
+        rule-only. This reports that state explicitly so the dashboard can
+        warn instead of silently showing zero ML detections.
+        """
+        streams = list(self.models.keys()) or list(BEHAVIOR_KEYS)
+        if not self.is_ready:
+            return {
+                "ml_contribution": "not_ready",
+                "zero_anomaly_streams": streams,
+                "warning": (
+                    "ML model not ready — detections rely on rules "
+                    f"(expected until ML_TRAIN_MIN_SAMPLES="
+                    f"{ML_TRAIN_MIN_SAMPLES} real samples)"
+                ),
+            }
+        close = session is None
+        session = session or SessionLocal()
+        try:
+            stmt = select(NormalizedEvent.event_id, NormalizedEvent.ml_score).where(
+                NormalizedEvent.ml_score.isnot(None)
+            )
+            if self.trained_at:
+                try:
+                    since = datetime.fromisoformat(self.trained_at)
+                    stmt = stmt.where(NormalizedEvent.timestamp >= since)
+                except ValueError:
+                    pass
+            rows = session.execute(stmt).all()
+            flagged = {s: 0 for s in streams}
+            for event_id, ml_score in rows:
+                behavior = _behavior_of(int(event_id))
+                if behavior not in flagged:
+                    continue
+                threshold = self.thresholds.get(behavior, 0.5)
+                if float(ml_score or 0.0) > threshold:
+                    flagged[behavior] += 1
+            zero_streams = [s for s in streams if flagged.get(s, 0) == 0]
+            if sum(flagged.values()) == 0:
+                return {
+                    "ml_contribution": "zero_anomaly",
+                    "zero_anomaly_streams": zero_streams,
+                    "warning": (
+                        "ML has not flagged anomalies yet — detections rely on "
+                        "rules (expected until ML_TRAIN_MIN_SAMPLES="
+                        f"{ML_TRAIN_MIN_SAMPLES} real samples)"
+                    ),
+                }
+            return {
+                "ml_contribution": "active",
+                "zero_anomaly_streams": zero_streams,
+                "warning": None,
+            }
+        except Exception:
+            logger.exception("Unexpected error")
+            return {
+                "ml_contribution": "unknown",
+                "zero_anomaly_streams": [],
+                "warning": None,
+            }
+        finally:
+            if close:
+                session.close()
+
     def status(self, session=None) -> dict:
         drifted, drift_reason = self._drift_result(session)
         stale, reason = self.is_stale(session)
@@ -5115,6 +5182,10 @@ class MLAnomalyDetector:
             "drift": drifted,
             "drift_reason": drift_reason,
         }
+        # Operator-facing: disclose when ML is not yet contributing (fresh
+        # deployment, 0 flagged anomalies) so the UI can warn instead of
+        # silently showing a healthy model that never fires.
+        result.update(self._contribution_result(session))
         # Phase 2.4: ensemble meta-learner status
         if self.ensemble is not None:
             result["ensemble"] = self.ensemble.status()

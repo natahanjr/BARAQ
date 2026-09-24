@@ -810,7 +810,12 @@ async def security_headers(request: Request, call_next):
 
 #: Rate limiting: delegated to backend.redis which uses Redis when
 #: available and falls back to in-memory dicts for single-node dev.
+from backend import redis as _redis_mod
 from backend.redis import rate_cleanup, rate_increment
+
+#: Back-compat alias: hardening tests clear the in-memory bucket via
+#: ``backend.main._rate_buckets`` (same object as redis._rate_buckets).
+_rate_buckets = _redis_mod._rate_buckets
 
 RATE_WINDOW_SECONDS = 60
 
@@ -1387,7 +1392,13 @@ if FRONTEND_DIST.is_dir():
         if stripped and static_file.is_file():
             ext = static_file.suffix.lower()
             ct = _ASSET_TYPES.get(ext, "application/octet-stream")
-            return FileResponse(static_file, media_type=ct)
+            resp = FileResponse(static_file, media_type=ct)
+            if stripped.startswith("assets/"):
+                # Content-hashed by Vite: safe to cache forever.
+                resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            else:
+                resp.headers["Cache-Control"] = "no-store"
+            return resp
         index = FRONTEND_DIST / "index.html"
         if index.is_file():
             resp = FileResponse(index, media_type="text/html; charset=utf-8")
@@ -1395,4 +1406,8 @@ if FRONTEND_DIST.is_dir():
             return resp
         raise HTTPException(status_code=404, detail="Not Found")
 
-    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="static-assets")
+    app.mount(
+        "/assets",
+        _SPAMount(directory=str(FRONTEND_DIST / "assets")),
+        name="static-assets",
+    )

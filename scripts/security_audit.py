@@ -47,7 +47,20 @@ def _scan(
                 continue
             if any(
                 s in p.parts
-                for s in ("node_modules", "dist", "__pycache__", ".git", "venv", "logs")
+                for s in (
+                    "node_modules",
+                    "dist",
+                    "__pycache__",
+                    ".git",
+                    "venv",
+                    "logs",
+                    # gitignored third-party installs / vendored runtimes:
+                    # pgAdmin 4 bundles its own python + site-packages
+                    "pg",
+                    "pgsql",
+                    "pgAdmin 4",
+                    "site-packages",
+                )
             ):
                 continue
             if p in skip or p.suffix not in (
@@ -59,6 +72,7 @@ def _scan(
                 ".ps1",
                 ".sh",
                 ".json",
+                ".cmd",
             ):
                 continue
             try:

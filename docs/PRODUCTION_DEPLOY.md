@@ -317,6 +317,56 @@ Invoke-WebRequest https://127.0.0.1:8443/api/endpoints -Headers @{"X-API-Key"=".
 
 ---
 
+## Scale & Load Guidance
+
+### Supported size
+
+| Tier | Endpoints | Notes |
+|------|-----------|-------|
+| Pilot | 10–50 | validate detections, tune false positives |
+| Target | 50–200 | designed LAN SOC size for this deployment |
+
+BARAQ runs as a **single Windows Server process** — no horizontal scaling or load balancing (`docs/limitations_and_future_work.md` §1.1). Size the box for the whole fleet (≥ 16 GB RAM at 200 endpoints).
+
+### Rough capacity
+
+- `BARAQ_INTERVAL=15` → each agent pushes every ~15 s; 200 endpoints ≈ 13 ingest POSTs/s at steady state.
+- Ingest is hard-capped at **2000 records per request** (`docs/agent_fleet.md` — Notes & limits), so a worst-case full batch stays bounded.
+- Rate limits: `BARAQ_API_RATE_LIMIT=600`/min and `BARAQ_API_RATE_BURST=900` per client (API key, else IP). Healthy agents sit far below this; bursts of 429 mean the limit is too tight or a client is misbehaving.
+
+### When to raise limits
+
+- **Multi-analyst dashboards:** raise `BARAQ_API_RATE_BURST` (e.g. 1800) before touching `BARAQ_API_RATE_LIMIT`; restart the service after edits.
+- **Postgres:** service on `:55432` (`BaraqPG`) — watch connection count and slow queries during peak ingest; it is the shared bottleneck.
+- **Redis:** optional (`BARAQ_REDIS_URL` empty = in-memory fallback for rate limiting and the scheduler lock) — only needed if you later split processes.
+
+### Monitoring
+
+| What | How |
+|------|-----|
+| Process health | `GET /api/health` (exempt from rate limiting) |
+| Notification channels | `GET /api/system/notifications/health` (admin) |
+| Fleet load | `GET /api/endpoints/overview` (or Dashboard → System → Endpoints) |
+| Errors / ingest failures | `logs\backend.log` |
+
+### Load test recipe (safe synthetic flood)
+
+1. Prefer a staging copy of the DB — never flood a production DB you cannot restore from backup.
+2. Bulk-load synthetic volume with `scripts/generate_100k.py` (writes ~120k mixed attack/benign events straight into the DB, bypassing HTTP — good for dashboard/query load, not ingest-path testing).
+3. For the ingest path, POST batches of ≤ 2000 records to `/api/ingest` with an `X-Agent-Key` from a test org, ramping concurrency gradually (off-hours).
+4. Watch for: ingest latency per batch, HTTP **429** responses (rate limit), scheduler backlog / growing detection lag in `logs\backend.log`, and Postgres CPU on `:55432`.
+
+### Hardening checklist
+
+- [ ] Firewall: **8443 only** inbound (Domain+Private); Postgres `55432` and dev `5173` closed to the LAN
+- [ ] MFA enforced: `BARAQ_AUTH_ENABLED=1`, `BARAQ_ENFORCE_ADMIN_MFA=1`, admin password changed from default
+- [ ] Agent keys rotated on a schedule (`scripts/provision_agent.py revoke` → re-add; see `docs/key_rotation_workflow.md`)
+- [ ] Threat-intel feeds refreshed (`BARAQ_THREAT_INTEL_ENABLED=1`, cache window sane)
+- [ ] Backups scheduled: `scripts\db_backup.py backup --keep 14` (+ weekly `verify`)
+- [ ] Splunk running **parallel for 1–2 weeks** (Phase 3) before any forwarder is removed
+
+---
+
 **Document owner:** SOC lead  
 **Last updated:** 2026-09-24  
 **Related:** `docs\agent-deployment.md`, `docs\tls_https.md`, `docs\security_hardening.md`, `docs\backup_restore.md`

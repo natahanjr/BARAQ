@@ -33,15 +33,23 @@ curl.exe -s --max-time 5 http://127.0.0.1:%PORT%/api/health
 echo.
 
 echo.
-echo [5/6] Seeded login (admin / sealed credential of this build)
+echo [5/6] Seeded login (admin / BARAQ_VERIFY_PASSWORD or %APP%\.env value)
 del /q "%TEMP%\baraq_cookies.txt" > NUL 2>&1
 set "BODY=%TEMP%\baraq_login.json"
-echo {"username":"admin","password":"u9TPiwIpgJ4D"}> "%BODY%"
+set "ADMIN_PASS=%BARAQ_VERIFY_PASSWORD%"
+if not defined ADMIN_PASS if exist "%APP%\.env" for /f "usebackq tokens=1,* delims==" %%A in ("%APP%\.env") do if /I "%%A"=="BARAQ_ADMIN_PASSWORD" set "ADMIN_PASS=%%B"
+if not defined ADMIN_PASS (
+  echo   [WARN] admin password not in %APP%\.env - on most installs it lives in
+  echo          the DPAPI vault (secrets.dat). Set BARAQ_VERIFY_PASSWORD to the
+  echo          first-boot password to test login; skipping this step.
+  goto :login_done
+)
+echo {"username":"admin","password":"%ADMIN_PASS%"}> "%BODY%"
 curl.exe -s -c "%TEMP%\baraq_cookies.txt" -H "Content-Type: application/json" --data "@%BODY%" http://127.0.0.1:%PORT%/api/auth/login > "%TEMP%\baraq_login_out.json"
 findstr /I "token" "%TEMP%\baraq_login_out.json" > NUL
 if %errorlevel%==0 (
-  echo   [OK] admin login accepted
-  curl.exe -s -b "%TEMP%\baraq_cookies.txt" -H "X-API-Key: baraq-admin-e1a5ffece0bc44b0a9f0" http://127.0.0.1:%PORT%/api/dashboard/summary
+  echo   [OK] admin login accepted - dashboard read via session cookie
+  curl.exe -s -b "%TEMP%\baraq_cookies.txt" http://127.0.0.1:%PORT%/api/dashboard/summary
   echo.
 ) else (
   echo   [WARN] login rejected - if this console was ever booted with an older
@@ -50,6 +58,7 @@ if %errorlevel%==0 (
   type "%TEMP%\baraq_login_out.json"
   echo.
 )
+:login_done
 
 echo.
 echo [6/6] Autostart registration

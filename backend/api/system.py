@@ -569,6 +569,10 @@ def ml_status():
         state = "WARNING"
     elif status["stale"] or not status["ready"]:
         state = "WARNING"
+    elif status.get("warning"):
+        # ML is trained but not yet contributing (0 flagged anomalies in the
+        # scoring window) - keep the badge honest for fresh deployments.
+        state = "WARNING"
     else:
         state = "HEALTHY"
 

@@ -25,3 +25,6 @@ pytest-asyncio==1.3.0
 httpx==0.28.1
 pydantic-settings==2.15.0
 openai>=1.30
+# CA bundle for outbound threat-intel HTTPS (backend/threatintel/_ssl_context).
+# Without this, miniconda/system Pythons with cafile=None fail CERTIFICATE_VERIFY_FAILED.
+certifi>=2024.2.2
