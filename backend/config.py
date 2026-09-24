@@ -345,18 +345,18 @@ DATASET_EXPORT_INTERVAL_HOURS = int(
     os.environ.get("BARAQ_DATASET_EXPORT_INTERVAL_HOURS", "24")
 )
 DATASET_FORMAT = os.environ.get("BARAQ_DATASET_FORMAT", "csv")
-DATASET_ENABLED = os.environ.get("BARAQ_DATASET_ENABLED", "true").lower() in (
+DATASET_ENABLED = os.environ.get("BARAQ_DATASET_ENABLED", "false").lower() in (
     "1",
     "true",
     "yes",
 )
-DATASET_ANONYMIZE = os.environ.get("BARAQ_DATASET_ANONYMIZE", "false").lower() in (
+DATASET_ANONYMIZE = os.environ.get("BARAQ_DATASET_ANONYMIZE", "true").lower() in (
     "1",
     "true",
     "yes",
 )
 DATASET_INCLUDE_LABELS = os.environ.get(
-    "BARAQ_DATASET_INCLUDE_LABELS", "true"
+    "BARAQ_DATASET_INCLUDE_LABELS", "false"
 ).lower() in (
     "1",
     "true",
@@ -626,6 +626,9 @@ SEVERITY_LADDER = ("low", "medium", "high", "critical")
 #: recent open alert instead of opening new ones).
 ALERT_THROTTLE_MINUTES = 5
 ALERT_THROTTLE_MAX_PER_WINDOW = 5
+ALERT_RETRIGGER_COOLDOWN_SECONDS = max(
+    0, int(os.environ.get("BARAQ_ALERT_RETRIGGER_COOLDOWN_SECONDS", "30"))
+)
 
 # --------------------------------------------------------------------------
 # ML lifecycle (retraining / staleness)
@@ -633,8 +636,12 @@ ALERT_THROTTLE_MAX_PER_WINDOW = 5
 ML_RETRAIN_AFTER_MINUTES = int(
     os.environ.get("BARAQ_ML_RETRAIN_AFTER_MINUTES", "5")
 )  # model older than this (minutes) is stale
-ML_RETRAIN_MIN_NEW_EVENTS = 200  # ...or more new events since training
-ML_RETRAIN_MIN_NEW_VERDICTS = 5  # ...or N analyst verdicts since training
+ML_RETRAIN_MIN_NEW_EVENTS = int(
+    os.environ.get("BARAQ_ML_RETRAIN_MIN_NEW_EVENTS", "200")
+)  # ...or more new events since training
+ML_RETRAIN_MIN_NEW_VERDICTS = int(
+    os.environ.get("BARAQ_ML_RETRAIN_MIN_NEW_VERDICTS", "5")
+)  # ...or N analyst verdicts since training
 ML_META_FILE = Path(
     os.environ.get(
         "BARAQ_ML_META_FILE",
@@ -945,7 +952,7 @@ API_IP_BLOCKLIST = [
 #: email bodies, chat, audit details) with AES-256-GCM before storage.
 #: Default ON for the packaged executable, OFF for source/dev runs unless
 #: explicitly enabled. Key lives in the DPAPI vault (secrets.dat).
-ENCRYPT_AT_REST = FROZEN or os.environ.get("BARAQ_ENCRYPT_AT_REST", "0").lower() in (
+ENCRYPT_AT_REST = FROZEN or os.environ.get("BARAQ_ENCRYPT_AT_REST", "1").lower() in (
     "1",
     "true",
     "yes",
@@ -1011,7 +1018,9 @@ API_KEYS: dict[str, str] = (
 ALLOW_DEV_KEYS = (not IS_PRODUCTION) and os.environ.get(
     "BARAQ_ALLOW_DEV_KEYS", "0"
 ).lower() in ("1", "true", "yes", "on")
-_USING_DEV_KEYS = bool(_env_keys) is False or set(_env_keys) & set(_DEFAULT_API_KEYS)
+_USING_DEV_KEYS = not _env_keys or any(
+    str(key).startswith("baraq-dev-") for key in _env_keys
+)
 if _USING_DEV_KEYS and not ALLOW_DEV_KEYS:
     raise RuntimeError(
         "Public development API keys (baraq-dev-*) are disabled via "
@@ -1104,6 +1113,19 @@ def _assert_production_safe() -> None:
         raise RuntimeError(
             "Production mode forbids localhost in BARAQ_CORS_ORIGINS. "
             "Set CORS origins to your actual domain(s)."
+        )
+    if not ENCRYPT_AT_REST:
+        raise RuntimeError(
+            "Production mode requires BARAQ_ENCRYPT_AT_REST=1."
+        )
+    if SOAR_DESTRUCTIVE_ACTIONS_ENABLED:
+        raise RuntimeError(
+            "Production mode refuses destructive SOAR actions by default. "
+            "Set BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED=0."
+        )
+    if METRICS_PUBLIC:
+        raise RuntimeError(
+            "Production mode requires BARAQ_METRICS_PUBLIC=0."
         )
     db_url = DATABASE_URL
     if "password" in db_url.lower() or "123" in db_url:
@@ -1256,6 +1278,11 @@ SMTP_FROM = os.environ.get("BARAQ_SMTP_FROM", "baraq@localhost")
 SMTP_TO = os.environ.get("BARAQ_SMTP_TO", "")
 SMTP_PASSWORD = _secret("BARAQ_SMTP_PASSWORD", "")
 NOTIFY_MIN_SEVERITY = os.environ.get("BARAQ_NOTIFY_MIN_SEVERITY", "high")
+#: Per-channel floors. A phone should only ring for a critical (otherwise
+#: analysts learn to ignore it), while email/webhook can take the high tier.
+#: Empty => fall back to BARAQ_NOTIFY_MIN_SEVERITY.
+TELEGRAM_MIN_SEVERITY = os.environ.get("BARAQ_TELEGRAM_MIN_SEVERITY", "")
+WEBHOOK_MIN_SEVERITY = os.environ.get("BARAQ_WEBHOOK_MIN_SEVERITY", "")
 # Telegram push (bot). Bot token is stored in the vault/secret env; chat id
 # is a number (or @channelusername). Leave empty to disable.
 TELEGRAM_BOT_TOKEN = _secret("BARAQ_TELEGRAM_BOT_TOKEN", "")
@@ -1486,7 +1513,7 @@ GRAPH_MAX_EDGES = int(os.environ.get("BARAQ_GRAPH_MAX_EDGES", "300"))
 # SIMULATED and performs no real side effect. Set to "1" to re-enable only
 # after the new detection engine is validated end-to-end.
 SOAR_DESTRUCTIVE_ACTIONS_ENABLED = os.environ.get(
-    "BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED", "1"
+    "BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED", "0"
 ).lower() in ("1", "true", "yes", "on")
 #: Actions classified as destructive / high-impact. Gated by the flag above.
 DESTRUCTIVE_ACTIONS = frozenset(

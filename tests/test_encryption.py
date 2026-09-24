@@ -16,6 +16,7 @@ pytestmark = pytest.mark.skipif(
 def encryption_on(monkeypatch, tmp_path):
     """Force encryption on and redirect the vault to a temp file."""
     monkeypatch.setenv("BARAQ_ENCRYPT_AT_REST", "1")
+    import backend.config as config_mod
     import backend.crypto as crypto_mod
     from backend.vault import SecretVault
 
@@ -24,6 +25,7 @@ def encryption_on(monkeypatch, tmp_path):
     def _fake_vault():
         return SecretVault(tmp_vault)
 
+    monkeypatch.setattr(config_mod, "ENCRYPT_AT_REST", True)
     monkeypatch.setattr(crypto_mod, "_open_vault", _fake_vault)
     crypto_mod._cached_key = None
     yield crypto_mod
@@ -44,10 +46,10 @@ def test_roundtrip(encryption_on):
 def test_encryption_disabled_passthrough(monkeypatch):
 
     monkeypatch.setenv("BARAQ_ENCRYPT_AT_REST", "0")
-    import importlib
+    import backend.config as config_mod
+    import backend.crypto as crypto
 
-    crypto = importlib.import_module("backend.crypto")
-    importlib.reload(crypto)
+    monkeypatch.setattr(config_mod, "ENCRYPT_AT_REST", False)
     assert crypto.encrypt_text("plain") == "plain"
     assert crypto.decrypt_text("plain") == "plain"
 

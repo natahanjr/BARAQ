@@ -19,8 +19,7 @@ Security notes:
 - AES-GCM is authenticated; tampered ciphertext raises and returns ``None``
   rather than silently corrupting data.
 - The key never touches disk except inside the DPAPI-protected vault blob.
-- Encryption is off unless explicitly enabled (``BARAQ_ENCRYPT_AT_REST=1``
-  or running the packaged ``BARAQ.exe`` where it defaults on).
+- Encryption is controlled by the immutable startup configuration.
 """
 
 from __future__ import annotations
@@ -31,7 +30,8 @@ import os
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from backend.config import APP_DIR, ENCRYPT_AT_REST, ENCRYPTION_KEY_NAME
+from backend import config as _config
+from backend.config import APP_DIR, ENCRYPTION_KEY_NAME
 
 _log = logging.getLogger(__name__)
 
@@ -44,15 +44,13 @@ _cached_key: bytes | None = None
 
 
 def _encryption_enabled() -> bool:
-    """True when at-rest encryption is on (frozen build, or env flag)."""
-    if ENCRYPT_AT_REST:
-        return True
-    return os.environ.get("BARAQ_ENCRYPT_AT_REST", "").lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
+    """True when at-rest encryption was enabled at process startup.
+
+    Resolved through ``backend.config`` (the single source of truth) rather
+    than a copy imported into this module, so the flag cannot drift between
+    modules that hold a reference to it.
+    """
+    return bool(_config.ENCRYPT_AT_REST)
 
 
 def _open_vault():
@@ -99,9 +97,9 @@ def encrypt_text(plaintext: str) -> str | None:
             + ":"
             + base64.urlsafe_b64encode(ciphertext).decode("ascii")
         )
-    except Exception:
-        _log.exception("encrypt_text failed; returning plaintext as fallback")
-        return plaintext
+    except Exception as exc:
+        _log.exception("encrypt_text failed; refusing to store plaintext")
+        raise RuntimeError("Sensitive value could not be encrypted") from exc
 
 
 def decrypt_text(value: str | None) -> str | None:
