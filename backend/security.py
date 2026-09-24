@@ -19,7 +19,7 @@ from collections.abc import Callable
 
 from fastapi import Depends, Header, HTTPException, Request
 
-from backend.auth import verify_token
+from backend.auth import session_fresh_for_user, verify_token
 from backend.config import API_KEYS, AUTH_ENABLED, ENFORCE_ADMIN_MFA
 from backend.database.connection import get_db
 from backend.database.models import User
@@ -54,7 +54,7 @@ def _bearer_payload(request: Request):
             auth = f"Bearer {session}"
     if not auth.lower().startswith("bearer "):
         return None
-    return verify_token(auth[7:].strip())
+    return verify_token(auth[7:].strip(), expected_type="access")
 
 
 def _bearer_key_role(request: Request) -> str | None:
@@ -119,7 +119,7 @@ def resolve_user(request: Request, db) -> User | None:
     if not payload:
         return None
     user = db.get(User, payload.get("uid"))
-    if not user or not user.is_active:
+    if not user or not user.is_active or not session_fresh_for_user(payload, user):
         return None
     return user
 
@@ -143,7 +143,7 @@ def require_role(*roles: str, allow_pending_password_change: bool = False) -> Ca
         payload = _bearer_payload(request)
         if payload:
             user = db.get(User, payload.get("uid"))
-            if not user or not user.is_active:
+            if not user or not user.is_active or not session_fresh_for_user(payload, user):
                 raise HTTPException(
                     status_code=401, detail="Invalid or expired session"
                 )
@@ -212,7 +212,7 @@ def require_auth_enroll_mfa(request: Request, db=Depends(get_db)):
     payload = _bearer_payload(request)
     if payload:
         user = db.get(User, payload.get("uid"))
-        if not user or not user.is_active:
+        if not user or not user.is_active or not session_fresh_for_user(payload, user):
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         return user.username
     key = request.headers.get(API_KEY_HEADER)

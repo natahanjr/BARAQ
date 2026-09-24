@@ -47,6 +47,7 @@ def test_verify_token_rejects_future_iat():
         "iat": future,
         "exp": future + 3600,
         "jti": "test",
+        "type": "access",
     }
     body = (
         base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8"))

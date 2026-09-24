@@ -1,17 +1,17 @@
-"""Authentication core: PBKDF2 password hashing + HMAC-signed session tokens.
+"""Authentication core: PBKDF2 password hashing + HMAC-signed tokens.
 
 Kept dependency-free (stdlib only). A token is ``base64(payload).signature``
 where the signature is an HMAC-SHA256 over the payload using a secret derived
-from the same secret as the API keys; payload carries user id, username, role
-and an expiry timestamp, so sessions are stateless and survive restarts.
+from the same secret as the API keys. Token types are explicit and are never
+interchangeable: access and refresh tokens are sessions, while MFA and reset
+tokens are short-lived capabilities accepted only by their dedicated endpoints.
 
 Revocation:
   Every token carries a random ``jti``. ``revoke_token(jti, db)`` adds
   it to the ``token_revocations`` table; ``verify_token`` then rejects
-  any token whose ``jti`` is present. This is what lets ``/api/auth/logout``
-  invalidate an outstanding session immediately instead of waiting for
-  the 12-hour TTL, and what gives admin disable / password change /
-  role demotion a way to revoke open sessions.
+  any token whose ``jti`` is present. A per-user session watermark invalidates
+  all outstanding stateless tokens after a password, role, organization, or
+  account-state change.
 """
 
 from __future__ import annotations
@@ -70,83 +70,123 @@ def _token_secret() -> bytes:
     return hashlib.sha256(AUTH_TOKEN_SECRET.encode("utf-8")).digest()
 
 
+ACCESS_TOKEN_TTL_SECONDS = 15 * 60
+REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 3600
+MFA_CHALLENGE_TTL_SECONDS = 5 * 60
+RESET_TOKEN_TTL_SECONDS = 60 * 60
+
+TOKEN_TYPE_ACCESS = "access"
+TOKEN_TYPE_REFRESH = "refresh"
+TOKEN_TYPE_MFA = "mfa"
+TOKEN_TYPE_RESET = "reset"
+TOKEN_TYPES = frozenset(
+    {TOKEN_TYPE_ACCESS, TOKEN_TYPE_REFRESH, TOKEN_TYPE_MFA, TOKEN_TYPE_RESET}
+)
+NON_SESSION_TOKEN_TYPES = frozenset({TOKEN_TYPE_MFA, TOKEN_TYPE_RESET})
+
+
+def _sign_token(payload: dict) -> str:
+    body = (
+        base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8"))
+        .rstrip(b"=")
+        .decode("ascii")
+    )
+    sig = hmac.new(_token_secret(), body.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{body}.{sig}"
+
+
 def create_token(
-    user_id: int, username: str, role: str, org: str = "", ttl_seconds: int = 15 * 60
+    user_id: int,
+    username: str,
+    role: str,
+    org: str = "",
+    ttl_seconds: int = ACCESS_TOKEN_TTL_SECONDS,
 ) -> str:
     """Create a short-lived access token (15 min default)."""
     now = int(time.time())
-    payload = {
-        "uid": user_id,
-        "sub": username,
-        "role": role,
-        "org": org,
-        "iat": now,
-        "exp": now + ttl_seconds,
-        "jti": secrets.token_hex(8),
-        "type": "access",
-    }
-    body = (
-        base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8"))
-        .rstrip(b"=")
-        .decode("ascii")
+    return _sign_token(
+        {
+            "uid": user_id,
+            "sub": username,
+            "role": role,
+            "org": org,
+            "iat": now,
+            "exp": now + ttl_seconds,
+            "jti": secrets.token_hex(16),
+            "type": TOKEN_TYPE_ACCESS,
+        }
     )
-    sig = hmac.new(_token_secret(), body.encode("ascii"), hashlib.sha256).hexdigest()
-    return f"{body}.{sig}"
 
 
-def create_refresh_token(user_id: int, username: str) -> str:
-    """Create a long-lived refresh token (7 days) that rotates on use."""
+def create_refresh_token(
+    user_id: int,
+    username: str,
+    ttl_seconds: int = REFRESH_TOKEN_TTL_SECONDS,
+) -> str:
+    """Create a long-lived refresh token that rotates on use."""
     now = int(time.time())
-    payload = {
-        "uid": user_id,
-        "sub": username,
-        "iat": now,
-        "exp": now + 7 * 24 * 3600,
-        "jti": secrets.token_hex(16),
-        "type": "refresh",
-    }
-    body = (
-        base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8"))
-        .rstrip(b"=")
-        .decode("ascii")
+    return _sign_token(
+        {
+            "uid": user_id,
+            "sub": username,
+            "iat": now,
+            "exp": now + ttl_seconds,
+            "jti": secrets.token_hex(16),
+            "type": TOKEN_TYPE_REFRESH,
+        }
     )
-    sig = hmac.new(_token_secret(), body.encode("ascii"), hashlib.sha256).hexdigest()
-    return f"{body}.{sig}"
 
 
-def create_mfa_challenge(user_id: int, username: str, ttl_seconds: int = 300) -> str:
-    """Short-lived token proving password verification passed.
-
-    Carries ``mfa`` in the payload so the login endpoint can tell it apart
-    from a full session token; it grants nothing until exchanged for a real
-    token via ``/api/auth/mfa/verify``.
-    """
-    payload = {
-        "uid": user_id,
-        "sub": username,
-        "role": "mfa-challenge",
-        "mfa": True,
-        "exp": int(time.time()) + ttl_seconds,
-        "jti": secrets.token_hex(8),
-    }
-    body = (
-        base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8"))
-        .rstrip(b"=")
-        .decode("ascii")
+def create_mfa_challenge(
+    user_id: int,
+    username: str,
+    ttl_seconds: int = MFA_CHALLENGE_TTL_SECONDS,
+) -> str:
+    """Create a password-verified challenge that is not a session token."""
+    now = int(time.time())
+    return _sign_token(
+        {
+            "uid": user_id,
+            "sub": username,
+            "role": "",
+            "mfa": True,
+            "iat": now,
+            "exp": now + ttl_seconds,
+            "jti": secrets.token_hex(16),
+            "type": TOKEN_TYPE_MFA,
+        }
     )
-    sig = hmac.new(_token_secret(), body.encode("ascii"), hashlib.sha256).hexdigest()
-    return f"{body}.{sig}"
 
 
-def verify_token(token: str, expected_type: str = "access") -> dict | None:
-    """Validate a session token; return its payload or None.
+def create_reset_token(
+    user_id: int,
+    username: str,
+    ttl_seconds: int = RESET_TOKEN_TTL_SECONDS,
+) -> str:
+    """Create a password-reset capability that is not a session token."""
+    now = int(time.time())
+    return _sign_token(
+        {
+            "uid": user_id,
+            "sub": username,
+            "role": "",
+            "iat": now,
+            "exp": now + ttl_seconds,
+            "jti": secrets.token_hex(16),
+            "type": TOKEN_TYPE_RESET,
+        }
+    )
 
-    Four failure paths, in order:
-      1. signature mismatch (tampering)
-      2. expiry (``exp`` field)
-      3. ``iat`` in the future (clock skew > 5 min, or forged token)
-      4. revocation (``jti`` present in token_revocations)
-    """
+
+def verify_token(
+    token: str,
+    expected_type: str = TOKEN_TYPE_ACCESS,
+) -> dict | None:
+    """Validate a signed token of exactly ``expected_type``."""
+    if expected_type not in TOKEN_TYPES:
+        raise ValueError(f"unknown expected_type: {expected_type!r}")
+    if not isinstance(token, str):
+        return None
     try:
         body, sig = token.split(".", 1)
         expected = hmac.new(
@@ -155,14 +195,16 @@ def verify_token(token: str, expected_type: str = "access") -> dict | None:
         if not hmac.compare_digest(sig, expected):
             return None
         payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+        token_type = payload.get("type")
+        if token_type not in TOKEN_TYPES or token_type != expected_type:
+            return None
+        if token_type in NON_SESSION_TOKEN_TYPES and payload.get("role"):
+            return None
         now = time.time()
         if int(payload.get("exp", 0)) < now:
             return None
-        iat = int(payload.get("iat", 0))
-        if iat > now + 300:
-            return None
-        # Verify token type
-        if payload.get("type", "access") != expected_type:
+        iat = int(payload.get("iat", 0) or 0)
+        if iat <= 0 or iat > now + 300:
             return None
         jti = payload.get("jti")
         if jti and _is_token_revoked(jti):
@@ -172,26 +214,48 @@ def verify_token(token: str, expected_type: str = "access") -> dict | None:
         return None
 
 
+def verify_mfa_challenge(token: str) -> dict | None:
+    return verify_token(token, expected_type=TOKEN_TYPE_MFA)
+
+
+def verify_reset_token(token: str) -> dict | None:
+    return verify_token(token, expected_type=TOKEN_TYPE_RESET)
+
+
 def verify_refresh_token(token: str) -> dict | None:
     """Validate a refresh token. Same as verify_token but expects type='refresh'."""
-    return verify_token(token, expected_type="refresh")
+    return verify_token(token, expected_type=TOKEN_TYPE_REFRESH)
+
+
+def session_fresh_for_user(payload: dict | None, user) -> bool:
+    """Return whether an access token is still valid for ``user``."""
+    if not payload or user is None or payload.get("type") != TOKEN_TYPE_ACCESS:
+        return False
+    iat = int(payload.get("iat", 0) or 0)
+    if iat <= 0:
+        return False
+    for attr in ("sessions_valid_after", "password_changed_at"):
+        mark = getattr(user, attr, None)
+        if mark is not None and iat <= int(mark.timestamp()):
+            return False
+    return True
+
+
+def verify_session_for_user(token: str, user) -> dict | None:
+    payload = verify_token(token, expected_type=TOKEN_TYPE_ACCESS)
+    return payload if session_fresh_for_user(payload, user) else None
 
 
 def verify_token_for_user(token: str, user) -> dict | None:
-    """Validate a token and reject it if issued before the user's last password change.
+    """Backward-compatible alias for :func:`verify_session_for_user`."""
+    return verify_session_for_user(token, user)
 
-    Call this from request handlers where the User object is available.
-    """
-    payload = verify_token(token)
-    if payload is None:
-        return None
-    # Invalidate tokens issued before the last password change
-    if user and user.password_changed_at:
-        token_iat = int(payload.get("iat", 0))
-        changed_at = int(user.password_changed_at.timestamp())
-        if token_iat < changed_at:
-            return None
-    return payload
+
+def revoke_all_sessions(user, reason: str) -> bool:
+    """Invalidate all outstanding sessions for a user."""
+    user.sessions_valid_after = datetime.now(UTC)
+    logger.info("Revoked all sessions for %s (reason=%s)", user.username, reason)
+    return True
 
 
 def _is_token_revoked(jti: str) -> bool:
@@ -221,17 +285,17 @@ def revoke_token(
     jti: str,
     username: str = "",
     reason: str = "",
-    ttl_seconds: int = 12 * 3600,
+    ttl_seconds: int = REFRESH_TOKEN_TTL_SECONDS,
 ) -> bool:
     """Add ``jti`` to the revocation list.
 
-    Idempotent: re-revoking the same ``jti`` is a no-op (the unique
-    index on ``token_revocations.jti`` rejects the second insert).
-    Returns True on a fresh revocation, False if the token was already
-    revoked or the write failed.
+    The retention period is never shorter than an access token so a revoked
+    token cannot become usable again while it is still cryptographically
+    valid. Re-revoking the same ``jti`` is a no-op.
     """
     if not jti:
         return False
+    ttl_seconds = max(int(ttl_seconds or 0), ACCESS_TOKEN_TTL_SECONDS)
     try:
         db = SessionLocal()
         try:

@@ -31,11 +31,18 @@ from sqlalchemy.orm import Session
 from backend import ldap as ldap_sso
 from backend.audit import client_ip, log_action
 from backend.auth import (
+    ACCESS_TOKEN_TTL_SECONDS,
+    REFRESH_TOKEN_TTL_SECONDS,
     create_mfa_challenge,
     create_refresh_token,
+    create_reset_token,
     create_token,
     hash_password,
+    prune_revoked_tokens,
+    revoke_all_sessions,
     revoke_token,
+    session_fresh_for_user,
+    verify_mfa_challenge,
     verify_password,
     verify_refresh_token,
     verify_token,
@@ -300,9 +307,9 @@ def password_reset_request(body: PasswordResetRequest, request: Request, db: Ses
     """Request a password reset. Always returns success to prevent enumeration."""
     user = db.scalar(select(User).where(User.username == body.username.strip()))
     if user and user.is_active:
-        reset_token = create_token(user.id, user.username, "reset", ttl_seconds=3600)
+        create_reset_token(user.id, user.username)
         log_action(db, user.username, "password_reset_requested", "user", str(user.id), "reset token generated", client_ip(request))
-        logger.info("Password reset token for %s: %s", user.username, reset_token[:20] + "...")
+        logger.info("Password reset token generated for %s", user.username)
     return {"ok": True, "message": "If this account exists, a reset link has been sent."}
 
 
@@ -348,21 +355,20 @@ def _provision_sso_user(
     remains the only way in for that account. ``source`` is "ldap" or "oidc"
     and only affects the audit detail.
 
-    Security: roles from external providers are NEVER trusted for initial
-    provisioning. New accounts are always created as 'analyst'. Existing
-    accounts keep their local role unless explicitly changed by an admin.
-    The exception is LDAP, where _role_for() uses group-based mapping
-    from the LDAP_ADMIN_GROUPS config (not the profile's role claim).
+    Security: no role *claim* from the provider is ever trusted. Both sources
+    derive the role from group membership intersected with the locally
+    configured ``LDAP_ADMIN_GROUPS`` allowlist (``_role_for()`` for LDAP,
+    ``oidc.profile_from_claims()`` for OIDC), so an operator has to be in a
+    canonical admin group and the token's own role/group labels cannot grant
+    privileges beyond that allowlist. The mapping is re-applied on every login
+    so a promotion or a demotion in the directory takes effect immediately
+    instead of leaving a stale local admin in place.
     """
     username = profile.get("username", "")
     user = db.scalar(select(User).where(User.username == username))
-    # Determine the role: use group-based mapping for LDAP, default to analyst for others
-    if source == "ldap":
-        # LDAP role is already computed by _role_for() from group membership
-        proposed_role = profile.get("role", "analyst")
-    else:
-        # OIDC and other SSO: never trust the external role claim
-        proposed_role = "analyst"
+    # Group-derived role computed by the source mapper (LDAP _role_for() /
+    # OIDC profile_from_claims()), never a raw token claim.
+    proposed_role = profile.get("role", "analyst")
     if user is None:
         user = User(
             username=username,
@@ -383,13 +389,14 @@ def _provision_sso_user(
             client_ip(request),
         )
         return user
-    # For existing users, only update role from LDAP group mapping, not from profile claims
-    if source == "ldap" and proposed_role != user.role:
+    role_changed = proposed_role != user.role
+    if role_changed:
         user.role = proposed_role
     full_name = profile.get("full_name", "")
-    if full_name and full_name != user.full_name:
+    name_changed = bool(full_name) and full_name != user.full_name
+    if name_changed:
         user.full_name = full_name
-    if source == "ldap" and proposed_role != user.role or full_name and full_name != user.full_name:
+    if role_changed or name_changed:
         db.commit()
         log_action(
             db,
@@ -397,7 +404,8 @@ def _provision_sso_user(
             "user.synced",
             "user",
             str(user.id),
-            f"{source} profile sync role={user.role}",
+            f"{source} profile sync role={user.role}"
+            + (" (role changed)" if role_changed else ""),
             client_ip(request),
         )
     return user
@@ -578,7 +586,7 @@ class MfaVerifyRequest(BaseModel):
 def mfa_verify(body: MfaVerifyRequest, request: Request, db: Session = Depends(get_db)):
     """Second step of a 2FA login: exchange the challenge for a session token."""
     _check_login_rate_limit(request)
-    payload = verify_token(body.challenge)
+    payload = verify_mfa_challenge(body.challenge)
     if not payload or not payload.get("mfa"):
         _record_login_failure(request, payload.get("sub", "") if payload else "")
         raise HTTPException(401, "Challenge expired — log in again")
@@ -656,7 +664,7 @@ def _set_session_cookie(resp: JSONResponse, token: str, refresh_token: str = "")
         samesite="strict",
         secure=COOKIE_SECURE,
         path="/",
-        max_age=15 * 60,  # 15 min access token
+        max_age=ACCESS_TOKEN_TTL_SECONDS,
     )
     if refresh_token:
         resp.set_cookie(
@@ -666,7 +674,7 @@ def _set_session_cookie(resp: JSONResponse, token: str, refresh_token: str = "")
             samesite="strict",
             secure=COOKIE_SECURE,
             path="/api/auth/refresh",
-            max_age=7 * 24 * 3600,
+            max_age=REFRESH_TOKEN_TTL_SECONDS,
         )
     resp.set_cookie(
         CSRF_COOKIE,
@@ -794,7 +802,7 @@ def mfa_disable(
 def logout(request: Request, db: Session = Depends(get_db)):
     auth = request.headers.get("Authorization", "")
     token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
-    payload = verify_token(token)
+    payload = verify_token(token, expected_type="access")
     actor = payload.get("sub", "unknown") if payload else "unknown"
     jti = payload.get("jti") if payload else None
     log_action(
@@ -807,13 +815,24 @@ def logout(request: Request, db: Session = Depends(get_db)):
         client_ip(request),
     )
     if jti:
-        revoke_token(jti, username=actor, reason="logout")
+        revoke_token(
+            jti,
+            username=actor,
+            reason="logout",
+            ttl_seconds=ACCESS_TOKEN_TTL_SECONDS,
+        )
     # Also revoke the refresh token if present
     refresh = request.cookies.get(REFRESH_COOKIE, "")
     if refresh:
         refresh_payload = verify_refresh_token(refresh)
         if refresh_payload and refresh_payload.get("jti"):
-            revoke_token(refresh_payload["jti"], username=actor, reason="logout")
+            revoke_token(
+                refresh_payload["jti"],
+                username=actor,
+                reason="logout",
+                ttl_seconds=REFRESH_TOKEN_TTL_SECONDS,
+            )
+    prune_revoked_tokens()
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(SESSION_COOKIE, path="/")
     resp.delete_cookie(CSRF_COOKIE, path="/")
@@ -837,8 +856,17 @@ def refresh_token(request: Request, db: Session = Depends(get_db)):
     user = db.get(User, payload.get("uid"))
     if not user or not user.is_active:
         raise HTTPException(401, "User not found or inactive")
+    if not session_fresh_for_user(
+        {"type": "access", "iat": int(payload.get("iat", 0))}, user
+    ):
+        raise HTTPException(401, "Session has been revoked")
     # Revoke old refresh token (rotation)
-    revoke_token(payload["jti"], username=user.username, reason="refresh-rotation")
+    revoke_token(
+        payload["jti"],
+        username=user.username,
+        reason="refresh-rotation",
+        ttl_seconds=REFRESH_TOKEN_TTL_SECONDS,
+    )
     # Issue new pair
     access_token = create_token(user.id, user.username, user.role, user.org)
     new_refresh = create_refresh_token(user.id, user.username)
@@ -974,6 +1002,7 @@ def change_password(
     user.password_hash = hash_password(body.new_password)
     user.must_change_password = False
     user.password_changed_at = datetime.now(UTC)
+    revoke_all_sessions(user, reason="password_changed")
     db.commit()
     log_action(
         db,
@@ -1027,6 +1056,12 @@ def update_user(
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(404, "User not found")
+    sensitive_change = (
+        (body.role is not None and body.role != user.role)
+        or (body.org is not None and body.org.strip() != user.org)
+        or (body.is_active is not None and bool(body.is_active) != bool(user.is_active))
+        or bool(body.password)
+    )
     if body.role is not None:
         user.role = body.role
     if body.full_name is not None:
@@ -1038,6 +1073,8 @@ def update_user(
     if body.password:
         user.password_hash = hash_password(body.password)
         user.password_changed_at = datetime.now(UTC)
+    if sensitive_change:
+        revoke_all_sessions(user, reason="admin_update")
     db.commit()
     log_action(
         db,
@@ -1179,7 +1216,7 @@ def clear_audit(request: Request, db: Session = Depends(get_db)):
     return {
         "cleared": count,
         "message": f"Cleared {count} audit record(s). Report generated before clearing.",
-        "report": report,
+        "report": {key: value for key, value in report.items() if key != "file_path"},
     }
 
 
