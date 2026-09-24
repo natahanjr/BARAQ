@@ -14,10 +14,12 @@ from __future__ import annotations
 import os
 import tempfile
 
-os.environ["BARAQ_DATABASE_URL"] = os.environ.get(
-    "BARAQ_TEST_DATABASE_URL",
+_test_database_url = os.environ.get("BARAQ_TEST_DATABASE_URL") or os.environ.get(
+    "BARAQ_DATABASE_URL",
     "postgresql+psycopg://postgres:password@127.0.0.1:55432/baraq_test",
 )
+os.environ["BARAQ_TEST_DATABASE_URL"] = _test_database_url
+os.environ["BARAQ_DATABASE_URL"] = _test_database_url
 print(f"[conftest] test DB URL -> {os.environ['BARAQ_DATABASE_URL']}")
 # The v2 telemetry/detection stack is fully enabled in the isolated test
 # database (never enabled for the production DB name - config gate).
@@ -50,6 +52,9 @@ os.environ["BARAQ_AGENT_KEYS"] = (
 os.environ["BARAQ_NO_SCHEDULER"] = "1"
 os.environ["BARAQ_AI_API_URL"] = ""
 os.environ["BARAQ_SCHEDULER_ENABLED"] = "0"  # no background collector in tests
+# Deterministic alert aggregation: the 30s re-trigger cooldown is a production
+# anti-flood guard, but tests loop the same finding and must see every trigger.
+os.environ["BARAQ_ALERT_RETRIGGER_COOLDOWN_SECONDS"] = "0"
 # Never spam Windows toasts / webhooks / email from synthetic test alerts.
 os.environ["BARAQ_TOAST_ENABLED"] = "0"
 # Cap sklearn/BLAS threads: IsolationForest grid search + CV oversubscribe
@@ -60,6 +65,22 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 # Disable CSRF for tests so cookie-session tests work without tokens.
 os.environ["BARAQ_CSRF_ENABLED"] = "0"
+os.environ.setdefault("BARAQ_TEST_MODE", "0")
+os.environ.setdefault("BARAQ_ALLOW_DEV_KEYS", "1")
+# Never run the suite under the production profile, even when the project
+# .env (non-overriding loader) configures BARAQ_ENV=production: the
+# production profile rejects the conftest dev API keys at import time.
+os.environ["BARAQ_ENV"] = "test"
+# Production .env raises the retrain gates (so hourly age-gate training
+# dominates); tests keep the historical low thresholds so staleness fixtures
+# stay small. setdefault wins because .env loads non-overriding later.
+os.environ.setdefault("BARAQ_ML_RETRAIN_MIN_NEW_EVENTS", "200")
+os.environ.setdefault("BARAQ_ML_RETRAIN_MIN_NEW_VERDICTS", "5")
+os.environ["BARAQ_ENCRYPT_AT_REST"] = "0"
+os.environ["BARAQ_TLS"] = "0"
+os.environ["BARAQ_COOKIE_SECURE"] = "0"
+os.environ["BARAQ_DATASET_ENABLED"] = "1"
+os.environ["BARAQ_DATASET_ANONYMIZE"] = "0"
 # Point the Sigma engine at an empty scratch dir: the full community rule set
 # (2,400+ YAML) takes ~25s to parse and would slow every RulesEngine test.
 os.environ["SIGMA_RULES_DIR"] = os.path.join(
@@ -89,6 +110,19 @@ def _table_names() -> list[str]:
 @pytest.fixture(scope="session", autouse=True)
 def _init_database():
     init_db()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_compliance_assessments():
+    """Compliance templates are process-wide mutable state - reset per test.
+
+    Without this, an assessment recorded by one test leaks into the next and
+    gap-analysis assertions depend on test order.
+    """
+    from backend.compliance.frameworks import reset_assessments
+
+    reset_assessments()
     yield
 
 

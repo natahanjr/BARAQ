@@ -28,16 +28,15 @@ def seeded_admin():
 
     db = SessionLocal()
     try:
-        if not db.query(User).filter(User.username == "admin").first():
-            db.add(
-                User(
-                    username="admin",
-                    password_hash=hash_password("baraq-test-admin"),
-                    role="admin",
-                    is_active=True,
-                )
-            )
-            db.commit()
+        user = db.query(User).filter(User.username == "admin").first()
+        if user is None:
+            user = User(username="admin", role="admin", is_active=True)
+            db.add(user)
+        user.password_hash = hash_password("baraq-test-admin")
+        user.is_active = True
+        user.sessions_valid_after = None
+        user.password_changed_at = None
+        db.commit()
     finally:
         db.close()
 
