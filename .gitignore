@@ -15,11 +15,7 @@ dist/
 *.db-shm
 *.db-wal
 *.sqlite*
-database/*.db
-database/model_meta.json
-database/model.bundle.joblib
-database/realtime_policy_state.json
-database/campaigns/
+database/
 pg/
 pgsql/
 postgres*.zip
@@ -50,6 +46,11 @@ certs/_k.pub
 .env.*
 secrets.dat
 secrets.tmp
+
+# Per-host agent configs / keys (generated; never commit real keys)
+agent_configs/*.json
+!agent_configs/company-fleet.json
+!agent_configs/README.md
 
 # Archives
 *.zip

@@ -1102,6 +1102,41 @@ for router in (
 
 app.mount("/reports", StaticFiles(directory=REPORT_DIR), name="reports")
 
+#: Allowlisted agent-distribution files (never mount the whole scripts/ tree).
+_SCRIPTS_ROOT = Path(__file__).resolve().parent.parent / "scripts"
+_AGENT_DIST_ALLOW = {
+    "agent.py": "text/x-python",
+    "install_agent.ps1": "text/plain",
+    "baraq.crt": "application/x-pem-file",
+    "cert": "application/x-pem-file",
+}
+
+
+@app.get("/scripts/{filename}")
+async def serve_agent_dist(filename: str) -> Response:
+    """Serve agent installer files to LAN endpoints.
+
+    Only an allowlist is exposed: agent.py, install_agent.ps1, and the
+    public TLS certificate. The rest of scripts/ (provisioning, vault
+    tools) is intentionally not downloadable.
+    """
+    name = filename.lower()
+    if name not in _AGENT_DIST_ALLOW:
+        raise HTTPException(status_code=404, detail="not found")
+    # cert / baraq.crt both resolve to certs/baraq.crt
+    if name in ("baraq.crt", "cert"):
+        from backend.config import TLS_CERT_FILE
+
+        path = Path(TLS_CERT_FILE)
+    else:
+        path = _SCRIPTS_ROOT / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="not found")
+    media = _AGENT_DIST_ALLOW[name]
+    if name == "install_agent.ps1":
+        media = "text/plain; charset=utf-8"
+    return FileResponse(path, media_type=media)
+
 
 def _safe_exc_msg(exc: Exception, max_len: int = 120) -> str:
     """Return a truncated, safe string of an exception for logging only."""

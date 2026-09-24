@@ -1,0 +1,44 @@
+{
+  "server": "https://192.168.1.7:8443",
+  "orgs": {
+    "it": {
+      "name": "IT Department",
+      "hosts": [
+        "srv-it-01",
+        "srv-it-02",
+        "ws-it-01",
+        "ws-it-02",
+        "ws-it-03"
+      ]
+    },
+    "finance": {
+      "name": "Finance",
+      "hosts": [
+        "ws-fin-01",
+        "ws-fin-02",
+        "ws-fin-03",
+        "ws-fin-04"
+      ]
+    },
+    "hr": {
+      "name": "Human Resources",
+      "hosts": [
+        "ws-hr-01",
+        "ws-hr-02"
+      ]
+    },
+    "ops": {
+      "name": "Operations",
+      "hosts": [
+        "ws-ops-01..ws-ops-20"
+      ]
+    },
+    "exec": {
+      "name": "Executive",
+      "hosts": [
+        "ws-exec-01",
+        "ws-exec-02"
+      ]
+    }
+  }
+}

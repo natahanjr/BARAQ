@@ -47,6 +47,9 @@ param(
     [string]$AgentDir = "$env:LOCALAPPDATA\BARAQAgent",
 
     [Parameter(Mandatory=$false)]
+    [string]$TlsCert = "",
+
+    [Parameter(Mandatory=$false)]
     [switch]$Uninstall
 )
 
@@ -118,9 +121,10 @@ Write-OK "Python found: $(& $python --version 2>&1)"
 
 # Check network connectivity
 Write-Status "Testing connection to BARAQ server..."
+$healthUrl = "$Server/api/health"
+$skipCert = $Server.StartsWith("https://")
 try {
-    $healthUrl = "$Server/api/health"
-    $response = Invoke-WebRequest -Uri $healthUrl -TimeoutSec 5 -UseBasicParsing
+    $response = Invoke-WebRequest -Uri $healthUrl -TimeoutSec 5 -UseBasicParsing -SkipCertificateCheck:$skipCert
     Write-OK "Server reachable (status $($response.StatusCode))"
 } catch {
     Write-Warn "Cannot reach server at $healthUrl - agent will retry on start"
@@ -137,7 +141,7 @@ Write-OK "Agent directory: $AgentDir"
 Write-Status "Downloading agent script..."
 $agentUrl = "$Server/scripts/agent.py"
 try {
-    Invoke-WebRequest -Uri $agentUrl -OutFile $AgentScript -TimeoutSec 30 -UseBasicParsing
+    Invoke-WebRequest -Uri $agentUrl -OutFile $AgentScript -TimeoutSec 30 -UseBasicParsing -SkipCertificateCheck:$skipCert
     Write-OK "Agent script downloaded"
 } catch {
     Write-Warn "Could not download from server, using local copy..."
@@ -162,6 +166,41 @@ try {
     }
 }
 
+# ── TLS certificate (self-signed / private CA) ──────────────────────────
+$tlsCaPath = ""
+if ($Server.StartsWith("https://")) {
+    if ($TlsCert -and (Test-Path $TlsCert)) {
+        $tlsCaPath = (Resolve-Path $TlsCert).Path
+        Write-OK "TLS cert (local): $tlsCaPath"
+    } else {
+        Write-Status "Downloading TLS certificate from server..."
+        $certLocal = Join-Path $AgentDir "baraq.crt"
+        $certUrls = @("$Server/scripts/baraq.crt", "$Server/scripts/cert")
+        $gotCert = $false
+        foreach ($u in $certUrls) {
+            try {
+                Invoke-WebRequest -Uri $u -OutFile $certLocal -TimeoutSec 15 -UseBasicParsing -SkipCertificateCheck
+                $tlsCaPath = $certLocal
+                $gotCert = $true
+                Write-OK "TLS cert downloaded: $certLocal"
+                break
+            } catch {}
+        }
+        if (-not $gotCert) {
+            # Fallback: local cert next to this installer (network share)
+            $shareCert = Join-Path $PSScriptRoot "baraq.crt"
+            if (Test-Path $shareCert) {
+                Copy-Item $shareCert $certLocal -Force
+                $tlsCaPath = $certLocal
+                Write-OK "TLS cert copied from installer dir"
+            } else {
+                Write-Warn "No TLS cert found - agent will use Windows cert store."
+                Write-Warn "Import certs\baraq.crt on this host, or re-run with -TlsCert."
+            }
+        }
+    }
+}
+
 # ── Create config file ───────────────────────────────────────────────────
 Write-Status "Creating agent config..."
 $config = @{
@@ -169,7 +208,7 @@ $config = @{
     key = $Key
     interval = $Interval
     org = $Org
-    tls_ca = ""
+    tls_ca = $tlsCaPath
     no_verify = $false
 } | ConvertTo-Json -Depth 3
 
@@ -222,7 +261,7 @@ Write-Status "Starting agent..."
 # Test server connectivity first
 try {
     $testUrl = "$Server/api/health"
-    $resp = Invoke-WebRequest -Uri $testUrl -TimeoutSec 5 -UseBasicParsing
+    $resp = Invoke-WebRequest -Uri $testUrl -TimeoutSec 5 -UseBasicParsing -SkipCertificateCheck:$skipCert
     Write-OK "Server confirmed reachable"
 
     # Start the task

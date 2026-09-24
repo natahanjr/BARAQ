@@ -158,6 +158,7 @@ BARAQ auto-generates OpenAPI documentation:
 
 | Document | Description |
 |---|---|
+| [`docs/PRODUCTION_DEPLOY.md`](docs/PRODUCTION_DEPLOY.md) | **Production LAN runbook (Windows, 50–200 endpoints, replace Splunk)** |
 | [`docs/BARAQ_Combined_Guide.md`](docs/BARAQ_Combined_Guide.md) | Operator/maintenance walkthrough |
 | [`docs/user-guide.md`](docs/user-guide.md) | Complete operator guide |
 | [`docs/architecture.md`](docs/architecture.md) | System architecture and data flow |
