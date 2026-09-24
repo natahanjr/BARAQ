@@ -268,24 +268,22 @@ class EnsembleStacker:
 
         v7: Uses gradient boosting when available, falls back to logistic regression,
         then to confidence-weighted blending.
+
+        Meta-features MUST match ``extract_meta_features`` used in training:
+        when markov is absent the model was fit on ``[if, sup, if*sup]``
+        (3 columns).  Building a 6-column vector here made every
+        ``predict_proba`` raise on shape mismatch and silently fall through
+        to the weighted blend — so the stacked learner never actually ran.
         """
-        meta = np.array(
-            [[
-                if_score, supervised_proba, markov_score,
-                if_score * supervised_proba,
-                if_score * markov_score,
-                supervised_proba * markov_score,
-            ]]
+        has_markov = markov_score != 0.0
+        meta = self.extract_meta_features(
+            np.array([if_score]),
+            np.array([supervised_proba]),
+            np.array([markov_score]) if has_markov else None,
         )
 
-        # Add v7 agreement features when markov available
-        if markov_score != 0.0:
-            if_agree = float((if_score > 0.5) == (supervised_proba > 0.5))
-            all_agree = float((if_score > 0.5) and (supervised_proba > 0.5) and (markov_score > 0.5))
-            any_anomaly = float((if_score > 0.5) or (supervised_proba > 0.5) or (markov_score > 0.5))
-            pred_var = float(np.var([if_score, supervised_proba, markov_score]))
-            meta = np.column_stack([meta, [[if_agree, all_agree, any_anomaly, pred_var]]])
-
+        # Agreement features only exist in training when markov is present
+        # (extract_meta_features already appended them for that path).
         # Try gradient boosting first
         if self.gb_model is not None:
             try:

@@ -52,6 +52,12 @@ os.environ["BARAQ_AI_API_URL"] = ""
 os.environ["BARAQ_SCHEDULER_ENABLED"] = "0"  # no background collector in tests
 # Never spam Windows toasts / webhooks / email from synthetic test alerts.
 os.environ["BARAQ_TOAST_ENABLED"] = "0"
+# Cap sklearn/BLAS threads: IsolationForest grid search + CV oversubscribe
+# 8 cores otherwise and multi-minute wall times on small test fixtures.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 # Disable CSRF for tests so cookie-session tests work without tokens.
 os.environ["BARAQ_CSRF_ENABLED"] = "0"
 # Point the Sigma engine at an empty scratch dir: the full community rule set
@@ -59,6 +65,11 @@ os.environ["BARAQ_CSRF_ENABLED"] = "0"
 os.environ["SIGMA_RULES_DIR"] = os.path.join(
     tempfile.gettempdir(), "baraq_test_sigma_rules_empty"
 )
+# Fixture/lab traffic uses TEST-NET IPs; keep them "external" for rules that
+# gate on BARAQ_TESTNET_EXTERNAL (production defaults to off).
+os.environ["BARAQ_TESTNET_EXTERNAL"] = "1"
+# Robustness eval is hundreds of IF predict calls (~50ms each) — skip in tests.
+os.environ["BARAQ_ML_SKIP_ROBUSTNESS"] = "1"
 
 import pytest
 from sqlalchemy import text

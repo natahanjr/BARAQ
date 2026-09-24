@@ -66,6 +66,13 @@ def prediction_stability_test(
     noise_levels = noise_levels or [0.02, 0.05, 0.10, 0.15]
     rng = np.random.default_rng(42)
 
+    # Scale perturbation count down for small matrices — IF predict is
+    # ~50ms/call with n_jobs=1; 4 levels x 10 perturbations x 3 streams
+    # otherwise dominates train() wall time on test-sized datasets.
+    if len(X) < 200:
+        n_perturbations = min(n_perturbations, 3)
+        noise_levels = noise_levels[:2]
+
     try:
         baseline_pred = model.predict(X)
     except Exception:
@@ -95,19 +102,19 @@ def prediction_stability_test(
         float(np.mean(list(stability_by_noise.values()))) if stability_by_noise else 0.0
     )
 
-    # Critical feature sensitivity analysis
+    # Critical feature sensitivity analysis (reuse baseline_pred; no extra
+    # model.predict(X) per feature).
     n_features = X.shape[1]
     critical_sensitivity: dict[int, float] = {}
-    critical_indices = [0, 13, 14]  # event_id, threat_intel_score (login stream)
+    critical_indices = [0, 13, 14]  # v9 login stream: logon_type / threat intel slots
     for feat_idx in critical_indices:
         if feat_idx >= n_features:
             continue
         X_perturbed = X.copy()
         X_perturbed[:, feat_idx] = np.clip(X[:, feat_idx] + 0.1, 0.0, 1.0)
         try:
-            base_pred = model.predict(X)
             perturbed_pred = model.predict(X_perturbed)
-            flip_rate = float(np.mean(base_pred != perturbed_pred))
+            flip_rate = float(np.mean(baseline_pred != perturbed_pred))
             critical_sensitivity[feat_idx] = flip_rate
         except Exception:
             logger.exception("Unexpected error")
@@ -151,21 +158,23 @@ def feature_importance_stability(
     rng = np.random.default_rng(42)
     importance_matrix = np.zeros((n_bootstrap, n_features))
 
-    try:
-        (model.score(X, np.zeros(len(X))) if hasattr(model, "score") else None)
-    except Exception:
-        logger.exception("Unexpected error")
-
     for b in range(n_bootstrap):
         idx = rng.choice(len(X), size=len(X), replace=True)
         X_boot = X[idx]
+        try:
+            # Compute base once per bootstrap (not per feature) — each
+            # decision_function call is ~50ms on IF with n_jobs=1.
+            base_dec = float(np.mean(np.abs(model.decision_function(X_boot))))
+        except Exception:
+            logger.exception("Unexpected error")
+            base_dec = None
+        if base_dec is None:
+            continue
         for f in range(n_features):
             X_perm = X_boot.copy()
             rng.shuffle(X_perm[:, f])
             try:
-                # Use decision_function magnitude as importance proxy
-                base_dec = np.mean(np.abs(model.decision_function(X_boot)))
-                perm_dec = np.mean(np.abs(model.decision_function(X_perm)))
+                perm_dec = float(np.mean(np.abs(model.decision_function(X_perm))))
                 importance_matrix[b, f] = abs(base_dec - perm_dec)
             except Exception:
                 logger.exception("Unexpected error")
@@ -332,6 +341,15 @@ def evaluate_robustness(
     Returns:
         Dict with per-stream robustness results and an overall score.
     """
+    import os
+
+    if os.environ.get("BARAQ_ML_SKIP_ROBUSTNESS", "0").lower() not in ("", "0", "false"):
+        return {
+            "overall_robustness_score": 0.0,
+            "per_stream": {},
+            "verdict": "skipped",
+        }
+
     results: dict[str, dict] = {}
     scores: list[float] = []
 
@@ -344,12 +362,12 @@ def evaluate_robustness(
         if model is None or X is None or len(X) < 5:
             continue
 
-        # Cap to 500 samples for speed
-        X_eval = X[:500] if len(X) > 500 else X
+        # Cap samples for speed (IF predict/decision_function ~50ms each)
+        X_eval = X[:100] if len(X) > 100 else X
 
         stability = prediction_stability_test(model, X_eval)
-        importance = feature_importance_stability(model, X_eval)
-        evasion = fgsm_evasion_test(model, X_eval, epsilon=0.1, n_samples=min(100, len(X_eval)))
+        importance = feature_importance_stability(model, X_eval, n_bootstrap=3)
+        evasion = fgsm_evasion_test(model, X_eval, epsilon=0.1, n_samples=min(50, len(X_eval)))
 
         stream_score = (
             stability["mean_stability"] * 0.5

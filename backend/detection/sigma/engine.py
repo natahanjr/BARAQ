@@ -25,6 +25,7 @@ from backend.detection.rules.base import BaseRule, DetectionResult
 from backend.detection.sigma.matcher import (
     PROCESS_FIELDS,
     SigmaCondition,
+    _split_key,
     build_event_fields,
     event_data_integrity,
 )
@@ -104,8 +105,7 @@ def _rule_uses_process_fields(rule: SigmaRule) -> bool:
             continue
         for key in selection:
             field = (
-                str(key)
-                .split("|")[0]
+                _split_key(key)[0]
                 .strip()
                 .lower()
                 .replace("_", "")

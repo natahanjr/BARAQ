@@ -445,6 +445,43 @@ def init_db() -> None:
                     logger.info(
                         "Migration: repaired %s.%s to TIMESTAMPTZ", table, column
                     )
+        # Type widening: columns created before the model grew past
+        # VARCHAR(16) reject longer detector ids (e.g. correlation_engine)
+        # and technique labels. Only widens; never shrinks.
+        if engine.dialect.name == "postgresql":
+            _WIDEN_TARGETS = (
+                ("v2_alerts", "detector_id", 64),
+                ("v2_alerts", "mitre_technique", 64),
+                ("detections", "detector_id", 64),
+                ("detections", "mitre_technique", 64),
+            )
+            for table, column, width in _WIDEN_TARGETS:
+                if not inspector.has_table(table):
+                    continue
+                col = next(
+                    (
+                        c
+                        for c in inspect(engine).get_columns(table)
+                        if c["name"] == column
+                    ),
+                    None,
+                )
+                if col is None:
+                    continue
+                current_len = getattr(col.get("type"), "length", None)
+                if current_len is None or current_len >= width:
+                    continue
+                with engine.begin() as conn:
+                    conn.exec_driver_sql(
+                        f"ALTER TABLE {table} ALTER COLUMN {column} "
+                        f"TYPE VARCHAR({width})"
+                    )
+                logger.info(
+                    "Migration: widened %s.%s to VARCHAR(%d)",
+                    table,
+                    column,
+                    width,
+                )
     with engine.begin() as conn:
         conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS idx_events_ts ON events (timestamp)"

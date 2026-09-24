@@ -1513,7 +1513,7 @@ PRODUCTION_DB_NAME = "sentinel"
 #: Allow v2 engines to run against the production database (local dev only).
 #: The default is False - the v2 workstream must never write to the production
 #: database unless the operator explicitly opts in.
-V2_ENGINES_ALLOW_PROD = os.environ.get("BARAQ_V2_ENGINES_ALLOW_PROD", "1").lower() in (
+V2_ENGINES_ALLOW_PROD = os.environ.get("BARAQ_V2_ENGINES_ALLOW_PROD", "0").lower() in (
     "1",
     "true",
     "yes",

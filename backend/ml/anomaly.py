@@ -35,7 +35,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
-from sqlalchemy import func, select
+from sqlalchemy import String, func, select
 
 from backend.collectors.validation import orm_event_is_corrupted
 from backend.config import (
@@ -64,6 +64,16 @@ from backend.database.models import (
 )
 
 logger = logging.getLogger("baraq.ml")
+
+#: Count of feature-helper DB failures since the counter was last reset.
+#: Training resets it, then refuses to promote models when too many feature
+#: queries failed (silent zero-features would otherwise poison the retrain).
+_FEATURE_ERROR_COUNT = 0
+
+#: Abort a retrain when this many feature helpers failed during it.
+_FEATURE_ERROR_ABORT_THRESHOLD = int(
+    os.environ.get("BARAQ_ML_FEATURE_ERROR_ABORT", "25")
+)
 
 try:
     from sklearn.ensemble import IsolationForest, RandomForestClassifier
@@ -135,6 +145,9 @@ def _grid_search_if(
     (pure unsupervised), uses the contamination-based heuristic:
     pick the model whose anomaly rate is closest to the median of the grid.
 
+    Small sample sizes skip the full CV grid (16 combos x folds is minutes
+    on contended hosts for a 50-event baseline) and return a safe default.
+
     Returns the best parameter dict.
     """
     if param_grid is None:
@@ -151,6 +164,14 @@ def _grid_search_if(
 
     if len(combos) <= 1:
         return combos[0] if combos else {"n_estimators": 100, "contamination": 0.05, "max_samples": min(256, len(X))}
+
+    # Tiny sets: full CV grid is pure overhead (and dominates wall time).
+    if len(X) < 100:
+        return {
+            "n_estimators": 100,
+            "max_samples": min(256, len(X)),
+            "contamination": 0.05,
+        }
 
     # If labels are available, use stratified split for evaluation
     if y is not None and len(np.unique(y)) >= 2 and len(X) >= 20:
@@ -174,6 +195,7 @@ def _grid_search_if(
                     random_state=random_state,
                     n_estimators=params.get("n_estimators", 100),
                     max_samples=ms,
+                    n_jobs=1,
                 )
                 model.fit(X_train)
                 try:
@@ -317,6 +339,39 @@ def _bool_fact(event, key: str) -> int:
     return 1 if _fact(event, key) else 0
 
 
+def _facts_of(event) -> dict:
+    """facts dict from any event shape (ORM, normalized dict with raw_json.facts)."""
+    try:
+        raw = event.raw_json
+    except AttributeError:
+        raw = event.get("raw_json") if isinstance(event, dict) else None
+    if isinstance(raw, dict):
+        facts = raw.get("facts")
+        if isinstance(facts, dict):
+            return facts
+        return {}
+    if isinstance(event, dict):
+        return event.get("facts") or {}
+    return {}
+
+
+def _fact_str(event, key: str, default: str = "") -> str:
+    """Read a string fact from any event shape (ORM, normalized dict, raw)."""
+    try:
+        raw = event.raw_json
+    except AttributeError:
+        raw = event.get("raw_json") if isinstance(event, dict) else None
+    if isinstance(raw, dict):
+        facts = raw.get("facts") or {}
+        if key in facts and facts[key] is not None:
+            return str(facts[key])
+    if isinstance(event, dict):
+        value = (event.get("raw") or {}).get(key)
+        if value is not None:
+            return str(value)
+    return default
+
+
 def _ip_feature(event, key: str) -> float:
     """Coerce an IP/status-code value into a stable numeric feature.
 
@@ -418,9 +473,27 @@ def _get_recent_events_count(session, behavior: str, hours: int = 24) -> int:
             or 0
         )
         return count
+    except Exception as exc:
+        return int(_feature_db_error(session, exc, 0))
+
+
+def _feature_db_error(session, exc, default=0.0):
+    """Handle a feature-helper DB failure: count it, roll back the aborted
+    transaction, and return ``default``.
+
+    Without an explicit rollback a single dialect/SQL error leaves the
+    session in PostgreSQL ``failed transaction`` state, so every subsequent
+    query on the same training session also fails - which is how features
+    used to silently collapse to 0.0 for the whole retrain.
+    """
+    global _FEATURE_ERROR_COUNT
+    _FEATURE_ERROR_COUNT += 1
+    logger.exception("ML feature helper failed: %s", exc)
+    try:
+        session.rollback()
     except Exception:
-        logger.exception("Unexpected error")
-        return 0
+        logger.exception("ML feature helper rollback failed")
+    return default
 
 
 def _get_failed_login_velocity_per_ip(
@@ -435,18 +508,17 @@ def _get_failed_login_velocity_per_ip(
                 .where(NormalizedEvent.event_id == 4625)  # Failed logon
                 .where(NormalizedEvent.timestamp >= since)
                 .where(
-                    func.json_extract_path_text(
-                        NormalizedEvent.raw_json, "facts", "source_ip"
-                    )
+                    # JSONB path extract via cast(String) - portable across
+                    # TypeDecorator JSON/JSONB; never SQLite-only fns.
+                    NormalizedEvent.raw_json["facts"]["source_ip"].cast(String)
                     == source_ip
                 )
             )
             or 0
         )
         return count / max(minutes, 1.0)
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return float(_feature_db_error(session, exc, 0.0))
 
 
 def _get_logon_type_entropy(session, hours: int = 24) -> float:
@@ -464,7 +536,7 @@ def _get_logon_type_entropy(session, hours: int = 24) -> float:
 
         # Count logon types
         type_counts: dict[int, int] = {}
-        for raw in rows:
+        for (raw,) in rows:
             facts = (raw or {}).get("facts") or {}
             logon_type = int(facts.get("logon_type", 0))
             type_counts[logon_type] = type_counts.get(logon_type, 0) + 1
@@ -483,9 +555,8 @@ def _get_logon_type_entropy(session, hours: int = 24) -> float:
         # Normalize by max possible entropy (log2 of number of types)
         max_entropy = math.log2(max(len(type_counts), 1))
         return min(1.0, entropy / max(max_entropy, 1.0))
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_source_ip_diversity(session, target_user: str, hours: int = 24) -> float:
@@ -500,7 +571,7 @@ def _get_source_ip_diversity(session, target_user: str, hours: int = 24) -> floa
 
         ips = set()
         total = 0
-        for raw in rows:
+        for (raw,) in rows:
             facts = (raw or {}).get("facts") or {}
             user = str(facts.get("target_user", "") or "")
             if user.lower() == target_user.lower():
@@ -513,9 +584,8 @@ def _get_source_ip_diversity(session, target_user: str, hours: int = 24) -> floa
             return 0.0
 
         return min(1.0, len(ips) / max(total, 1))
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_time_between_logins_zscore(session, hours: int = 24) -> float:
@@ -560,9 +630,8 @@ def _get_time_between_logins_zscore(session, hours: int = 24) -> float:
 
         # Normalize to [0, 1] range (clip extreme values)
         return min(1.0, max(0.0, abs(z_score) / 3.0))
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_privilege_escalation_indicator(session, hours: int = 1) -> float:
@@ -600,9 +669,8 @@ def _get_privilege_escalation_indicator(session, hours: int = 1) -> float:
                 return 1.0
 
         return 0.0
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -612,7 +680,7 @@ def _get_parent_child_anomaly_score(event) -> float:
     """Detect risky parent-child process combinations."""
     try:
         facts = (
-event.facts or {}
+_facts_of(event)
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -644,16 +712,15 @@ event.facts or {}
                         return 1.0
 
         return 0.0
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_commandline_entropy(event) -> float:
     """Calculate Shannon entropy of command line (obfuscation indicator)."""
     try:
         facts = (
-event.facts or {}
+_facts_of(event)
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -688,7 +755,7 @@ def _get_process_frequency_per_user(session, event, hours: int = 1) -> float:
     """Get process execution frequency for the current user."""
     try:
         facts = (
-event.facts or {}
+_facts_of(event)
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -708,16 +775,15 @@ event.facts or {}
         )
 
         return min(1.0, count / 50.0)  # Normalize to [0, 1] (50 processes/hour = max)
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_lolbin_abuse_indicator(event) -> float:
     """Detect Living-off-the-Land Binary (LOLBin) abuse."""
     try:
         facts = (
-event.facts or {}
+_facts_of(event)
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -752,16 +818,15 @@ event.facts or {}
                         return 1.0
 
         return 0.0
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_new_process_path_indicator(session, event, hours: int = 24) -> float:
     """Detect processes running from paths not seen in baseline."""
     try:
         facts = (
-event.facts or {}
+_facts_of(event)
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -807,16 +872,15 @@ event.facts or {}
             return 0.0
         else:
             return 1.0
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_executable_path_entropy(event) -> float:
     """Shannon entropy of the executable file path (obfuscation indicator)."""
     try:
         facts = (
-event.facts or {}
+_facts_of(event)
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -835,16 +899,15 @@ event.facts or {}
             if p > 0:
                 entropy -= p * math.log2(p)
         return min(1.0, entropy / 7.0)
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_system_directory_indicator(event) -> float:
     """1.0 if process runs from System32/SysWOW64, 0.0 otherwise."""
     try:
         facts = (
-event.facts or {}
+_facts_of(event)
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -865,7 +928,7 @@ def _get_parent_process_risk_score(event) -> float:
     """Risk score based on parent process legitimacy."""
     try:
         facts = (
-event.facts or {}
+_facts_of(event)
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -895,7 +958,7 @@ def _get_commandline_token_count(event) -> float:
     """Count of command-line tokens (argument complexity indicator)."""
     try:
         facts = (
-event.facts or {}
+_facts_of(event)
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -915,7 +978,7 @@ def _get_process_chain_depth(session, event, hours: int = 1) -> float:
     """Estimate process chain depth (deeper chains = more suspicious)."""
     try:
         facts = (
-event.facts or {}
+_facts_of(event)
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -939,9 +1002,8 @@ event.facts or {}
             depth += 1
             break
         return min(1.0, depth / 5.0)
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_time_since_last_event(session, behavior: str) -> float:
@@ -969,9 +1031,8 @@ def _get_time_since_last_event(session, behavior: str) -> float:
 
         delta = datetime.now(UTC) - last_event
         return max(0.0, min(24.0, delta.total_seconds() / 3600.0))  # cap at 24 hours
-    except Exception:
-        logger.exception("Unexpected error")
-        return 24.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 24.0)
 
 
 def _get_threat_intel_score(event) -> float:
@@ -1045,9 +1106,8 @@ def _get_threat_intel_score(event) -> float:
         # Default: public IP with no special indicators
         return 0.4
 
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.3
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.3)
 
 
 def _get_behavioral_velocity(session, behavior: str, hours: int = 1) -> float:
@@ -1070,9 +1130,8 @@ def _get_behavioral_velocity(session, behavior: str, hours: int = 1) -> float:
             or 0
         )
         return count / max(hours, 1.0)  # events per hour
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_failed_success_ratio(session, source_ip: str, hours: int = 24) -> float:
@@ -1099,16 +1158,15 @@ def _get_failed_success_ratio(session, source_ip: str, hours: int = 24) -> float
         if total == 0:
             return 0.0
         return failed / total
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_auth_protocol_indicator(event) -> float:
     """Detect authentication protocol: NTLM vs Kerberos vs other."""
     try:
         facts = (
-event.facts or {}
+_facts_of(event)
         )
         if not facts and isinstance(event, dict):
             facts = (event.get("raw_json") or {}).get("facts") or {}
@@ -1121,9 +1179,8 @@ event.facts or {}
         if "negotiate" in logon_process or "negotiate" in auth_package:
             return 0.3
         return 0.5
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.5
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.5)
 
 
 def _get_distinct_source_ips(session, target_user: str, hours: int = 24) -> float:
@@ -1136,7 +1193,7 @@ def _get_distinct_source_ips(session, target_user: str, hours: int = 24) -> floa
             .where(NormalizedEvent.timestamp >= since)
         ).all()
         ips = set()
-        for raw in rows:
+        for (raw,) in rows:
             facts = (raw or {}).get("facts") or {}
             user = str(facts.get("target_user", "") or "")
             if user.lower() == target_user.lower():
@@ -1144,9 +1201,8 @@ def _get_distinct_source_ips(session, target_user: str, hours: int = 24) -> floa
                 if ip:
                     ips.add(ip)
         return min(1.0, len(ips) / 10.0)
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_hour_distribution_entropy(session, hours: int = 24) -> float:
@@ -1176,9 +1232,8 @@ def _get_hour_distribution_entropy(session, hours: int = 24) -> float:
                 entropy -= p * math.log2(p)
         max_entropy = math.log2(max(len(hour_counts), 1))
         return min(1.0, entropy / max(max_entropy, 1.0))
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_cross_stream_features(
@@ -1274,9 +1329,8 @@ def _get_cross_stream_features(
             has_process_then_network,
             min(event_diversity / 5.0, 1.0),  # Event diversity (normalized)
         ]
-    except Exception:
-        logger.exception("Unexpected error")
-        return [0.0] * 8
+    except Exception as exc:
+        return _feature_db_error(session, exc, [0.0] * 8)
 
 
 # ---------------------------------------------------------------------------
@@ -1317,9 +1371,8 @@ def _get_port_scan_indicator(session, remote_ip: str, minutes: int = 60) -> floa
 
         # Port scan indicator: >10 unique ports in short time = suspicious
         return min(1.0, unique_ports / 20.0)  # Normalize: 20 ports = max
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_exfiltration_indicator(session, remote_ip: str, hours: int = 1) -> float:
@@ -1345,9 +1398,8 @@ def _get_exfiltration_indicator(session, remote_ip: str, hours: int = 1) -> floa
         ratio = bytes_sent / bytes_recv
         # Normalize: ratio > 10 = high exfiltration indicator
         return min(1.0, ratio / 10.0)
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_beaconing_indicator(session, remote_ip: str, hours: int = 1) -> float:
@@ -1394,9 +1446,8 @@ def _get_beaconing_indicator(session, remote_ip: str, hours: int = 1) -> float:
         # Beaconing indicator: CV < 0.3 = regular, CV > 1.0 = random
         # Invert so high score = more beaconing-like
         return max(0.0, min(1.0, 1.0 - cv))
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_dns_query_pattern(session, hours: int = 1) -> float:
@@ -1454,9 +1505,8 @@ def _get_dns_query_pattern(session, hours: int = 1) -> float:
         diversity_score = max(0.0, 1.0 - domain_diversity)  # Low diversity = high score
 
         return min(1.0, 0.4 * rate_score + 0.3 * size_score + 0.3 * diversity_score)
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_dns_tunnel_indicator(session, hours: int = 1) -> float:
@@ -1482,9 +1532,8 @@ def _get_dns_tunnel_indicator(session, hours: int = 1) -> float:
             return 0.0
         queries_per_domain = total / unique_domains
         return min(1.0, queries_per_domain / 50.0)
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_dns_long_label_indicator(session, hours: int = 1) -> float:
@@ -1508,9 +1557,8 @@ def _get_dns_long_label_indicator(session, hours: int = 1) -> float:
             if max_label > 40:
                 long_labels += 1
         return min(1.0, long_labels / max(len(rows), 1))
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_protocol_anomaly_score(session, remote_ip: str, remote_port: int) -> float:
@@ -1552,9 +1600,8 @@ def _get_tls_https_ratio(session, hours: int = 1) -> float:
         if total == 0:
             return 0.0
         return https / total
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_connection_diversity_score(session, hours: int = 1) -> float:
@@ -1578,9 +1625,8 @@ def _get_connection_diversity_score(session, hours: int = 1) -> float:
         if total == 0:
             return 0.0
         return min(1.0, unique_ips / total)
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_data_volume_asymmetry(session, remote_ip: str, hours: int = 1) -> float:
@@ -1601,9 +1647,8 @@ def _get_data_volume_asymmetry(session, remote_ip: str, hours: int = 1) -> float
             return 0.0
         asymmetry = abs(sent - recv) / max(sent + recv, 1)
         return min(1.0, asymmetry)
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_connection_regularity_score(session, remote_ip: str, hours: int = 1) -> float:
@@ -1633,9 +1678,8 @@ def _get_connection_regularity_score(session, remote_ip: str, hours: int = 1) ->
         std_int = (sum((i - mean_int)**2 for i in intervals) / len(intervals))**0.5
         cv = std_int / mean_int
         return max(0.0, min(1.0, 1.0 - cv))
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_outbound_connection_ratio(session, hours: int = 1) -> float:
@@ -1660,9 +1704,8 @@ def _get_outbound_connection_ratio(session, hours: int = 1) -> float:
         if total == 0:
             return 0.0
         return outbound / total
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def event_feature_vector(event, _shared_session=None) -> list[float] | None:
@@ -1685,19 +1728,11 @@ def event_feature_vector(event, _shared_session=None) -> list[float] | None:
 
         if behavior == "login":
             logon_type = _fact(event, "logon_type")
-            source_ip = (
-                str(event.facts.get("source_ip", "") or "")
-            )
-            target_user = (
-                str(
-                    str(event.facts.get("target_user", "") or "")
-                )
-            )
+            source_ip = _fact_str(event, "source_ip", "")
+            target_user = _fact_str(event, "target_user", "")
 
             # Base features (v9: no event_id to prevent label leakage)
-            sub_status_raw = (
-                (event.facts.get("sub_status", 0))
-            )
+            sub_status_raw = _fact(event, "sub_status", 0.0)
             try:
                 sub_status = int(sub_status_raw)
             except (ValueError, TypeError):
@@ -1739,7 +1774,10 @@ def event_feature_vector(event, _shared_session=None) -> list[float] | None:
                 session.scalar(
                     select(func.count(NormalizedEvent.id))
                     .where(NormalizedEvent.event_id == 4625)
-                    .where(NormalizedEvent.raw_json["facts"]["source_ip"].astext == source_ip)
+                    .where(
+                        NormalizedEvent.raw_json["facts"]["source_ip"].cast(String)
+                        == source_ip
+                    )
                 )
                 or 0
             ) if source_ip else 0
@@ -1887,13 +1925,13 @@ def event_feature_vector(event, _shared_session=None) -> list[float] | None:
 
         # For network or unknown behaviors, return None to use existing network handling
         return None
-    except Exception:
-        logger.exception("Unexpected error")
-        try:
-            session.rollback()
-        except Exception:
-            logger.exception("Unexpected error")
+    except AttributeError as exc:
+        # Shape mismatch (e.g. dict passed where .facts expected) - not a DB
+        # failure; never count toward the feature-error abort threshold.
+        logger.debug("event_feature_vector shape error: %s", exc)
         return None
+    except Exception as exc:
+        return _feature_db_error(session, exc, None)
     finally:
         if owns_session:
             session.close()
@@ -1989,9 +2027,8 @@ def _get_event_burst_score(session, behavior: str, minutes: int = 5) -> float:
         # Extrapolate hourly rate from the burst window
         extrapolated = float(recent_count) * (60.0 / max(minutes, 1))
         return min(2.0, extrapolated / max(float(hourly_count), 1.0))
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 def _get_kill_chain_phase(event) -> float:
@@ -2051,9 +2088,8 @@ def _get_user_attack_frequency(session, user: str, hours: int = 168) -> float:
         if total < 3:
             return 0.0
         return min(1.0, attacks / total)
-    except Exception:
-        logger.exception("Unexpected error")
-        return 0.0
+    except Exception as exc:
+        return _feature_db_error(session, exc, 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -2176,7 +2212,7 @@ def _load_network_features(
                 if len(parts) == 4:
                     return sum(int(p) << (8 * (3 - i)) for i, p in enumerate(parts)) / 4_294_967_296.0
             except Exception:
-                logger.exception("Unexpected error")
+                return 0.0
             return 0.0
 
         def _is_private(ip: str) -> float:
@@ -2388,6 +2424,7 @@ def _kfold_cross_validate(
     n_folds: int = 5,
     contamination: float = 0.05,
     random_state: int = 42,
+    n_estimators: int = 100,
 ) -> dict:
     """K-fold cross-validation for anomaly detection models.
 
@@ -2409,11 +2446,12 @@ def _kfold_cross_validate(
         fold_contam = np.mean(y_train) if len(y_train) > 0 else contamination
         fold_contam = max(0.01, min(0.5, fold_contam))
 
-        model = model_class(
+        model = IsolationForest(
             contamination=fold_contam,
             random_state=random_state + fold_idx,
-            n_estimators=100,
+            n_estimators=n_estimators,
             max_samples=min(256, len(X_train)),
+            n_jobs=1,
         )
         model.fit(X_train)
 
@@ -2455,6 +2493,7 @@ def _multi_contamination_ensemble(
             random_state=random_state,
             n_estimators=n_estimators,
             max_samples=min(256, len(X)),
+            n_jobs=1,
         )
         m.fit(X)
         models.append(m)
@@ -3187,15 +3226,22 @@ class MLAnomalyDetector:
     # ------------------------------------------------------------------
     @staticmethod
     def _tune_threshold(
-        model, X: np.ndarray, y, supervised=None, target_fpr: float | None = None
+        model,
+        X: np.ndarray,
+        y,
+        supervised=None,
+        target_fpr: float | None = None,
+        ensembles: list | None = None,
+        meta=None,
     ):
         """Return ``(threshold, baseline_cdf)`` for a freshly-fit stream model.
 
         The threshold lives in the *deployed* score space - the rank of the
         IsolationForest raw score when no supervised classifier is active,
-        otherwise the exact ``0.6*rank + 0.4*p`` blend used by
-        :meth:`_combined_score`. Tuning on the deployed space keeps the
-        decision boundary consistent with what actually runs:
+        otherwise the exact score :meth:`_combined_score` produces (ensemble
+        meta-learner when trained, else ``0.6*rank + 0.4*p``). Tuning on the
+        deployed space keeps the decision boundary consistent with what
+        actually runs:
 
         * **CFAR boundary (always)** - the ``(1 - target_fpr)`` quantile of
           the training score distribution, so at most ``target_fpr`` of the
@@ -3206,8 +3252,13 @@ class MLAnomalyDetector:
           CFAR one (more sensitive of the two), which prevents recall
           collapse when labels are sparse or noisy.
 
-        ``baseline_cdf`` is always the raw-score CDF (the input to
-        :meth:`_rank_of`), so the stored baselines keep their semantics.
+        ``baseline_cdf`` is always the raw-score CDF of the *primary* model
+        (the input to :meth:`_rank_of`), so the stored baselines keep their
+        semantics. When ``ensembles`` is provided, ranks are the median of
+        member ranks — the same statistic :meth:`_combined_score` deploys —
+        so the CFAR floor actually bounds the live FPR. When ``meta`` is
+        provided and trained, blended scores go through
+        ``meta.predict(rank, p)`` to match the stacked deployment path.
         """
         target_fpr = ML_TARGET_FPR if target_fpr is None else target_fpr
         if len(X) == 0:
@@ -3217,6 +3268,17 @@ class MLAnomalyDetector:
         )
         baseline = MLAnomalyDetector._compact_baseline(raws)
         ranks = MLAnomalyDetector._rank_of(raws, baseline)
+        if ensembles:
+            member_ranks = []
+            for ens in ensembles:
+                ens_raws = np.array(
+                    [MLAnomalyDetector._score_with(ens, row) for row in X],
+                    dtype=float,
+                )
+                member_ranks.append(
+                    MLAnomalyDetector._rank_of(ens_raws, baseline)
+                )
+            ranks = np.median(np.vstack(member_ranks), axis=0)
         if supervised is not None:
             try:
                 proba = supervised.predict_proba(X)
@@ -3224,7 +3286,13 @@ class MLAnomalyDetector:
             except Exception:
                 logger.exception("Unexpected error")
                 p = np.zeros(len(X))
-            scores = 0.6 * ranks + 0.4 * p
+            if meta is not None and getattr(meta, "is_trained", False):
+                scores = np.array(
+                    [float(meta.predict(r, pi)) for r, pi in zip(ranks, p)],
+                    dtype=float,
+                )
+            else:
+                scores = 0.6 * ranks + 0.4 * p
         else:
             scores = ranks
         score_baseline = MLAnomalyDetector._compact_baseline(scores)
@@ -3248,8 +3316,12 @@ class MLAnomalyDetector:
         else:
             floor = 0.05
         floor = float(np.clip(floor, 0.05, 0.98))
+        # best_j must start as a *metric* sentinel (not floor): initializing
+        # it to floor made `best_j > 0` true even when no Youden candidate
+        # was ever accepted, returning the untouched best_j_t = -1.0 and
+        # flagging every event (score > -1).
         best_t, best_f1 = floor, -1.0
-        best_j, best_j_t = floor, -1.0
+        best_j, best_j_t = -1.0, floor
         for t in np.linspace(floor, 0.98, 47):
             pred = scores_arr > t
             tp = int(((pred) & (y_arr == 1)).sum())
@@ -3269,11 +3341,11 @@ class MLAnomalyDetector:
                 best_j, best_j_t = youden_j, float(t)
         if best_f1 <= 0:
             return cfar, baseline
-        # Prefer Youden's J threshold (maximizes recall + specificity)
-        # Always use it if it exists — better for SOC detection
-        if best_j > 0:
+        # Prefer Youden's J threshold when it found a positive boundary;
+        # otherwise fall back to the F1 optimum (or CFAR above).
+        if best_j > 0 and best_j_t >= floor:
             return best_j_t, baseline
-        return best_t, baseline
+        return best_t if best_t >= floor else cfar, baseline
 
     # ------------------------------------------------------------------
     # Label helpers (shared between supervised training and validation)
@@ -3346,19 +3418,20 @@ class MLAnomalyDetector:
             sip = str(facts.get("source_ip", ""))
             if sip and sip != "-" and is_attack_ip_offline(sip):
                 return True
-            # Wrong password (0xC000006A) — common in brute force
-            if sub_status == 3221225578:
-                return True
             # Account does not exist (0xC0000064) — enumeration attempt
             if sub_status == 3221225572:
                 return True
             # Logon failure with NTLM (0xC000006D) — suspicious
             if sub_status == 3221225581:
                 return True
-            # Non-interactive logon types with failure = suspicious
-            lt = int(facts.get("logon_type", 0))
-            if lt in (3, 4, 5, 8, 10) and sub_status != 0:
-                return True
+            # Wrong password (0xC000006A) alone is routine (typos, forgotten
+            # passwords). Only elevate when combined with a non-interactive
+            # / uncommon logon type (batch/service/unlock/cleartext/RDP) —
+            # interactive (2) and network (3) failures are the benign baseline.
+            if sub_status == 3221225578:
+                lt = int(facts.get("logon_type", 0))
+                if lt in (4, 5, 7, 8, 9, 10, 11):
+                    return True
             return False
 
         # Successful logon (4624): logon_type IS in the feature vector.
@@ -3425,6 +3498,17 @@ class MLAnomalyDetector:
             )
             if any(s in cmd_lower for s in suspicious_cmds):
                 return True
+            # New process from a user-writable path (Temp/Downloads/Public/Users
+            # outside system dirs) — the classic implant-dropper pattern. Path
+            # location is context the supervised head can generalize on without
+            # reusing the has_encoded/has_hidden feature flags as labels.
+            writable_dir = any(
+                p in image_lower
+                for p in ("\\temp\\", "\\tmp\\", "\\downloads\\", "\\appdata\\",
+                          "\\public\\", "\\users\\")
+            )
+            if writable_dir and not is_system_path and image_lower:
+                return True
             # Sysmon EventID 10 (Process Access): lsass access = credential theft
             if eid == 10:
                 granted = str(facts.get("granted_access", "")).lower()
@@ -3461,35 +3545,152 @@ class MLAnomalyDetector:
         from backend.ml.realworld_labeler import is_attack_ip_offline
 
         X, metas = _load_network_features(session, since)
-        if not metas:
-            return X, np.empty((0,), dtype=int), []
+        rows_x: list[list[float]] = X.tolist() if X.size else []
+        rows_meta: list[dict] = list(metas)
+        # Parallel labels: -1 = event-derived (fill below), 0/1 = NetworkConnection
+        pending: list[int] = [-1] * len(rows_meta)
 
-        y = np.zeros(len(metas), dtype=int)
-        ips = []
-        for i, m in enumerate(metas):
+        def _is_attack_ip(ip: str) -> bool:
+            if not ip:
+                return False
+            return bool(
+                ip.startswith(_NET_ATTACK_PREFIXES)
+                or is_attack_ip_offline(ip)
+            )
+
+        # Also attribute labels from NetworkConnection flows (the live network
+        # telemetry path): group by remote_ip and emit one sample per IP so
+        # threat-intel / documentation-prefix hits train the supervised head.
+        try:
+            from backend.database.models import NetworkConnection as _NC
+
+            nc_stmt = select(
+                _NC.remote_ip,
+                func.count(_NC.id),
+                func.count(func.distinct(_NC.remote_port)),
+                func.sum(_NC.bytes_sent),
+                func.sum(_NC.bytes_recv),
+                func.avg(_NC.duration_seconds),
+                func.min(_NC.observed_at),
+            )
+            if since is not None:
+                nc_stmt = nc_stmt.where(_NC.observed_at >= since)
+            nc_rows = session.execute(
+                nc_stmt.group_by(_NC.remote_ip)
+            ).all()
+        except Exception:
+            logger.debug("NetworkConnection label load failed", exc_info=True)
+            nc_rows = []
+
+        # Match score_network_connection's deployed vector layout.
+        import math as _math
+
+        now_ref = datetime.now(UTC)
+        hour = now_ref.hour
+        for ip, count, dports, bsent, brecv, dur, obs in nc_rows:
+            remote_ip = str(ip or "unknown")
+            count_i = int(count or 0)
+            dports_i = int(dports or 0)
+            is_atk_i = 1 if _is_attack_ip(remote_ip) else 0
+
+            def _ip_num(ip: str) -> float:
+                try:
+                    parts = ip.split(".")
+                    if len(parts) == 4:
+                        return sum(
+                            int(p) << (8 * (3 - i)) for i, p in enumerate(parts)
+                        ) / 4_294_967_296.0
+                except Exception:
+                    return 0.0
+                return 0.0
+
+            def _is_priv(ip: str) -> float:
+                return 1.0 if (
+                    ip.startswith("10.")
+                    or ip.startswith("172.16.")
+                    or ip.startswith("192.168.")
+                ) else 0.0
+
+            port_cat = 0.0
+            if dports_i > 0:
+                if dports_i < 1024:
+                    port_cat = 0.25
+                elif dports_i < 10240:
+                    port_cat = 0.5
+                else:
+                    port_cat = 0.75
+            hour_sin = _math.sin(2 * _math.pi * hour / 24)
+            hour_cos = _math.cos(2 * _math.pi * hour / 24)
+            feats = [
+                0.5, 1.0, 0.0, 0.0,
+                hour_sin, hour_cos,
+                1.0 if hour in _NIGHT_HOURS else 0.0,
+                1.0 if now_ref.weekday() >= 5 else 0.0,
+                _ip_num("0.0.0.0"), _ip_num(remote_ip),
+                0.0, _is_priv(remote_ip),
+                1.0 if remote_ip.startswith("169.254.") else 0.0,
+                1.0 if remote_ip.startswith(("224.", "225.")) else 0.0,
+                1.0 if remote_ip in ("127.0.0.1", "::1") else 0.0,
+                float(dports_i) / 65535.0,
+                port_cat,
+                0.0, 0.5,
+                min(count_i / 100.0, 1.0), 0.0,
+                float(is_atk_i), 0.0,
+                0.5, 0.0,
+                min(count_i / 50.0, 1.0),
+                0.0, 0.0, 0.0,
+            ]
+            # Prefer the NetworkConnection row when the same IP already exists.
+            replaced = False
+            for j, m in enumerate(rows_meta):
+                if m.get("remote_ip", "") == remote_ip:
+                    rows_x[j] = feats
+                    pending[j] = is_atk_i
+                    replaced = True
+                    break
+            if not replaced:
+                rows_meta.append({
+                    "remote_ip": remote_ip,
+                    "source_ip": "",
+                    "event_id": 0,
+                    "eid": 3,
+                    "timestamp": obs.isoformat() if obs else "",
+                })
+                rows_x.append(feats)
+                pending.append(is_atk_i)
+
+        if not rows_meta:
+            return np.empty((0, 29)), np.empty((0,), dtype=int), []
+
+        # Event-derived labels (NetworkConnection rows already resolved above).
+        y = np.zeros(len(rows_meta), dtype=int)
+        for i, m in enumerate(rows_meta):
+            if pending[i] >= 0:
+                y[i] = pending[i]
+                continue
             ip = m.get("remote_ip", "")
             src_ip = m.get("source_ip", "")
             eid = m.get("eid", 0)
-            ips.append(ip)
-            if ip and is_attack_ip_offline(ip):
+            if _is_attack_ip(ip) or _is_attack_ip(src_ip):
                 y[i] = 1
-                continue
-            if src_ip and is_attack_ip_offline(src_ip):
-                y[i] = 1
-                continue
-            if eid in NETWORK_EVENTS and ip:
+            elif eid in NETWORK_EVENTS and ip and ip.startswith(
+                _NET_ATTACK_PREFIXES
+            ):
                 y[i] = 1
 
-        # IQR outlier detection only on events that have non-empty IPs
-        if X.shape[0] > 10 and X.shape[1] >= 22:
+        X_all = np.array(rows_x, dtype=float) if rows_x else np.empty((0, 29))
+        ips = [m.get("remote_ip", "") for m in rows_meta]
+
+        # IQR outlier detection only on event-derived rows that have IPs
+        if X_all.shape[0] > 10 and X_all.shape[1] >= 22:
             has_ip_mask = np.array([
-                1 if metas[i].get("remote_ip") or metas[i].get("source_ip") else 0
-                for i in range(len(metas))
+                1 if rows_meta[i].get("remote_ip") or rows_meta[i].get("source_ip") else 0
+                for i in range(len(rows_meta))
             ], dtype=bool)
             ip_indices = np.where(has_ip_mask)[0]
 
             if len(ip_indices) > 10:
-                feat_cols = X[ip_indices][:, [17, 18, 19, 20, 23, 24]]
+                feat_cols = X_all[ip_indices][:, [17, 18, 19, 20, 23, 24]]
                 q25 = np.percentile(feat_cols, 25, axis=0)
                 q75 = np.percentile(feat_cols, 75, axis=0)
                 iqr = q75 - q25
@@ -3499,14 +3700,14 @@ class MLAnomalyDetector:
                 for idx in ip_indices:
                     if y[idx] == 1:
                         continue
-                    vals = X[idx, [17, 18, 19, 20, 23, 24]]
+                    vals = X_all[idx, [17, 18, 19, 20, 23, 24]]
                     n_outlier = int(sum(vals > upper))
                     if n_outlier >= 2:
                         y[idx] = 1
                     elif any(vals > q75 + 3.0 * iqr):
                         y[idx] = 1
 
-        return X, y, ips
+        return X_all, y, ips
 
     @staticmethod
     def _labeled_samples(
@@ -3635,6 +3836,10 @@ class MLAnomalyDetector:
 
         close = session is None
         session = session or SessionLocal()
+        # Reset the feature-error counter for this retrain; helpers that hit
+        # DB failures increment it (and roll back) via _feature_db_error().
+        global _FEATURE_ERROR_COUNT
+        _FEATURE_ERROR_COUNT = 0
         try:
             since = None if not hours else datetime.now(UTC) - timedelta(hours=hours)
 
@@ -3961,8 +4166,38 @@ class MLAnomalyDetector:
                         _writable, _userdir, _enc_cmd, _dl_cmd, _atk_tool,
                         _office_parent, _is_lsass, _cmd_has_ps]
 
-            login_X = np.array([_build_login(_events[i], i) for i in _login_idx], dtype=float) if _login_idx else np.empty((0, 37))
-            process_X = np.array([_build_process(_events[i], i) for i in _proc_idx], dtype=float) if _proc_idx else np.empty((0, 38))
+            # Train in the *deployed* feature space: event_feature_vector is
+            # what scoring uses. The bulk _build_login/_build_process helpers
+            # drifted (38-dim process train vs 45-dim score) and produced
+            # garbage scores / FPR once models were applied to live events.
+            def _deployed_features(ev: dict) -> list[float] | None:
+                return event_feature_vector(
+                    {
+                        "event_id": ev["event_id"],
+                        "raw_json": {"facts": ev["facts"]},
+                        "timestamp": ev["ts"],
+                    },
+                    _shared_session=session,
+                )
+
+            _login_pairs = [
+                (i, f) for i in _login_idx if (f := _deployed_features(_events[i]))
+            ]
+            _proc_pairs = [
+                (i, f) for i in _proc_idx if (f := _deployed_features(_events[i]))
+            ]
+            login_X = (
+                np.array([f for _, f in _login_pairs], dtype=float)
+                if _login_pairs
+                else np.empty((0, 37))
+            )
+            process_X = (
+                np.array([f for _, f in _proc_pairs], dtype=float)
+                if _proc_pairs
+                else np.empty((0, 45))
+            )
+            _login_idx = [i for i, _ in _login_pairs]
+            _proc_idx = [i for i, _ in _proc_pairs]
 
             # ── Hybrid labeling: analyst verdicts + threat intel + heuristic ──
             from backend.ml.realworld_labeler import get_analyst_labels, get_attack_ips
@@ -4030,14 +4265,19 @@ class MLAnomalyDetector:
                     random_state=ML_RANDOM_STATE,
                     n_estimators=best_params.get("n_estimators", 100),
                     max_samples=ms,
+                    n_jobs=1,
                 )
                 model.fit(X)
                 new_models[behavior] = model
 
-                # v8: Multi-contamination ensemble for better recall on unseen attacks
-                if len(X) >= 20:
+                # v8: Multi-contamination ensemble for better recall on unseen
+                # attacks. Skipped on small streams: 5 contaminations x 50 trees
+                # is ~2s of pure overhead when N < 50 (tests / cold start).
+                if len(X) >= 50:
                     ensemble = _multi_contamination_ensemble(
-                        X, n_estimators=50, random_state=ML_RANDOM_STATE,
+                        X,
+                        n_estimators=min(50, max(20, len(X))),
+                        random_state=ML_RANDOM_STATE,
                     )
                     new_ensembles[behavior] = ensemble
 
@@ -4053,17 +4293,67 @@ class MLAnomalyDetector:
                 X_cv: np.ndarray | None = stream_X.get(behavior)
                 y_cv: np.ndarray | None = stream_y.get(behavior)
                 if X_cv is not None and y_cv is not None and len(X_cv) >= 10:
+                    # Full 5-fold x 100-tree CV is ~3s/stream on test-sized
+                    # data; use 3 folds x 50 trees when the stream is small.
+                    _small = len(X_cv) < 100
                     cv = _kfold_cross_validate(
                         IsolationForest, X_cv, y_cv,
-                        n_folds=min(5, len(X_cv) // 2),
+                        n_folds=min(3 if _small else 5, len(X_cv) // 2),
                         contamination=ML_CONTAMINATION,
                         random_state=ML_RANDOM_STATE,
+                        n_estimators=50 if _small else 100,
                     )
+                    cv["n_normal"] = int(np.sum(y_cv == 0))
+                    cv["n_anomaly"] = int(np.sum(y_cv == 1))
                     cv_results[behavior] = cv
                     logger.info(
                         f"ML CV [{behavior}]: mean={cv['mean_score']:.4f}, "
-                        f"std={cv['std_score']:.4f}, folds={len(cv['fold_scores'])}"
+                        f"std={cv['std_score']:.4f}, folds={len(cv['fold_scores'])}, "
+                        f"labels=normal:{cv['n_normal']}/anomaly:{cv['n_anomaly']}"
                     )
+
+            # Refuse to promote models when feature extraction was broken
+            # (too many DB helper failures) or when a stream with both label
+            # classes shows zero CV separation (degenerate / poisoned features).
+            if _FEATURE_ERROR_COUNT >= _FEATURE_ERROR_ABORT_THRESHOLD:
+                logger.error(
+                    "ML retrain aborted: %d feature helper failures "
+                    "(threshold %d) - features would be silently zeroed",
+                    _FEATURE_ERROR_COUNT,
+                    _FEATURE_ERROR_ABORT_THRESHOLD,
+                )
+                return {
+                    "status": "feature-errors",
+                    "trained": False,
+                    "feature_errors": _FEATURE_ERROR_COUNT,
+                }
+            degenerate = [
+                b
+                for b, cv in cv_results.items()
+                if cv.get("n_anomaly", 0) > 0
+                and cv.get("n_normal", 0) > 0
+                and cv["mean_score"] < 1e-9
+            ]
+            if degenerate and self.models:
+                # Keep the previous (known) models rather than promote a
+                # zero-separation retrain; first cold start still proceeds.
+                logger.error(
+                    "ML retrain rejected: zero CV separation on stream(s) %s "
+                    "(features likely degenerate) - keeping existing models",
+                    degenerate,
+                )
+                return {
+                    "status": "cv-degenerate",
+                    "trained": False,
+                    "streams": degenerate,
+                    "cv": {b: cv_results[b]["mean_score"] for b in degenerate},
+                }
+            if degenerate:
+                logger.warning(
+                    "ML first train has zero CV separation on %s "
+                    "(cold start / thin labels) - promoting with caution",
+                    degenerate,
+                )
 
             # v7: SMOTE-like augmentation for supervised training
             augmented_X: dict[str, np.ndarray] = {}
@@ -4086,13 +4376,16 @@ class MLAnomalyDetector:
                             f"({atk_count} attacks augmented)"
                         )
                     else:
-                        augmented_X[behavior] = X
-                        augmented_y[behavior] = y
+                        # Must use this stream's X_sm/y_sm — the bare X/y names
+                        # still point at the last IF-loop stream and would train
+                        # the supervised head on the wrong feature space.
+                        augmented_X[behavior] = X_sm
+                        augmented_y[behavior] = y_sm
                 else:
-                    if X is not None:
-                        augmented_X[behavior] = X
-                    if y is not None:
-                        augmented_y[behavior] = y
+                    if X_sm is not None:
+                        augmented_X[behavior] = X_sm
+                    if y_sm is not None:
+                        augmented_y[behavior] = y_sm
 
             # Supervised layer: per-stream attack-vs-baseline classifiers. Streams
             # have their own feature spaces (login/process 9-dim, network
@@ -4114,7 +4407,9 @@ class MLAnomalyDetector:
                 ben_mask = ~atk_mask
                 atk = X_sup[atk_mask]
                 ben = X_sup[ben_mask]
-                min_attacks = 3 if behavior == "network" else 10
+                # Thin cold-start streams still deserve a supervised head when
+                # both classes are present; SMOTE (above) expands the minority.
+                min_attacks = 3 if behavior == "network" else 5
                 if len(atk) < min_attacks or len(ben) < 3:
                     continue
                 # Cap supervised training to 5000 samples for speed
@@ -4142,6 +4437,7 @@ class MLAnomalyDetector:
                     self._tune_threshold(
                         new_models[behavior], _Xt, _yt,
                         supervised=new_supervised_by_stream.get(behavior),
+                        ensembles=new_ensembles.get(behavior),
                     )
                 )
             # Singular fallback keeps legacy callers (score_event) working.
@@ -4196,8 +4492,40 @@ class MLAnomalyDetector:
                         "Ensemble meta-learner training skipped", exc_info=True
                     )
 
-            # Phase 2.3: Run robustness evaluation on trained models
-            if HAS_ENSEMBLE and new_models:
+                # Re-tune thresholds in the *stacked* score space once the
+                # meta-learner is live. Without this the stored boundary was
+                # fit on 0.6*rank+0.4*p while _combined_score deploys
+                # meta.predict(...), so CFAR no longer bounded live FPR.
+                if (
+                    self.ensemble is not None
+                    and self.ensemble.is_trained
+                    and new_supervised_by_stream
+                ):
+                    for behavior in new_models:
+                        sup = new_supervised_by_stream.get(behavior)
+                        if sup is None:
+                            continue
+                        _Xt, _yt = stream_X[behavior], stream_y.get(behavior)
+                        if len(_Xt) > 5000:
+                            _rng = np.random.RandomState(42)
+                            _sel = _rng.choice(len(_Xt), 5000, replace=False)
+                            _Xt = _Xt[_sel]
+                            _yt = _yt[_sel] if _yt is not None else None
+                        new_thresholds[behavior], _ = self._tune_threshold(
+                            new_models[behavior], _Xt, _yt,
+                            supervised=sup,
+                            ensembles=new_ensembles.get(behavior),
+                            meta=self.ensemble,
+                        )
+                    self.thresholds = new_thresholds
+
+            # Phase 2.3: Run robustness evaluation on trained models.
+            # Skipped for tiny baselines (and BARAQ_ML_SKIP_ROBUSTNESS=1):
+            # hundreds of IF predict calls at ~50ms each dominate train() wall time.
+            _skip_rob = os.environ.get("BARAQ_ML_SKIP_ROBUSTNESS", "0").lower() not in (
+                "", "0", "false",
+            )
+            if HAS_ENSEMBLE and new_models and not _skip_rob and n_samples >= 30:
                 try:
                     self.robustness = evaluate_robustness(
                         _QuickModelProxy(new_models, new_baselines),

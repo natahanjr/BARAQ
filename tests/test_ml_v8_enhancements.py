@@ -33,7 +33,7 @@ class TestMultiContaminationEnsemble:
         X = np.clip(X, 0, 1)
 
         models = _multi_contamination_ensemble(X, n_estimators=20)
-        assert len(models) == 5  # default contamination_range has 5 values
+        assert len(models) == 6  # default contamination_range has 6 values
         for m in models:
             assert hasattr(m, "decision_function")
 

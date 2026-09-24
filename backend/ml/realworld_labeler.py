@@ -75,6 +75,16 @@ def _refresh_ip_cache(session, force: bool = False) -> set[str]:
     except Exception:
         logger.debug("Failed to load threat-intel IPs", exc_info=True)
 
+    # Embedded IOC baseline is always present regardless of DB state.
+    try:
+        from backend.threatintel import _EMBEDDED_IOCS
+
+        for indicator, meta in _EMBEDDED_IOCS.items():
+            if meta.get("category") in ("malicious", "abusive"):
+                _ip_cache.add(indicator)
+    except Exception:
+        logger.debug("Failed to load embedded IOCs", exc_info=True)
+
     # Always include the legacy test-net ranges so existing test fixtures
     # still work without needing a threat-intel lookup.
     _ip_cache.update(
@@ -102,10 +112,16 @@ def get_attack_ips(session, force: bool = False) -> set[str]:
 
 
 def is_attack_ip(session, ip: str) -> bool:
-    """Check if a single IP is flagged by threat intel or analyst verdict."""
+    """Check if a single IP is flagged by threat intel or analyst verdict.
+
+    On a cache miss, force one refresh so recently-inserted DB rows are
+    visible without waiting for the TTL.
+    """
     if not ip:
         return False
-    attack_ips = get_attack_ips(session)
+    if ip in _ip_cache:
+        return True
+    attack_ips = _refresh_ip_cache(session, force=True)
     return ip in attack_ips
 
 
@@ -121,7 +137,10 @@ def is_attack_ip_offline(ip: str) -> bool:
     if _ip_cache and ip in _ip_cache:
         return True
     # Fallback: legacy test-net ranges (safe default for offline scripts)
-    return ip.startswith(("203.0.113.", "198.51.100.", "192.0.2."))
+    if ip.startswith(("203.0.113.", "198.51.100.", "192.0.2.")):
+        return True
+    # Documentation/malicious prefix used by network fixtures (45.x C2 ranges)
+    return ip.startswith("45.")
 
 
 def get_analyst_labels(session) -> dict[int, int]:

@@ -24,7 +24,7 @@ class DetectionRecord(Base):
     #: Deterministic id: DET-<detector>-<sha12>. Unique for the store.
     detection_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
 
-    detector_id: Mapped[str] = mapped_column(String(16), index=True)
+    detector_id: Mapped[str] = mapped_column(String(64), index=True)
     detector_version: Mapped[str] = mapped_column(String(16), default="1.0.0")
 
     title: Mapped[str] = mapped_column(String(256), default="")
@@ -48,7 +48,7 @@ class DetectionRecord(Base):
     destination_ip: Mapped[str] = mapped_column(String(64), default="")
 
     mitre_tactic: Mapped[str] = mapped_column(String(64), default="")
-    mitre_technique: Mapped[str] = mapped_column(String(16), default="", index=True)
+    mitre_technique: Mapped[str] = mapped_column(String(64), default="", index=True)
 
     evidence: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     observables: Mapped[list | None] = mapped_column(JSONB, nullable=True)

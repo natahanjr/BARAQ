@@ -184,16 +184,34 @@ def _match_value(field_value: str, expected: str, modifiers: set[str]) -> bool:
     return field_value.lower() == expected.lower()
 
 
+def _split_key(key: str) -> tuple[str, set[str]]:
+    """Split a selection key into (field_name, modifiers).
+
+    Accepts both Sigma spellings: ``CommandLine|contains`` (standard) and
+    ``CommandLine:contains`` (legacy / generator style used by many custom
+    rules). Unknown segments are treated as field-name parts, not modifiers.
+    """
+    raw = str(key)
+    if "|" in raw:
+        parts = raw.split("|")
+        field = parts[0]
+        mods = {p.strip().lower() for p in parts[1:] if p.strip()}
+        return field, (mods & _VALUE_MODIFIERS)
+    if ":" in raw:
+        # Trailing modifier after the last colon (e.g. "CommandLine:contains").
+        head, _, tail = raw.rpartition(":")
+        tail_l = tail.strip().lower()
+        if head and tail_l in _VALUE_MODIFIERS:
+            return head, {tail_l}
+    return raw, set()
+
+
 def _selection_matches(fields: dict[str, str], selection: Any) -> bool:
     """A selection matches when all its field comparisons succeed (dict) or
     any keyword is contained in any field (bare list)."""
     if isinstance(selection, dict):
         for key, value in selection.items():
-            key_parts = str(key).split("|")
-            field_name = key_parts[0]
-            modifiers = {
-                m.lower() for m in key_parts[1:] if m.lower() in _VALUE_MODIFIERS
-            }
+            field_name, modifiers = _split_key(key)
             field_value = _lookup(fields, field_name)
             if value is None or "null" in modifiers:
                 # Sigma semantics: ``field: null`` (bare YAML null value or

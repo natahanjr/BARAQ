@@ -27,66 +27,71 @@ except ImportError:
     HAS_TORCH = False
 
 
-class EventAutoencoder(nn.Module):
-    """Autoencoder for learning compact event representations.
+if HAS_TORCH:
+    class EventAutoencoder(nn.Module):
+        """Autoencoder for learning compact event representations.
 
-    The encoder compresses input features into a latent space;
-    reconstruction error serves as an anomaly score.
-    """
+        The encoder compresses input features into a latent space;
+        reconstruction error serves as an anomaly score.
+        """
 
-    def __init__(self, input_dim: int, latent_dim: int = 16, hidden_dim: int = 64):
-        super().__init__()
-        self.encoder = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.BatchNorm1d(hidden_dim),
-            nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.ReLU(),
-            nn.Linear(hidden_dim // 2, latent_dim),
-        )
-        self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, hidden_dim // 2),
-            nn.ReLU(),
-            nn.Linear(hidden_dim // 2, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, input_dim),
-            nn.Sigmoid(),
-        )
+        def __init__(self, input_dim: int, latent_dim: int = 16, hidden_dim: int = 64):
+            super().__init__()
+            self.encoder = nn.Sequential(
+                nn.Linear(input_dim, hidden_dim),
+                nn.ReLU(),
+                nn.BatchNorm1d(hidden_dim),
+                nn.Linear(hidden_dim, hidden_dim // 2),
+                nn.ReLU(),
+                nn.Linear(hidden_dim // 2, latent_dim),
+            )
+            self.decoder = nn.Sequential(
+                nn.Linear(latent_dim, hidden_dim // 2),
+                nn.ReLU(),
+                nn.Linear(hidden_dim // 2, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, input_dim),
+                nn.Sigmoid(),
+            )
 
-    def forward(self, x):
-        latent = self.encoder(x)
-        reconstructed = self.decoder(latent)
-        return reconstructed, latent
+        def forward(self, x):
+            latent = self.encoder(x)
+            reconstructed = self.decoder(latent)
+            return reconstructed, latent
 
-    def reconstruction_error(self, x):
-        """Per-sample reconstruction error (higher = more anomalous)."""
-        with torch.no_grad():
-            recon, _ = self(x)
-            error = torch.mean((x - recon) ** 2, dim=1)
-        return error
+        def reconstruction_error(self, x):
+            """Per-sample reconstruction error (higher = more anomalous)."""
+            with torch.no_grad():
+                recon, _ = self(x)
+                error = torch.mean((x - recon) ** 2, dim=1)
+            return error
 
+    class TemporalCNN(nn.Module):
+        """1D CNN for capturing local temporal patterns in event sequences.
 
-class TemporalCNN(nn.Module):
-    """1D CNN for capturing local temporal patterns in event sequences.
+        Processes sliding windows of event features to detect burst patterns,
+        timing anomalies, and sequential attack indicators.
+        """
 
-    Processes sliding windows of event features to detect burst patterns,
-    timing anomalies, and sequential attack indicators.
-    """
+        def __init__(self, input_dim: int, seq_len: int = 10, n_filters: int = 32):
+            super().__init__()
+            self.conv1 = nn.Conv1d(input_dim, n_filters, kernel_size=3, padding=1)
+            self.conv2 = nn.Conv1d(n_filters, n_filters, kernel_size=3, padding=1)
+            self.pool = nn.AdaptiveAvgPool1d(1)
+            self.fc = nn.Linear(n_filters, 16)
 
-    def __init__(self, input_dim: int, seq_len: int = 10, n_filters: int = 32):
-        super().__init__()
-        self.conv1 = nn.Conv1d(input_dim, n_filters, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv1d(n_filters, n_filters, kernel_size=3, padding=1)
-        self.pool = nn.AdaptiveAvgPool1d(1)
-        self.fc = nn.Linear(n_filters, 16)
-
-    def forward(self, x):
-        # x: (batch, seq_len, features) -> (batch, features, seq_len)
-        x = x.permute(0, 2, 1)
-        x = torch.relu(self.conv1(x))
-        x = torch.relu(self.conv2(x))
-        x = self.pool(x).squeeze(-1)
-        return self.fc(x)
+        def forward(self, x):
+            # x: (batch, seq_len, features) -> (batch, features, seq_len)
+            x = x.permute(0, 2, 1)
+            x = torch.relu(self.conv1(x))
+            x = torch.relu(self.conv2(x))
+            x = self.pool(x).squeeze(-1)
+            return self.fc(x)
+else:
+    def __getattr__(name: str):
+        if name in ("EventAutoencoder", "TemporalCNN"):
+            raise ImportError("PyTorch required for deep feature models")
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class DeepFeatureExtractor:
