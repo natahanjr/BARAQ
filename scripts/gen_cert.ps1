@@ -84,15 +84,35 @@ $pfxPass = [System.Guid]::NewGuid().ToString("N")
 [System.IO.File]::WriteAllBytes($pfxFile, $cert.Export(
     [System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, $pfxPass))
 $env:OPENSSL_CONF = ""
-& openssl pkcs12 -in $pfxFile -nodes -passin pass:$pfxPass -nocerts -out $keyFile 2>$null
+# openssl may be absent (no PATH entry) — with ErrorActionPreference=Stop a
+# missing command would abort before the .NET fallback below, so probe first.
+$openssl = Get-Command openssl -ErrorAction SilentlyContinue
+if ($openssl) {
+    & openssl pkcs12 -in $pfxFile -nodes -passin pass:$pfxPass -nocerts -out $keyFile 2>$null
+}
 if (-not (Test-Path $keyFile) -or (Get-Item $keyFile).Length -eq 0) {
-    # Fallback: .NET PKCS#1 export (no OpenSSL required)
-    $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($cert)
-    $pkcs1 = $rsa.ExportRSAPrivateKey()
-    $keyB64 = [Convert]::ToBase64String($pkcs1)
-    $keyWrapped = (($keyB64 -replace "(.{64})", "`$1`n") -replace "`n$", "")
-    $keyPem = "-----BEGIN RSA PRIVATE KEY-----`n" + $keyWrapped + "`n-----END RSA PRIVATE KEY-----`n"
-    Set-Content -Path $keyFile -Value $keyPem -Encoding Ascii
+    # Fallback 1: .NET PKCS#1 export (works when the RSA provider exposes it)
+    try {
+        $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($cert)
+        if ($rsa -and $rsa.PSObject.Methods.Name -contains 'ExportRSAPrivateKey') {
+            $pkcs1 = $rsa.ExportRSAPrivateKey()
+            $keyB64 = [Convert]::ToBase64String($pkcs1)
+            $keyWrapped = (($keyB64 -replace "(.{64})", "`$1`n") -replace "`n$", "")
+            $keyPem = "-----BEGIN RSA PRIVATE KEY-----`n" + $keyWrapped + "`n-----END RSA PRIVATE KEY-----`n"
+            Set-Content -Path $keyFile -Value $keyPem -Encoding Ascii
+        }
+    } catch {
+        Write-Host "  .NET key export unavailable ($($_.Exception.Message))" -ForegroundColor DarkGray
+    }
+}
+if (-not (Test-Path $keyFile) -or (Get-Item $keyFile).Length -eq 0) {
+    # Fallback 2: Python cryptography reads the PFX (PS 5.1 RSACng cannot
+    # call ExportRSAPrivateKey, and openssl is often absent).
+    $py = Join-Path $root "venv\Scripts\python.exe"
+    if (-not (Test-Path $py)) { $py = "python" }
+    $pfxB64 = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($pfxFile))
+    $helper = Join-Path $PSScriptRoot "pfx_to_key.py"
+    & $py $helper $pfxB64 $pfxPass $keyFile
 }
 Remove-Item $pfxFile -Force -ErrorAction SilentlyContinue
 
