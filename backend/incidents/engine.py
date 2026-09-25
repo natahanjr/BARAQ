@@ -49,6 +49,15 @@ def _dedupe_title(title: str) -> str:
     return title.strip()[:255]
 
 
+def _as_utc(value: datetime | str | None) -> datetime | None:
+    """Normalise a timestamp to an aware datetime (PG stores naive UTC)."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
 def _validate_title(title: str) -> None:
     lowered = title.lower()
     for phrase in BANNED_INCIDENT_PHRASES:
@@ -178,13 +187,22 @@ def _priority_from_context(severity: str, risk_score: float, entity_count: int) 
     return "P4"
 
 
-def _is_suppressed(db, fingerprint: str | None) -> bool:
+def _is_suppressed(
+    db, fingerprint: str | None, at: datetime | str | None = None
+) -> bool:
+    """True when an unexpired suppression covers this fingerprint.
+
+    ``at`` is the ingest/evaluation time of the evidence (falls back to wall
+    clock) so replayed or backfilled evidence is judged against its own
+    timeline instead of "now". A suppression is active through ``expires_at``.
+    """
     if not fingerprint:
         return False
+    reference = _as_utc(at) or datetime.now(UTC)
     row = db.scalars(
         select(IncidentV2Suppression).where(
             IncidentV2Suppression.fingerprint == fingerprint,
-            IncidentV2Suppression.expires_at > datetime.now(UTC),
+            IncidentV2Suppression.expires_at >= reference,
         )
     ).first()
     return row is not None
@@ -362,7 +380,7 @@ def create_incident(
             policy_id=policy_id,
         )
 
-        if _is_suppressed(db, fingerprint):
+        if _is_suppressed(db, fingerprint, at=now):
             existing = db.scalars(
                 select(IncidentV2).where(IncidentV2.fingerprint == fingerprint)
             ).first()
@@ -376,8 +394,44 @@ def create_incident(
         existing = db.scalars(
             select(IncidentV2).where(IncidentV2.fingerprint == fingerprint)
         ).first()
-        if existing and not is_terminal(existing.status):
-            _suppress_reopen(db, existing.incident_id, fingerprint, actor=actor)
+        if existing is not None:
+            if existing.status == "SUPPRESSED" and not _is_suppressed(
+                db, fingerprint, at=now
+            ):
+                # The suppression window has lapsed: the incident is the one
+                # record that owns this fingerprint (it is UNIQUE), so it is
+                # resumed rather than duplicated.
+                existing.status = "NEW"
+                existing.suppression_reason = None
+                existing.suppression_scope = None
+                existing.suppression_expires_at = None
+                existing.suppression_created_by = None
+                existing.last_seen = max(_as_utc(existing.last_seen) or now, now)
+                existing.updated_at = datetime.now(UTC)
+                audit(
+                    db,
+                    existing.incident_id,
+                    "INCIDENT_SUPPRESSION_EXPIRED",
+                    actor=actor,
+                    new_value="NEW",
+                    now=datetime.now(UTC),
+                )
+                db.flush()
+                return {
+                    "incident_id": existing.incident_id,
+                    "status": existing.status,
+                    "fingerprint": fingerprint,
+                }
+            if not is_terminal(existing.status):
+                _suppress_reopen(db, existing.incident_id, fingerprint, actor=actor)
+                return {
+                    "incident_id": existing.incident_id,
+                    "status": existing.status,
+                    "fingerprint": fingerprint,
+                }
+            # Terminal (CLOSED / SUPPRESSED): the analyst decision stands, this
+            # fingerprint is never re-opened and never duplicated - a repeat of
+            # the same evidence keeps reporting the existing incident.
             return {
                 "incident_id": existing.incident_id,
                 "status": existing.status,
@@ -475,18 +529,25 @@ def create_incident(
             updated_by=actor,
         )
         db.add(incident)
+        # Flush any earlier pending work into the outer transaction FIRST so the
+        # savepoint below only wraps this insert; a rollback of the savepoint
+        # must never discard a caller's unrelated pending changes.
+        db.flush()
         try:
             with db.begin_nested():
                 db.flush()
         except IntegrityError:
-            db.rollback()
-            existing = db.scalars(
+            # Lost a concurrent race on the UNIQUE fingerprint index. The
+            # savepoint rolled back, so the session is still usable - reuse the
+            # winner instead of destroying the caller's whole transaction.
+            db.expunge(incident)
+            winner = db.scalars(
                 select(IncidentV2).where(IncidentV2.fingerprint == fingerprint)
             ).first()
-            if existing:
+            if winner:
                 return {
-                    "incident_id": existing.incident_id,
-                    "status": existing.status,
+                    "incident_id": winner.incident_id,
+                    "status": winner.status,
                     "fingerprint": fingerprint,
                 }
             raise
