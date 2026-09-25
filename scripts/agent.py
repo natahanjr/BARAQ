@@ -25,15 +25,18 @@ falls back to the minimal Linux collectors in ``scripts/linux_collect.py``
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import logging
 import os
+import re
 import socket
 import ssl
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -53,6 +56,62 @@ AGENT_TASK_NAME = "BARAQ Agent"
 #: Fleet auto-update (roadmap 3.4): reported on every ingest so the fleet
 #: view can spot stale agents; update_agent commands target this version.
 AGENT_VERSION = "2.0.0"
+
+#: Network budgets. The ingest POST runs the full detection pipeline on the
+#: server, so a cold or loaded server needs far longer than a command poll.
+#: Too short a timeout here is worse than a slow agent: the client aborts and
+#: resubmits the same batch, producing duplicate events.
+INGEST_TIMEOUT_SECONDS = int(os.environ.get("BARAQ_AGENT_INGEST_TIMEOUT", "300"))
+POLL_TIMEOUT_SECONDS = int(os.environ.get("BARAQ_AGENT_POLL_TIMEOUT", "30"))
+
+_VERSION_RE = re.compile(r"^\d{1,6}(\.\d{1,6}){0,3}(-[0-9A-Za-z][0-9A-Za-z._-]{0,31})?$")
+_PROCESS_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_ACCOUNT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_HOSTNAME_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9.-]{0,253}[A-Za-z0-9])?$")
+_SHELL_META = set("'\"`$;|&<>\n\r\t*?()[]{}^%!")
+
+
+class UnsafeCommand(ValueError):
+    """A queued command target failed local validation."""
+
+
+def validate_target(action: str, target: str) -> str:
+    """Validate server-provided command data before using it locally."""
+    target = (target or "").strip()
+    if action == "escalate":
+        return target
+    if not target:
+        raise UnsafeCommand(f"{action} requires a target")
+    if action == "block_ip":
+        try:
+            return str(ipaddress.ip_address(target))
+        except ValueError:
+            raise UnsafeCommand("block_ip requires a valid IP address") from None
+    if action == "kill_process":
+        if not _PROCESS_RE.match(target):
+            raise UnsafeCommand("kill_process target must be a process name or PID")
+        return target
+    if action == "quarantine":
+        if len(target) > 400 or _SHELL_META & set(target):
+            raise UnsafeCommand("quarantine target contains forbidden characters")
+        if not re.match(r"^([A-Za-z]:[\\/]|\\\\|/)", target):
+            raise UnsafeCommand("quarantine target must be an absolute path")
+        if ".." in re.split(r"[\\/]+", target):
+            raise UnsafeCommand("quarantine target must not traverse directories")
+        return target
+    if action == "isolate":
+        if not _HOSTNAME_RE.match(target):
+            raise UnsafeCommand("isolate target must be a hostname")
+        return target
+    if action == "disable_account":
+        if not _ACCOUNT_RE.match(target):
+            raise UnsafeCommand("disable_account target must be an account name")
+        return target
+    if action == "update_agent":
+        if not _VERSION_RE.match(target):
+            raise UnsafeCommand("update_agent target must be a version, e.g. 2.1.0")
+        return target
+    raise UnsafeCommand(f"unsupported action: {action}")
 
 
 def _os_banner() -> str:
@@ -93,6 +152,20 @@ def make_tls_context(
     return None
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(newurl, code, "redirects disabled", headers, fp)
+
+
+def _validate_server_url(server: str) -> str:
+    parsed = urllib.parse.urlparse(server)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError(f"unsupported server URL: {server!r}")
+    if parsed.username or parsed.password:
+        raise ValueError("server URL must not embed credentials")
+    return server
+
+
 def _request(
     base: str,
     path: str,
@@ -102,152 +175,172 @@ def _request(
     tls_ca: str | None = None,
     no_verify: bool = False,
 ) -> dict:
-    url = base.rstrip("/") + path
+    url = _validate_server_url(base.rstrip("/")) + path
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    req = urllib.request.Request(
-        url,
-        data=data,
-        headers={"Content-Type": "application/json", "X-Agent-Key": key},
-        method=method,
-    )
+    headers = {"Accept": "application/json", "X-Agent-Key": key}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
     context = make_tls_context(tls_ca, no_verify)
-    with urllib.request.urlopen(req, timeout=30, context=context) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    # The TLS context must be bound to the HTTPS handler - OpenerDirector.open()
+    # has no `context` parameter (only urlopen() does), so passing it there made
+    # every single agent request fail with a TypeError and the agent silently
+    # collected nothing.
+    opener = urllib.request.build_opener(
+        _NoRedirect, urllib.request.HTTPSHandler(context=context)
+    )
+    # Ingest triggers the whole detection pipeline server-side. A cold server
+    # (first batch, rule/sigma load, ML scoring) regularly needs more than 30s,
+    # and a client-side abort there makes the agent resubmit the same batch -
+    # duplicate events. Command polls stay short so the loop stays responsive.
+    timeout = INGEST_TIMEOUT_SECONDS if method == "POST" else POLL_TIMEOUT_SECONDS
+    with opener.open(req, timeout=timeout) as resp:
+        return json.loads(resp.read(8 * 1024 * 1024).decode("utf-8"))
 
 
-def _run(cmd: list[str]) -> tuple[str, int]:
+def _run(cmd: list[str], env: dict | None = None) -> tuple[str, int]:
     proc = subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         timeout=60,
+        env=env,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     return (proc.stdout + proc.stderr).strip(), proc.returncode
 
 
+def _run_powershell(script: str, values: dict[str, str]) -> tuple[str, int]:
+    env = {**os.environ, **{f"BARAQ_ARG_{key}": value for key, value in values.items()}}
+    return _run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+        env=env,
+    )
+
+
 def execute_command(cmd: dict) -> dict:
     """Execute one remote command locally; returns the result report dict."""
-    action, target = cmd.get("action", ""), cmd.get("target", "")
+    action = str(cmd.get("action", ""))
+    try:
+        target = validate_target(action, str(cmd.get("target", "")))
+    except UnsafeCommand as exc:
+        logger.error("Refusing %s command: %s", action, exc)
+        return {"status": "failed", "detail": str(exc)}
+
+    system32 = Path(os.environ.get("SystemDrive", "C:") + "\\Windows\\System32")
+
+    def system_binary(name: str) -> str:
+        return str(system32 / f"{name}.exe")
+
     if action == "block_ip":
-        out, code = _run(
-            [
-                "netsh",
-                "advfirewall",
-                "firewall",
-                "add",
-                "rule",
-                f"name=BARAQ Block {target}",
-                "dir=in",
-                "action=block",
-                f"remoteip={target}",
-                "enable=yes",
-            ]
-        )
-        if code != 0:
-            out, code = _run(
+        success = False
+        detail = ""
+        for direction in ("in", "out"):
+            detail, code = _run(
                 [
-                    "netsh",
+                    system_binary("netsh"),
                     "advfirewall",
                     "firewall",
                     "add",
                     "rule",
-                    f"name=BARAQ Block {target}",
-                    "dir=out",
+                    f"name=BARAQ Block {target} {direction}",
+                    f"dir={direction}",
                     "action=block",
                     f"remoteip={target}",
                     "enable=yes",
                 ]
             )
-        return {"status": "success" if code == 0 else "failed", "detail": out or "ok"}
+            success = success or code == 0
+        return {"status": "success" if success else "failed", "detail": detail or "ok"}
+
     if action == "kill_process":
-        out, code = _run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-Command",
-                f"Get-Process -Name {target} -ErrorAction SilentlyContinue | Stop-Process -Force",
-            ]
-        )
+        args = ["/F", "/PID", target] if target.isdigit() else ["/F", "/IM", target]
+        out, code = _run([system_binary("taskkill"), *args])
+        lowered = out.lower()
+        if code != 0 and ("not found" in lowered or "no tasks" in lowered):
+            return {"status": "success", "detail": f"process {target} was not running"}
         return {"status": "success" if code == 0 else "failed", "detail": out or "ok"}
+
     if action == "quarantine":
-        q = os.path.join(os.environ.get("SystemDrive", "C:"), "BARAQ-Quarantine")
-        out, code = _run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-Command",
-                (
-                    f"if (-not (Test-Path '{q}')) {{ New-Item -ItemType Directory -Path '{q}' | Out-Null }}; "
-                    f"Move-Item -LiteralPath '{target}' -Destination '{q}' -Force"
-                ),
-            ]
+        drive = os.environ.get("SystemDrive", "C:")
+        quarantine = os.path.join(f"{drive}\\", "BARAQ-Quarantine")
+        if not os.path.exists(target):
+            return {"status": "failed", "detail": f"path not found: {target}"}
+        out, code = _run_powershell(
+            "if (-not (Test-Path -LiteralPath $env:BARAQ_ARG_DEST)) "
+            "{ New-Item -ItemType Directory -Path $env:BARAQ_ARG_DEST -Force | Out-Null }; "
+            "Move-Item -LiteralPath $env:BARAQ_ARG_SRC -Destination $env:BARAQ_ARG_DEST -Force",
+            {"SRC": target, "DEST": quarantine},
         )
         return {"status": "success" if code == 0 else "failed", "detail": out or "ok"}
+
     if action == "isolate":
-        out, code = _run(["netsh", "advfirewall", "set", "allprofiles", "state", "on"])
-        if code == 0:
-            out, code = _run(
-                [
-                    "powershell",
-                    "-NoProfile",
-                    "-Command",
-                    (
-                        f"New-NetFirewallRule -DisplayName 'BARAQ Isolate {target}' -Direction Inbound -Action Block -Profile Any | Out-Null; "
-                        f"New-NetFirewallRule -DisplayName 'BARAQ Isolate {target} Out' -Direction Outbound -Action Block -Profile Any | Out-Null"
-                    ),
-                ]
-            )
-        return {"status": "success" if code == 0 else "failed", "detail": out or "ok"}
-    if action == "disable_account":
-        out, code = _run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-Command",
-                f"Disable-LocalUser -Name '{target}' -ErrorAction Stop",
-            ]
+        out, code = _run_powershell(
+            "New-NetFirewallRule -DisplayName $env:BARAQ_ARG_NAME -Direction Inbound "
+            "-Action Block -Profile Any | Out-Null; "
+            "New-NetFirewallRule -DisplayName ($env:BARAQ_ARG_NAME + ' Out') "
+            "-Direction Outbound -Action Block -Profile Any | Out-Null",
+            {"NAME": f"BARAQ Isolate {target}"},
         )
         return {"status": "success" if code == 0 else "failed", "detail": out or "ok"}
+
+    if action == "disable_account":
+        out, code = _run_powershell(
+            "Disable-LocalUser -Name $env:BARAQ_ARG_NAME -ErrorAction Stop",
+            {"NAME": target},
+        )
+        return {"status": "success" if code == 0 else "failed", "detail": out or "ok"}
+
     if action == "escalate":
         logger.warning(
             "Operator escalated agent %s - manual review required", cmd.get("agent_id")
         )
         return {"status": "success", "detail": "Acknowledged by operator"}
+
     if action == "update_agent":
-        # Roadmap 3.4 auto-update: try the configured updater, else record the
-        # rollout. The updater (scripts/agent_updater.ps1) swaps the agent files
-        # and restarts the scheduled task; absence of a real updater is a
-        # no-op that still acknowledges the rollout.
         updater = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "agent_updater.ps1"
         )
-        if os.path.exists(updater):
-            out, code = _run(
-                [
-                    "powershell",
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    updater,
-                    "-Version",
-                    target,
-                ]
-            )
+        if not os.path.exists(updater):
             return {
-                "status": "success" if code == 0 else "failed",
-                "detail": out or f"updated to {target}",
+                "status": "failed",
+                "detail": f"updater not configured for target version {target}",
             }
+        args = [
+            system_binary("powershell"),
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            updater,
+            "-Version",
+            target,
+        ]
+        expected_hash = str(cmd.get("sha256") or "")
+        if expected_hash:
+            args.extend(["-ExpectedSha256", expected_hash])
+        out, code = _run(args)
         return {
-            "status": "success",
-            "detail": f"target version {target} recorded (no updater configured)",
+            "status": "success" if code == 0 else "failed",
+            "detail": out or f"updated to {target}",
         }
+
     return {"status": "failed", "detail": f"Unknown action: {action}"}
 
 
+class CollectorsUnavailable(RuntimeError):
+    """No collector stack could be loaded on this host."""
+
+
 def collect() -> list[dict]:
-    """Collect telemetry: Windows collector stack, else the Linux fallback."""
+    """Collect telemetry with the full Windows collector stack.
+
+    Requires the ``backend`` package next to the agent (and pywin32 on
+    Windows). When it is missing we raise instead of returning an empty list:
+    an agent that quietly reports nothing looks identical to a healthy machine
+    with nothing to report, which is the worst possible failure mode for a SOC.
+    """
     from backend.collectors import CollectorManager
 
     host = socket.gethostname()
@@ -269,7 +362,11 @@ def collect_fallback() -> list[dict]:
             record["host"] = host
             records.append(record)
     except ImportError as exc:
-        logger.warning("No collectors available on this platform: %s", exc)
+        raise CollectorsUnavailable(
+            f"no collector stack on this host: {exc}. The full Python agent "
+            f"needs the 'backend' package and 'scripts/linux_collect.py' next "
+            f"to it, or use the self-contained scripts/agent.ps1 instead."
+        ) from exc
     return records
 
 
@@ -278,7 +375,7 @@ def load_config(path: Path | None = None) -> dict:
     path = path or AGENT_CONFIG_FILE
     cfg: dict = {}
     try:
-        cfg = json.loads(path.read_text(encoding="utf-8"))
+        cfg = json.loads(path.read_text(encoding="utf-8-sig"))
     except OSError:
         pass
     except ValueError as exc:
@@ -456,6 +553,14 @@ def main() -> None:
     interval = args.interval or cfg.get("interval") or 15
     tls_ca = args.tls_ca or cfg.get("tls_ca")
     no_verify = args.no_verify or bool(cfg.get("no_verify"))
+    parsed_server = urllib.parse.urlparse(server)
+    if parsed_server.scheme not in ("http", "https") or not parsed_server.hostname:
+        parser.error(f"invalid server URL: {server}")
+    is_loopback = parsed_server.hostname in ("127.0.0.1", "localhost", "::1")
+    if parsed_server.scheme == "http" and not is_loopback:
+        parser.error("HTTPS is required for non-loopback BARAQ servers")
+    if no_verify and not is_loopback:
+        parser.error("TLS verification cannot be disabled for a non-loopback server")
 
     if args.install:
         values = {
@@ -511,9 +616,20 @@ def main() -> None:
             records = []
             try:
                 records = collect()
-            except Exception as exc:
+            except CollectorsUnavailable as exc:
                 logger.debug("Windows collectors unavailable (%s); Linux fallback", exc)
                 records = collect_fallback()
+            except Exception as exc:
+                logger.debug("Windows collectors failed (%s); Linux fallback", exc)
+                records = collect_fallback()
+            if not records:
+                # Never let a misconfigured agent look like a quiet machine.
+                logger.error(
+                    "No telemetry collected on %s - this agent is reporting "
+                    "nothing. Check that the collector stack is installed (full "
+                    "Python agent) or deploy scripts/agent.ps1.",
+                    host,
+                )
             if records:
                 result = _request(
                     server,
