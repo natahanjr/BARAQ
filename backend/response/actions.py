@@ -35,6 +35,10 @@ def _is_admin() -> bool:
         return False
 
 
+def _ps_quote(value: str) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
+
+
 def _run(cmd: list[str], timeout: int = 30, elevate: bool = False) -> tuple[bool, str]:
     """Run a command safely, returning (success, output).
 
@@ -46,14 +50,15 @@ def _run(cmd: list[str], timeout: int = 30, elevate: bool = False) -> tuple[bool
             # Build ArgumentList safely — each arg quoted individually
             arg_parts = cmd[1:] if len(cmd) > 1 else []
             ps_script = (
-                "$p = Start-Process -FilePath '"
-                + cmd[0].replace("'", "''")
-                + "' -ArgumentList "
-                + repr(arg_parts)
-                + " -Verb RunAs -Wait -PassThru; exit $p.ExitCode"
+                "$p = Start-Process -FilePath "
+                + _ps_quote(cmd[0])
+                + " -ArgumentList @("
+                + ", ".join(_ps_quote(arg) for arg in arg_parts)
+                + ") -Verb RunAs -Wait -PassThru; exit $p.ExitCode"
             )
             r = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", ps_script],
+                shell=False,
                 capture_output=True, text=True, timeout=timeout + 15,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
@@ -63,6 +68,7 @@ def _run(cmd: list[str], timeout: int = 30, elevate: bool = False) -> tuple[bool
         r = subprocess.run(
             cmd,
             capture_output=True,
+            shell=False,
             text=True,
             timeout=timeout,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
@@ -219,13 +225,16 @@ def quarantine_file(file_path: str) -> tuple[str, str]:
 
     # Prevent path traversal — file must be under allowed directories
     # (e.g., not /etc/passwd or C:\Windows\System32)
-    allowed_roots = [Path(str(r)).resolve() for r in [
-        os.getenv("BARAQ_QUARANTINE_ALLOWED_ROOT", r"C:\BaraqData"),
-        QUARANTINE_DIR.resolve(),
-        Path.cwd().resolve(),
-    ]]
-    if not any(str(src).startswith(str(root)) for root in allowed_roots if root):
-        return "failed", f"Path not in allowed directories: {file_path}"
+    allowed_roots = [Path(r.strip()).resolve() for r in os.getenv(
+        "BARAQ_QUARANTINE_ALLOWED_ROOTS", ""
+    ).split(";") if r.strip()]
+    allowed_roots.append(QUARANTINE_DIR.resolve())
+    try:
+        contained = any(src.is_relative_to(root) for root in allowed_roots)
+    except (OSError, ValueError):
+        contained = False
+    if not contained:
+        return "failed", f"Path is outside every allowed quarantine root: {file_path}"
 
     QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
 

@@ -49,13 +49,16 @@ if ($Remove) {
 foreach ($r in $rules) {
     if ($r.Port -eq 8001 -and -not $AlsoHttp) { continue }
 
+    # Include Public: Windows often classifies Wi-Fi as Public and
+    # Set-NetConnectionProfile needs elevation + no GP block, so the
+    # rule must cover every profile a LAN NIC can land on.
     $params = @{
         DisplayName = $r.Name
         Direction   = "Inbound"
         Protocol    = "TCP"
         LocalPort   = $r.Port
         Action      = "Allow"
-        Profile     = "Domain,Private"
+        Profile     = "Domain,Private,Public"
         Enabled     = "True"
         ErrorAction = "SilentlyContinue"
     }
@@ -65,7 +68,8 @@ foreach ($r in $rules) {
 
     $existing = Get-NetFirewallRule -DisplayName $r.Name -ErrorAction SilentlyContinue
     if ($existing) {
-        Write-Host "Already exists: $($r.Name) (port $($r.Port))" -ForegroundColor Cyan
+        Set-NetFirewallRule -DisplayName $r.Name -Profile Domain,Private,Public -Enabled True -Action Allow
+        Write-Host "Updated: $($r.Name) (port $($r.Port), profiles Domain,Private,Public)" -ForegroundColor Cyan
     } else {
         New-NetFirewallRule @params | Out-Null
         Write-Host "Created: $($r.Name) (port $($r.Port))" -ForegroundColor Green
