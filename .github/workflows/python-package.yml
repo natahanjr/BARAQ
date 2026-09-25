@@ -31,7 +31,7 @@ jobs:
           find . -name "*.pyc" -delete || true
 
       - name: Lint with ruff (critical — syntax errors, undefined names)
-        run: ruff check . --select F,E9 --no-fix
+        run: ruff check . --select E9,F821,F601 --no-fix
 
       - name: Lint with ruff (full)
         run: ruff check .
@@ -60,7 +60,7 @@ jobs:
 
   test:
     name: Test Suite
-    needs: lint
+    needs: [lint, frontend]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -90,14 +90,30 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
           pip install pytest pytest-cov
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
       - name: Run tests
         env:
-          BARAQ_TEST_MODE: 1
+          BARAQ_TEST_MODE: 0
           BARAQ_SKIP_SECRET_GEN: 1
-          BARAQ_DATABASE_URL: "postgresql+psycopg://postgres:postgres@localhost:5432/baraq_test"
+          BARAQ_ALLOW_DEV_KEYS: 1
+          BARAQ_NO_SCHEDULER: 1
+          BARAQ_TEST_DATABASE_URL: "postgresql+psycopg://postgres:postgres@localhost:5432/baraq_test"
+          BARAQ_TEST_ADMIN_URL: "postgresql+psycopg://postgres:postgres@localhost:5432/postgres"
           BARAQ_CSRF_ENABLED: "0"
         run: |
-          python -m pytest tests/ -v --tb=short -x
+          python -m pytest tests/ -v --tb=short --maxfail=5
 
   security:
     name: Security Scan
@@ -122,7 +138,7 @@ jobs:
 
   docker-build:
     name: Docker Build Test
-    needs: [lint, frontend]
+    needs: [lint, frontend, test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

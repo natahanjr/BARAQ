@@ -22,13 +22,8 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    BARAQ_ROLE=api \
-    BARAQ_TELEMETRY_V2=1 \
-    BARAQ_ALERTS_V2=1 \
-    BARAQ_CORRELATION=1 \
-    BARAQ_RISK=1 \
-    BARAQ_BEHAVIOR_GROUPS=1 \
-    BARAQ_V2_ENGINES_ALLOW_PROD=1
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=5
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgomp1 \
@@ -42,6 +37,17 @@ WORKDIR /app
 # Install Python dependencies (use Docker-specific requirements without pywin32)
 COPY requirements-docker.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+
+# App defaults live AFTER the dependency layer on purpose: changing a runtime
+# default (or application code) must not invalidate the ~2 GB pip layer and
+# force a full re-download on every rebuild.
+ENV BARAQ_ROLE=api \
+    BARAQ_TELEMETRY_V2=1 \
+    BARAQ_ALERTS_V2=1 \
+    BARAQ_CORRELATION=1 \
+    BARAQ_RISK=1 \
+    BARAQ_BEHAVIOR_GROUPS=1 \
+    BARAQ_V2_ENGINES_ALLOW_PROD=0
 
 # Copy application code
 COPY backend ./backend
@@ -63,4 +69,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8001/api/health || exit 1
 
 ENTRYPOINT ["tini", "--"]
-CMD ["python", "start_dev.py"]
+CMD ["python", "start_dev.py", "--host", "0.0.0.0", "--port", "8001"]

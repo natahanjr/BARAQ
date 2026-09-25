@@ -42,6 +42,7 @@ server_err.log
 .env
 .env.*
 secrets.dat
+secrets.key
 certs/
 
 # Data (persisted via volumes)
