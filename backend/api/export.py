@@ -7,9 +7,9 @@ import io
 import json
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, select
 from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
@@ -30,7 +30,7 @@ from backend.database.models import (
     UsbDevice,
     VulnFinding,
 )
-from backend.security import require_auth
+from backend.security import require_auth, tenant_scope
 
 
 def _safe_like(value: str) -> str:
@@ -160,6 +160,7 @@ def list_export_types():
 @router.get("/{data_type}")
 def export_data(
     data_type: str,
+    request: Request,
     format: str = Query("csv", pattern="^(csv|json)$"),
     limit: int = Query(10000, ge=1, le=100000),
     offset: int = Query(0, ge=0),
@@ -180,6 +181,14 @@ def export_data(
 
     # Build query
     stmt = select(model)
+    scope = tenant_scope(request)
+    if scope is not None:
+        if not hasattr(model, "org"):
+            raise HTTPException(
+                403,
+                f"Export type '{data_type}' is not available to tenant-scoped users",
+            )
+        stmt = stmt.where(model.org == scope)
 
     # Apply filters based on available columns
     if since and hasattr(model, "timestamp"):
@@ -229,7 +238,11 @@ def export_data(
     total = db.scalar(count_stmt) or 0
 
     # Apply pagination
-    stmt = stmt.order_by(getattr(model, "id", model.id) if hasattr(model, "id") else model.id)
+    # NOTE: order by the model's real primary key. ``Endpoint`` is keyed on
+    # ``agent_id`` and has no ``id`` attribute, so the previous
+    # ``getattr(model, "id", model.id)`` raised AttributeError (the default is
+    # evaluated eagerly) and made the endpoints export fail with a 500.
+    stmt = stmt.order_by(inspect(model).primary_key[0])
     stmt = stmt.offset(offset).limit(limit)
 
     rows = db.execute(stmt).scalars().all()

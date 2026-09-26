@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
 from backend.search.engine import SearchError, execute_search
-from backend.security import require_auth
+from backend.security import require_auth, tenant_scope
 
 router = APIRouter(prefix="/api/hunting", tags=["Hunting"])
 
@@ -44,7 +44,7 @@ async def hunt_events(
 
     Supports pagination via offset/limit and sorting via sort_by/sort_order.
     """
-    org = getattr(request.state, "org", "") or ""
+    org = tenant_scope(request)
     try:
         result = execute_search(
             db,
@@ -85,7 +85,7 @@ async def hunt_events_get(
     db: Session = Depends(get_db),
     _auth=Depends(require_auth),
 ):
-    org = getattr(request.state, "org", "") or ""
+    org = tenant_scope(request)
     try:
         result = execute_search(
             db, q, org=org, earliest=earliest, latest=latest, default_limit=limit

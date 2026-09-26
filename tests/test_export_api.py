@@ -92,6 +92,28 @@ def test_export_alerts_csv(client, db):
 def test_export_with_severity_filter(client, db):
     _seed_alert(db, name="HighAlert", severity="high")
     _seed_alert(db, name="LowAlert", severity="low")
+
+
+def test_every_export_type_builds_a_query(client, db):
+    """Regression: ``/api/export/endpoints`` used to return 500.
+
+    The order-by was ``getattr(model, "id", model.id) if hasattr(model, "id")
+    else model.id`` -- the fallback is evaluated eagerly and ``Endpoint`` is
+    keyed on ``agent_id`` (no ``id``), so building the query raised
+    AttributeError. Every advertised type must build and run its query, even
+    against an empty table.
+    """
+    types = client.get("/api/export/types", headers=HEADERS).json()["types"]
+    assert types, "no export types advertised"
+    for entry in types:
+        data_type = entry["key"]
+        resp = client.get(f"/api/export/{data_type}?format=json&limit=1", headers=HEADERS)
+        assert resp.status_code == 200, f"{data_type}: HTTP {resp.status_code} - {resp.text[:200]}"
+        assert resp.json()["export_type"] == data_type
+
+    # Seed a high-severity alert so the severity filter has something to
+    # return; the loop above only proves each type *builds* its query.
+    _seed_alert(db, name="HighAlert", severity="high")
     db.commit()
     resp = client.get("/api/export/alerts?severity=high&format=json", headers=HEADERS)
     assert resp.status_code == 200

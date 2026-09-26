@@ -28,6 +28,7 @@ import asyncio
 import json
 import logging
 import time
+from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger("baraq.realtime")
@@ -57,47 +58,50 @@ def publish_failure_count() -> int:
     return _publish_failures
 
 
+@dataclass
+class _Subscriber:
+    queue: asyncio.Queue
+    org: str | None
+    role: str
+
+
 class BroadcastHub:
-    """Thread-safe fan-out of JSON events to WebSocket subscribers."""
+    """Thread-safe, tenant-aware fan-out of JSON events."""
 
     def __init__(self) -> None:
-        self._clients: set[asyncio.Queue] = set()
+        self._clients: dict[int, _Subscriber] = {}
+        self._next_id = 0
         self._loop: asyncio.AbstractEventLoop | None = None
         self._lock = (
             asyncio.Lock() if asyncio.get_event_loop_policy() is not None else None
         )
         self._started = False
 
-    # ------------------------------------------------------------------
-    # lifecycle
-    # ------------------------------------------------------------------
     def bind(self, loop: asyncio.AbstractEventLoop) -> None:
-        """Attach to the server event loop (called from app lifespan)."""
         self._loop = loop
         self._started = True
 
-    async def connect(self) -> asyncio.Queue:
-        """Register a new client queue and return it."""
+    async def connect(
+        self, org: str | None = None, role: str = "analyst"
+    ) -> tuple[int, asyncio.Queue]:
         if self._lock is None:
             self._lock = asyncio.Lock()
         queue: asyncio.Queue = asyncio.Queue(maxsize=500)
         async with self._lock:
-            self._clients.add(queue)
+            sub_id = self._next_id
+            self._next_id += 1
+            self._clients[sub_id] = _Subscriber(queue=queue, org=org, role=role)
         logger.info("Realtime client connected (%d total)", len(self._clients))
-        return queue
+        return sub_id, queue
 
-    async def disconnect(self, queue: asyncio.Queue) -> None:
+    async def disconnect(self, sub_id: int) -> None:
         if self._lock is None:
             return
         async with self._lock:
-            self._clients.discard(queue)
+            self._clients.pop(sub_id, None)
         logger.info("Realtime client disconnected (%d total)", len(self._clients))
 
-    # ------------------------------------------------------------------
-    # producer side (callable from any thread)
-    # ------------------------------------------------------------------
     def publish(self, message: dict[str, Any]) -> None:
-        """Push a JSON-serialisable message to all clients (thread-safe)."""
         if not self._started or self._loop is None or not self._clients:
             return
         try:
@@ -108,26 +112,34 @@ class BroadcastHub:
         try:
             asyncio.run_coroutine_threadsafe(self._broadcast(payload), self._loop)
         except RuntimeError as exc:
-            # Event loop closed (lifespan shutdown) or no running loop.
             record_publish_failure(f"loop unavailable: {exc}")
         except Exception as exc:
-            # Anything else (TypeError, ValueError from a bad coroutine,
-            # OSError from a queue that has been garbage-collected, ...).
             record_publish_failure(exc)
 
     async def _broadcast(self, payload: str) -> None:
         if self._lock is None:
             return
+        try:
+            message = json.loads(payload)
+        except (TypeError, ValueError):
+            message = {}
+        message_payload = message.get("payload") if isinstance(message, dict) else None
+        message_org = (
+            message_payload.get("org") if isinstance(message_payload, dict) else None
+        )
         async with self._lock:
-            clients = list(self._clients)
-        stale: list[asyncio.Queue] = []
-        for queue in clients:
+            clients = list(self._clients.items())
+        stale: list[int] = []
+        for sub_id, subscriber in clients:
+            if subscriber.org is not None and message_org != subscriber.org:
+                continue
             try:
-                queue.put_nowait(payload)
+                subscriber.queue.put_nowait(payload)
             except asyncio.QueueFull:
-                stale.append(queue)
-        for queue in stale:
-            await self.disconnect(queue)
+                stale.append(sub_id)
+        for sub_id in stale:
+            await self.disconnect(sub_id)
+
 
 
 #: Module-level singleton used across the app.

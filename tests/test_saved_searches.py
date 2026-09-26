@@ -89,9 +89,9 @@ def test_saved_search_org_scoping(db):
     db.commit()
 
     client = TestClient(app)
-    # Admin in scope "" does not see tenant-private searches.
+    # An unrestricted admin sees every organization.
     r = client.get("/api/saved/searches", headers={"X-API-Key": "baraq-dev-admin"})
-    assert all(s["name"] != "org_private" for s in r.json()["searches"])
+    assert any(s["name"] == "org_private" for s in r.json()["searches"])
 
 
 def test_dashboard_crud_and_render(db):

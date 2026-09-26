@@ -65,26 +65,35 @@ class DashboardUpdate(BaseModel):
     panels: list[Panel] | None = None
 
 
-def _org_scope(request: Request) -> str:
-    return tenant_scope(request) or ""
+def _org_scope(request: Request) -> str | None:
+    return tenant_scope(request)
 
 
-def _get_saved(db: Session, saved_id: int) -> SavedSearch:
-    row = db.get(SavedSearch, saved_id)
+def _get_saved(db: Session, request: Request, saved_id: int) -> SavedSearch:
+    stmt = select(SavedSearch).where(SavedSearch.id == saved_id)
+    scope = _org_scope(request)
+    if scope is not None:
+        stmt = stmt.where(SavedSearch.org.in_([scope, ""]))
+    row = db.scalars(stmt).first()
     if row is None:
         raise HTTPException(404, "saved search not found")
     return row
 
 
-def _get_dashboard(db: Session, dashboard_id: int) -> Dashboard:
-    row = db.get(Dashboard, dashboard_id)
+def _get_dashboard(db: Session, request: Request, dashboard_id: int) -> Dashboard:
+    stmt = select(Dashboard).where(Dashboard.id == dashboard_id)
+    scope = _org_scope(request)
+    if scope is not None:
+        stmt = stmt.where(Dashboard.org.in_([scope, ""]))
+    row = db.scalars(stmt).first()
     if row is None:
         raise HTTPException(404, "dashboard not found")
     return row
 
 
-def _visible_org_filter(model, org: str):
-    # "" = global searches (visible to everyone); otherwise scope to the org.
+def _visible_org_filter(model, org: str | None):
+    if org is None:
+        return None
     return or_(model.org == "", model.org == org)
 
 
@@ -95,11 +104,11 @@ def _visible_org_filter(model, org: str):
 def list_saved_searches(request: Request, db: Session = Depends(get_db)):
     """All saved searches visible to the caller (global + own org)."""
     org = _org_scope(request)
-    rows = db.scalars(
-        select(SavedSearch)
-        .where(_visible_org_filter(SavedSearch, org))
-        .order_by(SavedSearch.name)
-    ).all()
+    stmt = select(SavedSearch)
+    visible = _visible_org_filter(SavedSearch, org)
+    if visible is not None:
+        stmt = stmt.where(visible)
+    rows = db.scalars(stmt.order_by(SavedSearch.name)).all()
     return {"total": len(rows), "searches": [s.to_dict() for s in rows]}
 
 
@@ -110,7 +119,7 @@ def create_saved_search(
     db: Session = Depends(get_db),
 ):
     """Save a search query for one-click re-runs."""
-    org = _org_scope(request)
+    org = _org_scope(request) or ""
     duplicate = db.scalars(
         select(SavedSearch).where(
             SavedSearch.name == body.name.strip(),
@@ -137,9 +146,10 @@ def create_saved_search(
 def update_saved_search(
     saved_id: int,
     body: SavedSearchUpdate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
-    row = _get_saved(db, saved_id)
+    row = _get_saved(db, request, saved_id)
     for key, value in body.model_dump(exclude_none=True).items():
         setattr(row, key, value)
     db.commit()
@@ -147,8 +157,10 @@ def update_saved_search(
 
 
 @router.delete("/searches/{saved_id}")
-def delete_saved_search(saved_id: int, db: Session = Depends(get_db)):
-    row = _get_saved(db, saved_id)
+def delete_saved_search(
+    saved_id: int, request: Request, db: Session = Depends(get_db)
+):
+    row = _get_saved(db, request, saved_id)
     db.delete(row)
     db.commit()
     return {"deleted": True, "id": saved_id}
@@ -162,7 +174,7 @@ def run_saved_search(
     db: Session = Depends(get_db),
 ):
     """Execute a saved search and return the tabular result set."""
-    row = _get_saved(db, saved_id)
+    row = _get_saved(db, request, saved_id)
     org = _org_scope(request)
     try:
         result = execute_search(
@@ -193,11 +205,11 @@ def run_saved_search(
 def list_dashboards(request: Request, db: Session = Depends(get_db)):
     """All dashboards visible to the caller (global + own org)."""
     org = _org_scope(request)
-    rows = db.scalars(
-        select(Dashboard)
-        .where(_visible_org_filter(Dashboard, org))
-        .order_by(Dashboard.name)
-    ).all()
+    stmt = select(Dashboard)
+    visible = _visible_org_filter(Dashboard, org)
+    if visible is not None:
+        stmt = stmt.where(visible)
+    rows = db.scalars(stmt.order_by(Dashboard.name)).all()
     return {"total": len(rows), "dashboards": [d.to_dict() for d in rows]}
 
 
@@ -207,7 +219,7 @@ def create_dashboard(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    org = _org_scope(request)
+    org = _org_scope(request) or ""
     panels = []
     for panel in body.panels:
         panel_data = panel.model_dump()
@@ -232,9 +244,10 @@ def create_dashboard(
 def update_dashboard(
     dashboard_id: int,
     body: DashboardUpdate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
-    row = _get_dashboard(db, dashboard_id)
+    row = _get_dashboard(db, request, dashboard_id)
     updates = body.model_dump(exclude_none=True)
     if "panels" in updates:
         panels = []
@@ -252,26 +265,33 @@ def update_dashboard(
 
 
 @router.delete("/dashboards/{dashboard_id}")
-def delete_dashboard(dashboard_id: int, db: Session = Depends(get_db)):
-    row = _get_dashboard(db, dashboard_id)
+def delete_dashboard(
+    dashboard_id: int, request: Request, db: Session = Depends(get_db)
+):
+    row = _get_dashboard(db, request, dashboard_id)
     db.delete(row)
     db.commit()
     return {"deleted": True, "id": dashboard_id}
 
 
 def _render_panel(
-    db: Session, panel: dict, org: str, include_demo: bool = False
+    db: Session,
+    request: Request,
+    panel: dict,
+    org: str | None,
+    include_demo: bool = False,
 ) -> dict:
     """Run a panel's search and post-aggregate for its visualization."""
     query = panel.get("query")
     saved_id = panel.get("saved_search_id")
     if saved_id:
-        saved = db.get(SavedSearch, saved_id)
-        if saved is None:
+        try:
+            saved = _get_saved(db, request, saved_id)
+        except HTTPException:
             return {
                 "id": panel.get("id"),
                 "title": panel.get("title"),
-                "error": "saved search deleted",
+                "error": "saved search unavailable",
             }
         query = saved.query
         earliest = saved.earliest or "-24h"
@@ -385,10 +405,10 @@ def render_dashboard(
     db: Session = Depends(get_db),
 ):
     """Render every panel of a dashboard by executing its searches."""
-    row = _get_dashboard(db, dashboard_id)
+    row = _get_dashboard(db, request, dashboard_id)
     org = _org_scope(request)
     panels = [
-        _render_panel(db, panel, org, include_demo=bool(include_demo))
+        _render_panel(db, request, panel, org, include_demo=bool(include_demo))
         for panel in (row.panels or [])
     ]
     return {

@@ -286,7 +286,7 @@ def _agg_col(sub, fn: str, fld: str | None):
 def _build_query(
     q: _ParsedQuery,
     db: Session,
-    org: str,
+    org: str | None,
     earliest: str | None,
     latest: str | None,
     include_demo: bool = False,
@@ -306,7 +306,7 @@ def _build_query(
     else:
         raise SearchError(f"unknown index {q.index!r} (use events or alerts)")
     stmt = select(model).where(time_col >= start, time_col <= end)
-    if org:
+    if org is not None:
         stmt = stmt.where(model.org == org)
     explicit_demo = any(key == "demo" for key, _ in q.filters)
     if not include_demo and not explicit_demo:
@@ -336,7 +336,7 @@ def _coerce(value: Any) -> Any:
 def execute_search(
     db: Session,
     query: str,
-    org: str = "",
+    org: str | None = None,
     earliest: str | None = None,
     latest: str | None = None,
     default_limit: int = 500,

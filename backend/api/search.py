@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from backend.audit import client_ip, log_action
 from backend.database.connection import get_db
 from backend.search.engine import SearchError, execute_search
-from backend.security import actor_name, require_auth
+from backend.security import actor_name, require_auth, tenant_scope
 
 router = APIRouter(prefix="/api/search", tags=["Search"])
 
@@ -41,7 +41,7 @@ async def run_search(
     _auth=Depends(require_auth),
 ):
     """Execute a search and return a tabular result set."""
-    org = getattr(request.state, "org", "") or ""
+    org = tenant_scope(request)
     try:
         result = execute_search(
             db,
