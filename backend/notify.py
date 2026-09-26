@@ -46,7 +46,9 @@ from backend.config import (
     SMTP_USERNAME,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
+    TELEGRAM_MIN_SEVERITY,
     TOAST_ENABLED,
+    WEBHOOK_MIN_SEVERITY,
     WEBHOOK_URL,
 )
 
@@ -54,9 +56,20 @@ logger = logging.getLogger("baraq.notify")
 
 _SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 
+#: Per-channel severity floors, falling back to the global minimum. Paging a
+#: phone for a high-severity finding trains people to ignore it, so the noisy
+#: tiers go to email/webhook and only the critical tier pages.
+_CHANNEL_MIN_SEVERITY = {
+    "telegram": TELEGRAM_MIN_SEVERITY or NOTIFY_MIN_SEVERITY,
+    "webhook": WEBHOOK_MIN_SEVERITY or NOTIFY_MIN_SEVERITY,
+    "email": NOTIFY_MIN_SEVERITY,
+    "toast": NOTIFY_MIN_SEVERITY,
+}
 
-def _wanted(severity: str) -> bool:
-    return _SEVERITY_RANK.get(severity, 0) >= _SEVERITY_RANK.get(NOTIFY_MIN_SEVERITY, 3)
+
+def _wanted(severity: str, channel: str | None = None) -> bool:
+    floor = _CHANNEL_MIN_SEVERITY.get(channel or "", NOTIFY_MIN_SEVERITY)
+    return _SEVERITY_RANK.get(severity, 0) >= _SEVERITY_RANK.get(floor, 3)
 
 
 def _payload(alert: dict) -> dict:
@@ -123,6 +136,8 @@ def _teams_payload(alert: dict) -> dict:
 def _send_webhook(alert: dict) -> None:
     if not WEBHOOK_URL:
         return
+    if not _wanted(alert.get("severity", ""), "webhook"):
+        return
     url = WEBHOOK_URL.lower()
     if "hooks.slack.com" in url:
         payload = _slack_payload(alert)
@@ -142,6 +157,8 @@ def _send_webhook(alert: dict) -> None:
 
 def _send_telegram(alert: dict) -> None:
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    if not _wanted(alert.get("severity", ""), "telegram"):
         return
     body = _payload(alert)
     text = (
@@ -165,6 +182,8 @@ def _send_telegram(alert: dict) -> None:
 
 def _send_email(alert: dict) -> None:
     if not SMTP_HOST or not SMTP_TO:
+        return
+    if not _wanted(alert.get("severity", ""), "email"):
         return
     if not SMTP_STARTTLS:
         logger.warning(

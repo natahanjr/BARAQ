@@ -15,10 +15,9 @@ const REPORT_TYPES = [
   { value: "technical", label: "Technical Analysis", desc: "Evidence, timeline, MITRE mappings, recommendations" },
 ];
 
-function reportUrl(filePath) {
-  if (!filePath) return null;
-  const name = String(filePath).split(/[\\/]/).pop();
-  return `/reports/${encodeURIComponent(name)}`;
+function reportUrl(reportId) {
+  if (!reportId) return null;
+  return `/api/reports/${encodeURIComponent(reportId)}/download`;
 }
 
 function Reports() {
@@ -50,7 +49,7 @@ function Reports() {
     setError("");
     try {
       const res = await api.generateReport(type, format);
-      setMessage(`Report generated: ${res.file_path}`);
+      setMessage(`Report generated: ${res.filename}`);
       await load();
     } catch (e) {
       setError(e.message);
@@ -151,12 +150,12 @@ function Reports() {
             ) : (
               <div className="divide-y divide-[var(--border-subtle)]">
                 {reports.map((r) => {
-                  const url = reportUrl(r.file_path);
+                   const url = reportUrl(r.id);
                   return (
                     <div key={r.id} className="flex items-center gap-4 px-5 py-3 hover:bg-[var(--bg-surface-hover)] transition-colors">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[13px] font-medium text-[var(--fg-primary)]">{r.title}</p>
-                        <p className="mt-0.5 truncate font-mono text-[11px] text-[var(--fg-muted)]">{r.file_path}</p>
+                         <p className="mt-0.5 truncate font-mono text-[11px] text-[var(--fg-muted)]">{r.filename}</p>
                       </div>
                       <div className="shrink-0 text-right">
                         <Badge severity="info" size="sm">{r.report_type} · {r.format}</Badge>

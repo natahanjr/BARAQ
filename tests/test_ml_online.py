@@ -9,35 +9,53 @@ import numpy as np
 from backend.database.models import NormalizedEvent
 
 
-def _seed_events(db, n=120, user="ml-online-user"):
-    """Insert a reproducible set of login events across two clusters."""
+def _seed_events(db, n=80, user="ml-online-user"):
+    """Insert a reproducible set of login events in two separable clusters.
+
+    Even rows are routine interactive logons (type 2, private source, daytime),
+    odd rows are failed logons that trip the attack heuristic (account-locked
+    sub-status 0xC0000234, documentation-range attack source, night, type 10).
+    The clusters must be separable in the deployed feature space, otherwise
+    ``train()`` correctly refuses to promote a model with zero CV separation
+    and the drift assertions below have nothing to report on.
+    """
     from datetime import datetime, timedelta
 
     rows = []
-    base = datetime.now(UTC)
+    base = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
     for i in range(n):
+        attack = i % 2 == 1
+        if attack:
+            raw_json = {
+                "facts": {
+                    "source_ip": f"203.0.113.{10 + (i % 40)}",
+                    "logon_type": 10,
+                    "sub_status": 3221226036,  # 0xC0000234 account locked
+                    "target_user": user,
+                }
+            }
+            timestamp = base - timedelta(minutes=i, hours=6)  # night
+        else:
+            raw_json = {
+                "facts": {
+                    "source_ip": f"10.0.0.{10 + (i % 40)}",
+                    "logon_type": 2,
+                    "sub_status": 0,
+                    "target_user": user,
+                }
+            }
+            timestamp = base - timedelta(minutes=i)
         rows.append(
             NormalizedEvent(
                 source="test",
-                event_id=4624 if i % 2 == 0 else 4625,
+                event_id=4625 if attack else 4624,
                 category="logon",
                 severity="info",
                 message=f"logon attempt {i}",
                 user=user,
                 host="ml-host",
-                timestamp=base - timedelta(minutes=i),
-                raw_json={
-                    "facts": {
-                        # Well-spread IP + logon-type facts keep the feature
-                        # space non-degenerate regardless of wall-clock hour:
-                        # a 120-minute seed window can span only 2 distinct
-                        # hours, which alone leaves the IsolationForest with
-                        # a single-point baseline and check_drift silently
-                        # skips the stream.
-                        "source_ip": i * 16_777_216,
-                        "logon_type": 10 + (i % 4),
-                    }
-                },
+                timestamp=timestamp,
+                raw_json=raw_json,
             )
         )
     db.add_all(rows)

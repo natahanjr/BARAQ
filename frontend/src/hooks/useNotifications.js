@@ -11,7 +11,7 @@ export function useNotifications(token) {
     const connect = () => {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const host = window.location.host;
-      const wsUrl = `${protocol}//${host}/api/realtime/ws?token=${token}`;
+      const wsUrl = `${protocol}//${host}/api/realtime/ws`;
 
       try {
         const ws = new WebSocket(wsUrl);

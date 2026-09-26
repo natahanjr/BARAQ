@@ -704,13 +704,15 @@ def _threatfox(indicators: list[str]) -> dict[str, Any] | None:
 
 def _urlhaus(indicators: list[str]) -> dict[str, Any] | None:
     """URLhaus malicious URL lookup - by abuse.ch (requires Auth-Key for full access)."""
+    # abuse.ch now rejects unauthenticated API calls with 401; skip the
+    # provider entirely when no Auth-Key is configured (mirrors _threatfox).
+    if not THREAT_INTEL_ABUSECH_KEY:
+        return None
     import json as _json
     import urllib.request
     from urllib.parse import urlparse
 
-    headers = {"Content-Type": "application/json"}
-    if THREAT_INTEL_ABUSECH_KEY:
-        headers["Auth-Key"] = THREAT_INTEL_ABUSECH_KEY
+    headers = {"Content-Type": "application/json", "Auth-Key": THREAT_INTEL_ABUSECH_KEY}
     feed_url = "https://urlhaus-api.abuse.ch/v1/host/"
     parsed_feed = urlparse(feed_url)
     if parsed_feed.scheme not in ("https",):
@@ -745,13 +747,15 @@ def _urlhaus(indicators: list[str]) -> dict[str, Any] | None:
 
 def _malwarebazaar(indicators: list[str]) -> dict[str, Any] | None:
     """MalwareBazaar sample lookup - by abuse.ch (requires Auth-Key for full access)."""
+    # abuse.ch now rejects unauthenticated API calls with 401; skip the
+    # provider entirely when no Auth-Key is configured (mirrors _threatfox).
+    if not THREAT_INTEL_ABUSECH_KEY:
+        return None
     import json as _json
     import urllib.request
     from urllib.parse import urlparse
 
-    headers = {"Content-Type": "application/json"}
-    if THREAT_INTEL_ABUSECH_KEY:
-        headers["Auth-Key"] = THREAT_INTEL_ABUSECH_KEY
+    headers = {"Content-Type": "application/json", "Auth-Key": THREAT_INTEL_ABUSECH_KEY}
     feed_url = "https://mb-api.abuse.ch/api/v1/"
     parsed_feed = urlparse(feed_url)
     if parsed_feed.scheme not in ("https",):

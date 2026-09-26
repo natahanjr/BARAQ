@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { authStore } from "./api.js";
 
 const WS_PATH = `${window.location.protocol === "https:" ? "wss" : "ws"}://${
   window.location.host
@@ -14,8 +13,7 @@ function connect() {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
     return;
   }
-  const token = authStore.token;
-  const url = token ? `${WS_PATH}?token=${encodeURIComponent(token)}` : WS_PATH;
+  const url = WS_PATH;
   try {
     socket = new WebSocket(url);
   } catch {

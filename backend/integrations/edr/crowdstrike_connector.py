@@ -31,7 +31,12 @@ class CrowdStrikeConnector(BaseEDRConnector):
 
     async def fetch_alerts(self, since: str, limit: int = 100) -> list[EDRAlert]:
         if not self.client_id or not self.client_secret:
-            raise RuntimeError(_NOT_IMPLEMENTED_MSG)
+            logger.warning(
+                "CrowdStrike not configured - no alerts ingested. Set "
+                "BARAQ_CROWDSTRIKE_CLIENT_ID and BARAQ_CROWDSTRIKE_CLIENT_SECRET "
+                "to enable the Falcon connector."
+            )
+            return []
         raise NotImplementedError(_NOT_IMPLEMENTED_MSG)
 
     async def get_host_info(self, host_id: str) -> dict:

@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { api } from "../api.js";
 import { Loading, ErrorBanner } from "../components/Feedback.jsx";
-import { PageHeader, Card, CardHeader, CardTitle, CardContent, Badge, Button, Tabs, SearchInput } from "../components/ui/index.js";
+import { PageHeader, Card, CardHeader, CardTitle, CardContent, Badge, Button, Tabs, SearchInput, Drawer } from "../components/ui/index.js";
 import { useToast } from "../components/ui/Toast.jsx";
 
 const ACTIONS = [
@@ -20,6 +21,23 @@ const STATUS_STYLES = {
   failed: { bg: "bg-[var(--severity-critical)]/[0.10]", text: "text-[var(--severity-critical)]", dot: "bg-[var(--severity-critical)]", label: "Failed" },
   running: { bg: "bg-[var(--accent-cyan)]/[0.10]", text: "text-[var(--accent-cyan)]", dot: "bg-[var(--accent-cyan)]", label: "Running" },
   pending: { bg: "bg-[var(--severity-medium)]/[0.10]", text: "text-[var(--severity-medium)]", dot: "bg-[var(--severity-medium)]", label: "Pending" },
+  // The playbook engine records completed | partial | failed, not success.
+  completed: { bg: "bg-[var(--status-healthy)]/[0.10]", text: "text-[var(--status-healthy)]", dot: "bg-[var(--status-healthy)]", label: "Completed" },
+  partial: { bg: "bg-[var(--severity-medium)]/[0.10]", text: "text-[var(--severity-medium)]", dot: "bg-[var(--severity-medium)]", label: "Partial" },
+};
+
+const ACTION_LABELS = {
+  block_ip: "Block IP",
+  unblock_ip: "Unblock IP",
+  kill_process: "Kill process",
+  quarantine: "Quarantine file",
+  isolate: "Isolate endpoint",
+  disable_account: "Disable account",
+  escalate: "Escalate",
+  acknowledge: "Acknowledge",
+  fix: "Create fix task",
+  create_incident: "Create incident",
+  notify: "Notify analyst",
 };
 
 function formatTime(iso) {
@@ -45,7 +63,29 @@ function Automation() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", triggers: { severity: [], tactics: [] }, actions: [] });
   const [submitting, setSubmitting] = useState(false);
+  const [selectedRun, setSelectedRun] = useState(null);
+  const [runDetail, setRunDetail] = useState(null);
+  const [runLoading, setRunLoading] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+  const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Full detail for the clicked run; the list endpoint stays light.
+  const openRun = useCallback(async (run) => {
+    setSelectedRun(run);
+    setRunDetail(null);
+    setShowRaw(false);
+    setRunLoading(true);
+    try {
+      const data = await api.automationRun(run.id);
+      setRunDetail(data);
+    } catch (err) {
+      toast({ type: "error", message: `Could not load run #${run.id}` });
+      setSelectedRun(null);
+    } finally {
+      setRunLoading(false);
+    }
+  }, [toast]);
 
   const load = useCallback(async () => {
     try {
@@ -232,10 +272,14 @@ function Automation() {
           ) : (
             runs.map((run) => {
               const st = STATUS_STYLES[run.status] || STATUS_STYLES.pending;
+              const results = Array.isArray(run.results) ? run.results : [];
+              const failed = results.filter((r) => r.status === "failed").length;
               return (
-                <div
+                <button
                   key={run.id}
-                  className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-5 py-4 transition-all duration-200 hover:border-[var(--border-strong)] hover:shadow-md"
+                  type="button"
+                  onClick={() => openRun(run)}
+                  className="group relative block w-full overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-5 py-4 text-left transition-all duration-200 hover:border-[var(--border-strong)] hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-cyan)]"
                 >
                   <div className="flex items-center justify-between gap-4">
                     {/* Left: playbook name + actions */}
@@ -243,33 +287,213 @@ function Automation() {
                       <div className="flex items-center gap-3">
                         <span className={`flex h-2 w-2 shrink-0 rounded-full ${st.dot}`} />
                         <h4 className="truncate text-[14px] font-semibold text-[var(--fg-primary)]">
-                          {run.playbook_name || run.playbook_id || "\u2014"}
+                          {run.playbook_name || `Playbook #${run.playbook_id}`}
                         </h4>
+                        <span className="shrink-0 text-[11px] text-[var(--fg-subtle)]">
+                          run #{run.id}
+                        </span>
                       </div>
-                      <div className="mt-1.5 flex items-center gap-4 pl-5 text-[12px] text-[var(--fg-muted)]">
-                        <span>{Array.isArray(run.actions_executed) ? run.actions_executed.length : run.actions_count || 0} actions</span>
-                        {run.duration && <span>{run.duration}</span>}
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 pl-5 text-[12px] text-[var(--fg-muted)]">
+                        <span className="truncate">
+                          on{" "}
+                          <span className="text-[var(--fg-secondary)]">
+                            {run.alert_name || `alert #${run.alert_id}`}
+                          </span>
+                        </span>
+                        <span>
+                          {results.length} action{results.length === 1 ? "" : "s"}
+                        </span>
+                        {failed > 0 && (
+                          <span className="text-[var(--severity-critical)]">{failed} failed</span>
+                        )}
+                        {run.triggered_by && (
+                          <span className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+                            {run.triggered_by}
+                          </span>
+                        )}
+                        {run.rule && <span className="truncate">rule: {run.rule}</span>}
                       </div>
                     </div>
 
                     {/* Right: status + time */}
-                    <div className="flex items-center gap-4 shrink-0">
+                    <div className="flex shrink-0 items-center gap-3">
                       <div className="text-right">
                         <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold ${st.bg} ${st.text}`}>
                           {st.label}
                         </span>
-                        <p className="mt-1 text-[11px] text-[var(--fg-muted)]" title={run.started_at}>
-                          {timeAgo(run.started_at)}
+                        <p className="mt-1 text-[11px] text-[var(--fg-muted)]" title={run.created_at || ""}>
+                          {timeAgo(run.created_at)}
                         </p>
                       </div>
+                      <span className="text-[var(--fg-subtle)] transition-transform duration-200 group-hover:translate-x-0.5">
+                        {"\u203A"}
+                      </span>
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })
           )}
         </div>
       )}
+
+      {/* ── Run detail drawer ───────────────────────────────── */}
+      <Drawer
+        open={Boolean(selectedRun)}
+        onClose={() => setSelectedRun(null)}
+        title={selectedRun ? `Run #${selectedRun.id}` : ""}
+        width={520}
+      >
+        {runLoading && (
+          <div className="flex h-40 items-center justify-center text-[13px] text-[var(--fg-muted)]">
+            Loading run detail{"\u2026"}
+          </div>
+        )}
+
+        {!runLoading && runDetail && (
+          <div className="space-y-5 p-5">
+            {/* Summary */}
+            <div>
+              <h3 className="text-[15px] font-semibold text-[var(--fg-primary)]">
+                {runDetail.run.playbook_name}
+              </h3>
+              <p className="mt-1 text-[12px] text-[var(--fg-muted)]">
+                {formatTime(runDetail.run.created_at)} {"\u00B7"} {runDetail.run.triggered_by} {"\u00B7"} run #
+                {runDetail.run.id}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(["completed", "partial", "failed"].includes(runDetail.run.status)) && (
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                      (STATUS_STYLES[runDetail.run.status] || STATUS_STYLES.pending).bg
+                    } ${(STATUS_STYLES[runDetail.run.status] || STATUS_STYLES.pending).text}`}
+                  >
+                    {(STATUS_STYLES[runDetail.run.status] || STATUS_STYLES.pending).label}
+                  </span>
+                )}
+                <span className="inline-flex items-center rounded-full bg-[var(--bg-surface-hover)] px-2.5 py-1 text-[10px] text-[var(--fg-muted)]">
+                  {runDetail.actions_total} action{runDetail.actions_total === 1 ? "" : "s"}
+                </span>
+                {runDetail.actions_failed > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-[var(--severity-critical)]/[0.10] px-2.5 py-1 text-[10px] text-[var(--severity-critical)]">
+                    {runDetail.actions_failed} failed
+                  </span>
+                )}
+                {runDetail.run.org && (
+                  <span className="inline-flex items-center rounded-full bg-[var(--accent-cyan)]/[0.10] px-2.5 py-1 text-[10px] text-[var(--accent-cyan)]">
+                    org: {runDetail.run.org}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Alert it fired on */}
+            {runDetail.alert && (
+              <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface-hover)]/40 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">
+                  Alert
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedRun(null);
+                    navigate(`/alerts/${runDetail.alert.id}`);
+                  }}
+                  className="mt-1.5 block text-left text-[13px] font-semibold text-[var(--fg-primary)] hover:text-[var(--accent-cyan)] hover:underline"
+                >
+                  {runDetail.alert.name}
+                </button>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--fg-muted)]">
+                  <span>severity: {runDetail.alert.severity}</span>
+                  {runDetail.alert.rule && <span>rule: {runDetail.alert.rule}</span>}
+                  {runDetail.alert.mitre_id && <span>{runDetail.alert.mitre_id}</span>}
+                  {runDetail.alert.host && <span>host: {runDetail.alert.host}</span>}
+                  <span>alert #{runDetail.alert.id}</span>
+                </div>
+                {runDetail.alert.evidence && (
+                  <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-words rounded bg-[var(--bg-surface)] p-2.5 text-[11px] leading-relaxed text-[var(--fg-secondary)]">
+                    {runDetail.alert.evidence}
+                  </pre>
+                )}
+              </div>
+            )}
+
+            {/* Per-action results */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">
+                Actions
+              </p>
+              <div className="mt-2 space-y-2">
+                {(runDetail.run.results || []).length === 0 && (
+                  <p className="text-[12px] text-[var(--fg-muted)]">No actions recorded.</p>
+                )}
+                {(runDetail.run.results || []).map((r, i) => {
+                  const ok = r.status === "success";
+                  return (
+                    <div
+                      key={`${r.action}-${i}`}
+                      className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[13px] font-semibold text-[var(--fg-primary)]">
+                          {ACTION_LABELS[r.action] || r.action}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            ok
+                              ? "bg-[var(--status-healthy)]/[0.10] text-[var(--status-healthy)]"
+                              : "bg-[var(--severity-critical)]/[0.10] text-[var(--severity-critical)]"
+                          }`}
+                        >
+                          {ok ? "success" : r.status || "failed"}
+                        </span>
+                      </div>
+                      {r.detail && (
+                        <p className="mt-1.5 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-[var(--fg-muted)]">
+                          {r.detail}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Playbook definition (may be deleted since the run) */}
+            {runDetail.playbook && (
+              <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface-hover)]/40 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[var(--tracking-wider)] text-[var(--fg-muted)]">
+                  Playbook definition
+                </p>
+                {runDetail.playbook.description && (
+                  <p className="mt-1.5 text-[12px] text-[var(--fg-secondary)]">
+                    {runDetail.playbook.description}
+                  </p>
+                )}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {Object.entries(runDetail.playbook.triggers || {}).map(([k, v]) => (
+                    <span
+                      key={k}
+                      className="rounded bg-[var(--bg-surface)] px-2 py-0.5 text-[10px] text-[var(--fg-muted)]"
+                    >
+                      {k}: {Array.isArray(v) ? v.join(", ") : String(v)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Button size="sm" onClick={() => setShowRaw((v) => !v)}>
+              {showRaw ? "Hide" : "Show"} raw JSON
+            </Button>
+            {showRaw && (
+              <pre className="max-h-64 overflow-auto rounded-[var(--radius-lg)] bg-[var(--bg-surface-hover)] p-3 text-[10px] leading-relaxed text-[var(--fg-muted)]">
+                {JSON.stringify(runDetail, null, 2)}
+              </pre>
+            )}
+          </div>
+        )}
+      </Drawer>
 
       {/* ── Create Playbook Modal ──────────────────────────── */}
       {showCreate && (

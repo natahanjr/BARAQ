@@ -94,6 +94,22 @@ def get_framework(name: str) -> ComplianceFramework | None:
     return FRAMEWORKS.get(name)
 
 
+def reset_assessments(name: str | None = None) -> None:
+    """Clear every recorded control assessment (back to ``unassessed``).
+
+    The framework templates are process-wide mutable state, so this is what
+    keeps one caller (or test) from inheriting another's assessments. Note
+    that assessments are in-memory only: a restart reports every control as
+    unassessed until they are re-entered or persisted.
+    """
+    frameworks = FRAMEWORKS.values() if name is None else [FRAMEWORKS[name]]
+    for fw in frameworks:
+        for ctrl in fw.controls:
+            ctrl.status = "unassessed"
+            ctrl.evidence = []
+            ctrl.notes = ""
+
+
 def list_frameworks() -> list[str]:
     return list(FRAMEWORKS.keys())
 

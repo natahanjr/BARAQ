@@ -75,6 +75,23 @@ _FEATURE_ERROR_ABORT_THRESHOLD = int(
     os.environ.get("BARAQ_ML_FEATURE_ERROR_ABORT", "25")
 )
 
+# ---------------------------------------------------------------------------
+# Pass-scoped feature cache (shared with the detection pipeline)
+# ---------------------------------------------------------------------------
+# Window-aggregate helpers (event counts, path baselines, entropies, ...) are
+# recomputed for EVERY event even though their value is identical (or keyed by
+# a handful of distinct values) within one scoring/training pass. On a busy
+# host that was ~15 queries x N events per analyze_events() cycle - the single
+# largest cost in the scheduler. The cache is thread-local and only active
+# inside an explicit ``with _feature_pass_cache():`` scope, so direct helper
+# calls (tests, on-demand scoring) keep their uncached semantics.
+from backend.passcache import (  # noqa: E402
+    _FEATURE_CACHE_TLS,
+    _cached,
+    _feature_pass_cache,
+    _window_cached,
+)
+
 try:
     from sklearn.ensemble import IsolationForest, RandomForestClassifier
     from sklearn.preprocessing import LabelEncoder
@@ -456,23 +473,25 @@ def _time_features(event) -> tuple[float, float, float, float, float]:
 def _get_recent_events_count(session, behavior: str, hours: int = 24) -> int:
     """Get count of recent events for a behavior stream."""
     try:
-        since = datetime.now(UTC) - timedelta(hours=hours)
-        if behavior == "login":
-            event_ids = LOGIN_EVENTS
-        elif behavior == "process":
-            event_ids = PROCESS_EVENTS
-        else:
-            return 0
+        def _compute() -> int:
+            since = datetime.now(UTC) - timedelta(hours=hours)
+            if behavior == "login":
+                event_ids = LOGIN_EVENTS
+            elif behavior == "process":
+                event_ids = PROCESS_EVENTS
+            else:
+                return 0
 
-        count = (
-            session.scalar(
-                select(func.count(NormalizedEvent.id))
-                .where(NormalizedEvent.event_id.in_(event_ids))
-                .where(NormalizedEvent.timestamp >= since)
+            return int(
+                session.scalar(
+                    select(func.count(NormalizedEvent.id))
+                    .where(NormalizedEvent.event_id.in_(event_ids))
+                    .where(NormalizedEvent.timestamp >= since)
+                )
+                or 0
             )
-            or 0
-        )
-        return count
+
+        return int(_cached(("recent_count", behavior, hours), _compute))
     except Exception as exc:
         return int(_feature_db_error(session, exc, 0))
 
@@ -496,6 +515,7 @@ def _feature_db_error(session, exc, default=0.0):
     return default
 
 
+@_window_cached
 def _get_failed_login_velocity_per_ip(
     session, source_ip: str, minutes: int = 60
 ) -> float:
@@ -521,6 +541,26 @@ def _get_failed_login_velocity_per_ip(
         return float(_feature_db_error(session, exc, 0.0))
 
 
+@_window_cached
+def _get_ip_fail_count(session, source_ip: str) -> int:
+    """4625 count for a source IP (whole history, raw_json-cast match)."""
+    try:
+        return int(
+            session.scalar(
+                select(func.count(NormalizedEvent.id))
+                .where(NormalizedEvent.event_id == 4625)
+                .where(
+                    NormalizedEvent.raw_json["facts"]["source_ip"].cast(String)
+                    == source_ip
+                )
+            )
+            or 0
+        )
+    except Exception as exc:
+        return int(_feature_db_error(session, exc, 0))
+
+
+@_window_cached
 def _get_logon_type_entropy(session, hours: int = 24) -> float:
     """Calculate Shannon entropy of logon types in recent window."""
     try:
@@ -559,6 +599,7 @@ def _get_logon_type_entropy(session, hours: int = 24) -> float:
         return _feature_db_error(session, exc, 0.0)
 
 
+@_window_cached
 def _get_source_ip_diversity(session, target_user: str, hours: int = 24) -> float:
     """Get diversity of source IPs for a target user (unique IPs / total logins)."""
     try:
@@ -588,6 +629,7 @@ def _get_source_ip_diversity(session, target_user: str, hours: int = 24) -> floa
         return _feature_db_error(session, exc, 0.0)
 
 
+@_window_cached
 def _get_time_between_logins_zscore(session, hours: int = 24) -> float:
     """Z-score of time between consecutive logins vs baseline."""
     try:
@@ -712,8 +754,9 @@ _facts_of(event)
                         return 1.0
 
         return 0.0
-    except Exception as exc:
-        return _feature_db_error(session, exc, 0.0)
+    except Exception:
+        logger.exception("Unexpected error")
+        return 0.0
 
 
 def _get_commandline_entropy(event) -> float:
@@ -818,8 +861,9 @@ _facts_of(event)
                         return 1.0
 
         return 0.0
-    except Exception as exc:
-        return _feature_db_error(session, exc, 0.0)
+    except Exception:
+        logger.exception("Unexpected error")
+        return 0.0
 
 
 def _get_new_process_path_indicator(session, event, hours: int = 24) -> float:
@@ -844,26 +888,33 @@ _facts_of(event)
         else:
             return 0.5
 
-        since = datetime.now(UTC) - timedelta(hours=hours)
-        rows = session.execute(
-            select(NormalizedEvent.raw_json)
-            .where(NormalizedEvent.event_id.in_(PROCESS_EVENTS))
-            .where(NormalizedEvent.timestamp >= since)
-        ).all()
+        # The 24h process-path baseline is identical for every event in one
+        # pass - cache it (pass-scoped) instead of JSON-parsing the whole
+        # window per event (was 12.5s of every 22s feature pass).
+        def _known_paths() -> set[str]:
+            since = datetime.now(UTC) - timedelta(hours=hours)
+            rows = session.execute(
+                select(NormalizedEvent.raw_json)
+                .where(NormalizedEvent.event_id.in_(PROCESS_EVENTS))
+                .where(NormalizedEvent.timestamp >= since)
+            ).all()
 
-        known_paths = set()
-        for row in rows:
-            raw = row[0] if row else None
-            row_facts = (raw or {}).get("facts") or {}
-            path = str(
-                row_facts.get("image_path", "")
-                or row_facts.get("new_process", "")
-                or ""
-            ).lower()
-            if path and "\\" in path:
-                known_paths.add("\\".join(path.split("\\")[:-1]))
-            elif path and "/" in path:
-                known_paths.add("/".join(path.split("/")[:-1]))
+            known: set[str] = set()
+            for row in rows:
+                raw = row[0] if row else None
+                row_facts = (raw or {}).get("facts") or {}
+                path = str(
+                    row_facts.get("image_path", "")
+                    or row_facts.get("new_process", "")
+                    or ""
+                ).lower()
+                if path and "\\" in path:
+                    known.add("\\".join(path.split("\\")[:-1]))
+                elif path and "/" in path:
+                    known.add("/".join(path.split("/")[:-1]))
+            return known
+
+        known_paths = _cached(("proc_paths", hours), _known_paths)
 
         if not known_paths:
             return 0.5
@@ -899,8 +950,9 @@ _facts_of(event)
             if p > 0:
                 entropy -= p * math.log2(p)
         return min(1.0, entropy / 7.0)
-    except Exception as exc:
-        return _feature_db_error(session, exc, 0.0)
+    except Exception:
+        logger.exception("Unexpected error")
+        return 0.0
 
 
 def _get_system_directory_indicator(event) -> float:
@@ -1009,28 +1061,31 @@ _facts_of(event)
 def _get_time_since_last_event(session, behavior: str) -> float:
     """Get hours since last event for a behavior stream."""
     try:
-        if behavior == "login":
-            event_ids = LOGIN_EVENTS
-        elif behavior == "process":
-            event_ids = PROCESS_EVENTS
-        else:
-            return 24.0  # default to 24 hours if unknown
+        def _compute() -> float:
+            if behavior == "login":
+                event_ids = LOGIN_EVENTS
+            elif behavior == "process":
+                event_ids = PROCESS_EVENTS
+            else:
+                return 24.0  # default to 24 hours if unknown
 
-        last_event = session.execute(
-            select(NormalizedEvent.timestamp)
-            .where(NormalizedEvent.event_id.in_(event_ids))
-            .order_by(NormalizedEvent.timestamp.desc())
-            .limit(1)
-        ).scalar()
+            last_event = session.execute(
+                select(NormalizedEvent.timestamp)
+                .where(NormalizedEvent.event_id.in_(event_ids))
+                .order_by(NormalizedEvent.timestamp.desc())
+                .limit(1)
+            ).scalar()
 
-        if last_event is None:
-            return 24.0
+            if last_event is None:
+                return 24.0
 
-        if isinstance(last_event, str):
-            last_event = datetime.fromisoformat(last_event.replace("Z", "+00:00"))
+            if isinstance(last_event, str):
+                last_event = datetime.fromisoformat(last_event.replace("Z", "+00:00"))
 
-        delta = datetime.now(UTC) - last_event
-        return max(0.0, min(24.0, delta.total_seconds() / 3600.0))  # cap at 24 hours
+            delta = datetime.now(UTC) - last_event
+            return max(0.0, min(24.0, delta.total_seconds() / 3600.0))  # cap at 24 hours
+
+        return float(_cached(("time_since_last", behavior), _compute))
     except Exception as exc:
         return _feature_db_error(session, exc, 24.0)
 
@@ -1106,8 +1161,9 @@ def _get_threat_intel_score(event) -> float:
         # Default: public IP with no special indicators
         return 0.4
 
-    except Exception as exc:
-        return _feature_db_error(session, exc, 0.3)
+    except Exception:
+        logger.exception("Unexpected error")
+        return 0.3
 
 
 def _get_behavioral_velocity(session, behavior: str, hours: int = 1) -> float:
@@ -1134,6 +1190,7 @@ def _get_behavioral_velocity(session, behavior: str, hours: int = 1) -> float:
         return _feature_db_error(session, exc, 0.0)
 
 
+@_window_cached
 def _get_failed_success_ratio(session, source_ip: str, hours: int = 24) -> float:
     """Ratio of failed to total logins for a source IP."""
     try:
@@ -1179,10 +1236,12 @@ _facts_of(event)
         if "negotiate" in logon_process or "negotiate" in auth_package:
             return 0.3
         return 0.5
-    except Exception as exc:
-        return _feature_db_error(session, exc, 0.5)
+    except Exception:
+        logger.exception("Unexpected error")
+        return 0.5
 
 
+@_window_cached
 def _get_distinct_source_ips(session, target_user: str, hours: int = 24) -> float:
     """Count of distinct source IPs for a target user."""
     try:
@@ -1205,6 +1264,7 @@ def _get_distinct_source_ips(session, target_user: str, hours: int = 24) -> floa
         return _feature_db_error(session, exc, 0.0)
 
 
+@_window_cached
 def _get_hour_distribution_entropy(session, hours: int = 24) -> float:
     """Entropy of login hour distribution (diversity of login times)."""
     try:
@@ -1250,85 +1310,92 @@ def _get_cross_stream_features(
     6. has_failed_then_process: 1 if failed login followed by process event
     7. has_process_then_network: 1 if process event followed by network
     8. event_diversity: number of distinct event types in last hour
+
+    Every value is a window aggregate (``current_event_id`` does not affect
+    any of them), so the result is identical for all events in one pass and
+    is cached as such.
     """
-    since = datetime.now(UTC) - timedelta(hours=hours)
     try:
-        # Count recent events per stream
-        failed_logins = (
-            session.scalar(
-                select(func.count(NormalizedEvent.id))
-                .where(NormalizedEvent.event_id == 4625)  # Failed logon
-                .where(NormalizedEvent.timestamp >= since)
-            )
-            or 0
-        )
-
-        suspicious_processes = (
-            session.scalar(
-                select(func.count(NormalizedEvent.id))
-                .where(NormalizedEvent.event_id.in_(PROCESS_EVENTS))
-                .where(NormalizedEvent.timestamp >= since)
-            )
-            or 0
-        )
-
-        network_connections = (
-            session.scalar(
-                select(func.count(NormalizedEvent.id))
-                .where(
-                    NormalizedEvent.event_id.in_(
-                        NETWORK_EVENTS if NETWORK_EVENTS else set()
-                    )
+        def _compute() -> list[float]:
+            since = datetime.now(UTC) - timedelta(hours=hours)
+            # Count recent events per stream
+            failed_logins = (
+                session.scalar(
+                    select(func.count(NormalizedEvent.id))
+                    .where(NormalizedEvent.event_id == 4625)  # Failed logon
+                    .where(NormalizedEvent.timestamp >= since)
                 )
-                .where(NormalizedEvent.timestamp >= since)
+                or 0
             )
-            or 0
-        )
 
-        # Time since last event across all streams
-        last_event_time = session.scalar(
-            select(func.max(NormalizedEvent.timestamp)).where(
-                NormalizedEvent.timestamp >= since
+            suspicious_processes = (
+                session.scalar(
+                    select(func.count(NormalizedEvent.id))
+                    .where(NormalizedEvent.event_id.in_(PROCESS_EVENTS))
+                    .where(NormalizedEvent.timestamp >= since)
+                )
+                or 0
             )
-        )
-        if last_event_time:
-            time_since_last = (
-                datetime.now(UTC) - last_event_time
-            ).total_seconds() / 3600.0
-        else:
-            time_since_last = 1.0  # Default to 1 hour if no events
 
-        # Event diversity (distinct event types)
-        event_diversity = (
-            session.scalar(
-                select(func.count(func.distinct(NormalizedEvent.event_id))).where(
+            network_connections = (
+                session.scalar(
+                    select(func.count(NormalizedEvent.id))
+                    .where(
+                        NormalizedEvent.event_id.in_(
+                            NETWORK_EVENTS if NETWORK_EVENTS else set()
+                        )
+                    )
+                    .where(NormalizedEvent.timestamp >= since)
+                )
+                or 0
+            )
+
+            # Time since last event across all streams
+            last_event_time = session.scalar(
+                select(func.max(NormalizedEvent.timestamp)).where(
                     NormalizedEvent.timestamp >= since
                 )
             )
-            or 0
-        )
+            if last_event_time:
+                time_since_last = (
+                    datetime.now(UTC) - last_event_time
+                ).total_seconds() / 3600.0
+            else:
+                time_since_last = 1.0  # Default to 1 hour if no events
 
-        # Ratio features
-        login_process_ratio = failed_logins / max(suspicious_processes, 1)
+            # Event diversity (distinct event types)
+            event_diversity = (
+                session.scalar(
+                    select(func.count(func.distinct(NormalizedEvent.event_id))).where(
+                        NormalizedEvent.timestamp >= since
+                    )
+                )
+                or 0
+            )
 
-        # Sequence detection (simplified: check if both types occurred)
-        has_failed_then_process = (
-            1.0 if (failed_logins > 0 and suspicious_processes > 0) else 0.0
-        )
-        has_process_then_network = (
-            1.0 if (suspicious_processes > 0 and network_connections > 0) else 0.0
-        )
+            # Ratio features
+            login_process_ratio = failed_logins / max(suspicious_processes, 1)
 
-        return [
-            min(failed_logins / 10.0, 1.0),  # Normalized failed logins
-            min(suspicious_processes / 10.0, 1.0),  # Normalized suspicious processes
-            min(network_connections / 10.0, 1.0),  # Normalized network connections
-            min(login_process_ratio, 1.0),  # Login/process ratio (capped at 1)
-            min(time_since_last, 1.0),  # Time since last event (capped at 1 hour)
-            has_failed_then_process,
-            has_process_then_network,
-            min(event_diversity / 5.0, 1.0),  # Event diversity (normalized)
-        ]
+            # Sequence detection (simplified: check if both types occurred)
+            has_failed_then_process = (
+                1.0 if (failed_logins > 0 and suspicious_processes > 0) else 0.0
+            )
+            has_process_then_network = (
+                1.0 if (suspicious_processes > 0 and network_connections > 0) else 0.0
+            )
+
+            return [
+                min(failed_logins / 10.0, 1.0),  # Normalized failed logins
+                min(suspicious_processes / 10.0, 1.0),  # Normalized suspicious processes
+                min(network_connections / 10.0, 1.0),  # Normalized network connections
+                min(login_process_ratio, 1.0),  # Login/process ratio (capped at 1)
+                min(time_since_last, 1.0),  # Time since last event (capped at 1 hour)
+                has_failed_then_process,
+                has_process_then_network,
+                min(event_diversity / 5.0, 1.0),  # Event diversity (normalized)
+            ]
+
+        return list(_cached(("cross_stream", hours), _compute))
     except Exception as exc:
         return _feature_db_error(session, exc, [0.0] * 8)
 
@@ -1770,17 +1837,7 @@ def event_feature_vector(event, _shared_session=None) -> list[float] | None:
             ]
 
             # New v5 features for login stream (must match training order)
-            _ip_fail_count = (
-                session.scalar(
-                    select(func.count(NormalizedEvent.id))
-                    .where(NormalizedEvent.event_id == 4625)
-                    .where(
-                        NormalizedEvent.raw_json["facts"]["source_ip"].cast(String)
-                        == source_ip
-                    )
-                )
-                or 0
-            ) if source_ip else 0
+            _ip_fail_count = _get_ip_fail_count(session, source_ip) if source_ip else 0
             login_v5_features = [
                 min(
                     _get_failed_login_velocity_per_ip(session, source_ip, 5) / 2.0, 1.0
@@ -1992,6 +2049,7 @@ def _get_user_session_deviation(
         return 0.0
 
 
+@_window_cached
 def _get_event_burst_score(session, behavior: str, minutes: int = 5) -> float:
     """Burst score: ratio of events in the last `minutes` to the hourly rate.
 
@@ -2141,26 +2199,27 @@ def _load_behavior_features(
         X = []
         y = []
         verdicts = _verdict_map(_sess) if with_labels else {}
-        for ev in rows:
-            try:
-                if orm_event_is_corrupted(ev)[0]:
-                    continue
-                features = event_feature_vector(ev)
-                if not features:
-                    continue
-                X.append(features)
-                if with_labels:
-                    if ev.id in verdicts:
-                        y.append(verdicts[ev.id])
+        with _feature_pass_cache():
+            for ev in rows:
+                try:
+                    if orm_event_is_corrupted(ev)[0]:
                         continue
-                    y.append(
-                        1
-                        if MLAnomalyDetector._is_attack_sample(ev.event_id, ev.raw_json or {})
-                        else 0
-                    )
-            except Exception:
-                logger.exception("Unexpected error")
-                continue
+                    features = event_feature_vector(ev, _shared_session=_sess)
+                    if not features:
+                        continue
+                    X.append(features)
+                    if with_labels:
+                        if ev.id in verdicts:
+                            y.append(verdicts[ev.id])
+                            continue
+                        y.append(
+                            1
+                            if MLAnomalyDetector._is_attack_sample(ev.event_id, ev.raw_json or {})
+                            else 0
+                        )
+                except Exception:
+                    logger.exception("Unexpected error")
+                    continue
         if with_labels:
             return (
                 np.array(X, dtype=float) if X else np.empty((0, 9)),
@@ -3730,20 +3789,21 @@ class MLAnomalyDetector:
             )
         ).all()
         verdicts = _verdict_map(session)
-        for event_id, raw, eid in rows:
-            if orm_event_is_corrupted({"user": "-", "raw_json": raw})[0]:
-                continue
-            behavior = _behavior_of(int(eid))
-            if behavior not in out:
-                continue
-            features = event_feature_vector({"event_id": eid, "raw_json": raw}, _shared_session=session)
-            if not features:
-                continue
-            if event_id in verdicts:
-                is_attack = bool(verdicts[event_id])
-            else:
-                is_attack = MLAnomalyDetector._is_attack_sample(eid, raw or {})
-            (out[behavior][0] if is_attack else out[behavior][1]).append(features)
+        with _feature_pass_cache():
+            for event_id, raw, eid in rows:
+                if orm_event_is_corrupted({"user": "-", "raw_json": raw})[0]:
+                    continue
+                behavior = _behavior_of(int(eid))
+                if behavior not in out:
+                    continue
+                features = event_feature_vector({"event_id": eid, "raw_json": raw}, _shared_session=session)
+                if not features:
+                    continue
+                if event_id in verdicts:
+                    is_attack = bool(verdicts[event_id])
+                else:
+                    is_attack = MLAnomalyDetector._is_attack_sample(eid, raw or {})
+                (out[behavior][0] if is_attack else out[behavior][1]).append(features)
 
         net_X, net_y, net_ips = MLAnomalyDetector._labeled_network_samples(
             session, None
@@ -3776,23 +3836,25 @@ class MLAnomalyDetector:
             "network": [[], []],
         }
         verdicts = _verdict_map(session)
-        for row_id, raw, event_id, timestamp in rows:
-            if orm_event_is_corrupted({"user": "-", "raw_json": raw})[0]:
-                continue
-            features = event_feature_vector(
-                {"event_id": event_id, "raw_json": raw, "timestamp": timestamp}
-            )
-            if not features:
-                continue
-            behavior = _behavior_of(int(event_id))
-            if row_id in verdicts:
-                label = verdicts[row_id]
-            else:
-                label = (
-                    1 if MLAnomalyDetector._is_attack_sample(event_id, raw or {}) else 0
+        with _feature_pass_cache():
+            for row_id, raw, event_id, timestamp in rows:
+                if orm_event_is_corrupted({"user": "-", "raw_json": raw})[0]:
+                    continue
+                features = event_feature_vector(
+                    {"event_id": event_id, "raw_json": raw, "timestamp": timestamp},
+                    _shared_session=session,
                 )
-            out[behavior][0].append(features)
-            out[behavior][1].append(label)
+                if not features:
+                    continue
+                behavior = _behavior_of(int(event_id))
+                if row_id in verdicts:
+                    label = verdicts[row_id]
+                else:
+                    label = (
+                        1 if MLAnomalyDetector._is_attack_sample(event_id, raw or {}) else 0
+                    )
+                out[behavior][0].append(features)
+                out[behavior][1].append(label)
         return {
             beh: (np.array(x, dtype=float), np.array(y, dtype=int))
             for beh, (x, y) in out.items()
@@ -4180,12 +4242,13 @@ class MLAnomalyDetector:
                     _shared_session=session,
                 )
 
-            _login_pairs = [
-                (i, f) for i in _login_idx if (f := _deployed_features(_events[i]))
-            ]
-            _proc_pairs = [
-                (i, f) for i in _proc_idx if (f := _deployed_features(_events[i]))
-            ]
+            with _feature_pass_cache():
+                _login_pairs = [
+                    (i, f) for i in _login_idx if (f := _deployed_features(_events[i]))
+                ]
+                _proc_pairs = [
+                    (i, f) for i in _proc_idx if (f := _deployed_features(_events[i]))
+                ]
             login_X = (
                 np.array([f for _, f in _login_pairs], dtype=float)
                 if _login_pairs
@@ -4810,6 +4873,70 @@ class MLAnomalyDetector:
 
         return float(max(0.0, min(1.0, 0.6 * base + 0.4 * p)))
 
+    def _combined_score_batch(
+        self, behavior: str, model, features_list: list[list[float]]
+    ) -> list[float]:
+        """Batched :meth:`_combined_score` - identical semantics, one
+        ``decision_function`` / ``predict_proba`` call per behavior group."""
+        if not features_list:
+            return []
+        try:
+            X = np.array(features_list, dtype=float)
+        except (TypeError, ValueError):
+            return [
+                self._combined_score(behavior, model, features)
+                for features in features_list
+            ]
+        if (
+            X.ndim != 2
+            or X.shape[1] != model.n_features_in_
+            or (self.ensembles.get(behavior) and any(
+                ens.n_features_in_ != X.shape[1]
+                for ens in self.ensembles[behavior]
+            ))
+        ):
+            return [
+                self._combined_score(behavior, model, features)
+                for features in features_list
+            ]
+
+        try:
+            # Mirror _score_with: clip(0.5 - decision) per row, then rank.
+            raw = np.clip(0.5 - model.decision_function(X), 0.0, 1.0)
+            base = self._rank_of(raw, self.baselines.get(behavior))
+            if self.ensembles.get(behavior):
+                ens_rows = []
+                for ens_model in self.ensembles[behavior]:
+                    ens_raw = np.clip(
+                        0.5 - ens_model.decision_function(X), 0.0, 1.0
+                    )
+                    ens_rows.append(
+                        self._rank_of(ens_raw, self.baselines.get(behavior))
+                    )
+                base = np.median(np.stack(ens_rows), axis=0)
+
+            classifier = self.supervised_by_stream.get(behavior) or self.supervised
+            p = np.zeros(len(features_list), dtype=float)
+            if classifier is not None and X.shape[1] == classifier.n_features_in_:  # type: ignore[attr-defined]
+                try:
+                    proba = classifier.predict_proba(X)  # type: ignore[attr-defined]
+                    if proba.shape[1] > 1:
+                        p = proba[:, 1]
+                except Exception:
+                    logger.exception("Unexpected error")
+                    p = np.zeros(len(features_list), dtype=float)
+            if self.ensemble is not None and self.ensemble.is_trained:
+                scores = np.clip(self.ensemble.predict_batch(base, p), 0.0, 1.0)
+            else:
+                scores = np.clip(0.6 * base + 0.4 * p, 0.0, 1.0)
+            return [float(x) for x in scores]
+        except Exception:
+            logger.exception("Unexpected error")
+            return [
+                self._combined_score(behavior, model, features)
+                for features in features_list
+            ]
+
     def score_event(self, features: list[float]) -> float:
         """Anomaly score in [0,1]; higher = more anomalous.
 
@@ -4893,23 +5020,13 @@ class MLAnomalyDetector:
             behavior, self._combined_score(behavior, model, features)
         )
 
-    def score_network_connection(
-        self,
+    @staticmethod
+    def _network_features(
         remote_ip: str,
         count: int = 1,
         distinct_ports: int = 1,
-        bytes_sent: int = 0,
-        bytes_recv: int = 0,
-        duration: float = 0.0,
-    ) -> float:
-        """Anomaly score for a network connection.
-
-        v11 Feature vector: 26-dim per-event features matching _load_network_features.
-        """
-        model = self.models.get("network")
-        if model is None:
-            return 0.0
-
+    ) -> list[float]:
+        """v11 26-dim network feature row matching _load_network_features."""
         from backend.ml.realworld_labeler import is_attack_ip_offline
         import math
 
@@ -4924,17 +5041,17 @@ class MLAnomalyDetector:
                 logger.exception("Unexpected error")
             return 0.0
 
-        def _is_priv(ip: str) -> float:
-            return 1.0 if (ip.startswith("10.") or ip.startswith("172.16.") or ip.startswith("192.168.")) else 0.0
+        def _is_priv(ip: str) -> bool:
+            return ip.startswith("10.") or ip.startswith("172.16.") or ip.startswith("192.168.")
 
-        def _is_ll(ip: str) -> float:
-            return 1.0 if ip.startswith("169.254.") or ip.startswith("fe80") else 0.0
+        def _is_ll(ip: str) -> bool:
+            return ip.startswith("169.254.") or ip.startswith("fe80")
 
-        def _is_mc(ip: str) -> float:
-            return 1.0 if ip.startswith("224.") or ip.startswith("239.") or ip.startswith("ff") else 0.0
+        def _is_mc(ip: str) -> bool:
+            return ip.startswith("224.") or ip.startswith("239.") or ip.startswith("ff")
 
-        def _is_lb(ip: str) -> float:
-            return 1.0 if ip in ("127.0.0.1", "::1") else 0.0
+        def _is_lb(ip: str) -> bool:
+            return ip in ("127.0.0.1", "::1")
 
         now = datetime.now(UTC)
         hour = now.hour
@@ -4952,15 +5069,15 @@ class MLAnomalyDetector:
             else:
                 port_cat = 0.75
 
-        features = [
+        return [
             0.5,
             1.0,
             0.0,
             0.0,
             hour_sin, hour_cos, is_night, is_weekend,
             _ip_num("0.0.0.0"), _ip_num(remote_ip),
-            0.0, _is_priv(remote_ip),
-            _is_ll(remote_ip), _is_mc(remote_ip), _is_lb("0.0.0.0"),
+            0.0, float(_is_priv(remote_ip)),
+            float(_is_ll(remote_ip)), float(_is_mc(remote_ip)), float(_is_lb("0.0.0.0")),
             float(distinct_ports) / 65535.0,
             port_cat,
             0.0,
@@ -4976,10 +5093,30 @@ class MLAnomalyDetector:
             0.0,
         ]
 
+    def score_network_connection(
+        self,
+        remote_ip: str,
+        count: int = 1,
+        distinct_ports: int = 1,
+        bytes_sent: int = 0,
+        bytes_recv: int = 0,
+        duration: float = 0.0,
+    ) -> float:
+        """Anomaly score for a network connection.
+
+        v11 Feature vector: 26-dim per-event features matching _load_network_features.
+        """
+        model = self.models.get("network")
+        if model is None:
+            return 0.0
+
+        features = self._network_features(remote_ip, count, distinct_ports)
+
         return self._weighted_score(
             "network",
             self._combined_score("network", model, features),
         )
+
 
     @staticmethod
     def _score_with(model, features: list[float]) -> float:
@@ -5005,36 +5142,53 @@ class MLAnomalyDetector:
         session = session or SessionLocal()
         try:
             since = datetime.now(UTC) - timedelta(hours=hours)
-            events = session.scalars(
-                select(NormalizedEvent).where(NormalizedEvent.timestamp >= since)
-            ).all()
             flagged = 0
             scored = 0
-            for ev in events:
-                if orm_event_is_corrupted(ev)[0]:
-                    continue
-                behavior = _behavior_of(ev.event_id)
-                model = self.models.get(behavior)
-                if model is None:
-                    continue
-                features = event_feature_vector(ev)
-                if features is None:
-                    continue
-                try:
-                    score = self._weighted_score(
-                        behavior, self._combined_score(behavior, model, features)
+            # Pass-scoped cache: window aggregates (counts, baselines,
+            # entropies) are identical for every event in this window, so
+            # they are computed once instead of once per event.
+            with _feature_pass_cache():
+                events = session.scalars(
+                    select(NormalizedEvent).where(NormalizedEvent.timestamp >= since)
+                ).all()
+                groups: dict[str, tuple[object, list, list]] = {}
+                for ev in events:
+                    if orm_event_is_corrupted(ev)[0]:
+                        continue
+                    behavior = _behavior_of(ev.event_id)
+                    model = self.models.get(behavior)
+                    if model is None:
+                        continue
+                    features = event_feature_vector(ev, _shared_session=session)
+                    if features is None:
+                        continue
+                    grouped = groups.setdefault(
+                        behavior, (model, [], [])
                     )
+                    grouped[1].append(ev)
+                    grouped[2].append(features)
+
+            for behavior, (model, evs, feats) in groups.items():
+                try:
+                    scores = self._combined_score_batch(behavior, model, feats)
                 except Exception:
                     logger.exception("Unexpected error")
-                    continue
-                ev.ml_score = round(score, 4)
-                scored += 1
-                if score > self.thresholds.get(behavior, 0.5):
-                    ev.is_anomaly = True
-                    flagged += 1
+                    scores = [0.0] * len(feats)
+                for ev, features, combined in zip(evs, feats, scores):
+                    try:
+                        score = self._weighted_score(behavior, float(combined))
+                    except Exception:
+                        logger.exception("Unexpected error")
+                        continue
+                    ev.ml_score = round(score, 4)
+                    scored += 1
+                    if score > self.thresholds.get(behavior, 0.5):
+                        ev.is_anomaly = True
+                        flagged += 1
 
             # Score network connection buckets in the same pass.
             if "network" in self.models:
+                net_model = self.models["network"]
                 net_rows = session.execute(
                     select(
                         NetworkConnection.remote_ip,
@@ -5047,23 +5201,35 @@ class MLAnomalyDetector:
                     .where(NetworkConnection.observed_at >= since)
                     .group_by(NetworkConnection.remote_ip)
                 ).all()
-                for (
-                    remote_ip,
-                    count,
-                    distinct_ports,
-                    bytes_sent,
-                    bytes_recv,
-                    duration,
-                ) in net_rows:
+                net_inputs = [
+                    (
+                        remote_ip or "unknown",
+                        int(count),
+                        int(distinct_ports),
+                    )
+                    for (
+                        remote_ip,
+                        count,
+                        distinct_ports,
+                        _bytes_sent,
+                        _bytes_recv,
+                        _duration,
+                    ) in net_rows
+                ]
+                net_feats = [
+                    self._network_features(ip, count, ports)
+                    for ip, count, ports in net_inputs
+                ]
+                try:
+                    net_scores = self._combined_score_batch(
+                        "network", net_model, net_feats
+                    )
+                except Exception:
+                    logger.exception("Unexpected error")
+                    net_scores = [0.0] * len(net_feats)
+                for (_ip, _cnt, _ports), combined in zip(net_inputs, net_scores):
                     try:
-                        score = self.score_network_connection(
-                            remote_ip or "unknown",
-                            int(count),
-                            int(distinct_ports),
-                            int(bytes_sent or 0),
-                            int(bytes_recv or 0),
-                            float(duration or 0.0),
-                        )
+                        score = self._weighted_score("network", float(combined))
                     except Exception:
                         logger.exception("Unexpected error")
                         continue

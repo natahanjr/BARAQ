@@ -423,6 +423,7 @@ export const api = {
   automationRunPlaybook: (id, alertId) => request(`/api/automation/playbooks/${id}/run?alert_id=${alertId}`, { method: "POST" }),
   automationRuns: (limit = 50, alertId) =>
     request(`/api/automation/runs?limit=${limit}${alertId ? `&alert_id=${alertId}` : ""}`),
+  automationRun: (runId) => request(`/api/automation/runs/${runId}`),
   automationPreview: (alertId) => request(`/api/automation/preview?alert_id=${alertId}`),
 
   savedSearches: () => request("/api/saved/searches"),

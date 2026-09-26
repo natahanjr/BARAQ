@@ -31,11 +31,34 @@ def _bulk_train(session, hours=None, kind="manual"):
     return result
 
 
+def _demote_thread_priority() -> None:
+    """Run the training thread below normal priority (best effort).
+
+    Retrains contend with the scheduler loop for CPU; at normal priority the
+    training burst starves collection/detection (cycles ballooned 20s ->
+    100s+). On Windows this pins the thread to below-normal so latency-
+    critical stages preempt it; elsewhere it is a no-op.
+    """
+    try:
+        import ctypes
+
+        THREAD_PRIORITY_BELOW_NORMAL = -1
+        if hasattr(ctypes.windll, "kernel32"):
+            if ctypes.windll.kernel32.SetThreadPriority(
+                ctypes.windll.kernel32.GetCurrentThread(),
+                THREAD_PRIORITY_BELOW_NORMAL,
+            ):
+                logger.debug("Training thread priority set below normal")
+    except Exception:  # pragma: no cover - non-Windows or restricted env
+        pass
+
+
 def train_in_background(hours=None, validate=True, force=False):
     if not _train_lock.acquire(blocking=False):
         return False
 
     def _work():
+        _demote_thread_priority()
         db = SessionLocal()
         try:
             result = _bulk_train(db, hours=hours, kind="manual")

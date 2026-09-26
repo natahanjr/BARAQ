@@ -33,7 +33,11 @@ class AWSConnector(BaseCloudConnector):
 
     async def fetch_events(self, since: str, limit: int = 100) -> list[CloudEvent]:
         if not self.access_key or not self.secret_key:
-            raise RuntimeError(_NOT_IMPLEMENTED_MSG)
+            logger.warning(
+                "AWS not configured - no events ingested. Set BARAQ_AWS_ACCESS_KEY_ID "
+                "and BARAQ_AWS_SECRET_ACCESS_KEY to enable the CloudTrail connector."
+            )
+            return []
         raise NotImplementedError(_NOT_IMPLEMENTED_MSG)
 
     async def test_connection(self) -> bool:
