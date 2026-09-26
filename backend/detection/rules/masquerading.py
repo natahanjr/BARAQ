@@ -76,6 +76,13 @@ class MasqueradingRule(BaseRule):
             name = (pr.name or "").lower()
             if name not in SYSTEM_BINARIES:
                 continue
+            # An empty path means the collector could not read it (access
+            # denied), NOT that the binary lives outside C:\Windows. Firing on
+            # a missing field produced "smss.exe is executing from ''" on
+            # perfectly normal SYSTEM processes - a guaranteed false positive
+            # on every locked-down endpoint.
+            if not (pr.path or "").strip():
+                continue
             if _is_system_path(pr.path or ""):
                 continue
             findings.append(

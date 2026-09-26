@@ -25,6 +25,11 @@ class RBAManager:
     MIN_ALERT_RISK = 25.0
     #: Minimum number of significant alerts required for a cluster.
     MIN_CLUSTER_ALERTS = 2
+    #: A cluster made only of low/medium severity alerts needs this many
+    #: members before it can escalate on cumulative risk alone - two marginal
+    #: detections (e.g. a stray failed logon and a single DNS anomaly) must
+    #: never become an incident on their own.
+    MIN_LOW_SEVERITY_CLUSTER = 4
 
     def __init__(self, session: Session, risk_threshold: float = 50.0):
         self.session = session
@@ -91,6 +96,22 @@ class RBAManager:
             )
 
         if len(unique_tactics) < 2 and not has_significant_severity:
+            return None
+
+        # Low/medium-only clusters escalate on volume, not on a couple of
+        # marginal scores: keep the high/critical path fast, require a real
+        # cluster before cumulative risk alone is enough.
+        if (
+            not has_significant_severity
+            and len(significant) < self.MIN_LOW_SEVERITY_CLUSTER
+        ):
+            logger.debug(
+                "Entity %s cluster below escalation bar: %d low/medium alerts "
+                "(needs %d or one high/critical)",
+                host,
+                len(significant),
+                self.MIN_LOW_SEVERITY_CLUSTER,
+            )
             return None
 
         # Bonus: Increase risk if multiple different tactics are observed (indicates a campaign)

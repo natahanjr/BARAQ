@@ -51,6 +51,13 @@ class NetworkReconRule(BaseRule):
             )
             .where(
                 NetworkConnection.observed_at >= since,
+                # A host talking to ITSELF across many ports is loopback /
+                # keepalive churn (local services, health checks, ephemeral
+                # port reuse), never reconnaissance. Excluding the self-pair
+                # stops "192.168.1.5 scanning 192.168.1.5" false positives.
+                NetworkConnection.local_ip.is_distinct_from(
+                    NetworkConnection.remote_ip
+                ),
                 *self._org_conds(NetworkConnection),
             )
             .group_by(NetworkConnection.local_ip, NetworkConnection.remote_ip)
@@ -62,6 +69,8 @@ class NetworkReconRule(BaseRule):
 
         for row in self.session.execute(stmt).all():
             if row.local_ip in ("", "::1", "127.0.0.1"):
+                continue
+            if row.remote_ip in ("", "::1", "127.0.0.1"):
                 continue
             evidence = (
                 f"{row.attempts} connection attempts from {row.local_ip} to "

@@ -23,8 +23,8 @@ from backend.database.models import NormalizedEvent
 from backend.detection.fp_filters import is_trusted_agent_activity
 from backend.detection.rules.base import BaseRule, DetectionResult
 from backend.detection.sigma.matcher import (
-    PROCESS_FIELDS,
     SigmaCondition,
+    _PROCESS_FIELDS_NORM,
     _split_key,
     build_event_fields,
     event_data_integrity,
@@ -97,9 +97,7 @@ def _rule_uses_process_fields(rule: SigmaRule) -> bool:
     """True when a rule's selections depend on process identity/activity
     fields - matches are meaningless on events whose process data is
     incomplete (no image / command line captured)."""
-    candidates = {
-        f.replace("_", "").replace(".", "").replace("-", "") for f in PROCESS_FIELDS
-    }
+    candidates = _PROCESS_FIELDS_NORM
     for selection in rule.detection.values():
         if not isinstance(selection, dict):
             continue
@@ -119,17 +117,34 @@ def _rule_uses_process_fields(rule: SigmaRule) -> bool:
 
 _cache: dict[str, tuple[tuple, list[SigmaRule]]] = {}
 
+#: ``_dir_fingerprint`` stats every file in the rules dir (~2500 stat calls,
+#: ~0.7s) and used to run once per RulesEngine construction (4x per detection
+#: sweep). Memoize the walk for this long; on-disk rule edits are picked up
+#: within a minute.
+_FINGERPRINT_TTL = 60.0
+_fingerprint_cache: dict[str, tuple[float, tuple]] = {}
+
 
 def _dir_fingerprint(rules_dir: Path) -> tuple:
+    import time as _time
+
+    key = str(rules_dir)
+    hit = _fingerprint_cache.get(key)
+    now = _time.monotonic()
+    if hit is not None and now - hit[0] < _FINGERPRINT_TTL:
+        return hit[1]
     if not rules_dir.exists():
-        return ("missing", 0, 0)
-    newest: float = 0
-    count = 0
-    for path in rules_dir.rglob("*"):
-        if path.is_file() and path.suffix.lower() in (".yml", ".yaml"):
-            count += 1
-            newest = max(newest, path.stat().st_mtime)
-    return (str(rules_dir), newest, count)
+        result = ("missing", 0, 0)
+    else:
+        newest: float = 0
+        count = 0
+        for path in rules_dir.rglob("*"):
+            if path.is_file() and path.suffix.lower() in (".yml", ".yaml"):
+                count += 1
+                newest = max(newest, path.stat().st_mtime)
+        result = (str(rules_dir), newest, count)
+    _fingerprint_cache[key] = (now, result)
+    return result
 
 
 def load_rules_cached(rules_dir: Path) -> list[SigmaRule]:
@@ -202,6 +217,13 @@ class SigmaRuleEngine(BaseRule):
         super().__init__(session, org)
         self.rules_dir = Path(rules_dir or SIGMA_RULES_DIR)
         self.rules = load_rules_cached(self.rules_dir)
+        #: Rule IDs whose selections touch process identity/activity fields.
+        #: Resolved once per engine construction instead of per (rule, event)
+        #: in the matching loop (it used to rebuild a normalized field set on
+        #: every single call).
+        self._process_rule_ids = frozenset(
+            rule.rule_id for rule in self.rules if _rule_uses_process_fields(rule)
+        )
 
     def evaluate(
         self, window_minutes: int, since_id: int | None = None
@@ -288,6 +310,10 @@ class SigmaRuleEngine(BaseRule):
         # Aggregation rules: window-wide counts (unchanged semantics). Events
         # with incomplete process data are excluded from process-field rules,
         # so a truncated batch cannot push a count over a threshold.
+        # Integrity flags are per-event, not per-(rule, event): compute once.
+        integrities: dict[int, dict] = {
+            event.id: event_data_integrity(event) for event in events
+        }
         for rule in aggregation_rules:
             agg = _agg_details(rule.condition)
             if agg is None:
@@ -297,13 +323,13 @@ class SigmaRuleEngine(BaseRule):
             if pre_cond is None:
                 pre_cond = SigmaCondition(pre)
                 compiled[rule.rule_id] = pre_cond
-            rule_uses_process = _rule_uses_process_fields(rule)
+            rule_uses_process = rule.rule_id in self._process_rule_ids
             scope = _logsource_event_ids(rule)
             counts: Counter[str] = Counter()
             for event in events:
                 if scope and event.event_id not in scope:
                     continue
-                integrity = event_data_integrity(event)
+                integrity = integrities[event.id]
                 if integrity["process_incomplete"] and rule_uses_process:
                     continue
                 fields = _fields(event)
@@ -345,11 +371,16 @@ class SigmaRuleEngine(BaseRule):
             )
 
         # Event-level rules: match every new event against its candidate set.
+        # Pre-merge the (unconstrained + scoped) candidate lists per EventID
+        # once instead of concatenating fresh lists for every event.
+        merged_candidates: dict[int, list[SigmaRule]] = {
+            eid: unconstrained + rs for eid, rs in rules_by_event_id.items()
+        }
         emitted: dict[str, int] = {}
         for event in delta:
             fields = _fields(event)
             integrity = event_data_integrity(event)
-            candidates = unconstrained + rules_by_event_id.get(event.event_id, [])
+            candidates = merged_candidates.get(event.event_id, unconstrained)
             if not candidates:
                 continue
             for rule in candidates:
@@ -358,7 +389,9 @@ class SigmaRuleEngine(BaseRule):
                 # Exception: processes with incomplete data. Rules that
                 # depend on process fields cannot be trusted on events whose
                 # process data was never captured - they are skipped.
-                if integrity["process_incomplete"] and _rule_uses_process_fields(rule):
+                if integrity["process_incomplete"] and (
+                    rule.rule_id in self._process_rule_ids
+                ):
                     logger.debug(
                         "Sigma: skipping '%s' for event %s - process data "
                         "incomplete (%s)",

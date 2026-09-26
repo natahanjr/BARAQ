@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -130,7 +130,22 @@ class BaseRule(ABC):
 
     def cmdline_candidates(self, since: datetime) -> list[tuple[str, str, str]]:
         """Yield (command_line, source_label, user) from process snapshots and
-        normalized 4688/4104 events so command-line rules share one source."""
+        normalized 4688/4104 events so command-line rules share one source.
+
+        Every rule in a detection sweep calls this with the same effective
+        window (``now - window_minutes``), so inside a pass scope the result
+        is computed once per (org, window) instead of ~100 times; duplicates
+        (the same command line in ProcessRecord + event form) are collapsed
+        by (command_line, user) so downstream regex scans run ~7x less.
+        """
+        from backend.passcache import _FEATURE_CACHE_TLS
+
+        cache = getattr(_FEATURE_CACHE_TLS, "cache", None)
+        window_min = int((datetime.now(UTC) - since).total_seconds() // 60)
+        key = ("cmdline_candidates", self.org, window_min)
+        if cache is not None and key in cache:
+            return list(cache[key])
+
         out: list[tuple[str, str, str]] = []
         for pr in self.session.scalars(
             select(ProcessRecord).where(
@@ -152,4 +167,16 @@ class BaseRule(ABC):
             cl = facts.get("command_line") or facts.get("cmdline") or ""
             if cl:
                 out.append((cl, f"Event {ev.event_id} (user '{ev.user}')", ev.user))
-        return out
+
+        seen: set[tuple[str, str]] = set()
+        deduped: list[tuple[str, str, str]] = []
+        for cl, label, user in out:
+            dedup_key = (cl, user or "")
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
+            deduped.append((cl, label, user))
+
+        if cache is not None:
+            cache[key] = deduped
+        return deduped

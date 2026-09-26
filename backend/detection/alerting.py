@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from backend.config import (
     ALERT_ESCALATE_AFTER,
+    ALERT_RETRIGGER_COOLDOWN_SECONDS,
     ALERT_THROTTLE_MAX_PER_WINDOW,
     ALERT_THROTTLE_MINUTES,
     SEVERITY_LADDER,
@@ -521,12 +522,16 @@ class AlertingService:
 
             if alert:
                 # Re-trigger cooldown: if the alert was already updated in the
-                # last 30 seconds, skip re-processing to prevent oscillation
-                # and unbounded trigger_count growth from the same events.
+                # last ALERT_RETRIGGER_COOLDOWN_SECONDS, skip re-processing to
+                # prevent oscillation and unbounded trigger_count growth from
+                # the same events. Configurable (0 disables) for deterministic
+                # pipelines and tests.
+                cooldown = ALERT_RETRIGGER_COOLDOWN_SECONDS
                 last_update = alert.updated_at
                 if (
-                    last_update
-                    and (datetime.now(UTC) - last_update).total_seconds() < 30
+                    cooldown > 0
+                    and last_update
+                    and (datetime.now(UTC) - last_update).total_seconds() < cooldown
                 ):
                     continue
                 alert.evidence = evidence_display
