@@ -80,7 +80,7 @@ def insert_batch(events, source, session):
 def main():
     from backend.ml.dataset_adapters import ADAPTERS
     from backend.database.connection import SessionLocal, engine
-    from backend.database.models import NormalizedEvent
+    from backend.database.models import NormalizedEvent, Verdict
     from sqlalchemy import select, func
     import urllib.request
 

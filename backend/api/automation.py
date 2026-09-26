@@ -19,7 +19,7 @@ from backend.automation.playbooks import (
 )
 from backend.database.connection import get_db
 from backend.database.models import Alert, AutomationPlaybook, PlaybookRun
-from backend.security import actor_name, require_admin, require_auth
+from backend.security import actor_name, require_admin, require_auth, tenant_scope
 
 router = APIRouter(
     prefix="/api/automation",
@@ -224,19 +224,60 @@ def run_playbook_now(
 
 @router.get("/runs")
 def list_runs(
+    request: Request,
     limit: int = Query(50, ge=1, le=500),
     playbook_id: int | None = None,
     alert_id: int | None = None,
     db: Session = Depends(get_db),
 ):
-    """Execution log of automation playbook runs (newest first)."""
+    """Execution log of automation playbook runs (newest first).
+
+    Tenant-scoped: runs record the alert's org, so an analyst only ever sees
+    their own organization's automation history.
+    """
+    org = tenant_scope(request)
     stmt = select(PlaybookRun).order_by(PlaybookRun.created_at.desc())
+    if org is not None:
+        stmt = stmt.where(PlaybookRun.org == org)
     if playbook_id:
         stmt = stmt.where(PlaybookRun.playbook_id == playbook_id)
     if alert_id:
         stmt = stmt.where(PlaybookRun.alert_id == alert_id)
     runs = db.scalars(stmt.limit(limit)).all()
     return {"total": len(runs), "runs": [r.to_dict() for r in runs]}
+
+
+@router.get("/runs/{run_id}")
+def get_run(
+    request: Request,
+    run_id: int,
+    db: Session = Depends(get_db),
+):
+    """Full detail for one automation run, for the drill-down view.
+
+    Returns the run, the alert it fired on (so the UI can link straight to the
+    investigation), the playbook definition with its triggers, and the
+    org-scoped audit trail for the same event.
+    """
+    run = db.get(PlaybookRun, run_id)
+    if run is None:
+        raise HTTPException(404, "run not found")
+    org = tenant_scope(request)
+    if org is not None and (run.org or "") != org:
+        raise HTTPException(404, "run not found")
+
+    playbook = db.get(AutomationPlaybook, run.playbook_id)
+    alert = db.get(Alert, run.alert_id) if run.alert_id else None
+
+    return {
+        "run": run.to_dict(),
+        "playbook": playbook.to_dict() if playbook else None,
+        "alert": alert.to_dict() if alert else None,
+        "actions_total": len(run.results or []),
+        "actions_failed": sum(
+            1 for r in (run.results or []) if str(r.get("status")) == "failed"
+        ),
+    }
 
 
 @router.get("/preview")

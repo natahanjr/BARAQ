@@ -110,7 +110,7 @@ log.info("Total combined events: %d", len(all_events))
 log.info("Inserting into database...")
 from backend.database.connection import SessionLocal, engine
 from backend.database.models import NormalizedEvent, Verdict
-from sqlalchemy import text, func
+from sqlalchemy import text, func, select
 import hashlib
 from datetime import UTC, datetime
 
