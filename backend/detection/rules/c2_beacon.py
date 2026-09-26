@@ -1,12 +1,20 @@
-"""Rule - External C2 beacon / sustained exfiltration flows (MITRE T1071.001).
+"""Rule - External C2 beaconing and bulk exfiltration (MITRE T1071.001).
 
-Flags sustained high-volume connections from a single process to a
-single *external* remote IP - the network signature of a command-and-control
-beacon or bulk data transfer that normal client traffic does not exhibit.
+Two genuinely different behaviours live in this rule, and conflating them is
+what makes it cry wolf:
 
-Emitted (process, remote) pairs are remembered with a cooldown so the same
-sliding-window rows are not re-reported every scheduler cycle while still
-re-checking candidates whose byte counters keep growing.
+* **C2 beaconing** - many *small* connections to one external address. The
+  volume is low; the *repetition* is the signal. This is the high-severity
+  path.
+* **Bulk transfer** - a few *large* connections (a 4 GB browser download, a
+  cloud-sync client, Windows Update). High volume, no repetition. This is
+  informational only, and is suppressed for well-known bulk-transfer programs
+  because a desktop that browses the web is not an incident.
+
+The earlier version fired on ">= 5 MB total, >= 3 connections, one long
+connection", which every Firefox/Edge/Telegram/Discord session satisfies - on
+a real laptop that produced 8 high-severity alerts in a single pass, all of
+them ordinary software talking to Google, Cloudflare and Microsoft.
 """
 
 from __future__ import annotations
@@ -23,9 +31,83 @@ from sqlalchemy import select
 from backend.database.models import NetworkConnection, SystemState
 from backend.detection.rules.base import BaseRule, DetectionResult
 
-BEACON_BYTES_THRESHOLD = 5_000_000  # 5 MB in either direction to one remote IP
-BEACON_MIN_CONNECTIONS = 3
+# --- beaconing (repetition is the signal) ----------------------------------
+BEACON_BYTES_THRESHOLD = 1_000_000  # 1 MB total, spread over many transfers
+BEACON_MIN_CONNECTIONS = 8  # repetition, not one-off traffic
+#: A beacon carries a small payload per connection. Above this average the
+#: traffic is a transfer, not a beacon.
+BEACON_MAX_AVG_BYTES = 256 * 1024
 BEACON_MIN_DURATION_SECONDS = 120.0
+
+# --- bulk transfer (volume is the signal) ---------------------------------
+#: Deliberately high for ordinary programs: at 5 MB this fired on browsing.
+BULK_BYTES_THRESHOLD = 250_000_000  # 250 MB in the window
+#: ...but 24 MB leaving a PowerShell to an external host is not "browsing".
+#: For interpreters and LOLBins any significant external transfer is worth a
+#: look, so they get their own, much lower bar.
+BULK_SUSPICIOUS_BYTES_THRESHOLD = 5_000_000
+BULK_MIN_CONNECTIONS = 3
+BULK_MIN_DURATION_SECONDS = 300.0
+
+#: Programs that have no business moving bulk data off the host. Volume from
+#: one of these is meaningful at a level that would be noise from a browser.
+SUSPICIOUS_TRANSFER_PROCESSES = {
+    "powershell.exe",
+    "pwsh.exe",
+    "cmd.exe",
+    "wscript.exe",
+    "cscript.exe",
+    "mshta.exe",
+    "rundll32.exe",
+    "regsvr32.exe",
+    "certutil.exe",
+    "bitsadmin.exe",
+    "msiexec.exe",
+    "wmic.exe",
+    "installutil.exe",
+    "msbuild.exe",
+}
+
+#: Programs that legitimately move large volumes. A beacon from one of these
+#: is still reported (the beacon path is shape-based, not name-based) - only
+#: the volume-driven bulk path is suppressed.
+BENIGN_BULK_PROCESSES = {
+    "firefox.exe",
+    "chrome.exe",
+    "msedge.exe",
+    "brave.exe",
+    "opera.exe",
+    "vivaldi.exe",
+    "thunderbird.exe",
+    "outlook.exe",
+    "onedrive.exe",
+    "dropbox.exe",
+    "googledrivefs.exe",
+    "rclone.exe",
+    "telegram.exe",
+    "discord.exe",
+    "slack.exe",
+    "zoom.exe",
+    "teams.exe",
+    "svchost.exe",  # Windows Update / BITS
+    "wuauclt.exe",
+    "tiworker.exe",
+    "searchindexer.exe",
+    "mbamain.exe",
+    "mrt.exe",
+    # Chromium/WebView and desktop dev tooling move the same volumes through
+    # the same hosts as anything else; measured on real traffic.
+    "msedgewebview2.exe",
+    "msedge.exe",
+    "webview2.exe",
+    "code.exe",
+    "code-sidecar.exe",
+    "electron.exe",
+    "opencode.exe",
+    "grammarly.desktop.exe",
+    "crossdeviceservice.exe",
+    "node.exe",
+}
 
 #: system_state key: JSON map of "process|remote" -> last emit epoch.
 _COOLDOWN_KEY = "c2_beacon_emit_cooldown"
@@ -81,19 +163,20 @@ def _save_cooldowns(session, data: dict[str, float]) -> None:
 
 class C2BeaconRule(BaseRule):
     rule_id = "c2_beacon"
-    name = "External C2 Beacon / Bulk Transfer"
+    name = "External C2 Beaconing / Bulk Transfer"
     description = (
-        "A process maintained sustained high-volume connections to a single "
-        "external address - consistent with command-and-control beaconing "
-        "or large-scale exfiltration."
+        "A process either beaconed - many small connections to one external "
+        "address - or moved an unusually large volume to one external "
+        "address. Repetition separates command-and-control from ordinary "
+        "bulk transfer."
     )
     severity = "high"
     confidence = 0.7
     mitre_id = "T1071.001"
     recommendation = (
-        "Block the remote host at the firewall, inspect the initiating "
-        "process memory and parent chain, and hunt for additional beacon "
-        "intervals or data stores on the host."
+        "For beaconing: block the remote host, inspect the process memory and "
+        "parent chain, and hunt for the implant. For bulk transfer: confirm "
+        "the transfer was expected before acting."
     )
 
     def __init__(
@@ -119,13 +202,20 @@ class C2BeaconRule(BaseRule):
         ).all()
 
         buckets: dict[tuple[str, str], dict] = defaultdict(
-            lambda: {"count": 0, "sent": 0, "recv": 0, "max_duration": 0.0}
+            lambda: {
+                "count": 0,
+                "sent": 0,
+                "recv": 0,
+                "max_duration": 0.0,
+                "peak": 0,
+            }
         )
         for conn in rows:
             remote = (conn.remote_ip or "").strip()
             if not _is_external(remote):
                 continue
             process = (conn.process or "?").strip() or "?"
+            volume = (conn.bytes_sent or 0) + (conn.bytes_recv or 0)
             bucket = buckets[(process, remote)]
             bucket["count"] += 1
             bucket["sent"] += conn.bytes_sent or 0
@@ -133,6 +223,7 @@ class C2BeaconRule(BaseRule):
             bucket["max_duration"] = max(
                 bucket["max_duration"], conn.duration_seconds or 0.0
             )
+            bucket["peak"] = max(bucket["peak"], volume)
 
         now = time.time()
         cooldown_sec = max(window_minutes, 1) * 60.0
@@ -145,11 +236,37 @@ class C2BeaconRule(BaseRule):
 
         for (process, remote), stats in buckets.items():
             total = stats["sent"] + stats["recv"]
-            if total < self.bytes_threshold:
+            count = stats["count"]
+            avg_bytes = total / count if count else 0.0
+            proc_key = process.lower()
+            suspicious_proc = proc_key in SUSPICIOUS_TRANSFER_PROCESSES
+
+            # --- classify by shape before deciding anything ---
+            # Beaconing: repetition of SMALL transfers.
+            is_beacon = (
+                count >= self.min_connections
+                and total >= self.bytes_threshold
+                and avg_bytes <= BEACON_MAX_AVG_BYTES
+                and stats["max_duration"] >= self.min_duration_seconds
+            )
+            # Bulk transfer: few LARGE transfers. The bar depends on WHO is
+            # moving the data - 5 MB from powershell.exe is exfiltration,
+            # 5 MB from firefox.exe is a video.
+            bulk_threshold = (
+                BULK_SUSPICIOUS_BYTES_THRESHOLD
+                if suspicious_proc
+                else BULK_BYTES_THRESHOLD
+            )
+            is_bulk = (
+                count >= BULK_MIN_CONNECTIONS
+                and total >= bulk_threshold
+                and avg_bytes > BEACON_MAX_AVG_BYTES
+                and stats["max_duration"] >= BULK_MIN_DURATION_SECONDS
+            )
+            if not (is_beacon or is_bulk):
                 continue
-            if stats["count"] < self.min_connections:
-                continue
-            if stats["max_duration"] < self.min_duration_seconds:
+            if is_bulk and not suspicious_proc and proc_key in BENIGN_BULK_PROCESSES:
+                # A browser downloading a video is not an incident.
                 continue
 
             pair_key = f"{process}|{remote}"
@@ -159,20 +276,47 @@ class C2BeaconRule(BaseRule):
                 # re-emit the same sliding-window rows every cycle.
                 continue
 
-            confidence = min(
-                0.95,
-                self.confidence + 0.05 * (stats["count"] >= self.min_connections * 2),
-            )
+            if is_beacon:
+                confidence = min(0.95, 0.75 + 0.02 * (count >= self.min_connections * 2))
+                evidence = (
+                    f"Process '{process}' made {count} connections to external "
+                    f"host {remote} carrying {total:,} bytes total "
+                    f"(~{avg_bytes:,.0f} B per connection, longest "
+                    f"{stats['max_duration']:.0f}s) - the small, repeated "
+                    f"transfers are consistent with C2 beaconing."
+                )
+                severity = "high"
+            elif suspicious_proc:
+                # An interpreter or LOLBin shipping bulk data off-host.
+                confidence = 0.6
+                evidence = (
+                    f"Process '{process}' moved {total:,} bytes to external host "
+                    f"{remote} across {count} connections (largest single "
+                    f"connection {stats['peak']:,} B, longest "
+                    f"{stats['max_duration']:.0f}s). {process} has no normal "
+                    f"reason to bulk-transfer data off this host - treat as "
+                    f"possible exfiltration or a download-and-execute stage."
+                )
+                severity = "medium"
+            else:
+                # Informational: volume alone, with no repetition, is a much
+                # weaker signal and must not page anyone.
+                confidence = 0.4
+                evidence = (
+                    f"Process '{process}' moved {total:,} bytes to external "
+                    f"host {remote} across {count} connections (largest single "
+                    f"connection {stats['peak']:,} B, longest "
+                    f"{stats['max_duration']:.0f}s) - large transfer, not "
+                    f"repetitive. Confirm this was expected."
+                )
+                severity = "low"
+
             findings.append(
                 self._result(
-                    evidence=(
-                        f"Process '{process}' exchanged {total:,} bytes with "
-                        f"external host {remote} across {stats['count']} "
-                        f"connections (longest {stats['max_duration']:.0f}s) - "
-                        f"possible C2 beacon or bulk exfiltration."
-                    ),
+                    evidence=evidence,
                     event_ids=[],
                     confidence=confidence,
+                    severity=severity,
                 )
             )
             cooldowns[pair_key] = now
