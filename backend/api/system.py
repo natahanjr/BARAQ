@@ -118,10 +118,11 @@ def run_detection_for_orgs(
         set_cursor,
     )
     from backend.detection.rules_engine import RulesEngine
+    from backend.passcache import _feature_pass_cache
 
     findings: list = []
     created: list = []
-    with CURSOR_LOCK:
+    with CURSOR_LOCK, _feature_pass_cache():
         cursor = get_cursor(db)
         prev_demo = db.info.get("baraq_demo")
         db.info["baraq_demo"] = demo

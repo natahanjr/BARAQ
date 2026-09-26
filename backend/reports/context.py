@@ -47,12 +47,15 @@ def _risk_level(security_score: float) -> tuple[str, str]:
     return level, RISK_DESCRIPTIONS.get(level, RISK_DESCRIPTIONS["LOW"])
 
 
-def executive_context(session: Session) -> dict:
-    summary = dashboard_summary(session)
+def executive_context(session: Session, org: str | None = None) -> dict:
+    summary = dashboard_summary(session, org=org)
     score = summary["security_score"]
     label, desc = _risk_level(score)
 
-    alerts = session.scalars(select(Alert).where(Alert.status == "open")).all()
+    alert_stmt = select(Alert).where(Alert.status == "open")
+    if org is not None:
+        alert_stmt = alert_stmt.where(Alert.org == org)
+    alerts = session.scalars(alert_stmt).all()
     top_threats = [
         {
             "name": a.name,
@@ -73,16 +76,19 @@ def executive_context(session: Session) -> dict:
         "risk_description": desc,
         "summary": summary,
         "top_threats": top_threats,
-        "threat_categories": threat_categories(session),
-        "severity_distribution": severity_distribution(session),
-        "attack_stats": attack_stats(session),
+        "threat_categories": threat_categories(session, org=org),
+        "severity_distribution": severity_distribution(session, org=org),
+        "attack_stats": attack_stats(session, org=org),
     }
 
 
-def technical_context(session: Session) -> dict:
-    alerts = session.scalars(
-        select(Alert).where(Alert.status == "open").order_by(Alert.created_at.desc())
-    ).all()
+def technical_context(session: Session, org: str | None = None) -> dict:
+    alert_stmt = select(Alert).where(Alert.status == "open")
+    event_stmt = select(NormalizedEvent).order_by(NormalizedEvent.timestamp.desc()).limit(100)
+    if org is not None:
+        alert_stmt = alert_stmt.where(Alert.org == org)
+        event_stmt = event_stmt.where(NormalizedEvent.org == org)
+    alerts = session.scalars(alert_stmt.order_by(Alert.created_at.desc())).all()
 
     alert_details = []
     for a in alerts:
@@ -91,20 +97,18 @@ def technical_context(session: Session) -> dict:
         detail["events"] = events
         alert_details.append(detail)
 
-    recent_events = session.scalars(
-        select(NormalizedEvent).order_by(NormalizedEvent.timestamp.desc()).limit(100)
-    ).all()
+    recent_events = session.scalars(event_stmt).all()
 
     return {
         "title": "Technical Security Report",
         "generated_at": datetime.now(UTC).isoformat(),
         "alerts": alert_details,
-        "event_timeline": event_timeline(session),
-        "alert_timeline": alert_timeline(session),
+        "event_timeline": event_timeline(session, org=org),
+        "alert_timeline": alert_timeline(session, org=org),
         "recent_events": [e.to_dict() for e in recent_events],
         "mitre_coverage": [
             {"tactic": tactic, "techniques": [t["id"] + " " + t["name"] for t in techs]}
             for tactic, techs in mitre_categories().items()
         ],
-        "summary": dashboard_summary(session),
+        "summary": dashboard_summary(session, org=org),
     }

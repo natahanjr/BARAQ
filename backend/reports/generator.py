@@ -9,12 +9,17 @@ from backend.reports.context import executive_context, technical_context
 from backend.reports.exporters import export_report
 
 
-def generate_report(session: Session, report_type: str, fmt: str = "pdf") -> dict:
+def generate_report(
+    session: Session,
+    report_type: str,
+    fmt: str = "pdf",
+    org: str | None = None,
+) -> dict:
     """Generate a report of the given type/format and record its metadata."""
     if report_type == "executive":
-        context = executive_context(session)
+        context = executive_context(session, org=org)
     elif report_type == "technical":
-        context = technical_context(session)
+        context = technical_context(session, org=org)
     else:
         raise ValueError("report_type must be 'executive' or 'technical'")
 
@@ -24,13 +29,16 @@ def generate_report(session: Session, report_type: str, fmt: str = "pdf") -> dic
         format=ext,
         title=context["title"],
         file_path=file_path,
+        org=org or "",
     )
     session.add(record)
     session.commit()
     return {
+        "id": record.id,
         "report_type": report_type,
         "format": ext,
         "title": context["title"],
+        "filename": file_path.replace("\\", "/").rsplit("/", 1)[-1],
         "file_path": file_path,
         "created_at": record.created_at.isoformat(),
         "security_score": context.get("security_score"),

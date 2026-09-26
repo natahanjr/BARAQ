@@ -42,8 +42,10 @@ except ImportError:  # pragma: no cover
 class SecurityAssistant:
     """Answers analyst questions about alerts, incidents and remediation."""
 
-    def __init__(self, session):
+    def __init__(self, session, org: str | None = None, user_id: int | None = None):
         self.session = session
+        self.org = org
+        self.user_id = user_id
         self._vectorizer = None
         self._intent_matrix = None
         self._index_built = False
@@ -104,34 +106,44 @@ class SecurityAssistant:
     # ------------------------------------------------------------------
     # Context helpers
     # ------------------------------------------------------------------
+    def _scope(self, model):
+        return None if self.org is None else model.org == self.org
+
     def _latest_alerts(self, limit: int = 5) -> list[Alert]:
+        stmt = select(Alert).where(Alert.status == "open")
+        scope = self._scope(Alert)
+        if scope is not None:
+            stmt = stmt.where(scope)
         return list(
-            self.session.scalars(
-                select(Alert)
-                .where(Alert.status == "open")
-                .order_by(Alert.created_at.desc())
-                .limit(limit)
-            )
+            self.session.scalars(stmt.order_by(Alert.created_at.desc()).limit(limit))
         )
 
     def _find_alert(self, query: str) -> Alert | None:
         """Resolve an alert from an ID or a name/keyword mention."""
         m = re.search(r"#?(\d+)", query)
         if m:
-            return self.session.get(Alert, int(m.group(1)))
+            stmt = select(Alert).where(Alert.id == int(m.group(1)))
+            scope = self._scope(Alert)
+            if scope is not None:
+                stmt = stmt.where(scope)
+            return self.session.scalars(stmt).first()
         lowered = query.lower()
         # Scan recent alerts first (bounded), then the rest of the table.
-        recent = list(
-            self.session.scalars(
-                select(Alert).order_by(Alert.created_at.desc()).limit(50)
-            )
-        )
+        recent_stmt = select(Alert).order_by(Alert.created_at.desc()).limit(50)
+        recent_scope = self._scope(Alert)
+        if recent_scope is not None:
+            recent_stmt = recent_stmt.where(recent_scope)
+        recent = list(self.session.scalars(recent_stmt))
         for alert in recent:  # fresh alerts match best
             if alert.name and (
                 alert.name.lower() in lowered or lowered in alert.name.lower()
             ):
                 return alert
-        for alert in self.session.scalars(select(Alert)).all():
+        all_stmt = select(Alert)
+        all_scope = self._scope(Alert)
+        if all_scope is not None:
+            all_stmt = all_stmt.where(all_scope)
+        for alert in self.session.scalars(all_stmt).all():
             if (
                 alert.name.lower() in lowered
                 or lowered in alert.name.lower()
@@ -152,13 +164,11 @@ class SecurityAssistant:
         """
         if not HAS_SKLEARN or not query.strip():
             return []
-        rows = list(
-            self.session.scalars(
-                select(Alert)
-                .where(Alert.status != "open")
-                .order_by(Alert.updated_at.desc())
-            )
-        )
+        stmt = select(Alert).where(Alert.status != "open")
+        scope = self._scope(Alert)
+        if scope is not None:
+            stmt = stmt.where(scope)
+        rows = list(self.session.scalars(stmt.order_by(Alert.updated_at.desc())))
         if not rows:
             return []
         if self._rag_docs != rows or len(rows) != self._rag_indexed:
@@ -300,11 +310,12 @@ class SecurityAssistant:
         # 5) Live event / anomaly footprint
         if kind in ("user", "device"):
             event_col = NormalizedEvent.user if kind == "user" else NormalizedEvent.host
+            event_stmt = select(NormalizedEvent).where(event_col == name)
+            event_scope = self._scope(NormalizedEvent)
+            if event_scope is not None:
+                event_stmt = event_stmt.where(event_scope)
             rows = self.session.scalars(
-                select(NormalizedEvent)
-                .where(event_col == name)
-                .order_by(NormalizedEvent.timestamp.desc())
-                .limit(400)
+                event_stmt.order_by(NormalizedEvent.timestamp.desc()).limit(400)
             ).all()
             recent_anomalies = sum(1 for r in rows if r.is_anomaly)
             if rows:
@@ -632,6 +643,9 @@ class SecurityAssistant:
             query = query.where(Alert.status != "open")
         if severities:
             query = query.where(Alert.severity.in_(severities))
+        scope = self._scope(Alert)
+        if scope is not None:
+            query = query.where(scope)
         query = query.order_by(Alert.created_at.desc()).limit(20)
         rows = list(self.session.scalars(query))
 
@@ -689,6 +703,9 @@ class SecurityAssistant:
             query = query.where(NormalizedEvent.host == host)
         if user:
             query = query.where(NormalizedEvent.user == user)
+        scope = self._scope(NormalizedEvent)
+        if scope is not None:
+            query = query.where(scope)
         query = query.order_by(NormalizedEvent.timestamp.desc()).limit(15)
         rows = list(self.session.scalars(query))
 
@@ -774,7 +791,11 @@ class SecurityAssistant:
         return "\n".join(lines)
 
     def _fleet_status(self) -> str:
-        endpoints = list(self.session.scalars(select(Endpoint).order_by(Endpoint.host)))
+        endpoint_stmt = select(Endpoint)
+        endpoint_scope = self._scope(Endpoint)
+        if endpoint_scope is not None:
+            endpoint_stmt = endpoint_stmt.where(endpoint_scope)
+        endpoints = list(self.session.scalars(endpoint_stmt.order_by(Endpoint.host)))
         if not endpoints:
             return (
                 "No endpoints are registered yet. Install the fleet agent "
@@ -806,12 +827,15 @@ class SecurityAssistant:
         return "\n".join(lines)
 
     def _ml_anomalies(self) -> str:
+        anomaly_stmt = select(NormalizedEvent).where(
+            NormalizedEvent.is_anomaly.is_(True)
+        )
+        scope = self._scope(NormalizedEvent)
+        if scope is not None:
+            anomaly_stmt = anomaly_stmt.where(scope)
         rows = list(
             self.session.scalars(
-                select(NormalizedEvent)
-                .where(NormalizedEvent.is_anomaly.is_(True))
-                .order_by(NormalizedEvent.timestamp.desc())
-                .limit(15)
+                anomaly_stmt.order_by(NormalizedEvent.timestamp.desc()).limit(15)
             )
         )
         if not rows:
@@ -846,15 +870,20 @@ class SecurityAssistant:
     def _compute_score(self) -> float:
         from backend.analyzers.dashboard import compute_security_score
 
-        return compute_security_score(self.session)
+        return compute_security_score(self.session, org=self.org)
 
     # ------------------------------------------------------------------
     # Chat
     # ------------------------------------------------------------------
     def _recent_history(self, limit: int = 8) -> list[AssistantMessage]:
         """Last N stored turns, oldest first (multi-turn conversation memory)."""
+        stmt = select(AssistantMessage)
+        if self.user_id is None:
+            stmt = stmt.where(AssistantMessage.user_id.is_(None))
+        else:
+            stmt = stmt.where(AssistantMessage.user_id == self.user_id)
         rows = self.session.scalars(
-            select(AssistantMessage).order_by(AssistantMessage.id.desc()).limit(limit)
+            stmt.order_by(AssistantMessage.id.desc()).limit(limit)
         ).all()
         return list(reversed(rows))
 
@@ -876,11 +905,20 @@ class SecurityAssistant:
         return None
 
     def clear_history(self) -> int:
-        """Delete all stored conversation turns; returns the number removed."""
-        count = self.session.query(AssistantMessage).count()
-        self.session.execute(AssistantMessage.__table__.delete())  # type: ignore[attr-defined]
+        """Delete this user's stored conversation turns; returns the number removed."""
+        owner_filter = (
+            AssistantMessage.user_id.is_(None)
+            if self.user_id is None
+            else AssistantMessage.user_id == self.user_id
+        )
+        count = self.session.scalar(
+            select(func.count(AssistantMessage.id)).where(owner_filter)
+        ) or 0
+        self.session.execute(
+            AssistantMessage.__table__.delete().where(owner_filter)
+        )
         self.session.commit()
-        return count
+        return int(count)
 
     def chat(self, message: str, role: str = "user", persist: bool = True) -> str:
         self._ensure_index()
@@ -888,7 +926,9 @@ class SecurityAssistant:
         logger.info("Assistant intent=%s for: %s", intent, message[:80])
 
         if persist:
-            self.session.add(AssistantMessage(role="user", content=message))
+            self.session.add(
+                AssistantMessage(user_id=self.user_id, role="user", content=message)
+            )
 
         if AI_API_URL:
             response = self._remote_completion(message, intent)
@@ -896,13 +936,24 @@ class SecurityAssistant:
             response = self._respond(intent, message)
 
         if persist:
-            self.session.add(AssistantMessage(role="assistant", content=response))
+            self.session.add(
+                AssistantMessage(
+                    user_id=self.user_id,
+                    role="assistant",
+                    content=response,
+                )
+            )
             self.session.commit()
         return response
 
     def history(self, limit: int = 50) -> list[dict]:
+        stmt = select(AssistantMessage)
+        if self.user_id is None:
+            stmt = stmt.where(AssistantMessage.user_id.is_(None))
+        else:
+            stmt = stmt.where(AssistantMessage.user_id == self.user_id)
         rows = self.session.scalars(
-            select(AssistantMessage).order_by(AssistantMessage.id.desc()).limit(limit)
+            stmt.order_by(AssistantMessage.id.desc()).limit(limit)
         ).all()
         return [r.to_dict() for r in reversed(rows)]
 
@@ -924,7 +975,11 @@ class SecurityAssistant:
         try:
             from backend.database.models import Endpoint
 
-            eps = list(self.session.scalars(select(Endpoint)))
+            endpoint_stmt = select(Endpoint)
+            endpoint_scope = self._scope(Endpoint)
+            if endpoint_scope is not None:
+                endpoint_stmt = endpoint_stmt.where(endpoint_scope)
+            eps = list(self.session.scalars(endpoint_stmt))
             online = sum(
                 1
                 for e in eps

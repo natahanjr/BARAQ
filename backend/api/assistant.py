@@ -9,13 +9,19 @@ from sqlalchemy.orm import Session
 from backend.ai.assistant import SecurityAssistant
 from backend.audit import client_ip, log_action
 from backend.database.connection import get_db
-from backend.security import actor_name, require_auth
+from backend.security import actor_name, require_auth, resolve_user, tenant_scope
 
 router = APIRouter(
     prefix="/api/assistant",
     tags=["assistant"],
     dependencies=[Depends(require_auth)],
 )
+
+
+def _assistant(request: Request, db: Session):
+    user = resolve_user(request, db)
+    user_id = user.id if user is not None else None
+    return SecurityAssistant(db, org=tenant_scope(request), user_id=user_id)
 
 
 class ChatRequest(BaseModel):
@@ -33,21 +39,25 @@ class EntityExplainRequest(BaseModel):
 
 
 @router.post("/chat")
-def chat(body: ChatRequest, db: Session = Depends(get_db)):
-    assistant = SecurityAssistant(db)
+def chat(body: ChatRequest, request: Request, db: Session = Depends(get_db)):
+    assistant = _assistant(request, db)
     response = assistant.chat(body.message)
     return {"reply": response, "history": assistant.history()}
 
 
 @router.get("/history")
-def history(limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
-    assistant = SecurityAssistant(db)
+def history(
+    request: Request,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    assistant = _assistant(request, db)
     return {"items": assistant.history(limit)}
 
 
 @router.delete("/history")
 def clear_history(request: Request, db: Session = Depends(get_db)):
-    assistant = SecurityAssistant(db)
+    assistant = _assistant(request, db)
     count = assistant.clear_history()
     log_action(
         db,
@@ -62,8 +72,8 @@ def clear_history(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/explain")
-def explain(body: ExplainRequest, db: Session = Depends(get_db)):
-    assistant = SecurityAssistant(db)
+def explain(body: ExplainRequest, request: Request, db: Session = Depends(get_db)):
+    assistant = _assistant(request, db)
     query = (
         body.query or f"explain alert {body.alert_id}"
         if body.alert_id
@@ -74,14 +84,16 @@ def explain(body: ExplainRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/summarize")
-def summarize(db: Session = Depends(get_db)):
-    assistant = SecurityAssistant(db)
+def summarize(request: Request, db: Session = Depends(get_db)):
+    assistant = _assistant(request, db)
     response = assistant.chat("summarize the current incidents", persist=False)
     return {"reply": response}
 
 
 @router.post("/explain-entity")
-def explain_entity(body: EntityExplainRequest, db: Session = Depends(get_db)):
-    assistant = SecurityAssistant(db)
+def explain_entity(
+    body: EntityExplainRequest, request: Request, db: Session = Depends(get_db)
+):
+    assistant = _assistant(request, db)
     response = assistant.explain_entity(body.kind, body.name)
     return {"reply": response}

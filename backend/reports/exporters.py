@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 from datetime import UTC, datetime
+from html import escape
 
 from backend.config import REPORT_DIR
 
@@ -61,6 +62,10 @@ def export_html(context: dict) -> tuple[str, str]:
     return str(path), "html"
 
 
+def _x(value) -> str:
+    return escape(str(value if value is not None else ""), quote=True)
+
+
 def _render_html(context: dict) -> str:
     summary = context.get("summary", {})
     score = context.get("security_score", summary.get("security_score", 0))
@@ -69,11 +74,11 @@ def _render_html(context: dict) -> str:
     for a in context.get("alerts", context.get("top_threats", [])):
         alert_rows += (
             "<tr>"
-            f"<td>{a.get('name', '')}</td>"
-            f"<td>{a.get('severity', '')}</td>"
-            f"<td>{a.get('mitre_id', '')}</td>"
-            f"<td>{a.get('mitre_tactic', '')}</td>"
-            f"<td>{a.get('status', '')}</td>"
+            f"<td>{_x(a.get('name', ''))}</td>"
+            f"<td>{_x(a.get('severity', ''))}</td>"
+            f"<td>{_x(a.get('mitre_id', ''))}</td>"
+            f"<td>{_x(a.get('mitre_tactic', ''))}</td>"
+            f"<td>{_x(a.get('status', ''))}</td>"
             "</tr>"
         )
 
@@ -81,7 +86,7 @@ def _render_html(context: dict) -> str:
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>{context['title']}</title>
+<title>{_x(context['title'])}</title>
 <style>
   body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 2em; color: #1f2937; background: #fff; }}
   h1 {{ color: #0f172a; border-bottom: 3px solid #2563eb; padding-bottom: .4em; }}
@@ -96,12 +101,12 @@ def _render_html(context: dict) -> str:
 </style>
 </head>
 <body>
-<h1>{context['title']}</h1>
-<p class="meta">Generated: {context.get('generated_at', '')} | Period: {context.get('period', '')}</p>
+<h1>{_x(context['title'])}</h1>
+<p class="meta">Generated: {_x(context.get('generated_at', ''))} | Period: {_x(context.get('period', ''))}</p>
 <div class="card">
   <span class="score">{score:.1f}</span> / 100
-  <span class="risk">{context.get('risk_level', 'N/A')} RISK</span>
-  <p>{context.get('risk_description', '')}</p>
+  <span class="risk">{_x(context.get('risk_level', 'N/A'))} RISK</span>
+  <p>{_x(context.get('risk_description', ''))}</p>
   <p>Total events: {summary.get('total_events', 0)} | Open alerts: {summary.get('active_alerts', 0)} | Critical threats: {summary.get('critical_threats', 0)} | System: {summary.get('system_status', 'N/A')}</p>
 </div>
 <h2>Threat Summary</h2>
@@ -112,10 +117,10 @@ def _render_html(context: dict) -> str:
 <h2>Severity Distribution</h2>
 <table>
 <tr><th>Severity</th><th>Count</th></tr>
-{''.join(f'<tr><td>{d["severity"]}</td><td>{d["count"]}</td></tr>' for d in context.get('severity_distribution', []))}
+ {''.join(f'<tr><td>{_x(d["severity"])}</td><td>{_x(d["count"])}</td></tr>' for d in context.get('severity_distribution', []))}
 </table>
 <h2>MITRE ATT&CK Coverage</h2>
-{'<ul>' + ''.join(f'<li><b>{c["tactic"]}:</b> {", ".join(c["techniques"])}</li>' for c in context.get('mitre_coverage', [])) + '</ul>'}
+ {'<ul>' + ''.join(f'<li><b>{_x(c["tactic"])}:</b> {_x(", ".join(c["techniques"]))}</li>' for c in context.get('mitre_coverage', [])) + '</ul>'}
 <p class="meta">BARAQ - Intelligent Lightweight SOC Platform</p>
 </body>
 </html>"""
@@ -226,7 +231,7 @@ def export_pdf(context: dict) -> tuple[str, str]:
     for c in context.get("mitre_coverage", []):
         story.append(
             Paragraph(
-                f"<b>{c['tactic']}:</b> " + ", ".join(c["techniques"]), styles["Normal"]
+                f"<b>{_x(c['tactic'])}:</b> " + _x(", ".join(c["techniques"])), styles["Normal"]
             )
         )
 
@@ -235,24 +240,30 @@ def export_pdf(context: dict) -> tuple[str, str]:
         story.append(PageBreak())
         story.append(Paragraph("Technical Detail - Evidence & Recommendations", h2))
         for a in context["alerts"]:
-            story.append(Paragraph(f"#{a['id']} {a['name']} ({a['severity']})", h2))
             story.append(
                 Paragraph(
-                    f"<b>Description:</b> {a.get('description', '')}", styles["Normal"]
+                    f"#{_x(a['id'])} {_x(a['name'])} ({_x(a['severity'])})", h2
                 )
             )
             story.append(
                 Paragraph(
-                    f"<b>MITRE:</b> {a.get('mitre_id', '')} - {a.get('mitre_name', '')} ({a.get('mitre_tactic', '')})",
+                    f"<b>Description:</b> {_x(a.get('description', ''))}", styles["Normal"]
+                )
+            )
+            story.append(
+                Paragraph(
+                    f"<b>MITRE:</b> {_x(a.get('mitre_id', ''))} - {_x(a.get('mitre_name', ''))} ({_x(a.get('mitre_tactic', ''))})",
                     styles["Normal"],
                 )
             )
             story.append(
-                Paragraph(f"<b>Evidence:</b> {a.get('evidence', '')}", styles["Normal"])
+                Paragraph(
+                    f"<b>Evidence:</b> {_x(a.get('evidence', ''))}", styles["Normal"]
+                )
             )
             story.append(
                 Paragraph(
-                    f"<b>Recommendation:</b> {a.get('recommendation', '')}",
+                    f"<b>Recommendation:</b> {_x(a.get('recommendation', ''))}",
                     styles["Normal"],
                 )
             )

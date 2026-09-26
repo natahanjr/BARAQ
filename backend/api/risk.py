@@ -287,6 +287,22 @@ def factor_registry() -> dict:
     return {"count": len(list_factors()), "factors": list_factors()}
 
 
+def _list_entity_risks(db: Session, limit: int) -> list:
+    """Most recent entity risk records.
+
+    These two routes used to import ``backend.risk.service.list_entity_risks``,
+    a module that does not exist - both endpoints raised ImportError (HTTP 500)
+    on every call and no test covered them. Query the model directly instead.
+    """
+    return list(
+        db.scalars(
+            select(EntityRiskV2)
+            .order_by(EntityRiskV2.updated_at.desc())
+            .limit(limit)
+        ).all()
+    )
+
+
 @router.get("/entities")
 def risk_entities_list(
     limit: int = Query(100, ge=1, le=500),
@@ -294,8 +310,7 @@ def risk_entities_list(
 ) -> dict:
     """List all entities with risk scores (spec 6.46)."""
     _gate()
-    from backend.risk.service import list_entity_risks
-    items = list_entity_risks(db, limit=limit)
+    items = _list_entity_risks(db, limit=limit)
     return {"items": [e.to_dict() for e in items], "total": len(items)}
 
 
@@ -306,10 +321,12 @@ def risk_scores_list(
 ) -> dict:
     """List top entity risk scores sorted by score desc."""
     _gate()
-    from backend.risk.service import list_entity_risks
-    items = list_entity_risks(db, limit=limit)
-    sorted_items = sorted(items, key=lambda e: getattr(e, "score", 0), reverse=True)
-    return {"items": [e.to_dict() for e in sorted_items], "total": len(items)}
+    sorted_items = sorted(
+        _list_entity_risks(db, limit=limit),
+        key=lambda e: getattr(e, "score", 0) or 0,
+        reverse=True,
+    )
+    return {"items": [e.to_dict() for e in sorted_items], "total": len(sorted_items)}
 
 
 @router.get("/{risk_id}")

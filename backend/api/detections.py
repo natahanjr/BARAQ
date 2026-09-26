@@ -176,7 +176,7 @@ MITRE_TACTIC_MAP = {
     "T1071": "command-and-control", "T1105": "command-and-control",
     "T1572": "command-and-control", "T1090": "command-and-control",
     "T1571": "command-and-control", "T1095": "command-and-control",
-    "T1547": "persistence", "T1136": "persistence", "T1053": "persistence",
+    "T1547": "persistence", "T1136": "persistence",
     "T1543": "persistence", "T1546": "persistence", "T1098": "persistence",
     "T1076": "persistence", "T1505": "persistence", "T1137": "persistence",
     "T1542": "persistence",

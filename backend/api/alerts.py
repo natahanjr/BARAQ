@@ -15,7 +15,15 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.audit import client_ip, log_action
 from backend.database.connection import get_db
-from backend.database.models import Alert, AlertAction, AlertEventLink, AnalystNote
+from backend.config import DESTRUCTIVE_ACTIONS, SOAR_DESTRUCTIVE_ACTIONS_ENABLED
+from backend.database.models import (
+    AgentCommand,
+    Alert,
+    AlertAction,
+    AlertEventLink,
+    AnalystNote,
+    Endpoint,
+)
 from backend.detection.workflow import can_transition, is_valid_state, next_states
 from backend.reports.generator import generate_report
 from backend.response.actions import (
@@ -605,6 +613,39 @@ def _extract_target(alert: Alert, action: str) -> str:
     return ""
 
 
+def _queue_remote_action(
+    db: Session,
+    alert: Alert,
+    action: str,
+    target: str,
+    triggered_by: str,
+) -> tuple[str, str]:
+    """Queue a destructive action for the agent on the alert's host."""
+    if not SOAR_DESTRUCTIVE_ACTIONS_ENABLED:
+        return "failed", "Destructive response actions are disabled on this deployment"
+    if not alert.host:
+        return "failed", "The alert has no registered host; remote action was not queued"
+    endpoint = db.scalar(select(Endpoint).where(Endpoint.host == alert.host))
+    if endpoint is None:
+        return "failed", "No registered agent exists for the alert host"
+    from backend.api.endpoints import _validate_target
+
+    try:
+        validated_target = _validate_target(action, target)
+    except HTTPException as exc:
+        return "failed", str(exc.detail)
+    command = AgentCommand(
+        agent_id=endpoint.agent_id,
+        action=action,
+        target=validated_target,
+        status="pending",
+        detail=f"Queued from alert #{alert.id} by {triggered_by}",
+    )
+    db.add(command)
+    db.commit()
+    return "success", f"Queued {action} for agent {endpoint.agent_id} (command #{command.id})"
+
+
 def _execute_action(action: str, target: str) -> tuple[str, str]:
     """Execute a response action; returns (status, detail).
 
@@ -645,7 +686,12 @@ def take_action(
     action = body.action.value
 
     target = body.target or _extract_target(alert, action)
-    status, detail = _execute_action(action, target)
+    if action in DESTRUCTIVE_ACTIONS:
+        status, detail = _queue_remote_action(
+            db, alert, action, target, body.triggered_by
+        )
+    else:
+        status, detail = _execute_action(action, target)
 
     action_row = AlertAction(
         alert_id=alert_id,
@@ -743,7 +789,7 @@ def clear_alerts(request: Request, db: Session = Depends(get_db)):
             "report": None,
         }
 
-    report = generate_report(db, "executive", "pdf")
+    report = generate_report(db, "executive", "pdf", org=tenant_scope(request))
 
     alert_ids = [a.id for a in open_alerts]
     rules = {a.rule for a in open_alerts}
@@ -780,5 +826,5 @@ def clear_alerts(request: Request, db: Session = Depends(get_db)):
     return {
         "cleared": len(open_alerts),
         "message": f"Cleared {len(open_alerts)} alert(s). Security score restored to 100. Incident report generated.",
-        "report": report,
+        "report": {key: value for key, value in report.items() if key != "file_path"},
     }

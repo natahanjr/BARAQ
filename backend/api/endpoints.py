@@ -13,6 +13,7 @@ reports the outcome to ``POST /api/commands/{id}/result``.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import re
 from datetime import UTC, datetime
@@ -45,7 +46,11 @@ router = APIRouter(
 
 AGENT_KEY_HEADER = "X-Agent-Key"
 
-_IP_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
+_VERSION_RE = re.compile(r"^\d{1,6}(\.\d{1,6}){0,3}(-[0-9A-Za-z][0-9A-Za-z._-]{0,31})?$")
+_PROCESS_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_ACCOUNT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_HOSTNAME_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9.-]{0,253}[A-Za-z0-9])?$")
+_SHELL_META = set("'\"`$;|&<>\n\r\t*?()[]{}^%!")
 
 
 def require_agent(
@@ -274,6 +279,10 @@ def set_agent_tags(
 
 class CommandAction(str, Enum):
     block_ip = "block_ip"
+    #: Undo for block_ip. Without this a false-positive containment is
+    #: permanent - the firewall rule has no TTL and the agent had no way to
+    #: remove it, so the analyst had to RDP in and run netsh by hand.
+    unblock_ip = "unblock_ip"
     kill_process = "kill_process"
     quarantine = "quarantine"
     isolate = "isolate"
@@ -287,6 +296,7 @@ class CommandCreate(BaseModel):
     action: CommandAction
     target: str = Field("", max_length=256)
     note: str = Field("", max_length=500)
+    sha256: str = Field("", max_length=64, pattern=r"^[0-9A-Fa-f]{64}$")
 
 
 class CommandResult(BaseModel):
@@ -294,14 +304,51 @@ class CommandResult(BaseModel):
     detail: str = Field("", max_length=2000)
 
 
+def _is_ip(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _validate_target(action: str, target: str) -> str:
-    if action == "block_ip" and not _IP_RE.match(target):
-        raise HTTPException(422, "block_ip requires a valid IPv4 target")
-    if action in ("kill_process", "quarantine") and not target.strip():
+    """Validate a command target before it is stored and sent to an agent."""
+    target = (target or "").strip()
+    if action == "escalate":
+        return target
+    if not target:
         raise HTTPException(422, f"{action} requires a target")
-    if action == "update_agent" and not target.strip():
-        raise HTTPException(422, "update_agent requires a target version")
-    return target.strip()
+    if action in ("block_ip", "unblock_ip"):
+        try:
+            return str(ipaddress.ip_address(target))
+        except ValueError:
+            raise HTTPException(422, f"{action} requires a valid IP address") from None
+    if action == "kill_process":
+        if not _PROCESS_RE.match(target):
+            raise HTTPException(422, "kill_process target must be a process name or PID")
+        return target
+    if action == "quarantine":
+        if len(target) > 400 or _SHELL_META & set(target):
+            raise HTTPException(422, "quarantine target contains forbidden characters")
+        if not re.match(r"^([A-Za-z]:[\\/]|\\\\|/)", target):
+            raise HTTPException(422, "quarantine target must be an absolute path")
+        if ".." in re.split(r"[\\/]+", target):
+            raise HTTPException(422, "quarantine target must not traverse directories")
+        return target
+    if action == "isolate":
+        if not (_HOSTNAME_RE.match(target) or _is_ip(target)):
+            raise HTTPException(422, "isolate target must be a hostname or IP address")
+        return target
+    if action == "disable_account":
+        if not _ACCOUNT_RE.match(target):
+            raise HTTPException(422, "disable_account target must be an account name")
+        return target
+    if action == "update_agent":
+        if not _VERSION_RE.match(target):
+            raise HTTPException(422, "update_agent target must be a version, e.g. 2.1.0")
+        return target
+    raise HTTPException(422, f"unsupported action: {action}")
 
 
 def _apply_command_side_effects(db: Session, command: AgentCommand) -> None:
@@ -314,7 +361,11 @@ def _apply_command_side_effects(db: Session, command: AgentCommand) -> None:
     if endpoint is None:
         return
     if command.action == "update_agent":
-        endpoint.update_status = "pending" if command.status == "pending" else "current"
+        endpoint.update_status = {
+            "pending": "pending",
+            "success": "current",
+            "failed": "failed",
+        }.get(command.status, "pending")
     if command.status == "failed":
         endpoint.errors_total = (endpoint.errors_total or 0) + 1
     db.commit()
@@ -334,6 +385,7 @@ def queue_command(
         agent_id=agent_id,
         action=body.action.value,
         target=target,
+        sha256=body.sha256.lower(),
         status="pending",
         detail=body.note,
     )
@@ -425,6 +477,8 @@ def report_result(
     command = db.get(AgentCommand, command_id)
     if not command or command.agent_id != agent_id:
         raise HTTPException(404, "Command not found for this agent")
+    if command.status != "pending":
+        return command.to_dict()
     command.status = body.status
     command.detail = body.detail
     command.executed_at = datetime.now(UTC)

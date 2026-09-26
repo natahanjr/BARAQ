@@ -59,7 +59,7 @@ from backend.api import (
     telemetry,
     ueba_api,
 )
-from backend.auth import verify_token
+from backend.auth import session_fresh_for_user, verify_token
 from backend.config import (
     ADMIN_PASSWORD,
     ADMIN_USERNAME,
@@ -72,7 +72,6 @@ from backend.config import (
     HSTS_MAX_AGE,
     IS_PRODUCTION,
     METRICS_PUBLIC,
-    REPORT_DIR,
     SECURITY_HEADERS,
     SINGLE_INSTANCE,
 )
@@ -197,6 +196,16 @@ def _scheduler_loop(interval_seconds: int = 15):
     counter = 0
     while not _scheduler_stop.is_set():
         cycle_start = time.monotonic()
+        #: Per-stage wall times for this cycle, logged once per cycle so
+        #: latency regressions are attributable without re-profiling.
+        _timings: list[tuple[str, float]] = []
+        _lap = [cycle_start]
+
+        def _mark(label: str) -> None:
+            now = time.monotonic()
+            _timings.append((label, now - _lap[0]))
+            _lap[0] = now
+
         try:
             db = SessionLocal()
             # Production partition for the whole cycle: detection, RBA,
@@ -220,6 +229,7 @@ def _scheduler_loop(interval_seconds: int = 15):
                         "Scheduler cycle: %d records collected",
                         result["collected"],
                     )
+                _mark("collect")
 
                 # 2. Incremental detection for every tenant ("" system org
                 #    plus each configured agent organization). With
@@ -233,10 +243,12 @@ def _scheduler_loop(interval_seconds: int = 15):
                         len(created),
                         len(orgs),
                     )
+                _mark("detection")
                 counter += 1
                 from backend.realtime import publish_status
 
                 publish_status({"summary": dashboard.dashboard_summary(db)})
+                _mark("summary")
 
                 # Dataset collector: consume new telemetry into the research
                 # store every cycle (batched, never blocks ingestion).
@@ -256,6 +268,7 @@ def _scheduler_loop(interval_seconds: int = 15):
                         )
                 except Exception:
                     logger.exception("Dataset sweep failed")
+                _mark("dataset")
 
                 # Phase 4: aggregate new alerts into behavior groups (v2 alerts).
                 phase4_groups: list = []
@@ -409,6 +422,7 @@ def _scheduler_loop(interval_seconds: int = 15):
                                     "Auto-train: could not acquire training lock"
                                 )
 
+                _mark("phase4+baseline+ml")
                 # RBA - Correlate alerts into incidents
                 from backend.detection.rba import RBAManager
 
@@ -472,6 +486,7 @@ def _scheduler_loop(interval_seconds: int = 15):
                             )
                     except Exception:
                         logger.exception("Phase 7 incident creation failed")
+                _mark("rba+incidents")
                 # against the baselines; on "drift" retrain so the baseline
                 # follows the environment. Retrains always use the FULL
                 # collected history (hours=None) - the model must reflect
@@ -578,6 +593,7 @@ def _scheduler_loop(interval_seconds: int = 15):
                     except Exception:
                         logger.exception("Scheduled reports failed")
             finally:
+                _mark("rest")
                 db.close()
         except Exception as exc:
             logger.exception("Scheduler cycle failed: %s", exc)
@@ -585,6 +601,11 @@ def _scheduler_loop(interval_seconds: int = 15):
             from backend.metrics import record_scheduler_cycle_seconds
 
             record_scheduler_cycle_seconds(time.monotonic() - cycle_start)
+            if _timings:
+                logger.info(
+                    "Scheduler stages: %s",
+                    " ".join(f"{label}={secs:.1f}s" for label, secs in _timings),
+                )
         _scheduler_stop.wait(interval_seconds)
     logger.info("Scheduler stopped")
 
@@ -598,6 +619,9 @@ async def lifespan(app: FastAPI):
     hub.bind(asyncio.get_running_loop())
     init_db()
     _seed_admin_user()
+    from backend.auth import prune_revoked_tokens
+
+    prune_revoked_tokens()
     from backend.licensing import enforce_license
 
     db = SessionLocal()
@@ -663,11 +687,11 @@ async def lifespan(app: FastAPI):
     )
     # Roadmap 3.1: BARAQ_ROLE=api runs the API without a scheduler - the
     # scheduler lives in its own service (backend/scheduler_service.py).
-    from backend.config import APP_ROLE
+    from backend.config import APP_ROLE, SCHEDULER_ENABLED
 
-    if APP_ROLE not in ("all", "scheduler"):
+    if APP_ROLE not in ("all", "api", "scheduler"):
         logger.warning("BARAQ_ROLE=%s not recognised; treating as 'all'", APP_ROLE)
-    no_scheduler = no_scheduler or APP_ROLE == "api"
+    no_scheduler = no_scheduler or not SCHEDULER_ENABLED or APP_ROLE == "api"
     scheduler_owner = True
     if SINGLE_INSTANCE and APP_ROLE != "api":
         from backend.database.connection import engine as app_engine
@@ -909,6 +933,8 @@ _PUBLIC_PREFIXES = (
     "/api/auth/login",
     "/api/auth/register",
     "/api/auth/mfa/verify",
+    "/api/auth/refresh",
+    "/api/auth/password-reset",
     "/api/auth/oidc/login",
     "/api/auth/oidc/callback",
     "/api/auth/oidc/status",
@@ -942,6 +968,24 @@ def _csrf_token_matches(request: Request) -> bool:
     return hmac.compare_digest(cookie, header)
 
 
+def _session_still_valid(payload: dict) -> bool:
+    """Fail-closed liveness and freshness check for a Bearer session."""
+    from backend.database.models import User
+
+    uid = payload.get("uid")
+    if not isinstance(uid, int):
+        return False
+    db = SessionLocal()
+    try:
+        user = db.get(User, uid)
+        return bool(user and user.is_active and session_fresh_for_user(payload, user))
+    except Exception:
+        logger.warning("Session liveness check failed (fail-closed)", exc_info=True)
+        return False
+    finally:
+        db.close()
+
+
 @app.middleware("http")
 async def api_key_auth(request: Request, call_next):
     path = request.url.path
@@ -964,7 +1008,9 @@ async def api_key_auth(request: Request, call_next):
             logger.warning("CSRF protection disabled via BARAQ_CSRF_ENABLED=0")
         if authorization.lower().startswith("bearer "):
             secret = authorization[7:].strip()
-            payload = verify_token(secret)
+            payload = verify_token(secret, expected_type="access")
+            if payload and not _session_still_valid(payload):
+                payload = None
             if not payload:
                 # Prometheus-style scrapers send the shared key as a Bearer
                 # secret (Prometheus v3 no longer supports custom headers).
@@ -1000,6 +1046,7 @@ async def api_key_auth(request: Request, call_next):
                     status_code=401,
                 )
             request.state.api_role = role
+            request.state.token_user = None
     elif AUTH_ENABLED:
         request.state.api_role = "admin"
     else:
@@ -1105,13 +1152,15 @@ for router in (
 ):
     app.include_router(router)
 
-app.mount("/reports", StaticFiles(directory=REPORT_DIR), name="reports")
-
 #: Allowlisted agent-distribution files (never mount the whole scripts/ tree).
 _SCRIPTS_ROOT = Path(__file__).resolve().parent.parent / "scripts"
 _AGENT_DIST_ALLOW = {
     "agent.py": "text/x-python",
+    # Self-contained collector: the default agent for fleet rollouts, so it
+    # must be downloadable or a remote one-liner install has nothing to fetch.
+    "agent.ps1": "text/plain",
     "install_agent.ps1": "text/plain",
+    "agent_updater.ps1": "text/plain",
     "baraq.crt": "application/x-pem-file",
     "cert": "application/x-pem-file",
 }
@@ -1121,8 +1170,8 @@ _AGENT_DIST_ALLOW = {
 async def serve_agent_dist(filename: str) -> Response:
     """Serve agent installer files to LAN endpoints.
 
-    Only an allowlist is exposed: agent.py, install_agent.ps1, and the
-    public TLS certificate. The rest of scripts/ (provisioning, vault
+    Only an allowlist is exposed: the agent scripts, the installer/updater and
+    the public TLS certificate. The rest of scripts/ (provisioning, vault
     tools) is intentionally not downloadable.
     """
     name = filename.lower()
@@ -1138,7 +1187,7 @@ async def serve_agent_dist(filename: str) -> Response:
     if not path.is_file():
         raise HTTPException(status_code=404, detail="not found")
     media = _AGENT_DIST_ALLOW[name]
-    if name == "install_agent.ps1":
+    if name.endswith(".ps1"):
         media = "text/plain; charset=utf-8"
     return FileResponse(path, media_type=media)
 
@@ -1233,19 +1282,29 @@ def health():
     if data_quality_status == "error" and overall_status == "ok":
         overall_status = "warning"
 
-    # Single instance check
+    # Single instance check. The lock is only meaningful for the process that
+    # owns the scheduler: an api-only replica (BARAQ_ROLE=api) or a run with
+    # the scheduler disabled is *supposed* not to hold it, so that is reported
+    # as informational instead of an error - otherwise a correctly scaled
+    # deployment shows a permanent false alarm on /api/health.
+    from backend.config import APP_ROLE as _APP_ROLE, SCHEDULER_ENABLED as _SCHED_ENABLED
     from backend.locks import instance_lock_status
 
-    instance_locked = instance_lock_status()
-    checks["single_instance"] = {
-        "status": "ok" if instance_locked else "error",
-        "message": (
-            "Instance lock acquired"
-            if instance_locked
-            else "Instance lock not acquired"
-        ),
-    }
-    if not instance_locked and overall_status == "ok":
+    lock_status = instance_lock_status()
+    instance_locked = bool(lock_status.get("held"))
+    expects_lock = bool(_SCHED_ENABLED) and _APP_ROLE != "api"
+    if instance_locked:
+        lock_state, lock_message = "ok", "Instance lock acquired"
+    elif expects_lock:
+        lock_state, lock_message = "error", "Instance lock not acquired"
+    else:
+        lock_state = "ok"
+        lock_message = (
+            "Instance lock not held (scheduler disabled or api-only role) - "
+            "another instance owns the scheduler"
+        )
+    checks["single_instance"] = {"status": lock_state, "message": lock_message}
+    if lock_state == "error" and overall_status == "ok":
         overall_status = "warning"
 
     # If we have any critical errors (database or ml_model), we already set status_code to 503
