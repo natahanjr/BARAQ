@@ -130,7 +130,17 @@ Implemented and verified in the current codebase:
 - **Tenant isolation** — search, hunting, exports, saved searches, bookmarks,
   the assistant, the entity graph, automation run history, realtime
   broadcasts and the WebSocket are all org-scoped; the entity graph is
-  filtered to entities a tenant has actually observed
+  filtered to entities a tenant has actually observed.
+  **BARAQ is a single-tenant deployment** (one organization, no external
+  customers). Fifteen API surfaces — the v2 alerts and incidents APIs, risk,
+  UEBA, investigation, intel, compliance, telemetry, evaluation and others —
+  have **no `org` column on their tables**, so they are not org-filtered and are
+  reachable by any authenticated analyst. That is not a cross-tenant leak while
+  the deployment is single-tenant, but it is a real limit on both multi-tenancy
+  and role-based access. See [`docs/SINGLE_TENANT.md`](docs/SINGLE_TENANT.md)
+  for the full list, why they are not simply admin-gated, and the three ways to
+  resolve it. `tests/test_single_tenant.py` is an executable specification of
+  the gap.
 - **Auditable response actions** — `block_ip` has an `unblock_ip` undo, every
   command target is validated server-side, and destructive actions are
   simulated while `BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED=0`

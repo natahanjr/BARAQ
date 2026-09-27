@@ -25,7 +25,17 @@ capabilities.
 
 ## [Unreleased]
 
-Nothing yet.
+- **Deployment model documented: single-tenant.** BARAQ is deployed as a single
+  organization with no external customers. Added
+  [`docs/SINGLE_TENANT.md`](docs/SINGLE_TENANT.md) recording what that means
+  for access control, and `tests/test_single_tenant.py` as an executable
+  specification of the fifteen API surfaces that have no `org` column and are
+  therefore reachable by any authenticated analyst. Those surfaces are not
+  cross-tenant leaks while the deployment is single-tenant, but they do limit
+  both multi-tenancy and role-based access. Restricting them to admin was
+  implemented and reverted — it returns 403 to analysts and blanks eight
+  analyst-facing screens, because the frontend calls them with no role check.
+  No behaviour changed in this release.
 
 ---
 

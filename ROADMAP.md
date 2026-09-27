@@ -24,19 +24,27 @@ issues".
    column; isolation is enforced at the API layer (entities must appear in the
    caller's own telemetry). True multi-tenancy needs `entity_nodes.org` plus a
    backfill migration.
-6. **Scale not load-tested** — verified on one endpoint only; 50–200 machines
+6. **Fifteen API surfaces have no tenant column** — the v2 alerts and incidents
+   APIs plus risk, UEBA, investigation, intel, compliance, telemetry, evaluation
+   and others are reachable by any authenticated analyst. Acceptable while the
+   deployment is single-tenant; not acceptable if a second organization is ever
+   onboarded. Restricting them to admin was implemented and reverted because it
+   blanks eight analyst-facing screens. Full analysis and the three resolution
+   options: [`docs/SINGLE_TENANT.md`](docs/SINGLE_TENANT.md). Specified by
+   `tests/test_single_tenant.py` (14 expected failures).
+7. **Scale not load-tested** — verified on one endpoint only; 50–200 machines
    and the resulting event volume are unproven.
-7. **Detection tuning** — two rule false positives were found and fixed against
+8. **Detection tuning** — two rule false positives were found and fixed against
    real traffic (C2 beaconing 104 → 0; masquerading on an empty process path;
    port-scan counting a host talking to itself). The C2 rewrite initially also
    silenced a *true* positive (a 24 MB PowerShell exfiltration), which the
    hold-out suite caught; interpreters and LOLBins now have their own lower
    volume bar. Expect more from a week of real traffic; the systematic fix is
    to run it and work the noise list.
-8. **Response actions not rehearsed on a real host** — validation and injection
+9. **Response actions not rehearsed on a real host** — validation and injection
    defences are unit-tested and command polling works over TLS, but no live
    containment has been executed. Destructive SOAR ships disabled by design.
-9. **Full-suite run is the last gate** — see `CHANGELOG.md` for the current
+10. **Full-suite run is the last gate** — see `CHANGELOG.md` for the current
    numbers.
 
 ---
