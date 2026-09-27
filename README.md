@@ -235,12 +235,25 @@ BARAQ supports importing external security datasets for ML training:
 
 ## ML Performance
 
+Measured on the **full in-distribution evaluation set** (310K synthetic OTRF
+records). These are *not* hold-out numbers and should not be read as expected
+performance on a real network.
+
 | Model | AUC | Recall | Samples |
 |---|---|---|---|
 | Network (v12) | 0.999 | 99.7% | 310K |
 | Process (v10) | 0.865 | 86.5% | 310K |
 | Login (v37) | 0.870 | 21.4% | 995 |
 | **Full-DB Eval** | **0.999** | **100%** | **310K** |
+
+> **These figures overstate real-world detection.** They are measured on
+> synthetic data drawn from the same distribution the model was trained on. The
+> honest generalisation numbers come from the hold-out split, which uses attack
+> scenarios the detector has never seen: the **rule and hybrid layers reach
+> 0.939 recall**, while the **ML layer alone reaches 0.286**. Treat the table
+> above as "the model fits its training distribution", not "the model detects
+> 99.7% of attacks". Current status is tracked in
+> [`ROADMAP.md`](ROADMAP.md) item 3.
 
 ---
 
