@@ -44,6 +44,13 @@ Read this section first — it is the difference between a demo and a SOC.
   [`docs/CUTOVER_RUNBOOK.md`](docs/CUTOVER_RUNBOOK.md). The full record of the
   2026-09 hardening pass, including known issues, is in
   [`CHANGELOG.md`](CHANGELOG.md).
+- **BARAQ is a single-tenant platform** — one organization, no external
+  customers. Most read paths are org-scoped per analyst, but fifteen API
+  surfaces (the v2 alerts and incidents APIs, risk, UEBA, investigation, intel,
+  compliance, telemetry, evaluation) have no tenant column and are reachable by
+  any authenticated account. Read
+  [`docs/SINGLE_TENANT.md`](docs/SINGLE_TENANT.md) before onboarding a second
+  organization.
 
 ---
 
