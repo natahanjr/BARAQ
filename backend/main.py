@@ -1349,8 +1349,14 @@ def liveness():
 
 @app.get("/api/version")
 def version():
-    """Public version endpoint: returns the current build version."""
-    return {"version": "0.13.0", "build": "v6-phase2"}
+    """Public version endpoint: returns the current build version.
+
+    Kept in step with the release recorded in CHANGELOG.md. It previously
+    reported ``0.13.0`` while the project was at 1.0.8, which is worse than
+    having no endpoint at all: an operator checking a deployment would be told
+    it was running a seven-release-old build.
+    """
+    return {"version": "1.0.8", "build": "v6-phase2"}
 
 
 @app.get("/metrics")
