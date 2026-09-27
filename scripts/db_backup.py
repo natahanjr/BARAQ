@@ -35,10 +35,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 #: Directories probed for embedded/portable PostgreSQL binaries (besides
 #: ``BARAQ_PG_BIN`` and PATH). ``<project>/pg/bin`` is the portable bundle
 #: produced by ``scripts/download_postgres.ps1``; ``%LOCALAPPDATA%`` is the
-#: default home used by ``scripts/pg_setup.ps1``.
+#: default home used by ``scripts/pg_setup.ps1``. ``dist/pg`` and ``pg/pgsql``
+#: are the layouts the Windows build actually produces, plus the standard
+#: installer path - without these a scheduled backup fails at 3am because the
+#: service account's PATH has no PostgreSQL on it.
 _PG_BIN_HINTS = [
     Path(__file__).resolve().parent.parent / "pg" / "bin",
+    Path(__file__).resolve().parent.parent / "pg" / "pgsql" / "bin",
+    Path(__file__).resolve().parent.parent / "dist" / "pg" / "bin",
+    Path(__file__).resolve().parent.parent / "dist" / "pg" / "bin" / "bin",
     Path.home() / "AppData" / "Local" / "BARAQ" / "postgres" / "bin",
+    Path("C:/Program Files/PostgreSQL"),
 ]
 
 DEFAULT_DIR = Path(__file__).resolve().parent.parent / "backups"
@@ -60,6 +67,10 @@ def find_pg_binary(tool: str) -> str:
         candidates.append(Path(hint) / (tool + ".exe"))
     for base in _PG_BIN_HINTS:
         candidates.append(base / (tool + ".exe"))
+        # C:/Program Files/PostgreSQL/<major>/bin
+        if base.name.lower().startswith("postgresql") and base.is_dir():
+            for version_dir in base.iterdir():
+                candidates.append(version_dir / "bin" / (tool + ".exe"))
     for cand in candidates:
         if Path(cand).is_file():
             return str(Path(cand))

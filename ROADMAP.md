@@ -1,8 +1,43 @@
 # BARAQ SOC Platform — Development Roadmap
 
 **Author:** natahan  
-**Date:** 2026-09-07  
-**Status:** Completed
+**Date:** 2026-09-07 (updated 2026-09-27)  
+**Status:** Completed — see "Remaining production work" below for what is *not* done
+
+## Remaining production work (as of 2026-09-27)
+
+The items below were identified by running the system end to end and are **not**
+complete. They are tracked in [`CHANGELOG.md`](CHANGELOG.md) under "Known
+issues".
+
+1. **External penetration test** — not performed; needs an outside party.
+2. **Typecheck gate** — pyright is installed and configured
+   (`pyrightconfig.json`) but 170 findings remain (SQLAlchemy `Optional`
+   patterns, argument types; zero undefined variables). Not wired into CI.
+3. **ML unsupervised recall** — 0.286 on the hold-out split (2/7), down from
+   ~0.36. The rule/hybrid layers carry detection (hybrid recall 0.939).
+   Restoring this touches `backend/ml/anomaly.py`, which has concurrent work in
+   flight.
+4. **Compliance assessments are in-memory only** — they reset to `unassessed`
+   on restart, so they cannot be used as audit evidence yet.
+5. **Entity graph is not natively multi-tenant** — `entity_nodes` has no `org`
+   column; isolation is enforced at the API layer (entities must appear in the
+   caller's own telemetry). True multi-tenancy needs `entity_nodes.org` plus a
+   backfill migration.
+6. **Scale not load-tested** — verified on one endpoint only; 50–200 machines
+   and the resulting event volume are unproven.
+7. **Detection tuning** — two rule false positives were found and fixed against
+   real traffic (C2 beaconing 104 → 0; masquerading on an empty process path;
+   port-scan counting a host talking to itself). The C2 rewrite initially also
+   silenced a *true* positive (a 24 MB PowerShell exfiltration), which the
+   hold-out suite caught; interpreters and LOLBins now have their own lower
+   volume bar. Expect more from a week of real traffic; the systematic fix is
+   to run it and work the noise list.
+8. **Response actions not rehearsed on a real host** — validation and injection
+   defences are unit-tested and command polling works over TLS, but no live
+   containment has been executed. Destructive SOAR ships disabled by design.
+9. **Full-suite run is the last gate** — see `CHANGELOG.md` for the current
+   numbers.
 
 ---
 

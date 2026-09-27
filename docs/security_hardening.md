@@ -53,7 +53,11 @@ the static items; the list below is the full operational picture.
 - [ ] Configure at least one out-of-band alert channel in `backend\config.py`:
       `BARAQ_WEBHOOK_URL` (Slack/Teams aware), `BARAQ_SMTP_*`, and/or
       `BARAQ_TELEGRAM_BOT_TOKEN` + `BARAQ_TELEGRAM_CHAT_ID`.
-      `NOTIFY_MIN_SEVERITY` defaults to high.
+      NOTIFY_MIN_SEVERITY defaults to high (email/webhook/toast). Set
+
+  BARAQ_TELEGRAM_MIN_SEVERITY=critical so the phone only rings for
+
+  criticals, and confirm the split with scripts\show_paging_routes.py.
 - [ ] Verify the channel with a real high/critical alert (or the test
       harness in `tests\test_notify.py`).
 - [ ] SMTP uses STARTTLS by default - keep `BARAQ_SMTP_STARTTLS=1`.

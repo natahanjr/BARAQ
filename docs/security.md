@@ -29,13 +29,23 @@ Enable TOTP-based 2FA for all admin accounts:
 
 ### TLS/HTTPS
 
-Enable TLS for production deployments:
+TLS is **required** in production (`BARAQ_ENV=production` refuses to start
+without it). Enable and point it at your certificate:
 
 ```env
 BARAQ_TLS=1
 BARAQ_TLS_CERT=/path/to/cert.pem
 BARAQ_TLS_KEY=/path/to/key.pem
 ```
+
+The launcher serves real HTTPS from these paths and **exits with an error if
+they are missing or unreadable** — the configuration can no longer claim
+encryption that the listener is not providing. Verify the scheme in the startup
+log (`BARAQ backend starting on https://...`).
+
+Agents connect over HTTPS and pin this certificate (`-TlsCert`); see
+`docs/agent-deployment.md`. Set `BARAQ_CORS_ORIGINS` to the real console
+origin — production rejects `localhost` in that list.
 
 ### CORS Configuration
 

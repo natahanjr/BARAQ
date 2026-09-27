@@ -76,11 +76,11 @@ BARAQ uses an **agent-based architecture**:
 
 BARAQ provides two agent options depending on your needs:
 
-| Feature | PowerShell Agent (Recommended) | Python Agent (Full) |
+| Feature | PowerShell Agent (default) | Python Agent (Full) |
 |---|---|---|
 | **File** | `agent.ps1` | `agent.py` + `install_agent.ps1` |
-| **Python Required** | No | Yes (3.8+) |
-| **Installation** | None — run directly | Install script + scheduled task |
+| **Python Required** | No | Yes (3.8+) **and the `backend` package + pywin32 deployed** |
+| **Installation** | `install_agent.ps1 -AgentType powershell` (default) | `install_agent.ps1 -AgentType python` |
 | **Processes** | First 300, delta only | Full process tree with hashes |
 | **Network** | TCP connections only | TCP + UDP + DNS + HTTP |
 | **Event Logs** | Not collected | Security, System, PowerShell, Sysmon |
@@ -88,8 +88,47 @@ BARAQ provides two agent options depending on your needs:
 | **Scheduled Tasks** | Not collected | Monitored |
 | **USB Events** | Not collected | Monitored |
 | **File Integrity** | Not collected | Monitored |
-| **Background Mode** | Manual or scheduled task | Scheduled task with auto-start |
-| **Best For** | Quick deployment, low-resource PCs | Full SOC visibility |
+| **Background Mode** | Scheduled task with auto-start | Scheduled task with auto-start |
+| **Best For** | Fleet rollouts, low-resource PCs | Full SOC visibility |
+
+### The Python agent needs its dependencies, or it collects nothing
+
+`agent.py` imports `backend.collectors` and `win32evtlog`. If the `backend`
+package is not deployed next to the agent it cannot collect a single record.
+The agent now **raises and logs an error** in that case instead of quietly
+reporting nothing, but the fix is operational: deploy the package (and
+pywin32) or use the PowerShell agent. **Do not pick `-AgentType python` for a
+fleet rollout unless you have deployed the full package to that host.**
+
+### TLS and certificate pinning (required for https)
+
+Any `https://` server requires a certificate. Pass it explicitly:
+
+```
+powershell -ExecutionPolicy Bypass -File scripts\install_agent.ps1 `
+  -Server https://soc.example.com:8443 -Key <agent-secret> -Org ict `
+  -TlsCert certs\baraq.crt
+```
+
+The agent pins that certificate's thumbprint and refuses to connect to a
+different one, so a compromised or substituted certificate does not silently
+succeed. `install_agent.ps1` will download the server certificate itself if
+`/scripts/baraq.crt` is published. For plain `http://` the agent refuses to
+start against any non-loopback host.
+
+### The installer verifies itself
+
+`install_agent.ps1` runs a real collection cycle against the server before it
+reports success:
+
+- `Installed and VERIFIED!` — the task is registered **and** the server
+  accepted records from this host.
+- `AUTO-START NOT CONFIGURED` — the scheduled task could not be registered
+  (run elevated); the agent will not survive a reboot.
+- `TELEMETRY NOT VERIFIED` — the agent installed but delivered nothing.
+
+Treat a non-verified install as a failed install. Check
+`$env:LOCALAPPDATA\BARAQAgent\agent.log`.
 
 ### When to Use Which
 
@@ -171,7 +210,7 @@ venv\Scripts\python scripts\seed_departments.py --dry-run
 ======================================================================
   BARAQ DEPARTMENT SEEDING MANIFEST
 ======================================================================
-  Server: http://192.168.1.100:8001
+  Server: https://192.168.1.100:8443
   Departments: 10
   Total Endpoints: 30
 ======================================================================
@@ -182,7 +221,7 @@ venv\Scripts\python scripts\seed_departments.py --dry-run
 ----------------------------------------------------------------------
     srv-ict-01
       Key:     baraq-ict-srv-ict-01
-      Command: powershell -ExecutionPolicy Bypass -File scripts/install_agent.ps1 -Server http://192.168.1.100:8001 -Key "baraq-ict-srv-ict-01" -Org ict
+      Command: powershell -ExecutionPolicy Bypass -File scripts/install_agent.ps1 -Server https://192.168.1.100:8443 -Key "<agent-secret>" -Org ict -TlsCert C:\BARAQ\baraq.crt
 
     ws-ict-01
       Key:     baraq-ict-ws-ict-01
@@ -215,11 +254,11 @@ No installation needed — just run directly:
 ```powershell
 # On the target laptop:
 powershell -ExecutionPolicy Bypass -File \\SERVER\BARAQ-Deploy\agent.ps1 `
-    -Server http://192.168.1.100:8001 `
+    -Server https://192.168.1.100:8443 -TlsCert C:\BARAQ\baraq.crt `
     -Key "YOUR-AGENT-KEY"
 
 # To run in background (hidden window):
-Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File \\SERVER\BARAQ-Deploy\agent.ps1 -Server http://192.168.1.100:8001 -Key YOUR-AGENT-KEY" -WindowStyle Hidden
+Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File \\SERVER\BARAQ-Deploy\agent.ps1 -Server https://192.168.1.100:8443 -Key YOUR-AGENT-KEY -TlsCert C:\BARAQ\baraq.crt" -WindowStyle Hidden
 ```
 
 **Method B: Python Agent (Full telemetry)**
@@ -227,7 +266,7 @@ Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File \\SERVER\B
 ```powershell
 # On the target laptop:
 powershell -ExecutionPolicy Bypass -File \\SERVER\BARAQ-Deploy\install_agent.ps1 `
-    -Server http://192.168.1.100:8001 `
+    -Server https://192.168.1.100:8443 -TlsCert C:\BARAQ\baraq.crt `
     -Key "baraq-library-ws-lib-01" `
     -Org library
 ```
@@ -243,7 +282,7 @@ copy \\SERVER\BARAQ-Deploy\agent.py C:\BARAQAgent\
 
 # Create config file
 @{
-    server = "http://192.168.1.100:8001"
+    server = "https://192.168.1.100:8443"
     key = "baraq-library-ws-lib-01"
     interval = 15
     org = "library"

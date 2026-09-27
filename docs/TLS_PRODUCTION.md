@@ -102,6 +102,30 @@ BARAQ_ENV=production
 
 ```
 
+### The server enforces this now, it does not just record it
+
+`BARAQ_TLS=1` used to be stored in the configuration and then ignored by the
+launcher: the API bound plain HTTP while the `Secure` cookie flag was set and
+the service reported itself healthy and "encrypted". That is fixed. The
+launcher reads `BARAQ_TLS_CERT`/`BARAQ_TLS_KEY`, serves real HTTPS, and
+**exits with an error** if TLS is requested but the certificate or key is
+missing or unreadable. It prints the scheme on startup, so confirm it from the
+log:
+
+```
+BARAQ backend starting on https://0.0.0.0:8443
+```
+
+If you start the API yourself instead of via the launcher, you own the
+certificate:
+
+```
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 8443 --ssl-certfile C:\path\server.crt --ssl-keyfile C:\path\server.key
+```
+
+Agents pin the server certificate with `-TlsCert` (see
+`docs/agent-deployment.md`); they refuse to talk to a different certificate.
+
 
 
 4. Restart the console and verify:

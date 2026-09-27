@@ -24,9 +24,11 @@ def rotate_admin_password(vault: SecretVault) -> str:
 
 def rotate_api_keys(vault: SecretVault) -> dict:
     """Generate new API keys."""
+    admin_key = f"baraq-{secrets.token_hex(8)}"
+    analyst_key = f"baraq-{secrets.token_hex(8)}"
     keys = {
-        f"baraq-{secrets.token_hex(8)}": "admin",
-        f"baraq-{secrets.token_hex(8)}": "analyst",
+        admin_key: "admin",
+        analyst_key: "analyst",
     }
     import json
     vault.set("BARAQ_API_KEYS", json.dumps(keys))

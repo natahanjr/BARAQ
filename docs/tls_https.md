@@ -56,6 +56,18 @@ The packaged executable honours the same config: `BARAQ_TLS=1` +
 
 (default port 8443).
 
+`start_dev.py` and the container entrypoint do the same, and **refuse to start**
+
+if `BARAQ_TLS=1` and the certificate is missing - the configuration can no
+
+longer claim encryption that the listener does not provide. Both print the
+
+scheme at startup (`BARAQ backend starting on https://...`), so verify it there.
+
+Agents must connect over HTTPS and pin the certificate (`-TlsCert`); see
+
+`docs/agent-deployment.md`.
+
 
 
 ## Option B - Reverse proxy with a real certificate (recommended for a domain)

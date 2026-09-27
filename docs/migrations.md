@@ -8,7 +8,14 @@ connection string as the application (`BARAQ_DATABASE_URL`), so there is
 
 never a second place to configure the database.
 
-
+> **Verified on a fresh database, 2026-09.** This path was broken: the baseline
+> revision's `revision =` id did not match the `down_revision` declared by the
+> additive-columns revision, so `alembic upgrade head` died with
+> `KeyError: '0001_baseline'` and **no new deployment could be migrated at
+> all**. `scripts\migrate_db.py` is covered by
+> `tests/test_migrations.py::test_migrations_baseline_bootstraps_fresh_postgres`,
+> which creates a throwaway database and runs the real upgrade end to end, so a
+> broken chain fails the suite rather than a production deploy.
 
 ## Quick reference
 
@@ -50,6 +57,32 @@ shell (the project `.env` does not set it; the dev stack does so inline).
 
 
 
+## Additive migrations are idempotent
+
+`002_additive_columns.py` replays the same column set the application applies
+
+at startup, using `ADD COLUMN IF NOT EXISTS` semantics, and **skips tables that
+
+do not exist** on the target database. A fresh install (where `create_all` only
+
+creates what the models declare) and a long-lived install therefore both
+
+upgrade cleanly, and re-running the upgrade is harmless.
+
+Columns introduced by the 2026-09 pass: `users.sessions_valid_after`,
+
+`reports.org`, `assistant_messages.user_id`, `agent_commands.sha256`.
+
+## Adding a migration
+
+1. Edit `backend/database/models.py`.
+2. `venv\Scripts\python -m alembic revision --autogenerate -m "describe change"`
+3. **Read the generated file.** The chain must be intact (each `down_revision`
+   matches the previous revision's `revision` id) and every `ADD COLUMN` must be
+   guarded, or a fresh database will fail exactly as it did in September.
+4. `venv\Scripts\python scripts\migrate_db.py`
+5. Add a test that runs the upgrade against a throwaway database
+   (`tests/test_migrations.py` is the pattern).
 ## How the baseline works
 
 

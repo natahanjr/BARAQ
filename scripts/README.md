@@ -2,6 +2,33 @@
 
 This directory contains utility scripts for BARAQ administration, development, and data management.
 
+## Production operations (2026-09)
+
+| Script | Purpose |
+|---|---|
+| `preflight.py` | **Run this before every cutover.** 17 checks (production profile, encryption, SOAR, auth, TLS + health, unauthenticated surface, backup freshness); exits non-zero on any hard failure |
+| `db_backup.py` | backup / list / verify / restore. Locates `pg_dump` itself — no `BARAQ_PG_BIN` needed. `--encrypt` for at-rest confidentiality |
+| `install_backup_task.ps1` | Registers the daily encrypted backup task (default 03:00). Verify with `(Get-ScheduledTaskInfo -TaskName 'BARAQ-DB-Backup').LastTaskResult` |
+| `preflight.py`, `show_paging_routes.py` | Inspect which severities reach email/webhook/Telegram |
+| `seed_playbooks.py` | Idempotent starter SOAR playbooks. Safe ones by default; `--with-soar` adds containment playbooks which ship **disabled** |
+| `verify_paging.py` | Triggers a real critical alert and proves it reaches a configured webhook |
+| `verify_paging_channels.py` | Proves the email (SMTP) and Telegram senders work, offline, against local stubs |
+| `webhook_sink.py` | Local webhook receiver used as a stand-in for Slack/Teams while testing. **Test only** |
+| `rotate_secrets.py` | Rotates admin password, API keys, session secret |
+| `migrate_db.py` | Runs `alembic upgrade head` |
+
+## Agents
+
+| Script | Purpose |
+|---|---|
+| `agent.ps1` | The default self-contained Windows agent: process + TCP telemetry, no Python required. `-TlsCert` pins the server certificate |
+| `install_agent.ps1` | Installs the agent + scheduled task. **Verifies the agent actually reports** before reporting success; defaults to the PowerShell agent, `-AgentType python` for the full one |
+| `agent.py` | Full agent (event logs, Sysmon, DNS, USB, registry). Requires the `backend` package + pywin32 deployed, otherwise it cannot collect |
+| `agent_updater.ps1` | Hash-verified update with rollback |
+| `provision_agent.py` / `provision_fleet.py` | Register agents and issue per-host keys |
+| `gen_cert.ps1` | Self-signed SAN certificate → `certs/baraq.crt` + `certs/baraq.key` |
+| `import_cert.ps1` | Install that certificate as a trusted root on an endpoint |
+
 ## Import Scripts
 
 ### train_full.py

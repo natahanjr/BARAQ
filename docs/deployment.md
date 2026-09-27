@@ -1,5 +1,16 @@
 # BARAQ Deployment Guide
 
+> **For a production deployment, use [`CUTOVER_RUNBOOK.md`](CUTOVER_RUNBOOK.md)
+> and [`PRODUCTION_DEPLOY.md`](PRODUCTION_DEPLOY.md) instead.** This page covers
+> development setup. Two things in particular changed in 2026-09 and are easy to
+> miss: TLS is now *enforced* (the launcher exits if `BARAQ_TLS=1` and the
+> certificate is missing, rather than quietly serving plaintext), and readiness
+> is checkable in one command:
+>
+> ```
+> venv\Scripts\python scripts\preflight.py --url https://<host>:8443 --ca-file certs\baraq.crt
+> ```
+
 ## Prerequisites
 
 ### System Requirements

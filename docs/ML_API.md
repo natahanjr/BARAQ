@@ -632,7 +632,9 @@ Get cross-stream attack sequence detection status.
 
 Get production model monitoring metrics.
 
-**Response:**
+**Response** (illustrative values — the numbers below are example output, not
+this deployment's measured performance; read the real values from the endpoint
+or `docs/performance_benchmarks.md`):
 ```json
 {
   "status": "ok",

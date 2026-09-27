@@ -106,7 +106,19 @@ assessment.
 
   admins, API-key scopes.
 
-- **In transit**: TLS (production gate requires `BARAQ_TLS=1`).
+- **In transit**: TLS. The production gate requires `BARAQ_TLS=1` and the
+
+  launcher **refuses to start** if the certificate is missing or unreadable, so
+
+  an instance cannot report itself healthy while serving plaintext. Agents
+
+  additionally pin the server certificate (`-TlsCert`) and refuse plain HTTP
+
+  against any non-loopback address. Exception: development, where
+
+  `BARAQ_ALLOW_PLAINTEXT_PROD=1` is the only way to run without TLS, and it
+
+  must not be set on a production host.
 
 - **At rest**: AES-256-GCM envelope encryption for sensitive columns
 

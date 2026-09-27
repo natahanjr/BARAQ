@@ -14,6 +14,46 @@ cryptographically before any restore is allowed.
 
 
 
+> **Restoring is the part you must rehearse.** A backup that has never been
+> restored is a hypothesis. Restore the newest archive into a scratch database
+> before trusting it - done on this deployment, it matched row for row:
+>
+> ```
+> venv\Scripts\python scripts\db_backup.py list
+> psql -h 127.0.0.1 -U postgres -d postgres -c "CREATE DATABASE baraq_restore_drill;"
+> venv\Scripts\python scripts\db_backup.py restore <archive> --yes ^
+>   --target postgresql+psycopg://postgres:...@127.0.0.1:55432/baraq_restore_drill
+> ```
+>
+> Encrypted (`.enc`) archives restore the same way; the key comes from the
+> DPAPI vault, so rehearse as the same Windows account that would need to
+> restore during an incident.
+
+### The client tools are found automatically
+
+`pg_dump` / `pg_restore` no longer need `BARAQ_PG_BIN`. The script probes the
+environment variable, `PATH`, then the layouts this project actually produces:
+`<project>/pg/bin`, `<project>/pg/pgsql/bin`, `<project>/dist/pg/bin`
+(including the nested `bin/bin`), `%LOCALAPPDATA%\BARAQ\postgres\bin`, and
+`C:\Program Files\PostgreSQL\<version>\bin`. This matters because a scheduled
+task runs with the service account's PATH, which normally has no PostgreSQL on
+it - the 03:00 backup previously failed silently.
+
+### Unattended backups
+
+```
+powershell -ExecutionPolicy Bypass -File scripts\install_backup_task.ps1 -Time 03:00
+```
+
+Registers `BARAQ-DB-Backup` (daily, encrypted, keeps 14). Verify it really ran
+instead of trusting the registration:
+
+```
+Start-ScheduledTask -TaskName 'BARAQ-DB-Backup'
+(Get-ScheduledTaskInfo -TaskName 'BARAQ-DB-Backup').LastTaskResult   # 0 = success
+```
+
+---
 ## 1. What gets backed up
 
 

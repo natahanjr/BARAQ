@@ -72,7 +72,17 @@ python scripts/rotate_secrets.py token-secret
 
 ## Agent Key Rotation
 
-Agent keys are managed separately:
+Agent keys are managed separately.
+
+**Format matters more than anything else here:** `BARAQ_AGENT_KEYS` is
+`{"<agent-secret>": "<agent-id>"}` — the **secret is the JSON key**, the agent id
+is the value. Reversed, every agent authenticates as nothing and all requests
+return `401` (easy to misdiagnose as a network or TLS problem).
+
+Rotate a key in batches for a large fleet: provision the new key, roll the
+affected machines, confirm each shows `health_status: ok` in `/api/endpoints`,
+then revoke the old secret. Removing a secret immediately breaks every agent
+still using it.
 
 ```powershell
 # Provision a new agent key
@@ -84,7 +94,7 @@ from backend.vault import SecretVault, get_vault_path
 v = SecretVault(get_vault_path())
 import json
 keys = json.loads(v.get('BARAQ_AGENT_KEYS', '{}'))
-keys.pop('<agent-key>', None)
+keys.pop('<agent-secret>', None)   # the SECRET is the key, not the agent id
 v.set('BARAQ_AGENT_KEYS', json.dumps(keys))
 "
 ```

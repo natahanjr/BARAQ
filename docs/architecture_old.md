@@ -1,4 +1,17 @@
-# BARAQ — System Architecture
+﻿
+> **ARCHIVED - DO NOT FOLLOW.** This document predates the 2026-09 production
+> hardening pass and describes behaviour that no longer exists (plain HTTP
+> servers, the Python-only agent, `POST /api/automation/run`, dev API keys in
+> production). Current documentation:
+>
+> - Deployment / cutover: `CUTOVER_RUNBOOK.md`, `PRODUCTION_DEPLOY.md`
+> - Agents: `agent-deployment.md`, `agent_fleet.md`
+> - TLS: `TLS_PRODUCTION.md`, `tls-setup.md`
+> - Security: `../SECURITY.md`
+> - Backups: `backup_restore.md`
+> - What changed, and what is still broken: `../CHANGELOG.md`
+
+# BARAQ â€” System Architecture
 
 **Document:** Architecture Overview
 **Version:** 3.0 (100 rules + Sigma, 9 threat intel, SOAR, data export, ML-enhanced)
@@ -9,63 +22,63 @@
 ## 1. High-Level Architecture
 
 ```
-                    ┌────────────────────────────────────────────┐
-                    │              WINDOWS 11 HOST               │
-                    │                                            │
-                    │   ┌────────────────────────────────────┐   │
-│   │        BARAQ Backend         │   │
-│   │        (FastAPI / Uvicorn)         │   │
-│   │              :8001                 │   │
-                    │   └───────────────┬────────────────────┘   │
-                    │                   │                        │
-                    │   ┌───────────────▼────────────────────┐   │
-                    │   │        Event Collection Layer      │   │
-                    │   │  eventlog │ process │ network │ PS │   │
-                    │   │  (+ attack simulator)             │   │
-                    │   └───────────────┬────────────────────┘   │
-                    │                   │                        │
-                    │   ┌───────────────▼────────────────────┐   │
-                    │   │        Security Data Processing    │   │
-                    │   │  Normalizer → risk 0-100 → DB      │   │
-                    │   └───────────────┬────────────────────┘   │
-                    │                   │                        │
-                    │        ┌──────────┴──────────┐             │
-                    │        ▼                     ▼             │
-                    │  ┌─────────────┐      ┌──────────────┐     │
-                    │  │ Rule-Based  │      │  ML Engine   │     │
-                    │  │ Detection   │      │  IF / XGB /  │     │
-                    │  │(100+S rules)│      │  Meta-learner│     │
-                    │  └──────┬──────┘      └──────┬───────┘     │
-                    │         └─────────┬──────────┘             │
-                    │                   ▼                        │
-                    │  ┌──────────────────────────────────────┐  │
-                    │  │       Hybrid Risk Scoring Engine     │  │
-                    │  │    0.6 × rule + 0.4 × ML = 0-100     │  │
-                    │  │    LOW · MEDIUM · HIGH · CRITICAL    │  │
-                    │  └───────────────────┬──────────────────┘  │
-                    │                      ▼                     │
-                    │   ┌────────────────────────────────────┐   │
-                    │   │        MITRE ATT&CK Mapper         │   │
-                    │   │  technique · tactic · rec action   │   │
-                    │   └───────────────────┬────────────────┘   │
-                    │                      ▼                     │
-                    │   ┌────────────────────────────────────┐   │
-                    │   │         Local Database             │   │
-                    │   │   (SQLite: baraq.db)            │   │
-                    │   └───────────┬────────────┬───────────┘   │
-                    │               │            │               │
-                    │      ┌────────▼───┐  ┌─────▼─────────┐     │
-                    │      │ SOC        │  │ Evaluation    │     │
-                    │      │ Dashboard  │  │ Framework     │     │
-                    │      │ :5173      │  │ (isolated DB) │     │
-                    │      └────────────┘  └───────────────┘     │
-                    │                                            │
-                    │   ┌────────────────────────────────────┐   │
-                    │   │      Incident Report Generator     │   │
-                    │   │  PDF · HTML · JSON · CSV           │   │
-                    │   └────────────────────────────────────┘   │
-                    │                                            │
-                    └────────────────────────────────────────────┘
+                    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+                    â”‚              WINDOWS 11 HOST               â”‚
+                    â”‚                                            â”‚
+                    â”‚   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+â”‚   â”‚        BARAQ Backend         â”‚   â”‚
+â”‚   â”‚        (FastAPI / Uvicorn)         â”‚   â”‚
+â”‚   â”‚              :8001                 â”‚   â”‚
+                    â”‚   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+                    â”‚                   â”‚                        â”‚
+                    â”‚   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+                    â”‚   â”‚        Event Collection Layer      â”‚   â”‚
+                    â”‚   â”‚  eventlog â”‚ process â”‚ network â”‚ PS â”‚   â”‚
+                    â”‚   â”‚  (+ attack simulator)             â”‚   â”‚
+                    â”‚   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+                    â”‚                   â”‚                        â”‚
+                    â”‚   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+                    â”‚   â”‚        Security Data Processing    â”‚   â”‚
+                    â”‚   â”‚  Normalizer â†’ risk 0-100 â†’ DB      â”‚   â”‚
+                    â”‚   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+                    â”‚                   â”‚                        â”‚
+                    â”‚        â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”             â”‚
+                    â”‚        â–¼                     â–¼             â”‚
+                    â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”      â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”     â”‚
+                    â”‚  â”‚ Rule-Based  â”‚      â”‚  ML Engine   â”‚     â”‚
+                    â”‚  â”‚ Detection   â”‚      â”‚  IF / XGB /  â”‚     â”‚
+                    â”‚  â”‚(100+S rules)â”‚      â”‚  Meta-learnerâ”‚     â”‚
+                    â”‚  â””â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”˜      â””â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”˜     â”‚
+                    â”‚         â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜             â”‚
+                    â”‚                   â–¼                        â”‚
+                    â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”‚
+                    â”‚  â”‚       Hybrid Risk Scoring Engine     â”‚  â”‚
+                    â”‚  â”‚    0.6 Ã— rule + 0.4 Ã— ML = 0-100     â”‚  â”‚
+                    â”‚  â”‚    LOW Â· MEDIUM Â· HIGH Â· CRITICAL    â”‚  â”‚
+                    â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â”‚
+                    â”‚                      â–¼                     â”‚
+                    â”‚   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+                    â”‚   â”‚        MITRE ATT&CK Mapper         â”‚   â”‚
+                    â”‚   â”‚  technique Â· tactic Â· rec action   â”‚   â”‚
+                    â”‚   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+                    â”‚                      â–¼                     â”‚
+                    â”‚   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+                    â”‚   â”‚         Local Database             â”‚   â”‚
+                    â”‚   â”‚   (SQLite: baraq.db)            â”‚   â”‚
+                    â”‚   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+                    â”‚               â”‚            â”‚               â”‚
+                    â”‚      â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”     â”‚
+                    â”‚      â”‚ SOC        â”‚  â”‚ Evaluation    â”‚     â”‚
+                    â”‚      â”‚ Dashboard  â”‚  â”‚ Framework     â”‚     â”‚
+                    â”‚      â”‚ :5173      â”‚  â”‚ (isolated DB) â”‚     â”‚
+                    â”‚      â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜     â”‚
+                    â”‚                                            â”‚
+                    â”‚   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+                    â”‚   â”‚      Incident Report Generator     â”‚   â”‚
+                    â”‚   â”‚  PDF Â· HTML Â· JSON Â· CSV           â”‚   â”‚
+                    â”‚   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+                    â”‚                                            â”‚
+                    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ---
@@ -93,7 +106,7 @@ Severity: medium        Timestamp: 2026-08-03T07:12:00Z
 Host: <hostname>        Message: <normalized text>     Raw: <original record>
 ```
 
-Risk mapping: event ID → risk level; severity derived per category (Authentication/Recon = medium+...). All events are persisted via `NormalizedEvent` and flagged `is_anomaly` by the ML layer.
+Risk mapping: event ID â†’ risk level; severity derived per category (Authentication/Recon = medium+...). All events are persisted via `NormalizedEvent` and flagged `is_anomaly` by the ML layer.
 
 ### 2.3 Threat Detection & Analysis (`backend/detection/`, `backend/ml/`, `backend/risk/`)
 - **Rules Engine** (`rules_engine.py`) runs 100 native detection rules + 2,512 Sigma rules against the current corpus within a correlation window (default 10 minutes).
@@ -101,18 +114,18 @@ Risk mapping: event ID → risk level; severity derived per category (Authentica
 
 | Rule | Detection logic | MITRE |
 |---|---|---|
-| `brute_force.py` | ≥5 failed logons (4625) for same account in window | T1110 |
+| `brute_force.py` | â‰¥5 failed logons (4625) for same account in window | T1110 |
 | `powershell.py` | Encoded (-EncodedCommand/-e), download-execute (IEX/DownloadString), hidden execution | T1059.001 |
 | `privilege_escalation.py` | New admin accounts, sensitive privilege assignment (4720/4732/4672) | T1068 |
 | `persistence.py` | Run-key registry changes, scheduled tasks, new services (4698/7045) | T1547 |
-| `network_recon.py` | One source probing ≥20 distinct ports in 120 s | T1046 |
+| `network_recon.py` | One source probing â‰¥20 distinct ports in 120 s | T1046 |
 | `lateral_movement.py` | SMB connections + cross-host logons | T1021 |
 | `data_staging.py` | Archive tools against data folders (7z/rar/zip) | T1074 |
 | `malware_file.py` | Known-bad hash/path/signature hits | T1105 |
 | `email_phishing.py` | Heuristic sender/attachment/body scoring | T1566 |
 | `dns_http.py` | DNS tunnel/TLD + oversized HTTP bodies | T1071 |
 | `usb.py` | New removable-device insertion | T1091 |
-| `correlation.py` | ≥2 kill-chain steps from one host in window | T1082 |
+| `correlation.py` | â‰¥2 kill-chain steps from one host in window | T1082 |
 | `vulnerability.py` | Installed software matching known CVEs | T1190 |
 | `credential_access.py` | Sysmon E10 targeting lsass.exe from unexpected process | T1003.001 |
 | `registry_runkey.py` | Sysmon E13 writes to Run/RunOnce autostart keys | T1547.001 |
@@ -135,7 +148,7 @@ Risk mapping: event ID → risk level; severity derived per category (Authentica
   1. Per-behavior **Isolation Forest** (login / process / network streams),
   2. Supervised **Random Forest / XGBoost** classifier (attack vs baseline clusters; XGBoost used when installed, sklearn fallback otherwise),
   3. Per-event anomaly score (0-1) feeding the hybrid risk engine.
-- **Hybrid Risk Scoring** (`risk/scoring.py`): `Final = 0.6 × rule(severity, confidence, events) + 0.4 × ML(mean anomaly of evidence)` → 0-100 with LOW/MEDIUM/HIGH/CRITICAL levels. Alerts are labelled `rule` or `hybrid` by `detection_method`.
+- **Hybrid Risk Scoring** (`risk/scoring.py`): `Final = 0.6 Ã— rule(severity, confidence, events) + 0.4 Ã— ML(mean anomaly of evidence)` â†’ 0-100 with LOW/MEDIUM/HIGH/CRITICAL levels. Alerts are labelled `rule` or `hybrid` by `detection_method`.
 
 ### 2.4 MITRE ATT&CK (`backend/mitre/`)
 `attack.py` + `techniques.json` provide technique name, tactic, and recommended response for every mapped technique (T1046, T1059.001, T1068, T1110, T1547, plus T1078, T1036, T1497, T1005, T1027, T1040, T1555 fallbacks).
@@ -144,7 +157,7 @@ Risk mapping: event ID → risk level; severity derived per category (Authentica
 PostgreSQL via psycopg3 + SQLAlchemy 2.0. 47+ tables including: `users`, `normalized_events`, `alerts`, `alert_events`, `analyst_notes`, `processes`, `network_connections` (BIGINT bytes), `dashboard_snapshots`, `evaluation_runs`, `assistant_messages`, `reports`, `incidents`, `incident_links`, `incident_comments`, `audit_log`, `detection_verdicts`, `reputation_cache`, `saved_searches`, `search_panels`, `sigma_rules`, `endpoints`, `agent_commands`, `threat_intel_cache`, and more. Retention default 30 days.
 
 ### 2.6 SOC Dashboard (`frontend/`)
-React 18 + Tailwind CSS 4 + Recharts, served by Vite on port 5173. Talks to the backend exclusively through the Vite dev proxy (`/api` → `127.0.0.1:8001`), so no CORS issues and no configuration. Pages: Dashboard, Alerts, Alert Detail, Investigation, Events, Processes & Network, Threat Intelligence, MITRE ATT&CK, AI Assistant, Reports, Evaluation, System, Data Export.
+React 18 + Tailwind CSS 4 + Recharts, served by Vite on port 5173. Talks to the backend exclusively through the Vite dev proxy (`/api` â†’ `127.0.0.1:8001`), so no CORS issues and no configuration. Pages: Dashboard, Alerts, Alert Detail, Investigation, Events, Processes & Network, Threat Intelligence, MITRE ATT&CK, AI Assistant, Reports, Evaluation, System, Data Export.
 
 ### 2.7 Report Generation (`backend/reports/`)
 `generator.py` builds an executive or technical report context from live DB analytics; `exporters.py` renders PDF (ReportLab), HTML, JSON, and CSV into `reports/`. Metadata stored in the `reports` table.
@@ -153,7 +166,7 @@ React 18 + Tailwind CSS 4 + Recharts, served by Vite on port 5173. Talks to the 
 `assistant.py` implements a fully local engine (intent matching + TF-IDF keyword retrieval against a threat knowledge base in `knowledge.py`). It can explain alerts, summarize incidents, recommend remediation, and produce analyst notes. Optional: delegate to the BARAQ AI endpoint via `BARAQ_AI_API_URL` env vars.
 
 ### 2.9 Evaluation Framework (`backend/evaluation/`)
-Runs the five attack scenarios + baseline through the complete pipeline (normalize → persist → rules → alert) inside an **isolated temporary database** (production data is never touched), then computes per-scenario and overall detection metrics:
+Runs the five attack scenarios + baseline through the complete pipeline (normalize â†’ persist â†’ rules â†’ alert) inside an **isolated temporary database** (production data is never touched), then computes per-scenario and overall detection metrics:
 
 - Accuracy, precision, recall, F1-score, false-positive rate, detection time (ms).
 
@@ -161,16 +174,16 @@ Results persist to `evaluation_runs` for reporting and history. Exposed via `/ap
 
 ### 2.10 SOAR Actions (`backend/response/`)
 Real Windows-native security response actions executed via PowerShell:
-- **Block IP**: `netsh advfirewall firewall add rule` — adds inbound deny rule
-- **Kill Process**: `taskkill /F /PID` — force-terminates process
+- **Block IP**: `netsh advfirewall firewall add rule` â€” adds inbound deny rule
+- **Kill Process**: `taskkill /F /PID` â€” force-terminates process
 - **Quarantine File**: moves file to `C:\BaraqQuarantine` with metadata JSON
-- **Disable Account**: `net user /active:no` — disables local Windows account
-- **Isolate Host**: `netsh advfirewall set allprofiles firewallpolicy blockinbound,blockoutbound` — blocks all traffic
+- **Disable Account**: `net user /active:no` â€” disables local Windows account
+- **Isolate Host**: `netsh advfirewall set allprofiles firewallpolicy blockinbound,blockoutbound` â€” blocks all traffic
 - All actions require UAC elevation via `Start-Process -Verb RunAs`
 
 ### 2.11 Threat Intelligence (`backend/threatintel/`)
 9 integrated providers in a 3-tier loop:
-1. **Local cache** (1-hour TTL) → 2. **Free providers** (isbadip, FFraud, AlienVault OTX, AbuseIPDB, FindIP, IPDetails.io) → 3. **Premium providers** (ThreatFox, URLhaus, MalwareBazaar — require `BARAQ_ABUSECH_KEY`)
+1. **Local cache** (1-hour TTL) â†’ 2. **Free providers** (isbadip, FFraud, AlienVault OTX, AbuseIPDB, FindIP, IPDetails.io) â†’ 3. **Premium providers** (ThreatFox, URLhaus, MalwareBazaar â€” require `BARAQ_ABUSECH_KEY`)
 
 ### 2.12 Data Export (`backend/api/export.py`)
 Universal CSV/JSON export for all 15 data types: events, alerts, processes, network, reports, incidents, evaluation runs, audit logs, assistant messages, endpoints, threat intel, dashboard snapshots, detection verdicts, sigma rules, and alerts with evidence. Supports streaming for large datasets.
@@ -183,24 +196,24 @@ Universal CSV/JSON export for all 15 data types: events, alerts, processes, netw
 ## 3. Data Flow (one collection cycle)
 
 ```
-Collectors → raw records
-   ↓
-Normalizer → NormalizedEvent (risk 0-100) / ProcessRecord / NetworkConnection
-   ↓
-RulesEngine.evaluate(window) → 100 native rules + 2,512 Sigma rules → DetectionResults
-   ↓
+Collectors â†’ raw records
+   â†“
+Normalizer â†’ NormalizedEvent (risk 0-100) / ProcessRecord / NetworkConnection
+   â†“
+RulesEngine.evaluate(window) â†’ 100 native rules + 2,512 Sigma rules â†’ DetectionResults
+   â†“
 MITRE enrichment (technique, tactic, recommendation) + Threat Intel lookups (9 providers)
-   ↓
-Hybrid Risk Scoring → Alert (risk_score, risk_level, detection_method)
-   ↓
-ML analyze → event ml_score / is_anomaly (feeds future hybrid scores) + drift detection
-   ↓
+   â†“
+Hybrid Risk Scoring â†’ Alert (risk_score, risk_level, detection_method)
+   â†“
+ML analyze â†’ event ml_score / is_anomaly (feeds future hybrid scores) + drift detection
+   â†“
 Dashboard analytics (KPIs, timelines, distributions, user behavior)
-   ↓
-Dashboard UI (REST)  ·  Report generator (PDF/HTML/JSON/CSV)  ·  Evaluation framework
-   ↓
+   â†“
+Dashboard UI (REST)  Â·  Report generator (PDF/HTML/JSON/CSV)  Â·  Evaluation framework
+   â†“
 SOAR actions (Block IP, Kill Process, Quarantine, Disable Account, Isolate Host)
-   ↓
+   â†“
 Data Export (CSV/JSON for all data types)
 ```
 
@@ -228,14 +241,14 @@ Data Export (CSV/JSON for all data types)
 | `GET /api/processes` / `GET /api/network` | Telemetry tables |
 | `GET /api/events/statistics` | Aggregates by event ID/category |
 | `GET /api/investigation/alert/{id}` | Attack chain + related events + network context |
-| `POST /api/assistant/chat` · `GET /api/assistant/history` | AI chat |
-| `POST /api/assistant/explain` · `POST /api/assistant/summarize` | AI actions |
-| `POST /api/reports/generate` · `GET /api/reports/list` | Report generation |
+| `POST /api/assistant/chat` Â· `GET /api/assistant/history` | AI chat |
+| `POST /api/assistant/explain` Â· `POST /api/assistant/summarize` | AI actions |
+| `POST /api/reports/generate` Â· `GET /api/reports/list` | Report generation |
 | `POST /api/system/collect` | One live collection cycle |
 | `POST /api/system/simulate` | Run attack simulation |
-| `POST /api/system/ml/train` · `POST /api/system/ml/analyze` · `GET /api/system/ml/status` | ML lifecycle |
+| `POST /api/system/ml/train` Â· `POST /api/system/ml/analyze` Â· `GET /api/system/ml/status` | ML lifecycle |
 | `POST /api/evaluation/run` | Run detection evaluation suite (isolated DB) |
-| `GET /api/evaluation/results` · `GET /api/evaluation/latest` | Evaluation history / latest run |
+| `GET /api/evaluation/results` Â· `GET /api/evaluation/latest` | Evaluation history / latest run |
 | `GET /api/system/status` | App status + KPIs + uptime |
 
 Interactive docs: `http://127.0.0.1:8001/docs`.
@@ -246,7 +259,7 @@ Interactive docs: `http://127.0.0.1:8001/docs`.
 
 - **DB:** PostgreSQL on port 5432 (local or fleet-scale).
 - **Scheduler:** single background thread, 15 s interval.
-- **ML:** 3-layer system — Isolation Forest + XGBoost/RandomForest + ensemble stacking meta-learner. Trained on local data, no GPU.
+- **ML:** 3-layer system â€” Isolation Forest + XGBoost/RandomForest + ensemble stacking meta-learner. Trained on local data, no GPU.
 - **AI assistant:** local rule/TF-IDF engine; no LLM required by default.
 - **Sigma rules:** 2,512 YAML rules loaded on startup, cached in memory.
 - **Expected footprint:** < 400 MB RAM total for backend + dashboard during normal operation on an i5 / 12 GB laptop.

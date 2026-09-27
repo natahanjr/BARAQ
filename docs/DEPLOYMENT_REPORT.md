@@ -1,5 +1,13 @@
 # BARAQ Deployment Report
 
+> **Historical record (2026-09-06, commit `003ffc9`).** This report describes a
+> development deployment *before* the production hardening pass. Several of its
+> findings are now fixed, and a few behaviours it reports as working were not:
+> the container served plaintext while configured for TLS, `alembic upgrade`
+> could not run on a fresh database, and a fresh deployment shipped with zero automation playbooks, so SOAR never fired.
+> For the current, verified state see [`CUTOVER_RUNBOOK.md`](CUTOVER_RUNBOOK.md)
+> and the open issues in [`../CHANGELOG.md`](../CHANGELOG.md).
+
 **Date:** September 6, 2026
 **Environment:** Windows 11, PostgreSQL 17, Python 3.13.15, Node.js 22.23.2
 **Commit:** `003ffc9` (main branch)

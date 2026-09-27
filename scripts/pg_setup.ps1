@@ -34,7 +34,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 
 # ------------------------------------------------------------------ defaults
-$Port = if ($env:BARAQ_PG_PORT) { $env:BARAQ_PG_PORT } else { "5432" }
+$Port = if ($env:BARAQ_PG_PORT) { $env:BARAQ_PG_PORT } else { "55432" }
 $Bind = if ($env:BARAQ_PG_HOST) { $env:BARAQ_PG_HOST } else { "127.0.0.1" }
 if (-not $PgHome) { $PgHome = $env:BARAQ_PG_HOME }
 if (-not $PgHome) { $PgHome = Join-Path $env:LOCALAPPDATA "BARAQ\postgres" }
@@ -50,6 +50,7 @@ function Get-PgBin([string]$Tool) {
         $candidates += Join-Path $env:BARAQ_PG_BIN "bin\$Tool.exe"
     }
     $candidates += Join-Path $Root "pg\bin\$Tool.exe"
+    $candidates += Join-Path $Root "pg\pgsql\bin\$Tool.exe"
     $candidates += Join-Path $PgHome "bin\$Tool.exe"
     foreach ($pg in @(Get-ChildItem (Join-Path $env:ProgramFiles "PostgreSQL") -Directory -ErrorAction SilentlyContinue)) {
         $candidates += Join-Path $pg.FullName "bin\$Tool.exe"

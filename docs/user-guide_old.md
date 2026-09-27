@@ -1,4 +1,17 @@
-# BARAQ — User Manual
+﻿
+> **ARCHIVED - DO NOT FOLLOW.** This document predates the 2026-09 production
+> hardening pass and describes behaviour that no longer exists (plain HTTP
+> servers, the Python-only agent, `POST /api/automation/run`, dev API keys in
+> production). Current documentation:
+>
+> - Deployment / cutover: `CUTOVER_RUNBOOK.md`, `PRODUCTION_DEPLOY.md`
+> - Agents: `agent-deployment.md`, `agent_fleet.md`
+> - TLS: `TLS_PRODUCTION.md`, `tls-setup.md`
+> - Security: `../SECURITY.md`
+> - Backups: `backup_restore.md`
+> - What changed, and what is still broken: `../CHANGELOG.md`
+
+# BARAQ â€” User Manual
 
 **Document:** Operator Guide
 **Version:** 3.0 (100 rules + Sigma, 9 threat intel, SOAR, data export, ML-enhanced)
@@ -16,7 +29,7 @@ BARAQ is a lightweight SOC platform that runs entirely on a single Windows 11 la
 
 ### 2.1 Prerequisites
 - Windows 11, Python 3.13+, Node.js 18+ (frontend only)
-- PostgreSQL 16+ on `127.0.0.1:5432` (required — no SQLite fallback)
+- PostgreSQL 16+ on `127.0.0.1:5432` (required â€” no SQLite fallback)
 - Backend dependencies: `pip install -r requirements.txt`
 - Frontend dependencies: `cd frontend && npm install`
 
@@ -35,21 +48,21 @@ The background scheduler begins collecting host telemetry and running detection 
 cd frontend
 npm run dev
 ```
-Open **http://localhost:5173**. The Vite dev proxy forwards `/api` → `http://127.0.0.1:8001`.
+Open **http://localhost:5173**. The Vite dev proxy forwards `/api` â†’ `http://127.0.0.1:8001`.
 
 ---
 
 ## 3. Dashboard Pages
 
 ### 3.1 Dashboard
-- **Security score ring** (0–100) and **system status** (HEALTHY / ATTENTION / CRITICAL).
+- **Security score ring** (0â€“100) and **system status** (HEALTHY / ATTENTION / CRITICAL).
 - KPI cards: total events, active alerts, critical threats, ML anomalies, **current risk level**.
-- **Event & alert timeline (24 h)** — stacked area chart.
-- **Threat categories** — bar chart of alerts per MITRE tactic.
-- **Severity distribution** — donut chart of open alerts.
-- **Attack statistics** — horizontal bar chart per attack type.
-- **User behavior** — stacked successes/failures per account; **Detection method breakdown** — rule vs hybrid alerts.
-- **Latest alerts** — click-through list; **Top targets** — most-hit accounts.
+- **Event & alert timeline (24 h)** â€” stacked area chart.
+- **Threat categories** â€” bar chart of alerts per MITRE tactic.
+- **Severity distribution** â€” donut chart of open alerts.
+- **Attack statistics** â€” horizontal bar chart per attack type.
+- **User behavior** â€” stacked successes/failures per account; **Detection method breakdown** â€” rule vs hybrid alerts.
+- **Latest alerts** â€” click-through list; **Top targets** â€” most-hit accounts.
 - Auto-refreshes every 15 seconds.
 
 ### 3.2 Alerts
@@ -61,14 +74,14 @@ Open **http://localhost:5173**. The Vite dev proxy forwards `/api` → `http://1
 - Description, **evidence** (raw finding text), **recommended action**.
 - **Evidence events**: the raw normalized events that triggered the alert.
 - **MITRE ATT&CK panel**: technique ID (links to attack.mitre.org), name, tactic, confidence, score.
-- **Hybrid risk panel**: risk score (0-100), risk level (LOW→CRITICAL), detection method (rule-based or hybrid rule+ML).
-- **Status workflow**: open → investigating → resolved / dismissed.
+- **Hybrid risk panel**: risk score (0-100), risk level (LOWâ†’CRITICAL), detection method (rule-based or hybrid rule+ML).
+- **Status workflow**: open â†’ investigating â†’ resolved / dismissed.
 - **Analyst notes**: add notes; they persist and appear in investigation.
 
 ### 3.4 Investigation
-- Select an alert → BARAQ reconstructs the **attack chain** (kill-chain steps: credential probing → access granted → privilege assignment → script execution → persistence ...).
-- **Incident timeline**: visual sequence of surrounding events (Failed Login → Account Locked → ... → Alert Created).
-- **Related events** within ±30 minutes of the first evidence event.
+- Select an alert â†’ BARAQ reconstructs the **attack chain** (kill-chain steps: credential probing â†’ access granted â†’ privilege assignment â†’ script execution â†’ persistence ...).
+- **Incident timeline**: visual sequence of surrounding events (Failed Login â†’ Account Locked â†’ ... â†’ Alert Created).
+- **Related events** within Â±30 minutes of the first evidence event.
 - **Network context** table for reconnaissance (T1046) alerts.
 - **AI explanation** button: one-click natural-language analysis of the alert, displayed in a redesigned section with color-coded cards for severity, MITRE, IOCs, and recommendations. The analysis card includes an "AI Generated" badge and uses markdown table rendering for structured data.
 
@@ -84,13 +97,13 @@ Open **http://localhost:5173**. The Vite dev proxy forwards `/api` → `http://1
 
 ### 3.8 Processes & Network
 - **Processes**: PID, parent PID, image, user, "NEW" flag for new processes.
-- **Network connections**: process, local/remote address:port, state, LISTEN flag, bytes sent/received (BIGINT — no overflow for large transfers).
+- **Network connections**: process, local/remote address:port, state, LISTEN flag, bytes sent/received (BIGINT â€” no overflow for large transfers).
 
 ### 3.9 Threat Intelligence
 - **9 integrated providers**: isbadip.com, FFraud.com, AlienVault OTX, ThreatFox, URLhaus, MalwareBazaar, AbuseIPDB, FindIP, IPDetails.io
-- 3-tier provider loop: local cache → free providers → premium (abuse.ch)
+- 3-tier provider loop: local cache â†’ free providers â†’ premium (abuse.ch)
 - Professional source cards with provider status, response format, and query parameters
-- No consumer language — designed for security analysts
+- No consumer language â€” designed for security analysts
 
 ### 3.10 SOAR Actions
 - **Block IP**: Windows Firewall rule via `netsh advfirewall`
@@ -124,7 +137,7 @@ Open **http://localhost:5173**. The Vite dev proxy forwards `/api` → `http://1
 ### 3.15 System
 - App status: version, database (PostgreSQL), collection state, uptime.
 - **Collection & simulation**: run the full attack suite or a single scenario, or collect live host data.
-- **Machine learning**: 3-layer detection system — Isolation Forest + XGBoost/RandomForest + Hybrid Risk Fusion (60% rules + 40% ML) + ensemble stacking meta-learner.
+- **Machine learning**: 3-layer detection system â€” Isolation Forest + XGBoost/RandomForest + Hybrid Risk Fusion (60% rules + 40% ML) + ensemble stacking meta-learner.
 - Live KPI panel.
 - **ML Status**: trained/stale/drift warning, 1300+ feature vectors from 129,170 events.
 
@@ -132,13 +145,13 @@ Open **http://localhost:5173**. The Vite dev proxy forwards `/api` → `http://1
 
 ## 4. Typical Analyst Workflow
 
-1. **Populate data** → System page → *Run simulation* (full suite) or *Collect live host data*.
-2. **Triage** → Alerts page → filter by severity → open each alert.
-3. **Investigate** → Alert Detail → read evidence and MITRE mapping → *Open investigation* → AI explanation → review attack chain.
-4. **Respond** → set status (investigating / resolved), add analyst notes, run SOAR actions (Block IP, Kill Process, Quarantine File, Disable Account, Isolate Host).
-5. **Export** → Data Export page → export events/alerts/processes as CSV or JSON for external analysis.
-6. **Report** → Reports page → generate Executive PDF for stakeholders; Technical JSON/HTML for the engineering record.
-7. **Monitor** → Dashboard page (auto-refreshes) and train the ML model from System page as events accumulate.
+1. **Populate data** â†’ System page â†’ *Run simulation* (full suite) or *Collect live host data*.
+2. **Triage** â†’ Alerts page â†’ filter by severity â†’ open each alert.
+3. **Investigate** â†’ Alert Detail â†’ read evidence and MITRE mapping â†’ *Open investigation* â†’ AI explanation â†’ review attack chain.
+4. **Respond** â†’ set status (investigating / resolved), add analyst notes, run SOAR actions (Block IP, Kill Process, Quarantine File, Disable Account, Isolate Host).
+5. **Export** â†’ Data Export page â†’ export events/alerts/processes as CSV or JSON for external analysis.
+6. **Report** â†’ Reports page â†’ generate Executive PDF for stakeholders; Technical JSON/HTML for the engineering record.
+7. **Monitor** â†’ Dashboard page (auto-refreshes) and train the ML model from System page as events accumulate.
 
 ---
 
@@ -182,12 +195,12 @@ Environment variables: `BARAQ_INTERVAL`, `BARAQ_DATABASE_URL` (PostgreSQL), `BAR
 | Symptom | Cause / Fix |
 |---|---|
 | Dashboard shows "Backend offline" | Backend not running; start uvicorn. Check `logs/server.err.log`. |
-| No security events collected | Install/verify `pywin32` (`pip install pywin32`). Reading the **Security** log requires an elevated (Administrator) console — run the backend as admin for full event-log access. |
-| Simulation produces no alerts | Run the *full suite*; single scenarios need matching rule thresholds (e.g. ≥5 failed logins). |
+| No security events collected | Install/verify `pywin32` (`pip install pywin32`). Reading the **Security** log requires an elevated (Administrator) console â€” run the backend as admin for full event-log access. |
+| Simulation produces no alerts | Run the *full suite*; single scenarios need matching rule thresholds (e.g. â‰¥5 failed logins). |
 | PDF report fails | Verify `reportlab` installed and `reports/` directory writable. |
 | Port 5173 busy | Change port in `frontend/vite.config.js` and matching `CORS_ORIGINS` in `backend/config.py`. |
 | AI assistant gives generic answers | It is a local rule/TF-IDF engine by design; set `BARAQ_AI_API_URL`/`KEY` to delegate to the BARAQ AI endpoint for generative answers. |
-| Alerts show "rule" not "hybrid" | Hybrid labels require ML scores on evidence events — train the model (System → ML → Train) and run **ML analyze** after collecting more data. |
+| Alerts show "rule" not "hybrid" | Hybrid labels require ML scores on evidence events â€” train the model (System â†’ ML â†’ Train) and run **ML analyze** after collecting more data. |
 
 ---
 

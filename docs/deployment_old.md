@@ -1,4 +1,17 @@
-# BARAQ — Central University Deployment Guide
+﻿
+> **ARCHIVED - DO NOT FOLLOW.** This document predates the 2026-09 production
+> hardening pass and describes behaviour that no longer exists (plain HTTP
+> servers, the Python-only agent, `POST /api/automation/run`, dev API keys in
+> production). Current documentation:
+>
+> - Deployment / cutover: `CUTOVER_RUNBOOK.md`, `PRODUCTION_DEPLOY.md`
+> - Agents: `agent-deployment.md`, `agent_fleet.md`
+> - TLS: `TLS_PRODUCTION.md`, `tls-setup.md`
+> - Security: `../SECURITY.md`
+> - Backups: `backup_restore.md`
+> - What changed, and what is still broken: `../CHANGELOG.md`
+
+# BARAQ â€” Central University Deployment Guide
 
 This guide covers the supported deployment of BARAQ as the central
 console for a multi-tenant university consortium: one central server, several
@@ -23,7 +36,7 @@ options are shipped in `dist\`:
 The bundled build is path-portable: the frozen server locates its data,
 scripts, certs and the `pg\` toolkit relative to its own executable
 (`sys.executable`), never hard-coded drive letters. Environment config
-(`BARAQ_PORT`, `BARAQ_DATABASE_URL`, TLS settings, …) is read from
+(`BARAQ_PORT`, `BARAQ_DATABASE_URL`, TLS settings, â€¦) is read from
 `.env` next to the exe if present; otherwise defaults apply (port 8001,
 `pg\data` cluster on 127.0.0.1:55432).
 
@@ -51,14 +64,14 @@ Steps (option A) - one click:
 
 First boot with an empty database seeds the application role, a TOTP-less
 `admin` super-user and a bootstrap API key, all printed to the console log
-— capture and store them (the API key also lives in `data\secrets.dat`,
+â€” capture and store them (the API key also lives in `data\secrets.dat`,
 the app vault). After provisioning, follow the
 first-run checklist in section 3 (change the admin password, enroll MFA,
 create analysts per campus). TLS enforcement is identical to source runs:
 use `BARAQ_ENV=production` + the `start_pg_server.cmd` HTTPS launcher,
 or the documented self-signed setup, before putting agents on it.
 
-Upgrade / reinstall: the installer is idempotent — re-running it over an
+Upgrade / reinstall: the installer is idempotent â€” re-running it over an
 existing `%LOCALAPPDATA%\BARAQ\postgres` cluster leaves the operator data
 untouched; if the new install finds no `BARAQ_DATABASE_URL` in `.env` it
 rotates the `baraq` role password and writes a fresh one. Uninstall
@@ -75,8 +88,8 @@ PostgreSQL.
 | Requirement | Detail |
 |-------------|--------|
 | OS          | Windows 10/11 (Windows Server 2019+ recommended) |
-| Python      | 3.11+ on PATH — source runs only |
-| Node.js     | 18+ (one-time dashboard build) — source runs only |
+| Python      | 3.11+ on PATH â€” source runs only |
+| Node.js     | 18+ (one-time dashboard build) â€” source runs only |
 | PostgreSQL  | 16+ on 127.0.0.1:55432, or use `scripts\download_postgres.ps1` + `scripts\pg_setup.ps1` to provision a portable `pg\data` cluster with no system install |
 | Network     | Inbound TCP **8443** (HTTPS) from agent hosts and analysts |
 | Storage     | ~1 GB headroom + growth per fleet host |
@@ -97,14 +110,14 @@ What this does:
   and serves the console at **https://<server-ip>:8443**.
 
 HTTPS is the standard deployment path. Plain `start.bat` (http, :8001) is for
-local development only — campus telemetry must never cross the network
+local development only â€” campus telemetry must never cross the network
 unencrypted. For a production server, run it as a Windows service instead
 (see `scripts/install_service.ps1` and `documentation/windows_service.md`).
 
-### 2a. Provision PostgreSQL (required — no SQLite fallback exists)
+### 2a. Provision PostgreSQL (required â€” no SQLite fallback exists)
 
 BARAQ is PostgreSQL-only. Before the first backend start, provision the
-cluster and app credentials (idempotent — safe to re-run):
+cluster and app credentials (idempotent â€” safe to re-run):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\provision_postgres.ps1
@@ -113,7 +126,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\provision_postgres.p
 This reachability-checks the cluster (default `127.0.0.1:55432`), creates the
 application role `baraq` (generated password) and database `baraq`, and
 writes `BARAQ_DATABASE_URL` into `.env`. The backend then runs entirely
-against PostgreSQL — the SQLite fallback was removed. Migration of a legacy
+against PostgreSQL â€” the SQLite fallback was removed. Migration of a legacy
 SQLite dataset is still possible via `scripts\migrate_to_postgres.py`.
 
 ### 2b. Daily encrypted backups
@@ -127,14 +140,14 @@ Procedure and restore drill: `documentation/backup_restore.md`.
 
 ## 3. First-run security checklist
 
-1. **Change the admin password** — the production gate refuses the
+1. **Change the admin password** â€” the production gate refuses the
    well-known `baraqadmin` bootstrap value on boot (`BARAQ_ENV=production`).
-2. **Enroll admin TOTP 2FA** — with `BARAQ_ENFORCE_ADMIN_MFA=1` (production
+2. **Enroll admin TOTP 2FA** â€” with `BARAQ_ENFORCE_ADMIN_MFA=1` (production
    default), admin API features stay locked until every admin has a TOTP
    second factor (Account > Security in the console).
-3. **Create analysts** — one per campus; the user's `org` must match the
+3. **Create analysts** â€” one per campus; the user's `org` must match the
    campus org id exactly (e.g. `univ-a`).
-4. **Create global admins** — for operators who must see every campus.
+4. **Create global admins** â€” for operators who must see every campus.
 5. Optionally wire alerting: webhook / SMTP env vars (see README).
 6. Back up `secrets.dat` and the database (see `documentation/backup_restore.md`).
 
@@ -142,7 +155,7 @@ Procedure and restore drill: `documentation/backup_restore.md`.
 
 All agent keys are generated on the server, stored in the DPAPI vault
 (`secrets.dat`), and host launch configs are written to `agent_configs\`.
-Keys are shown **once** at provisioning time — distribute them over a
+Keys are shown **once** at provisioning time â€” distribute them over a
 trusted channel and treat them as secrets.
 
 Single host, with tenant:
@@ -201,7 +214,7 @@ campus org.
 - Analysts of campus A only see campus A endpoints, alerts, events,
   incidents and dashboard numbers.
 - Admins see everything and can scope the dashboard to a campus.
-- Cross-org access returns 404 — it never leaks data.
+- Cross-org access returns 404 â€” it never leaks data.
 
 ## 7. Fleet monitoring (optional, Docker)
 
@@ -229,7 +242,7 @@ focuses the view on one campus.
 |---------|-----|
 | Analyst sees wrong (or no) data | the user's `org` must equal the campus org id |
 | Agent never connects | open TCP 8443; agent must use `https://` and `--tls-ca <server cert>` |
-| New key returns 401 | restart the service — keys are loaded at startup |
+| New key returns 401 | restart the service â€” keys are loaded at startup |
 | Browser cert warning | `scripts\import_cert.ps1` on the client (or `-Machine` as admin) |
 | Prometheus scrape 401 | use the bearer key from `deploy\prometheus\.my-scrape-key` |
 | Agent ships nothing | check `--interval`, host collectors, agent log lines |

@@ -40,9 +40,8 @@ See `config/nginx/baraq.conf` for the full nginx configuration.
 Add to `.env`:
 ```
 BARAQ_TLS=1
-BARAQ_TLS_CERTFILE=certs\baraq.pfx
-BARAQ_TLS_KEYFILE=
-BARAQ_TLS_PASSWORD=BaraqTLS2026!
+BARAQ_TLS_CERT=certs\baraq.crt
+BARAQ_TLS_KEY=certs\baraq.key
 ```
 
 Or run with plaintext in dev:
@@ -50,12 +49,23 @@ Or run with plaintext in dev:
 BARAQ_ALLOW_PLAINTEXT_PROD=1
 ```
 
+The launcher now **fails closed**: with `BARAQ_TLS=1` and a missing or
+unreadable certificate it exits with an error instead of quietly serving plain
+HTTP. The plaintext override is for emergencies only - never permanent.
+
+Generate a certificate with `scripts\gen_cert.ps1`; it writes
+`certs\baraq.crt` + `certs\baraq.key` and prints the SANs it covered.
+
 ## Agent Communication
 
-When TLS is enabled, agents must connect via HTTPS:
+When TLS is enabled, agents must connect via HTTPS **and pin the server
+certificate**:
 ```powershell
-.\agent.ps1 -Server https://192.168.1.5:8443 -Key YOUR-AGENT-KEY
+.\install_agent.ps1 -Server https://192.168.1.5:8443 -Key YOUR-AGENT-KEY -TlsCert certs\baraq.crt
 ```
+
+The agent refuses to talk to a server presenting a different certificate, and
+refuses plain HTTP against any non-loopback address.
 
 ## Firewall Rules
 

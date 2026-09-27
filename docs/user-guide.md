@@ -121,11 +121,28 @@ Analyze process relationships:
 
 ### Playbooks
 
-Pre-defined response procedures:
+Pre-defined response procedures that run **automatically** when a matching
+alert is created:
 
-1. **View Playbooks:** See all available playbooks
-2. **Run Playbook:** Execute on specific alert/incident
-3. **Monitor Execution:** Track playbook progress
+1. **View Playbooks:** Automation → Playbooks. Shows every definition, its
+   trigger conditions and whether it is enabled.
+2. **Automatic execution:** an enabled playbook whose triggers match a new
+   alert fires by itself — you do not have to run anything. Seed a useful
+   starting set with `venv\Scripts\python scripts\seed_playbooks.py`
+   (idempotent; re-running never duplicates).
+3. **Run manually if needed:** Run playbook → pick an alert/incident.
+4. **Execution History:** Automation → Execution History lists every run.
+   **Click a run** for the full detail: the playbook and its triggers, the
+   alert it fired on (click through to the investigation), and the
+   success/failure and message for each individual action.
+5. **Destructive actions are simulated** while
+   `BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED=0` (the default), so a playbook that
+   would isolate a host or block an IP records `SIMULATED …` and changes
+   nothing. Read the Execution History first to see what *would* happen before
+   enabling it for real.
+6. **Always undo a block.** `block_ip` has no time limit; if a block turns out
+   to be a false positive, run `unblock_ip` for the same address. Stale
+   containment rules can break a machine's access to DNS, CDNs or SaaS.
 
 ### Creating Playbooks
 

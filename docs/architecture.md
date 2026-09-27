@@ -88,18 +88,41 @@ Windows Endpoints
 - `GET /api/correlations/{id}` - Correlation details
 - `GET /api/correlations/{id}/groups` - Related groups
 
-### Automation
+### Automation (SOAR)
 - `GET /api/automation/playbooks` - List playbooks
 - `POST /api/automation/playbooks` - Create playbook
-- `POST /api/automation/run` - Execute playbook
+- `PATCH /api/automation/playbooks/{id}` - Update playbook
+- `DELETE /api/automation/playbooks/{id}` - Delete playbook
+- `POST /api/automation/playbooks/{id}/test` - Dry-run against an alert
+- `POST /api/automation/playbooks/{id}/run` - Execute now (admin)
+- `GET /api/automation/runs` - Execution history (org-scoped)
+- `GET /api/automation/runs/{id}` - One run in full: run, playbook + triggers, alert, per-action results
+- `GET /api/automation/preview?alert_id=` - Which playbooks would fire
+
+**Playbooks fire automatically** when a matching alert is created — the pipeline
+invokes the engine directly, so an analyst does not have to press "Run". A
+fresh deployment ships **no playbooks**, so nothing fires until you seed some
+(`scripts/seed_playbooks.py`). A run is recorded per playbook with the
+per-action status and detail, and is visible under Automation → Execution
+History. While `BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED=0` (the default)
+containment actions are simulated and the run records `SIMULATED <action>`.
+
+Starter playbooks: `venv\Scripts\python scripts\seed_playbooks.py`
+(idempotent; `--with-soar` adds containment playbooks, which stay disabled).
 
 ## Security Model
 
 ### Authentication
-- JWT tokens with configurable expiration
+- HMAC-signed access tokens with a short expiry and a separate refresh token
+- **Strictly typed tokens**: an MFA challenge or a password-reset token is not
+  an access token, and a token carrying no recognised type is rejected
+- Session invalidation on password change (`sessions_valid_after` epoch),
+  revocation, and logout that prunes outstanding sessions
 - MFA support (TOTP)
-- SSO integration (OAuth2/SAML)
-- API key authentication
+- SSO integration (LDAP, OIDC). Roles are derived from group membership
+  intersected with the local `LDAP_ADMIN_GROUPS` allowlist — never from a role
+  claim in the token — and re-synced on every login
+- API key authentication (legacy shared keys; rejected in production)
 
 ### Authorization
 - Role-based access control (RBAC)

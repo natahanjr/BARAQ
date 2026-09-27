@@ -13,6 +13,40 @@ AI-Powered Security Operations Platform for Windows endpoints.
 
 ---
 
+## Before you run this in production
+
+Read this section first — it is the difference between a demo and a SOC.
+
+- **The production config is fail-closed.** With `BARAQ_ENV=production` the
+  server refuses to start on: public `baraq-dev-*` API keys, unparseable keys,
+  `localhost` in CORS origins, threat intel disabled, `ENCRYPT_AT_REST=0`,
+  destructive SOAR enabled, public metrics, a missing session secret, or
+  `BARAQ_TLS=1` without a readable certificate.
+- **Check readiness with one command:**
+  `venv\Scripts\python scripts\preflight.py --url https://<host>:8443 --ca-file certs\baraq.crt`
+  It runs 17 checks and exits non-zero on any hard failure. Use it to gate a
+  change window.
+- **Deploy agents with the installer, not by hand:**
+  `powershell -ExecutionPolicy Bypass -File scripts\install_agent.ps1 -Server https://<host>:8443 -Key <secret> -Org <dept> -TlsCert certs\baraq.crt`
+  The installer verifies the agent actually reports before reporting success,
+  and tells you plainly when auto-start is not configured.
+- **Back up and prove the restore.** `scripts\install_backup_task.ps1` installs
+  the 03:00 task; `scripts\db_backup.py` locates `pg_dump` itself. Restore the
+  newest archive into a scratch database before you trust it.
+- **Paging must be configured and tested** or nothing wakes anyone. Email and
+  Telegram are supported with per-channel severity floors
+  (`BARAQ_NOTIFY_MIN_SEVERITY`, `BARAQ_TELEGRAM_MIN_SEVERITY`); see
+  `scripts\show_paging_routes.py`.
+- **Response actions are simulated** while
+  `BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED=0` (the default). Containment
+  playbooks ship disabled. A `block_ip` has no TTL — undo it with `unblock_ip`.
+- The cutover procedure, go/no-go gates and rollback triggers are in
+  [`docs/CUTOVER_RUNBOOK.md`](docs/CUTOVER_RUNBOOK.md). The full record of the
+  2026-09 hardening pass, including known issues, is in
+  [`CHANGELOG.md`](CHANGELOG.md).
+
+---
+
 ## Quick Start
 
 ### Option 1: Docker (Recommended)
@@ -24,6 +58,17 @@ docker compose up -d
 ```
 
 That's it. Backend on `http://localhost:8001`, PostgreSQL and Redis included.
+
+**Production compose requires secrets.** `compose.yml` refuses to render
+without `POSTGRES_PASSWORD`, `BARAQ_API_KEYS`, `BARAQ_TOKEN_SECRET`,
+`BARAQ_ADMIN_PASSWORD`, `REDIS_PASSWORD` and `GRAFANA_ADMIN_PASSWORD` — this is
+deliberate, not a bug. Copy `.env.example` and fill them in, or export them
+from your secret store.
+
+```bash
+cp .env.example .env    # then edit: no baraq-dev-* keys in production
+docker compose up -d
+```
 
 **One-liner install (Linux/macOS):**
 ```bash

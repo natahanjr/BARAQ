@@ -213,7 +213,9 @@ All tunables live in **`backend/config.py`**, overridable via environment variab
 | `BARAQ_SYSLOG_HOST` / `BARAQ_SYSLOG_PORT` | `""` / `514` | Optional remote syslog collector |
 | `BARAQ_SMTP_*` | — | SMTP host/port/user/password/`TO` for alert emails |
 | `BARAQ_WEBHOOK_URL` | `""` | Webhook JSON POST for notifications |
-| `BARAQ_NOTIFY_MIN_SEVERITY` | `high` | Minimum severity to trigger notifications |
+| `BARAQ_NOTIFY_MIN_SEVERITY` | `high` | Minimum severity for email/webhook/toast notifications |
+| `BARAQ_TELEGRAM_MIN_SEVERITY` | (unset) | Telegram-only floor - set `critical` so a phone only rings for criticals |
+| `BARAQ_WEBHOOK_MIN_SEVERITY` | (unset) | Webhook-only floor |
 | `BARAQ_THREAT_INTEL*` | see below | Threshold Intel providers (`_ABUSEIPDB_KEY`, `_OTX_KEY`, `_VT_KEY`) |
 | `BARAQ_AI_API_URL` / `_KEY` / `_MODEL` | local | Point assistant at the BARAQ AI endpoint |
 | `BARAQ_LDAP_ENABLED` / URL / base | off | AD/LDAP SSO config |
@@ -393,7 +395,11 @@ Agents running on other machines can POST normalised records to the platform:
 
 ## 10. Alerting & Notifications
 
-Notifications fire on **high/critical** alerts (`BARAQ_NOTIFY_MIN_SEVERITY`) when configured:
+Notifications fire per channel, each with its own severity floor
+(`BARAQ_NOTIFY_MIN_SEVERITY` for email/webhook/toast,
+`BARAQ_TELEGRAM_MIN_SEVERITY` for Telegram). The recommended split is
+`high` for email and `critical` for Telegram, so a phone is not trained to be
+ignored. Check the routing with `scripts\show_paging_routes.py`.
 
 | Channel | Config | Behavior |
 |---|---|---|

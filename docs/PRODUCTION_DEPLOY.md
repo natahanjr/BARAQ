@@ -105,7 +105,8 @@ BARAQ_SMTP_USERNAME=
 BARAQ_SMTP_PASSWORD=
 BARAQ_SMTP_FROM=baraq@yourcompany.com
 BARAQ_SMTP_TO=soc@yourcompany.com,analyst@yourcompany.com
-BARAQ_NOTIFY_MIN_SEVERITY=high
+BARAQ_NOTIFY_MIN_SEVERITY=high        # email/webhook/toast
+BARAQ_TELEGRAM_MIN_SEVERITY=critical # phone pages only for criticals
 
 # Scale for 50-200 endpoints
 BARAQ_INCREMENTAL_COLLECTION=1

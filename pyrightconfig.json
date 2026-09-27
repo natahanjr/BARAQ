@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/pyright/main/packages/pyright-internal/typeshed-fallback/schema.json",
+  "include": ["backend", "scripts"],
+  "exclude": ["**/node_modules", "**/__pycache__", "backend/passcache.py"],
+  "typeCheckingMode": "basic",
+  "pythonVersion": "3.12",
+  "venvPath": ".",
+  "venv": "venv",
+  "reportMissingImports": "error",
+  "reportMissingTypeStubs": "none",
+  "reportUndefinedVariable": "error",
+  "reportAssertAlwaysTrue": "none",
+  "reportUnusedExpression": "warning"
+}

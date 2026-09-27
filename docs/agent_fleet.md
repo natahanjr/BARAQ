@@ -2,15 +2,23 @@
 
 
 
-Remote hosts run `scripts/agent.py` (a small, dependency-light telemetry
+Remote hosts run the **self-contained PowerShell agent** (`scripts/agent.ps1`,
 
-shipper) and authenticate to the central server with a per-host key. The
+installed by `scripts/install_agent.ps1`) or the full Python agent
 
-server attributes every record to the reporting agent, runs the full
+(`scripts/agent.py`) and authenticate to the central server with a per-host
+
+key. The server attributes every record to the reporting agent, runs the full
 
 detection pipeline, and lets analysts push mitigation commands back to the
 
 host.
+
+Agent keys are configured server-side as `{"<agent-secret>": "<agent-id>"}` in
+
+`BARAQ_AGENT_KEYS` — **the secret is the JSON key**, the id is the value. A
+
+reversed map authenticates nothing (every request returns 401).
 
 
 
@@ -24,13 +32,13 @@ host.
 
 |  host agent      | -- X-Agent-Key: <key> ------> |  central BARAQ |
 
-|  scripts/agent.py|                               |  - validates key     |
+|  agent.ps1 / agent.py|                         |  - validates key     |
 
 |                  | <--- GET /api/commands/pending|  - runs pipeline     |
 
 |  executes        | --- POST /api/commands/{id}/result (block_ip,        |
 
-|  command locally |      kill_process, quarantine, isolate, ...)         |
+|  command locally |      kill_process, quarantine, isolate, unblock_ip,...)   |
 
 +------------------+                               +----------------------+
 
@@ -126,19 +134,33 @@ Recommended fleet ops:
 
 ## Verify a host end-to-end
 
+Do this for at least one machine before rolling out to the fleet.
 
+1. `GET /api/endpoints` - the host appears with `records_total` growing and
 
-1. `GET /api/endpoints` - the host appears with `records_total` growing.
+   `health_status: ok`.
 
-2. Queue a test command (Command Center > Endpoints > the host, or
+2. Confirm **auto-start**, not just that the agent runs now:
+
+   `Get-ScheduledTask -TaskName 'BARAQ Agent'`. If the task is missing, the
+
+   agent dies at the next reboot - that failure used to be reported as a
+
+   successful install.
+
+3. Queue a test command (Command Center > Endpoints > the host, or
 
    `POST /api/endpoints/<id>/commands` with `{"action":"block_ip",
 
    "target":"198.51.100.99"}`) and confirm it flips to `success`/`failed`
 
-   after the agent's next cycle.
+   after the agent's next cycle. **Undo it with `unblock_ip` on the same
 
-3. Push a real event and watch the pipeline: alert pages / `/api/alerts`.
+   target** - a `block_ip` has no TTL, so a false positive is permanent
+
+   until someone removes the firewall rule.
+
+4. Push a real event and watch the pipeline: alert pages / `/api/alerts`.
 
 
 

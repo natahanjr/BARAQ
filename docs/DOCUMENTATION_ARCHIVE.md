@@ -19,6 +19,24 @@ Consolidated from 25 individual docs. Organized by status.
 | **Phase 6** | Entity Risk | Entity Risk contract, 14 factors, calculator, decay, propagation, 5 tables, 27+ scenarios | Done |
 | **Phase 7** | Incidents | Incident contract, 8 eligibility policies, 10+ tables, lifecycle, suppression, 20 scenarios | Done |
 
+### Production readiness (2026-09)
+
+| Item | Description | Status |
+|------|-------------|--------|
+| **Agent verified on hardware** | `install_agent.ps1` installs, registers auto-start with a qualified principal, and refuses to claim success unless the server accepted records | Done |
+| **Agent TLS** | Agents pin the server certificate; plain HTTP refused against non-loopback hosts | Done |
+| **Agent response actions** | `unblock_ip` added so a false-positive `block_ip` is reversible | Done |
+| **TLS enforced** | The launcher serves real HTTPS and exits if the certificate is missing — the container can no longer claim encryption it is not providing | Done |
+| **Fresh-install migrations** | Fixed the alembic revision chain; `alembic upgrade head` works on an empty database | Done |
+| **Fail-closed production gate** | Refuses dev keys, unparseable keys, localhost CORS, disabled threat intel, no encryption, destructive SOAR, public metrics | Done |
+| **Unattended backups** | Scheduled encrypted backup; `pg_dump` self-located; restore drill verified to exact row parity | Done |
+| **Readiness preflight** | `scripts/preflight.py` — 17 checks, non-zero exit on any hard failure | Done |
+| **Alert paging** | Email + Telegram with per-channel severity floors; delivery verified end to end | Done (credentials pending) |
+| **SOAR configured** | Starter playbooks seeded (a fresh install ships none, so nothing fired) | Done |
+| **Tenant isolation** | Entity graph, automation runs, report schedules, search/export/assistant/realtime all org-scoped | Done |
+| **Typecheck** | pyright installed and configured; 170 findings open, 0 undefined variables | Partial |
+| **External penetration test** | Not performed | **Not done** |
+| **Load test at 50–200 endpoints** | Verified on one endpoint only | **Not done** |
 ### Security Hardening
 
 | Item | Description | Status |
@@ -47,7 +65,7 @@ Consolidated from 25 individual docs. Organized by status.
 | **Threat Intelligence** | Feed management, IOC lookup, reputation | Done |
 | **UEBA** | User baselines, anomaly detection, risk scoring | Done |
 | **Insider Threat** | Threat scoring, indicators, recommended actions | Done |
-| **SOAR Automation** | Playbook CRUD, run history, approval workflow | Done |
+| **SOAR Automation** | Playbook CRUD, run history with a clickable per-run drill-down (playbook + triggers, alert link, per-action result), approval workflow | Done |
 | **Correlation Rules** | Rules list, severity display, MITRE mapping | Done |
 | **Playbook Editor** | Visual playbook creation, trigger conditions, action selection | Done |
 | **Real-time Notifications** | WebSocket hook, toast notifications for alerts/incidents | Done |

@@ -32,7 +32,25 @@ threat_intel_cache
 
 > **Migration:** existing BARAQ databases are upgraded automatically at
 > startup (`init_db` in `backend/database/connection.py`) — new columns and
-> tables are added in place without data loss.
+> tables are added in place without data loss. The same work is available as a
+> real alembic revision (`alembic/versions/002_additive_columns.py`, `ADD
+> COLUMN IF NOT EXISTS`, safe on a fresh or an existing database) for
+> deployments that run migrations explicitly.
+>
+> **Columns added in the 2026-09 hardening pass:**
+>
+> | Table | Column | Purpose |
+> |---|---|---|
+> | `users` | `sessions_valid_after` | Session epoch watermark. Access tokens issued at or before this instant are rejected, so a password change invalidates every existing session immediately. `NULL` = nothing invalidated. |
+> | `users` | `sessions_valid_after` (index) | See `alembic/versions/002_additive_columns.py`. |
+> | `reports` | `org` | Tenant scope; report records are no longer globally readable. |
+> | `assistant_messages` | `user_id` | Per-user assistant history. Without it the chat log was shared between every operator. |
+> | `agent_commands` | `sha256` | Expected SHA-256 of the file an `update_agent` command delivers, so the endpoint verifies the payload before installing it. |
+> | `playbook_runs` | `org` | Tenant scope for automation history (already present; now enforced by the API). |
+>
+> Note on `users.sessions_valid_after` and password rotation: the auth layer
+> also revokes individual tokens; this column is the catch-all for "log
+> everyone out" and for tokens that were never seen by the revocation list.
 
 ---
 

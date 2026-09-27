@@ -65,7 +65,9 @@ In scope:
 
 - The FastAPI backend (`backend/`), REST API, authentication & RBAC
 - The React dashboard (`frontend/`) and its API integration
-- The Windows collectors, agent (`scripts/agent.py`) and fleet ingest
+- The Windows collectors, the endpoint agents (`scripts/agent.ps1` — the
+  default, self-contained; and `scripts/agent.py` for full telemetry) and fleet
+  ingest
 - The self-contained `.exe` packaging (`scripts/build_exe.bat`)
 - The DPAPI secret vault, TLS handling, encryption-at-rest, audit hash chain
 
@@ -111,8 +113,32 @@ and an OS-level account with a strong passphrase.
 
 Implemented and verified in the current codebase:
 
-- **TLS everywhere** — optional HTTPS (`start.bat secure`), self-signed SAN
-  certificate generation with rotation, `Secure` session cookies under TLS
+- **TLS everywhere** — HTTPS is **required** in production, not optional:
+  the launcher serves real TLS from `BARAQ_TLS_CERT`/`BARAQ_TLS_KEY` and
+  refuses to start if the certificate is missing, so the configuration can
+  never claim encryption the listener is not providing. Agents pin the server
+  certificate. Self-signed SAN generation with rotation via
+  `scripts\gen_cert.ps1`; `Secure` session cookies under TLS
+- **Strict token typing** — MFA challenge tokens and password-reset tokens
+  cannot authenticate as access tokens; a token without a recognised type is
+  rejected. Session invalidation on password change via a `sessions_valid_after`
+  epoch
+- **Directory-controlled roles** — LDAP and OIDC both derive the role from
+  group membership intersected with the locally configured
+  `LDAP_ADMIN_GROUPS` allowlist (never a role claim from the token), and the
+  mapping is re-applied on every login so a demotion takes effect
+- **Tenant isolation** — search, hunting, exports, saved searches, bookmarks,
+  the assistant, the entity graph, automation run history, realtime
+  broadcasts and the WebSocket are all org-scoped; the entity graph is
+  filtered to entities a tenant has actually observed
+- **Auditable response actions** — `block_ip` has an `unblock_ip` undo, every
+  command target is validated server-side, and destructive actions are
+  simulated while `BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED=0`
+- **Fail-closed production gate** — refuses to start on dev API keys,
+  unparseable keys, localhost CORS, disabled threat intel, missing encryption,
+  destructive SOAR, public metrics or an auto-generated session secret
+- **Readiness preflight** — `scripts/preflight.py` checks 17 production
+  conditions and exits non-zero on any hard failure
 - **Encryption at rest** — AES-256-GCM envelope encryption for sensitive fields
   (audit details, alert evidence, process command lines, email bodies, AI chat
   content); key protected by the Windows DPAPI vault

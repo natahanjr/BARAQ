@@ -195,11 +195,18 @@ server {
   BARAQ_ROLE=api. Any replica can serve any request.
 * **WebSocket connections** (live dashboard) are long-lived; set
   proxy_read_timeout high enough (default 86400s = 24h).
-* **TLS termination** at the load balancer is recommended. BARAQ supports
-  TLS natively (BARAQ_TLS_CERT/BARAQ_TLS_KEY) but offloading to the
-  LB simplifies certificate management.
-* **Health check interval:** poll /api/health every 5–10 seconds. Remove
+* **TLS termination** at the load balancer is recommended. BARAQ serves TLS
+  natively (`BARAQ_TLS_CERT`/`BARAQ_TLS_KEY`) and refuses to start in
+  production without it; offloading to the LB simplifies certificate
+  management. Either way, agents must be given the certificate they should
+  trust (`-TlsCert`) — with LB termination, pin the LB's certificate.
+* **Health check interval:** poll /api/health every 5-10 seconds. Remove
   a node from the pool after 3 consecutive failures.
+* **Reading the health check:** `checks.single_instance` reports **error** only
+  when a scheduler-owning instance failed to take the lock. An api-only replica
+  (`BARAQ_ROLE=api`) or a node with the scheduler disabled reports it as
+  informational — that is the intended state, not a fault. Only one node
+  should run the scheduler.
 
 ## Health Check Endpoints
 

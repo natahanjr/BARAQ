@@ -58,6 +58,14 @@ This runbook provides step-by-step procedures for responding to security inciden
 **Automated (SOAR playbook):**
 - Playbook: `isolate-compromised-host`
 - Trigger: severity == CRITICAL AND MITRE technique in [T1021, T1059, T1003]
+- Matched playbooks fire automatically when the alert is created, and the
+  outcome is recorded under Automation → Execution History. Click a run to
+  see the playbook, its trigger conditions, the alert, and the per-action
+  result.
+- While `BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED=0` (the default) containment
+  actions are **simulated** — the run shows `SIMULATED <action>` and nothing is
+  changed on the host. Read Automation → Runs to see what *would* fire before
+  enabling it.
 
 ### 2.2 Account Disable
 
@@ -69,7 +77,12 @@ This runbook provides step-by-step procedures for responding to security inciden
 
 1. SOAR → Block IP → enter malicious destination IP
 2. This adds a Windows Firewall rule on the affected host
-3. Verify with `netsh advfirewall firewall show rule name="BARAQ Block <IP>"`
+3. Verify with `netsh advfirewall firewall show rule name="BARAQ-SOAR-IN-<IP dashed>"`
+4. **Undo it.** A block has no TTL: use SOAR → Unblock IP with the same address
+   (or `Get-NetFirewallRule -DisplayName 'BARAQ-SOAR*' | Remove-NetFirewallRule`).
+   Leave a block in place after a false positive and you will eventually break
+   someone's connectivity — including a CDN or DNS provider the machine needs
+   to function.
 
 ---
 
