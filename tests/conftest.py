@@ -57,6 +57,11 @@ os.environ["BARAQ_SCHEDULER_ENABLED"] = "0"  # no background collector in tests
 os.environ["BARAQ_ALERT_RETRIGGER_COOLDOWN_SECONDS"] = "0"
 # Never spam Windows toasts / webhooks / email from synthetic test alerts.
 os.environ["BARAQ_TOAST_ENABLED"] = "0"
+# SOAR tests must never run live-fire response actions: with the project .env
+# enabling BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED=1, playbook runs would call
+# real netsh/taskkill against this workstation (firewall rules accumulate on
+# every suite run). The config loader is non-overriding, so this wins over .env.
+os.environ["BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED"] = "0"
 # Cap sklearn/BLAS threads: IsolationForest grid search + CV oversubscribe
 # 8 cores otherwise and multi-minute wall times on small test fixtures.
 os.environ.setdefault("OMP_NUM_THREADS", "1")
