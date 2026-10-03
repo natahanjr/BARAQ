@@ -103,3 +103,6 @@ database/*.sentinel.lock
 tmp_data/
 datasets/
 *.pyc
+
+# Runtime state (dev launcher writes its pid here)
+.backend.pid
