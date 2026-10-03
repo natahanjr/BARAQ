@@ -15,7 +15,7 @@ os.environ["BARAQ_ALERTS_V2"] = "1"
 os.environ["BARAQ_CORRELATION"] = "1"
 os.environ["BARAQ_RISK"] = "1"
 os.environ["BARAQ_BEHAVIOR_GROUPS"] = "1"
-os.environ.setdefault("BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED", "0")
+os.environ.setdefault("BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED", "1")
 os.environ.setdefault("BARAQ_V2_ENGINES_ALLOW_PROD", "0")
 
 import uvicorn

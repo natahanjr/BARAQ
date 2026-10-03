@@ -134,11 +134,25 @@ def test_run_playbook_create_incident(db):
 
 
 def test_run_playbook_partial_status(db):
+    # The expected outcome depends on live-fire mode: in simulation
+    # (BARAQ_SOAR_DESTRUCTIVE_ACTIONS_ENABLED=0) block_ip is always a
+    # success no-op; in live mode a missing target is a real failure.
+    from backend.automation.playbooks import SOAR_DESTRUCTIVE_ACTIONS_ENABLED
+
     alert = _mk_alert(db, evidence="no ip here", host="")
     playbook = _mk_playbook(db, actions=[{"action": "notify"}, {"action": "block_ip"}])
     run = run_playbook(db, playbook, alert)
-    assert run.status == "completed"  # block_ip without target is a success no-op
+    assert run.results[0]["action"] == "notify"
     assert run.results[0]["status"] == "success"
+    assert run.results[1]["action"] == "block_ip"
+    if SOAR_DESTRUCTIVE_ACTIONS_ENABLED:
+        # Live-fire: no IP to block -> failed action -> partial run.
+        assert run.results[1]["status"] == "failed"
+        assert run.status == "partial"
+    else:
+        # Simulated: block_ip without target is a success no-op.
+        assert run.results[1]["status"] == "success"
+        assert run.status == "completed"
 
 
 def test_find_matching_playbooks_respects_enabled(db):
