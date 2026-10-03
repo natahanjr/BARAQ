@@ -3322,18 +3322,13 @@ class MLAnomalyDetector:
         target_fpr = ML_TARGET_FPR if target_fpr is None else target_fpr
         if len(X) == 0:
             return 0.5, np.empty((0,))
-        raws = np.array(
-            [MLAnomalyDetector._score_with(model, row) for row in X], dtype=float
-        )
+        raws = MLAnomalyDetector._score_batch(model, X)
         baseline = MLAnomalyDetector._compact_baseline(raws)
         ranks = MLAnomalyDetector._rank_of(raws, baseline)
         if ensembles:
             member_ranks = []
             for ens in ensembles:
-                ens_raws = np.array(
-                    [MLAnomalyDetector._score_with(ens, row) for row in X],
-                    dtype=float,
-                )
+                ens_raws = MLAnomalyDetector._score_batch(ens, X)
                 member_ranks.append(
                     MLAnomalyDetector._rank_of(ens_raws, baseline)
                 )
@@ -4720,9 +4715,7 @@ class MLAnomalyDetector:
                 X, y = X[_sel], y[_sel]
 
             try:
-                raws = np.array(
-                    [self._score_with(model, row) for row in X], dtype=float
-                )
+                raws = self._score_batch(model, X)
                 if_ranks = self._rank_of(raws, new_baselines.get(behavior))
             except Exception:
                 logger.exception("Unexpected error")
@@ -5132,6 +5125,25 @@ class MLAnomalyDetector:
         decision = float(model.decision_function(arr)[0])
         return float(max(0.0, min(1.0, 0.5 - decision)))
 
+    @staticmethod
+    def _score_batch(model, X) -> "np.ndarray":
+        """Row-wise :meth:`_score_with` for a whole matrix, computed in one call.
+
+        IsolationForest ``decision_function`` is row-independent, so this is
+        numerically identical to mapping ``_score_with`` over ``X`` - but it
+        pays sklearn's per-call overhead once instead of once per row. Scoring
+        one row at a time builds and tears down a joblib ``Parallel`` per call
+        (measured ~240 dispatches per row here), which made threshold tuning
+        dominate the whole retrain.
+        """
+        arr = np.asarray(X, dtype=float)
+        if arr.ndim == 1:
+            arr = arr.reshape(1, -1)
+        if arr.ndim != 2 or arr.shape[1] != model.n_features_in_:
+            return np.zeros(len(arr), dtype=float)
+        decision = np.asarray(model.decision_function(arr), dtype=float)
+        return np.clip(0.5 - decision, 0.0, 1.0)
+
     # ------------------------------------------------------------------
     def analyze_events(self, session=None, hours: int = 1) -> dict:
         """Score recent events per behavior stream and mark outliers."""
@@ -5185,6 +5197,28 @@ class MLAnomalyDetector:
                     if score > self.thresholds.get(behavior, 0.5):
                         ev.is_anomaly = True
                         flagged += 1
+                    # Feed the live event to the online learner: the reservoir
+                    # buffer learns the normal behavior of each stream and the
+                    # active-learning queue picks up uncertain events. The
+                    # score is passed through so nothing is scored twice.
+                    # NOTE: ev.id (autoincrement PK) is the unique, monotonic
+                    # id the dedup watermark and the analyst-facing suggestion
+                    # queue need; ev.event_id is the WINDOWS event id (4688),
+                    # which repeats across rows.
+                    if self.online_learner is not None:
+                        try:
+                            self.online_learner.score_and_buffer(
+                                behavior,
+                                features,
+                                score=score,
+                                event_id=ev.id,
+                            )
+                        except Exception:
+                            logger.debug(
+                                "online buffer failed for event %s",
+                                ev.id,
+                                exc_info=True,
+                            )
 
             # Score network connection buckets in the same pass.
             if "network" in self.models:
@@ -5227,7 +5261,15 @@ class MLAnomalyDetector:
                 except Exception:
                     logger.exception("Unexpected error")
                     net_scores = [0.0] * len(net_feats)
-                for (_ip, _cnt, _ports), combined in zip(net_inputs, net_scores):
+                # One buffering pass per update interval: buckets have no
+                # event id to dedupe on (see OnlineLearner.take_network_pass).
+                buffer_network = (
+                    self.online_learner is not None
+                    and self.online_learner.take_network_pass()
+                )
+                for (_ip, _cnt, _ports), combined, nfeat in zip(
+                    net_inputs, net_scores, net_feats
+                ):
                     try:
                         score = self._weighted_score("network", float(combined))
                     except Exception:
@@ -5236,6 +5278,24 @@ class MLAnomalyDetector:
                     scored += 1
                     if score > self.thresholds.get("network", 0.5):
                         flagged += 1
+                    if buffer_network:
+                        try:
+                            self.online_learner.score_and_buffer(
+                                "network", nfeat, score=score
+                            )
+                        except Exception:
+                            logger.debug(
+                                "online buffer failed for network bucket",
+                                exc_info=True,
+                            )
+
+            # Commit the online learner's dedup watermark for this pass:
+            # every row in the window has now been offered to the buffers.
+            if self.online_learner is not None:
+                try:
+                    self.online_learner.end_scoring_pass()
+                except Exception:
+                    logger.debug("online pass commit failed", exc_info=True)
 
             session.commit()
             return {"status": "ok", "scored": scored, "flagged": flagged}

@@ -278,6 +278,47 @@ class ActiveLearner:
     def __init__(self, top_k: int = 10):
         self.top_k = top_k
         self._uncertainty_queue: list[tuple[float, int, list[float]]] = []
+        # Uncertain unlabeled events waiting for an analyst verdict, keyed by
+        # event id so a suggestion can never be queued twice.
+        self._pending: dict[int, dict] = {}
+
+    def record(
+        self,
+        event_id: int,
+        behavior: str,
+        uncertainty: float,
+        features: list[float],
+    ) -> None:
+        """Queue an unlabeled event the model is unsure about."""
+        if event_id in self._pending:
+            return
+        self._pending[event_id] = {
+            "event_id": event_id,
+            "behavior": behavior,
+            "uncertainty": round(float(uncertainty), 4),
+        }
+        # Bound memory: keep only the most uncertain when the queue overflows.
+        cap = self.top_k * 8
+        if len(self._pending) > cap:
+            keep = sorted(
+                self._pending.values(),
+                key=lambda s: s["uncertainty"],
+                reverse=True,
+            )[: self.top_k * 4]
+            self._pending = {s["event_id"]: s for s in keep}
+
+    def resolve(self, event_id: int) -> None:
+        """Drop a suggestion once the event has been labeled."""
+        self._pending.pop(event_id, None)
+
+    def take(self, limit: int | None = None) -> list[dict]:
+        """Return queued suggestions, most uncertain first."""
+        limit = limit or self.top_k
+        return sorted(
+            self._pending.values(),
+            key=lambda s: s["uncertainty"],
+            reverse=True,
+        )[:limit]
 
     def score_uncertainty(
         self,
@@ -383,25 +424,81 @@ class OnlineLearner:
 
         # State
         self._last_update: datetime | None = None
+        self._last_attempt: datetime | None = None
+        self._buffered_through: int = 0
+        self._pass_max_id: int = 0
+        self._last_network_pass: datetime | None = None
         self._events_since_update = 0
         self._verdicts_since_update = 0
         self._prequential_scores: dict[str, list[float]] = {}
         self._update_count = 0
+
+    def take_network_pass(self) -> bool:
+        """True at most once per update interval - gates network buffering.
+
+        Network rows are aggregated buckets with no event id, so they cannot
+        be deduplicated the way events can. The detection pass re-scores the
+        same window every minute; without this gate one stream would flood
+        the reservoir with duplicates and crowd out login/process samples.
+        """
+        now = datetime.now(UTC)
+        if self._last_network_pass is not None and (
+            now - self._last_network_pass < self.update_interval
+        ):
+            return False
+        self._last_network_pass = now
+        return True
+
+    def end_scoring_pass(self) -> None:
+        """Commit the event-id dedup watermark after a full scoring pass.
+
+        Called by ``analyze_events`` once every row in the window has been
+        offered to the buffers, so the next pass skips everything already
+        seen regardless of the order behavior groups were processed in.
+        """
+        if self._pass_max_id > self._buffered_through:
+            self._buffered_through = self._pass_max_id
+        self._pass_max_id = 0
 
     def score_and_buffer(
         self,
         stream: str,
         features: list[float],
         label: int | None = None,
+        score: float | None = None,
+        event_id: int | None = None,
     ) -> float:
-        """Score an event, check for drift, and add to buffer."""
-        score = 0.0
-        if self.detector.is_ready:
-            try:
-                score = self.detector.score_event(features)
-            except Exception:
-                logger.exception("Unexpected error")
-                logger.debug("score_event failed in online learner", exc_info=True)
+        """Score an event, check for drift, and add to buffer.
+
+        This is the entry point that lets the learner see LIVE telemetry:
+        the detection pass calls it with the score it already computed
+        (``score=``) so nothing is scored twice, and with ``event_id`` so
+        uncertain events can be offered to an analyst. Unlabeled events teach
+        the Isolation Forest what "normal" looks like; labels only arrive
+        through :meth:`record_verdict`.
+        """
+        if stream not in self.buffers:
+            return float(score or 0.0)
+        # The detection pass rescans a rolling window, so the same row can
+        # arrive in many passes - but WITHIN one pass each row appears once,
+        # in an arbitrary behavior-group order. Gate on the watermark
+        # committed by the previous pass (not a live counter, which would
+        # let a high id in group A starve lower ids in group B) and commit
+        # the high-water mark once the pass finishes.
+        if event_id is not None:
+            if event_id <= self._buffered_through:
+                return float(score or 0.0)
+            if event_id > self._pass_max_id:
+                self._pass_max_id = event_id
+
+        if score is None:
+            score = 0.0
+            if self.detector.is_ready:
+                try:
+                    score = self.detector.score_event(features)
+                except Exception:
+                    logger.exception("Unexpected error")
+                    logger.debug("score_event failed in online learner", exc_info=True)
 
         # Track prequential scores
         if stream not in self._prequential_scores:
@@ -428,23 +525,84 @@ class OnlineLearner:
 
         # Improvement 1: Add to importance-weighted buffer
         weight = self.analyst_weight if label is not None else 1.0
-        self.buffers[stream].add(features, label, weight)
+        try:
+            self.buffers[stream].add(features, label, weight)
+        except Exception:
+            logger.debug("buffer add failed for %s", stream, exc_info=True)
+            return score
         self._events_since_update += 1
         if label is not None:
             self._verdicts_since_update += 1
+        elif event_id is not None:
+            # Margin sampling: score 0.5 = maximal uncertainty. Offer the
+            # events the model cannot decide on to the analyst next.
+            uncertainty = 1.0 - abs(float(score) * 2.0 - 1.0)
+            if uncertainty >= 0.5:
+                self.active_learner.record(
+                    event_id, stream, uncertainty, features
+                )
 
         return score
 
     def record_verdict(
-        self, stream: str, features: list[float], is_attack: bool
+        self,
+        stream: str,
+        features: list[float],
+        is_attack: bool,
+        event_id: int | None = None,
     ) -> None:
-        """Record an analyst verdict with high importance weight."""
+        """Record an analyst verdict with high importance weight.
+
+        Analyst verdicts are the only ground truth in the system, so they do
+        double duty: they enter the buffer with 5x weight AND they are the
+        only error signal ADWIN can measure (unlabeled live events have no
+        error to compute). The labeled event also leaves the active-learning
+        queue - the analyst just answered that question. ``event_id`` is the
+        NormalizedEvent PK the queue is keyed on (features[0] is the Windows
+        event id, which is not unique).
+        """
+        if stream not in self.buffers:
+            return
         label = 1 if is_attack else 0
-        self.buffers[stream].add(features, label, weight=self.analyst_weight)
+        try:
+            self.buffers[stream].add(features, label, weight=self.analyst_weight)
+        except Exception:
+            logger.debug("verdict buffer add failed for %s", stream, exc_info=True)
+            return
         self._verdicts_since_update += 1
+        if event_id is not None:
+            self.active_learner.resolve(event_id)
+        try:
+            score = (
+                self.detector.score_event(features)
+                if self.detector.is_ready
+                else 0.5
+            )
+            error = (
+                1.0
+                if (score > 0.7 and label == 0) or (score < 0.3 and label == 1)
+                else 0.0
+            )
+            drift_detected = self.drift_detectors[stream].update(error)
+            if drift_detected:
+                logger.warning(
+                    "ADWIN drift detected in %s stream (error_rate=%.3f), "
+                    "triggering retrain",
+                    stream,
+                    self.drift_detectors[stream].current_error_rate,
+                )
+        except Exception:
+            logger.debug("ADWIN verdict update failed for %s", stream, exc_info=True)
 
     def should_update(self) -> bool:
-        """Check if update is needed (timer + ADWIN drift)."""
+        """Check if update is needed (timer + ADWIN drift).
+
+        True when ADWIN flags concept drift (immediate), or the update
+        interval has elapsed AND there is buffered work to learn from. The
+        timer is anchored on the last *attempt*, not the last success - an
+        empty buffer can no longer make this return True forever while
+        ``incremental_update`` silently does nothing.
+        """
         if not self.detector.is_ready:
             return False
 
@@ -453,20 +611,26 @@ class OnlineLearner:
             if dd.window_size >= dd.min_window and dd.current_error_rate > 0.3:
                 return True
 
-        if self._last_update is None:
-            return True
-        elapsed = datetime.now(UTC) - self._last_update
-        if elapsed < self.update_interval:
-            return False
-        return (
+        has_work = (
             self._events_since_update >= self.min_new_events
             or self._verdicts_since_update >= self.min_new_verdicts
+            or any(b.size >= 10 for b in self.buffers.values())
         )
+        if not has_work:
+            return False
+
+        last = self._last_attempt or self._last_update
+        if last is None:
+            return True
+        return datetime.now(UTC) - last >= self.update_interval
 
     def incremental_update(self, session=None) -> dict:
         """Perform an incremental model update with all improvements."""
         if not self.detector.is_ready:
             return {"status": "not-ready", "updated": False}
+        # Anchor the timer on the attempt so repeated scheduler ticks do not
+        # re-enter the update while a rollback/no-op leaves _last_update unset.
+        self._last_attempt = datetime.now(UTC)
 
         # Improvement 3: Snapshot before update for rollback
         self._snapshot_models()
@@ -593,13 +757,14 @@ class OnlineLearner:
             logger.exception("Unexpected error")
             logger.debug("baseline CDF update failed for %s", stream, exc_info=True)
 
-        # Update threshold
+        # Update threshold - from LABELED samples only: y carries -1 for
+        # unlabeled live events, which would poison the tuning objective.
         try:
-            if len(y) >= 6 and len(np.unique(y)) >= 2:
+            if len(y_labeled) >= 6 and len(np.unique(y_labeled)) >= 2:
                 new_threshold, _ = self.detector._tune_threshold(
                     self.detector.models[stream],
-                    X,
-                    y,
+                    X_labeled,
+                    y_labeled,
                     supervised=self.detector.supervised_by_stream.get(stream),
                 )
                 self.detector.thresholds[stream] = new_threshold
@@ -751,6 +916,15 @@ class OnlineLearner:
     # ------------------------------------------------------------------
     # Improvement 4: Active learning suggestions
     # ------------------------------------------------------------------
+    def suggest(self, limit: int = 10) -> list[dict]:
+        """Queued active-learning suggestions (uncertain live events).
+
+        These are filled by :meth:`score_and_buffer` as the detector scores
+        live telemetry, and cleared by :meth:`record_verdict` when an analyst
+        answers - no caller has to supply feature vectors.
+        """
+        return self.active_learner.take(limit)
+
     def suggest_labeling(
         self, features_list: list[list[float]], behaviors: list[str]
     ) -> list[dict]:
