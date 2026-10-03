@@ -625,7 +625,9 @@ def _queue_remote_action(
         return "failed", "Destructive response actions are disabled on this deployment"
     if not alert.host:
         return "failed", "The alert has no registered host; remote action was not queued"
-    endpoint = db.scalar(select(Endpoint).where(Endpoint.host == alert.host))
+    endpoint = db.scalar(
+        select(Endpoint).where(func.lower(Endpoint.host) == alert.host.lower())
+    )
     if endpoint is None:
         return "failed", "No registered agent exists for the alert host"
     from backend.api.endpoints import _validate_target
@@ -634,6 +636,13 @@ def _queue_remote_action(
         validated_target = _validate_target(action, target)
     except HTTPException as exc:
         return "failed", str(exc.detail)
+    # Safety guards: refuse before the command ever reaches an agent, so the
+    # API answers with a clear reason instead of a late agent-side failure.
+    from backend.response.actions import guard_destructive
+
+    refused = guard_destructive(action, validated_target)
+    if refused:
+        return "failed", refused
     command = AgentCommand(
         agent_id=endpoint.agent_id,
         action=action,
