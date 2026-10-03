@@ -27,6 +27,63 @@ QUARANTINE_DIR = Path(os.getenv("BARAQ_QUARANTINE_DIR", r"C:\BaraqQuarantine"))
 FIREWALL_RULE_PREFIX = "BARAQ-SOAR"
 
 
+# ── Safety guards ─────────────────────────────────────────────────────────
+#
+# Destructive response is live-fire, and the most likely victim during a
+# drill is the operator's own workstation: killing the shell/agent, cutting
+# the host that serves the console, or disabling the machine's own account.
+# These guards refuse exactly those actions; the agent repeats the same
+# checks locally as defense in depth.
+
+def _guards_on() -> bool:
+    from backend import config
+
+    return config.SOAR_SAFETY_GUARDS and not config.SOAR_ALLOW_PROTECTED_ACTIONS
+
+
+def guard_destructive(action: str, target: str) -> str | None:
+    """Reason to refuse ``action`` on ``target``, or None when allowed.
+
+    Used by the API before queueing (fast, clear failure instead of an
+    agent-side rejection later) and by the executors themselves.
+    """
+    from backend import config
+
+    if not _guards_on():
+        return None
+    target = (target or "").strip()
+    if not target:
+        return None
+
+    if action == "kill_process" and not target.isdigit():
+        name = os.path.basename(target).lower()
+        exe = name if name.endswith(".exe") else f"{name}.exe"
+        if name in config.SOAR_PROTECTED_PROCESSES or exe in config.SOAR_PROTECTED_PROCESSES:
+            return (
+                f"kill_process refused: '{target}' is a protected core process "
+                f"(shell/agent/system). Remove it from BARAQ_SOAR_PROTECTED_PROCESSES "
+                f"or set BARAQ_SOAR_ALLOW_PROTECTED_ACTIONS=1 for a deliberate drill."
+            )
+    if action == "isolate":
+        if (
+            target.lower() in config.SOAR_PROTECTED_HOSTS
+            and not config.SOAR_ALLOW_SELF_ISOLATE
+        ):
+            return (
+                f"isolate refused: '{target}' serves this BARAQ console; isolating "
+                f"it would block access to the dashboard. Set "
+                f"BARAQ_SOAR_ALLOW_SELF_ISOLATE=1 for a deliberate drill."
+            )
+    if action == "disable_account":
+        if target.lower() in config.SOAR_PROTECTED_ACCOUNTS:
+            return (
+                f"disable_account refused: '{target}' is a protected local account "
+                f"(operator/admin). Remove it from BARAQ_SOAR_PROTECTED_ACCOUNTS or "
+                f"set BARAQ_SOAR_ALLOW_PROTECTED_ACTIONS=1 for a deliberate drill."
+            )
+    return None
+
+
 def _is_admin() -> bool:
     """Check if the current process has administrator privileges."""
     try:
@@ -141,6 +198,10 @@ def kill_process(target: str) -> tuple[str, str]:
         return "failed", "No process target provided."
 
     target = target.strip()
+    refused = guard_destructive("kill_process", target)
+    if refused:
+        logger.warning("%s", refused)
+        return "failed", refused
     # Validate: only allow alphanumeric, dots, hyphens, underscores
     if not re.match(r'^[a-zA-Z0-9._-]+$', target):
         return "failed", f"Invalid process name: {target}"
@@ -169,6 +230,10 @@ def isolate_host(host: str = "localhost") -> tuple[str, str]:
     Creates firewall rules to block all traffic on standard profiles,
     then adds an exception for the BARAQ server (127.0.0.1).
     """
+    refused = guard_destructive("isolate", host)
+    if refused:
+        logger.warning("%s", refused)
+        return "failed", refused
     # Block all inbound
     ok1, out1 = _run([
         "netsh", "advfirewall", "set", "allprofiles", "firewallpolicy",
@@ -262,6 +327,10 @@ def disable_account(username: str) -> tuple[str, str]:
         return "failed", "No username provided."
 
     username = username.strip()
+    refused = guard_destructive("disable_account", username)
+    if refused:
+        logger.warning("%s", refused)
+        return "failed", refused
     # Validate username: alphanumeric, dots, hyphens, underscores only
     if not re.match(r'^[a-zA-Z0-9_.-]+$', username):
         return "failed", f"Invalid username: {username}"
