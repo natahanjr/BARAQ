@@ -544,12 +544,15 @@ def record_verdict(
                 features = event_feature_vector(event)
                 if features:
                     detector.online_learner.record_verdict(
-                        behavior, features, body.verdict == "true_positive"
+                        behavior,
+                        features,
+                        body.verdict == "true_positive",
+                        event_id=event.id,
                     )
             except Exception:
-                pass
+                logger.debug("online learner verdict record failed", exc_info=True)
     except Exception:
-        pass
+        logger.debug("ML feedback fold-in failed", exc_info=True)
     log_action(
         db,
         actor_name(request),

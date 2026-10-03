@@ -550,6 +550,24 @@ def ml_analyze(hours: int = Query(1, ge=1, le=168), db: Session = Depends(get_db
     return result
 
 
+@router.post("/ml/online-update", dependencies=[Depends(require_admin)])
+def ml_online_update(db: Session = Depends(get_db)):
+    """Run the incremental online update now.
+
+    The scheduler only attempts it every 15 minutes; this endpoint forces a
+    run so the live-learning loop can be exercised and verified on demand.
+    """
+    detector = get_detector()
+    if detector.online_learner is None:
+        raise HTTPException(409, "Online learner unavailable (ensemble inactive)")
+    if not detector.is_ready:
+        raise HTTPException(409, "Model not trained yet")
+    result = detector.online_learner.incremental_update(db)
+    result["should_update_after"] = detector.online_learner.should_update()
+    result["learner"] = detector.online_learner.status()
+    return result
+
+
 @router.get("/ml/status")
 def ml_status():
     from backend.ml.tasks import training_active
@@ -667,12 +685,9 @@ def ml_versions():
 @router.get("/ml/drift", dependencies=[Depends(require_auth)])
 def ml_drift(hours: int = Query(12, ge=1, le=168), db: Session = Depends(get_db)):
     """Roadmap 4.1 - PSI drift monitor over recent features."""
-    from datetime import UTC, datetime, timedelta
-
     from backend.ml.anomaly import get_detector
 
     detector = get_detector()
-    since = datetime.now(UTC) - timedelta(hours=hours)
     streams: dict = {}
 
     net_baseline = detector.baselines.get("network")
@@ -687,7 +702,7 @@ def ml_drift(hours: int = Query(12, ge=1, le=168), db: Session = Depends(get_db)
     return {
         "status": "ok",
         "streams": streams,
-        "window_hours": since.isoformat(),
+        "window_hours": hours,
     }
 
 
@@ -856,14 +871,10 @@ def ml_online_learning():
             result["should_update"] = False
 
         try:
-            suggestions = detector.online_learner.active_learner.suggest_for_labeling(
-                features_list=[], behaviors=[], models={}
-            )
+            suggestions = detector.online_learner.suggest(10)
             result["active_learning_suggestions"] = len(suggestions)
-            result["suggestions"] = [
-                {"event_id": s[0], "uncertainty": round(s[2], 4)}
-                for s in (suggestions[:10] if suggestions else [])
-            ]
+            result["suggestions"] = suggestions
+            result["learner"] = detector.online_learner.status()
         except Exception:
             result["active_learning_suggestions"] = 0
             result["suggestions"] = []
