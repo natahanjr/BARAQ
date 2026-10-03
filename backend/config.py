@@ -5,10 +5,12 @@ adjusted without touching business logic. Optimised for a low-resource
 single Windows 11 laptop (i5 / 12 GB RAM).
 """
 
+import getpass
 import json
 import logging
 import os
 import secrets as _secrets
+import socket
 import sys
 from pathlib import Path
 
@@ -1519,6 +1521,44 @@ SOAR_DESTRUCTIVE_ACTIONS_ENABLED = os.environ.get(
 DESTRUCTIVE_ACTIONS = frozenset(
     {"block_ip", "kill_process", "quarantine", "isolate", "disable_account"}
 )
+
+
+def _csv_lower(name: str, default: str) -> frozenset[str]:
+    """Comma-separated env var -> lowercase frozenset."""
+    raw = os.environ.get(name, default)
+    return frozenset(v.strip().lower() for v in raw.split(",") if v.strip())
+
+
+def _env_flag(name: str, default: str = "0") -> bool:
+    return os.environ.get(name, default).lower() in ("1", "true", "yes", "on")
+
+
+#: Response safety guards (protect the operator's own workstation).
+#: With guards on (default), destructive actions refuse to: kill core
+#: shell/agent/system processes, isolate the host that serves this console,
+#: or disable the machine's own user accounts. These are exactly the
+#: mistakes that lock an analyst out of their own SOC during a drill.
+SOAR_SAFETY_GUARDS = _env_flag("BARAQ_SOAR_SAFETY_GUARDS", "1")
+#: Processes that must never be terminated by a response action.
+SOAR_PROTECTED_PROCESSES = _csv_lower(
+    "BARAQ_SOAR_PROTECTED_PROCESSES",
+    "powershell.exe,pwsh.exe,cmd.exe,conhost.exe,explorer.exe,"
+    "python.exe,pythonw.exe,uvicorn.exe,agent.py,agent.ps1,baraq-agent,"
+    "lsass.exe,csrss.exe,smss.exe,wininit.exe,winlogon.exe,services.exe,"
+    "svchost.exe,system,registry",
+)
+#: Hosts that must never be isolated - the console is served from here.
+SOAR_PROTECTED_HOSTS = _csv_lower(
+    "BARAQ_SOAR_PROTECTED_HOSTS", socket.gethostname()
+)
+#: Local accounts that must never be disabled.
+SOAR_PROTECTED_ACCOUNTS = _csv_lower(
+    "BARAQ_SOAR_PROTECTED_ACCOUNTS",
+    f"{getpass.getuser()},administrator,guest",
+)
+#: Deliberate live-fire drill switches - enable only in an isolated lab.
+SOAR_ALLOW_SELF_ISOLATE = _env_flag("BARAQ_SOAR_ALLOW_SELF_ISOLATE")
+SOAR_ALLOW_PROTECTED_ACTIONS = _env_flag("BARAQ_SOAR_ALLOW_PROTECTED_ACTIONS")
 
 # --------------------------------------------------------------------------
 # v2 telemetry (Phase 1)
