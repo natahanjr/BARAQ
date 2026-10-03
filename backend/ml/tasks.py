@@ -53,7 +53,14 @@ def _demote_thread_priority() -> None:
         pass
 
 
-def train_in_background(hours=None, validate=True, force=False):
+def train_in_background(hours=None, validate=True, force=False, kind="manual"):
+    """Queue a full retrain on a daemon thread; returns False if one runs.
+
+    ``kind`` labels the run in the model version history (manual / drift /
+    incremental). The scheduler uses this so a drift-triggered retrain no
+    longer blocks the collection/detection loop for minutes - a synchronous
+    retrain observed earlier stalled the loop ~14 minutes.
+    """
     if not _train_lock.acquire(blocking=False):
         return False
 
@@ -61,8 +68,12 @@ def train_in_background(hours=None, validate=True, force=False):
         _demote_thread_priority()
         db = SessionLocal()
         try:
-            result = _bulk_train(db, hours=hours, kind="manual")
-            logger.info("Background ML training finished: %s", result.get("status"))
+            result = _bulk_train(db, hours=hours, kind=kind)
+            logger.info(
+                "Background ML training finished (%s): %s",
+                kind,
+                result.get("status"),
+            )
         except Exception:
             logger.exception("Background ML training failed")
         finally:
@@ -71,49 +82,6 @@ def train_in_background(hours=None, validate=True, force=False):
 
     threading.Thread(target=_work, daemon=True, name="baraq-ml-train").start()
     return True
-
-
-def check_online_update():
-    """Check if online learning update is needed and perform it.
-
-    Called periodically by the background scheduler. Uses ADWIN drift detection
-    and reservoir sampling buffers to perform incremental model updates.
-    """
-    from backend.ml.anomaly import get_detector
-
-    detector = get_detector()
-    if not detector.is_ready or detector.online_learner is None:
-        return None
-
-    try:
-        if detector.online_learner.should_update():
-            logger.info("Online learning update triggered")
-            result = detector.online_learner.incremental_update()
-            logger.info("Online learning update: %s", result.get("status"))
-            return result
-    except Exception:
-        logger.debug("Online learning update failed", exc_info=True)
-    return None
-
-
-def get_active_learning_suggestions():
-    """Get top uncertain events for analyst labeling.
-
-    Returns list of (event_id, features, uncertainty_score) tuples
-    that would most improve the model if labeled.
-    """
-    from backend.ml.anomaly import get_detector
-
-    detector = get_detector()
-    if not detector.is_ready or detector.online_learner is None:
-        return []
-
-    try:
-        return detector.online_learner.active_learner.suggest_for_labeling(
-            features_list=[], behaviors=[], models=detector.models
-        )
-    except Exception:
-        return []
 
 
 def training_active():

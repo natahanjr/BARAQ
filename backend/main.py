@@ -149,15 +149,23 @@ _scheduler_stop = threading.Event()
 #: default 15 s interval (COLLECT_INTERVAL_SECONDS), the wall-clock
 #: frequencies are::
 #:
+#:     2     -> every cycle  (online learning attempt - the 15-minute
+#:                          wall-clock gate lives in should_update())
 #:     4     -> ~1 min      (per-host chain learning, ML auto-train probe,
 #:                          entity-risk decay)
 #:     6     -> ~1.5 min    (entity-risk backfill sweep + escalate)
 #:     20    -> ~5 min      (dashboard snapshot)
 #:     120   -> ~30 min     (ML drift check + watch retrain)
-#:     240   -> ~1 h        (dataset auto-export, online learning,
-#:                          retention purge, scheduled reports)
+#:     240   -> ~1 h        (dataset auto-export, retention purge,
+#:                          scheduled reports)
 #:     720   -> ~3 h        (threat-intel feed refresh)
 #:     5760  -> ~daily      (rule precision auto-tune)
+#:
+#: NOTE: cycle duration is NOT fixed - it is 15 s of sleep plus the
+#: cycle's work (observed 15 s idle to >90 s under load). Steps that
+#: promise "every N minutes" must gate on wall-clock time inside their
+#: callable, not on this counter; the counter only decides how often
+#: that gate is consulted.
 #:
 #: This table is the single source of truth for 'how often does step X
 #: run?'. The hot inline counter checks in ``_scheduler_loop`` are kept
@@ -173,7 +181,7 @@ SCHEDULER_CYCLE_FREQUENCY_SECONDS: dict[str, int] = {
     "entity_risk_decay": 4 * 15,
     "entity_risk_sweep": 6 * 15,
     "dataset_auto_export": 240 * 15,
-    "ml_online_update": 240 * 15,
+    "ml_online_update": 2 * 15,
     "retention_purge": 240 * 15,
     "audit_retention_purge": 240 * 15,
     "scheduled_reports": 240 * 15,
@@ -194,6 +202,9 @@ def _scheduler_loop(interval_seconds: int = 15):
     from backend.api.system import run_detection_for_orgs, run_pipeline
 
     counter = 0
+    #: Remaining wide-window warm-up passes for the online learner's
+    #: buffers (login/process can be nearly empty in the last hour).
+    warmup_passes = 3
     while not _scheduler_stop.is_set():
         cycle_start = time.monotonic()
         #: Per-stage wall times for this cycle, logged once per cycle so
@@ -385,7 +396,25 @@ def _scheduler_loop(interval_seconds: int = 15):
                 if counter % 20 == 0:
                     dashboard.snapshot(db)
                 if counter % 4 == 0 and get_detector().is_ready:
-                    get_detector().analyze_events(db, hours=1)
+                    # Buffer warm-up: the learner only sees what this pass
+                    # scores, and the last hour can hold almost no login or
+                    # process events. While those buffers are cold, score a
+                    # 24 h window (a few passes at startup) so the model
+                    # learns this host's history instead of waiting hours
+                    # for new events to trickle in.
+                    hours = 1
+                    learner = get_detector().online_learner
+                    if learner is not None and warmup_passes > 0:
+                        cold = (
+                            learner.buffers["login"].size < 256
+                            or learner.buffers["process"].size < 256
+                        )
+                        if cold:
+                            hours = 24
+                            warmup_passes -= 1
+                        else:
+                            warmup_passes = 0
+                    get_detector().analyze_events(db, hours=hours)
                 if counter % 4 == 0:
                     stale, reason = get_detector().is_stale(db)
                     if stale:
@@ -494,23 +523,31 @@ def _scheduler_loop(interval_seconds: int = 15):
                 if counter % 120 == 0 and get_detector().is_ready:
                     try:
                         from backend.ml.drift import check_drift
+                        from backend.ml.tasks import train_in_background
 
                         drift = check_drift(db, hours=12)
                         if drift.get("status") == "drift":
-                            logger.warning("ML drift detected; retrain on full history")
-                            get_detector().train(
-                                db, hours=None, validate=False, kind="drift"
+                            started = train_in_background(hours=None, kind="drift")
+                            logger.warning(
+                                "ML drift detected; background retrain %s",
+                                "started" if started else "already running",
                             )
                         elif drift.get("status") == "watch":
-                            logger.info("ML drift watch; retrain on full history")
-                            get_detector().train(
-                                db, hours=None, validate=False, kind="incremental"
+                            started = train_in_background(
+                                hours=None, kind="incremental"
+                            )
+                            logger.info(
+                                "ML drift watch; background retrain %s",
+                                "started" if started else "already running",
                             )
                     except Exception:
                         logger.exception("ML drift check failed")
-                if counter % 240 == 0:  # every ~1 hour (240 cycles x 15s)
+                if counter % 2 == 0:  # every cycle (counter advances 2x/cycle)
                     # Phase 3: Online learning - incremental update via
                     # sliding-window buffer instead of full retrain.
+                    # Consulted every cycle; should_update() owns the actual
+                    # 15-minute wall-clock gate, because cycle durations vary
+                    # too much (15-90 s) for a counter to mean "15 minutes".
                     try:
                         detector = get_detector()
                         if (
@@ -518,12 +555,14 @@ def _scheduler_loop(interval_seconds: int = 15):
                             and detector.online_learner.should_update()
                         ):
                             result = detector.online_learner.incremental_update(db)
-                            if result.get("updated"):
-                                logger.info(
-                                    "ML online update: streams=%s buffer=%s",
-                                    result.get("streams_updated"),
-                                    result.get("buffer_sizes"),
-                                )
+                            logger.info(
+                                "ML online update: updated=%s streams=%s "
+                                "buffer=%s errors=%s",
+                                result.get("updated"),
+                                result.get("streams_updated"),
+                                result.get("buffer_sizes"),
+                                result.get("errors"),
+                            )
                         elif detector.is_ready:
                             # Fallback: full retrain if online learner not ready
                             from datetime import UTC, datetime, timedelta
@@ -543,15 +582,16 @@ def _scheduler_loop(interval_seconds: int = 15):
                                 or 0
                             )
                             if recent_verdicts >= ML_INCREMENTAL_MIN_VERDICTS:
-                                logger.info(
-                                    "ML full retrain (%d verdicts in 24h, online learner not ready)",
-                                    recent_verdicts,
+                                from backend.ml.tasks import train_in_background
+
+                                started = train_in_background(
+                                    hours=None, kind="incremental"
                                 )
-                                detector.train(
-                                    db,
-                                    hours=None,
-                                    validate=False,
-                                    kind="incremental",
+                                logger.info(
+                                    "ML full retrain (%d verdicts in 24h, online "
+                                    "learner not ready): %s",
+                                    recent_verdicts,
+                                    "started" if started else "already running",
                                 )
                     except Exception:
                         logger.exception("ML online update failed")
