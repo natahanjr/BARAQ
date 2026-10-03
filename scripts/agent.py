@@ -71,6 +71,63 @@ _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9.-]{0,253}[A-Za-z0-9])?$")
 _SHELL_META = set("'\"`$;|&<>\n\r\t*?()[]{}^%!")
 
 
+# ── Local safety guards ───────────────────────────────────────────────────
+# Defense in depth: even if the server's protection lists are bypassed or
+# misconfigured, the agent refuses to kill its own shell/agent/system
+# processes or disable this machine's own accounts. Same env overrides as
+# the server so an intentional lab drill can open both at once.
+
+def _env_csv(name: str, default: str) -> frozenset[str]:
+    raw = os.environ.get(name, default)
+    return frozenset(v.strip().lower() for v in raw.split(",") if v.strip())
+
+
+def _env_flag(name: str, default: str = "0") -> bool:
+    return os.environ.get(name, default).lower() in ("1", "true", "yes", "on")
+
+
+_PROTECTED_PROCESSES = _env_csv(
+    "BARAQ_SOAR_PROTECTED_PROCESSES",
+    "powershell.exe,pwsh.exe,cmd.exe,conhost.exe,explorer.exe,"
+    "python.exe,pythonw.exe,uvicorn.exe,agent.py,agent.ps1,baraq-agent,"
+    "lsass.exe,csrss.exe,smss.exe,wininit.exe,winlogon.exe,services.exe,"
+    "svchost.exe,system,registry",
+)
+try:
+    import getpass as _getpass
+
+    _SELF_USER = _getpass.getuser()
+except Exception:  # pragma: no cover - service accounts without a profile
+    _SELF_USER = ""
+_PROTECTED_ACCOUNTS = _env_csv(
+    "BARAQ_SOAR_PROTECTED_ACCOUNTS",
+    ",".join(u for u in (_SELF_USER, "administrator", "guest") if u),
+)
+
+
+def _guards_enabled() -> bool:
+    """Guards off only when BARAQ_SOAR_SAFETY_GUARDS=0 or the drill
+    override BARAQ_SOAR_ALLOW_PROTECTED_ACTIONS=1 is set."""
+    if not _env_flag("BARAQ_SOAR_SAFETY_GUARDS", "1"):
+        return False
+    return not _env_flag("BARAQ_SOAR_ALLOW_PROTECTED_ACTIONS")
+
+
+def _image_name_for_pid(pid: str) -> str | None:
+    """Resolve a PID to its image name (e.g. powershell.exe), best effort."""
+    tasklist = os.path.join(
+        os.environ.get("SystemRoot", r"C:\Windows"), "System32", "tasklist.exe"
+    )
+    try:
+        out, code = _run([tasklist, "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"])
+    except Exception:
+        return None
+    if code != 0 or '"' not in out:
+        return None
+    name = out.split('"')[1].strip()
+    return name or None
+
+
 class UnsafeCommand(ValueError):
     """A queued command target failed local validation."""
 
@@ -90,6 +147,19 @@ def validate_target(action: str, target: str) -> str:
     if action == "kill_process":
         if not _PROCESS_RE.match(target):
             raise UnsafeCommand("kill_process target must be a process name or PID")
+        if _guards_enabled():
+            name = target
+            if target.isdigit():
+                name = _image_name_for_pid(target) or ""
+                if not name:
+                    return target  # unresolvable PID: nothing to kill anyway
+            name = os.path.basename(name).lower()
+            exe = name if name.endswith(".exe") else f"{name}.exe"
+            if name in _PROTECTED_PROCESSES or exe in _PROTECTED_PROCESSES:
+                raise UnsafeCommand(
+                    f"kill_process refused: '{target}' is a protected core process "
+                    f"(shell/agent/system)"
+                )
         return target
     if action == "quarantine":
         if len(target) > 400 or _SHELL_META & set(target):
@@ -106,6 +176,14 @@ def validate_target(action: str, target: str) -> str:
     if action == "disable_account":
         if not _ACCOUNT_RE.match(target):
             raise UnsafeCommand("disable_account target must be an account name")
+        if (
+            _guards_enabled()
+            and target.lower() in _PROTECTED_ACCOUNTS
+        ):
+            raise UnsafeCommand(
+                f"disable_account refused: '{target}' is a protected local "
+                f"account (operator/admin)"
+            )
         return target
     if action == "update_agent":
         if not _VERSION_RE.match(target):
