@@ -92,6 +92,11 @@ def test_export_alerts_csv(client, db):
 def test_export_with_severity_filter(client, db):
     _seed_alert(db, name="HighAlert", severity="high")
     _seed_alert(db, name="LowAlert", severity="low")
+    db.commit()
+    resp = client.get("/api/export/alerts?severity=high&format=json", headers=HEADERS)
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["returned"] == 1
 
 
 def test_every_export_type_builds_a_query(client, db):
@@ -110,15 +115,6 @@ def test_every_export_type_builds_a_query(client, db):
         resp = client.get(f"/api/export/{data_type}?format=json&limit=1", headers=HEADERS)
         assert resp.status_code == 200, f"{data_type}: HTTP {resp.status_code} - {resp.text[:200]}"
         assert resp.json()["export_type"] == data_type
-
-    # Seed a high-severity alert so the severity filter has something to
-    # return; the loop above only proves each type *builds* its query.
-    _seed_alert(db, name="HighAlert", severity="high")
-    db.commit()
-    resp = client.get("/api/export/alerts?severity=high&format=json", headers=HEADERS)
-    assert resp.status_code == 200
-    payload = resp.json()
-    assert payload["returned"] == 1
 
 
 def test_export_with_search(client, db):
