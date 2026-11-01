@@ -295,14 +295,14 @@ class Profiler:
         p.host_ts = defaultdict(lambda: deque(maxlen=256), {k: deque(v, maxlen=256) for k, v in state.host_ts.items()})
         p.proc_dsts = defaultdict(set, {k: set(v) for k, v in state.proc_dsts.items()})
         p.proc_ports = defaultdict(set, {k: set(v) for k, v in state.proc_ports.items()})
-        p.proc_pairs = defaultdict(set, {k: {tuple(x.split(':',1)) for x in v} for k, v in state.proc_pairs.items()})
+        p.proc_pairs = defaultdict(set, {k: {(x.split(':',1)[0], int(x.split(':',1)[1])) for x in v} for k, v in state.proc_pairs.items()})
         p.proc_ext_dsts = defaultdict(set, {k: set(v) for k, v in state.proc_ext_dsts.items()})
         p.proc_ext_ports = defaultdict(set, {k: set(v) for k, v in state.proc_ext_ports.items()})
         p.proc_dst_hosts = defaultdict(set, {k: set(v) for k, v in state.proc_dst_hosts.items()})
         p.proc_dst_count = defaultdict(int, state.proc_dst_count)
         p.proc_pair_count = defaultdict(int, state.proc_pair_count)
         p.host_proc_dsts = defaultdict(set, {k: set(v) for k, v in state.host_proc_dsts.items()})
-        p.host_proc_pairs = defaultdict(set, {k: {tuple(x.split(':',1)) for x in v} for k, v in state.host_proc_pairs.items()})
+        p.host_proc_pairs = defaultdict(set, {k: {(x.split(':',1)[0], int(x.split(':',1)[1])) for x in v} for k, v in state.host_proc_pairs.items()})
         p.host_proc_ext_dsts = defaultdict(set, {k: set(v) for k, v in state.host_proc_ext_dsts.items()})
         p.host_proc_ext_ports = defaultdict(set, {k: set(v) for k, v in state.host_proc_ext_ports.items()})
         p.host_proc_count = defaultdict(int, state.host_proc_count)
@@ -804,8 +804,8 @@ def score_network_connections(
     Persists MLShadowScore rows; does NOT mutate events.
     Returns: (scored_count, flagged_count)
     """
-    from backend.ml.deployment import get_deployment_mode
-    if get_deployment_mode() == 'off':
+    from backend.ml.deployment import configured_mode
+    if configured_mode() == 'off':
         return 0, 0
 
     session = session or SessionLocal()
@@ -813,7 +813,7 @@ def score_network_connections(
         since = datetime.now(UTC) - pd.Timedelta(hours=hours)
         conns = session.query(NetworkConnection).filter(
             NetworkConnection.observed_at >= since
-        ).all()
+        ).order_by(NetworkConnection.observed_at).all()
 
         if not conns:
             return 0, 0
@@ -830,18 +830,27 @@ def score_network_connections(
         flagged = 0
         for conn, res in zip(conns, results):
             shadow = MLShadowScore(
-                connection_id=conn.id,
-                observed_at=conn.observed_at,
-                model_version=detector.training_manifest.get('version', 'high_level_v1'),
+                stream='network',
+                model_version=1,
                 feature_version=detector.feature_version,
-                fused_score=res['fused_score'],
-                if_score=res['if_score'],
-                pivot_score=res['pivot_score'],
-                fanout_score=res['fanout_score'],
-                c2_score=res['c2_score'],
-                is_anomaly=res['is_anomaly'],
+                entity=f"{conn.remote_ip}:{conn.remote_port}",
+                score=res['fused_score'],
                 threshold=res['threshold'],
-                evidence_json=json.dumps(res['evidence']),
+                flagged=res['is_anomaly'],
+                observed_at=conn.observed_at,
+                org='',
+                demo=False,
+                detail={
+                    'if_score': res['if_score'],
+                    'pivot_score': res['pivot_score'],
+                    'fanout_score': res['fanout_score'],
+                    'c2_score': res['c2_score'],
+                    'evidence': res['evidence'],
+                    'connection_id': conn.id,
+                    'process': conn.process,
+                    'remote_ip': conn.remote_ip,
+                    'remote_port': conn.remote_port,
+                },
             )
             session.add(shadow)
             scored += 1
