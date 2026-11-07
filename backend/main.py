@@ -979,7 +979,9 @@ async def api_gates(request: Request, call_next):
     if request.method == "OPTIONS":
         logger.debug("CORS preflight: %s %s", request.method, request.url.path)
     path = request.url.path
-    if path.startswith("/api/") and not path.startswith(
+    if (
+        path.startswith("/api/") or path == "/metrics"
+    ) and not path.startswith(
         ("/api/health", "/api/auth/login")
     ):
         if not _ip_allowed(request):
