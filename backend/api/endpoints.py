@@ -320,6 +320,12 @@ def _validate_target(action: str, target: str) -> str:
     """Validate a command target before it is stored and sent to an agent."""
     target = (target or "").strip()
     if action == "escalate":
+        if not target:
+            raise HTTPException(422, "escalate requires a target")
+        if len(target) > 200:
+            raise HTTPException(422, "escalate target too long")
+        if _SHELL_META & set(target):
+            raise HTTPException(422, "escalate target contains forbidden characters")
         return target
     if not target:
         raise HTTPException(422, f"{action} requires a target")
