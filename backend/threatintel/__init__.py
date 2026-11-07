@@ -216,6 +216,8 @@ def _classify_domain(domain: str) -> dict[str, Any] | None:
 def _http_json(
     url: str, headers: dict[str, str] | None = None, timeout: float = 8
 ) -> str | None:
+    import ipaddress
+    import socket
     import urllib.request
     from urllib.parse import urlparse
 
@@ -223,6 +225,31 @@ def _http_json(
     if parsed.scheme not in ("https",):
         logger.debug("Threat-intel: skipping non-HTTPS URL: %s", url)
         return None
+
+    # SSRF protection: reject private/reserved IP addresses as the target host
+    hostname = parsed.hostname
+    if hostname:
+        try:
+            ip = ipaddress.ip_address(socket.gethostbyname(hostname))
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+                or ip.is_multicast
+            ):
+                logger.debug(
+                    "Threat-intel: skipping private/resolved host: %s (%s)",
+                    hostname,
+                    ip,
+                )
+                return None
+        except socket.gaierror:
+            # Cannot resolve - let the request attempt fail naturally
+            pass
+        except ValueError:
+            pass
+
     req = urllib.request.Request(url, headers=headers or {})
     try:
         with _urlopen(req, timeout=timeout) as resp:
