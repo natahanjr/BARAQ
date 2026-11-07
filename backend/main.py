@@ -921,10 +921,19 @@ RATE_WINDOW_SECONDS = 60
 
 
 def _client_identity(request: Request) -> str:
+    """Rate-limit identity: client IP first (hard to spoof), API key second.
+
+    The IP is always part of the identity so that spoofing X-API-Key or
+    Authorization headers cannot be used to obtain a separate rate-limit
+    bucket.
+    """
+    ip = client_ip(request)
     key = request.headers.get("X-API-Key", "") or (
         request.headers.get("Authorization", "")[:32]
     )
-    return key or client_ip(request)
+    if key:
+        return f"{ip}:{key[:16]}"
+    return ip
 
 
 def _ip_allowed(request: Request) -> bool:
