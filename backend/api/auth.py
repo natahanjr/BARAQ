@@ -715,6 +715,11 @@ def mfa_setup(request: Request, db: Session = Depends(get_db)):
     secret = generate_secret()
     user.totp_secret = secret
     user.totp_enabled = False
+    # Revoke all existing sessions: an attacker who already holds a session
+    # cookie must not be able to enroll their own TOTP device and lock out
+    # the legitimate user. The user must re-authenticate (with MFA once
+    # confirmed) to get a fresh session.
+    revoke_all_sessions(user, reason="mfa_setup")
     db.commit()
     log_action(
         db,
