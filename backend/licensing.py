@@ -192,6 +192,8 @@ def get_license_state(db: Session) -> LicenseState:
             license_id=info.license_id,
         )
     start = _trial_start(db)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=UTC)
     remaining = start + timedelta(days=TRIAL_DAYS) - datetime.now(UTC)
     if remaining <= timedelta(0):
         return LicenseState("expired", reason="trial period ended")

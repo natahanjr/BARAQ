@@ -469,11 +469,19 @@ DATASET_COLLECTOR_VERSION = "v1"
 # --------------------------------------------------------------------------
 DATABASE_URL = _secret("BARAQ_DATABASE_URL", os.environ.get("BARAQ_DATABASE_URL", ""))
 if not DATABASE_URL:
-    raise RuntimeError(
-        "BARAQ requires BARAQ_DATABASE_URL. The SQLite fallback has "
-        "been removed - set it to a postgresql:// URL via the DPAPI vault "
-        "(recommended) or BARAQ_DATABASE_URL env var (e.g. "
-        "postgresql+psycopg://user:pass@host:5432/baraq)."
+    if IS_PRODUCTION:
+        raise RuntimeError(
+            "Production mode requires BARAQ_DATABASE_URL (postgresql://). "
+            "Set it via the DPAPI vault or BARAQ_DATABASE_URL env var."
+        )
+    # Development-only SQLite fallback so BARAQ can run without a
+    # PostgreSQL server on a local dev machine. Not for production use.
+    _sqlite_path = APP_DIR / "baraq_dev.db"
+    DATABASE_URL = f"sqlite:///{_sqlite_path}"
+    logger.warning(
+        "BARAQ_DATABASE_URL not set — using development SQLite fallback at %s. "
+        "Not suitable for production. Set BARAQ_DATABASE_URL for Postgres.",
+        _sqlite_path,
     )
 ECHO_SQL = False
 EVENT_RETENTION_DAYS = 30

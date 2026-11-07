@@ -43,12 +43,10 @@ _DATABASE_URL = CONFIG_DATABASE_URL or settings.database_url
 
 
 def normalize_database_url(url: str) -> str:
-    """Prefer the psycopg3 driver for plain postgres:// URLs.
+    """Normalize a database URL for the configured driver.
 
-    SQLAlchemy would otherwise default to psycopg2, which is not installed.
-    ``postgresql://`` / ``postgres://`` are rewritten to the psycopg3 scheme;
-    URLs with an explicit driver (``+psycopg``, ``+psycopg2``) pass through
-    untouched.
+    ``postgresql://`` / ``postgres://`` are rewritten to psycopg3.
+    ``sqlite:///`` URLs pass through untouched.
     """
     for prefix in ("postgresql://", "postgres://"):
         if url.startswith(prefix):
@@ -57,13 +55,15 @@ def normalize_database_url(url: str) -> str:
 
 
 # In-place additive column migrations (idempotton for pre-Alembic DDL).
+# Types are SQLite-compatible; PostgreSQL equivalents are used via
+# _ddl_default() when running against Postgres.
 _ADDITIVE_MIGRATIONS = {
     "v2_events": [
         ("event_id", "VARCHAR(64) DEFAULT ''"),
         ("event_type", "VARCHAR(32) DEFAULT ''"),
         ("destination", "VARCHAR(128) DEFAULT ''"),
-        ("process", "JSONB"),
-        ("network", "JSONB"),
+        ("process", "TEXT"),
+        ("network", "TEXT"),
         ("outcome", "VARCHAR(16) DEFAULT ''"),
         ("schema_version", "VARCHAR(8) DEFAULT '1.1'"),
     ],
@@ -82,7 +82,7 @@ _ADDITIVE_MIGRATIONS = {
         ("trigger_count", "INTEGER DEFAULT 1"),
         ("host", "VARCHAR(128) DEFAULT ''"),
         ("org", "VARCHAR(64) DEFAULT ''"),
-        ("ticket_links", "JSONB DEFAULT '[]'::jsonb"),
+        ("ticket_links", "TEXT DEFAULT '[]'"),
         ("demo", "BOOLEAN DEFAULT 0"),
         ("correlation_id", "VARCHAR(64) DEFAULT ''"),
         ("risk_json", "TEXT"),
@@ -92,7 +92,7 @@ _ADDITIVE_MIGRATIONS = {
         ("demo", "BOOLEAN DEFAULT 0"),
         ("last_escalated_level", "VARCHAR(16) DEFAULT ''"),
         ("last_escalated_score", "REAL DEFAULT 0"),
-        ("last_escalated_at", "TIMESTAMPTZ"),
+        ("last_escalated_at", "DATETIME"),
     ],
     "entity_risk_events": [
         ("demo", "BOOLEAN DEFAULT 0"),
@@ -105,11 +105,11 @@ _ADDITIVE_MIGRATIONS = {
         ("chain_json", "TEXT"),
         ("chain_confidence", "REAL DEFAULT 0"),
         ("chain_risk", "INTEGER DEFAULT 0"),
-        ("responded_at", "TIMESTAMPTZ"),
+        ("responded_at", "DATETIME"),
     ],
     "network_connections": [
-        ("bytes_sent", "BIGINT DEFAULT 0"),
-        ("bytes_recv", "BIGINT DEFAULT 0"),
+        ("bytes_sent", "INTEGER DEFAULT 0"),
+        ("bytes_recv", "INTEGER DEFAULT 0"),
         ("duration_seconds", "REAL DEFAULT 0"),
         ("org", "VARCHAR(64) DEFAULT ''"),
         ("demo", "BOOLEAN DEFAULT 0"),
@@ -184,30 +184,41 @@ _ADDITIVE_MIGRATIONS = {
 
 
 def _ddl_default(ddl_type: str) -> str:
-    """Translate SQLite-flavored DDL types/defaults for PostgreSQL.
+    """Normalize DDL type strings for the target dialect.
 
-    ``BOOLEAN DEFAULT 0`` requires TRUE/FALSE, and ``DATETIME`` is not a
-    PostgreSQL type (use TIMESTAMP) - passing it through made the startup
-    migration loop crash on ``users.sessions_valid_after`` whenever
-    ``alembic_version`` was absent and the in-place DDL path ran.
+    SQLite accepts BOOLEAN DEFAULT 0 and DATETIME natively. PostgreSQL needs
+    BOOLEAN DEFAULT FALSE and TIMESTAMP instead of DATETIME.
     """
-    if "BOOLEAN" in ddl_type.upper() and "DEFAULT 0" in ddl_type.upper():
-        return ddl_type.replace("DEFAULT 0", "DEFAULT FALSE")
-    if "DATETIME" in ddl_type.upper():
-        return ddl_type.upper().replace("DATETIME", "TIMESTAMP")
+    is_postgres = engine.dialect.name == "postgresql"
+    if is_postgres:
+        if "BOOLEAN" in ddl_type.upper() and "DEFAULT 0" in ddl_type.upper():
+            return ddl_type.replace("DEFAULT 0", "DEFAULT FALSE")
+        if "DATETIME" in ddl_type.upper():
+            return ddl_type.upper().replace("DATETIME", "TIMESTAMP")
     return ddl_type
 
 
 # Create the engine with connection pooling settings from the configuration.
+# SQLite does not support connection pooling options or PostgreSQL-specific
+# connect_args, so they are only applied for PostgreSQL URLs.
+_is_postgres_url = str(_DATABASE_URL).startswith(("postgresql://", "postgres://", "postgresql+psycopg://", "postgres+psycopg://"))
+
+_engine_kwargs: dict = {
+    "echo": settings.echo_sql,
+    "pool_pre_ping": True,
+}
+if _is_postgres_url:
+    _engine_kwargs.update(
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_timeout=settings.db_pool_timeout,
+        pool_recycle=settings.db_pool_recycle,
+        connect_args={"options": "-c timezone=UTC"},
+    )
+
 engine = create_engine(
     normalize_database_url(_DATABASE_URL),
-    echo=settings.echo_sql,
-    pool_pre_ping=True,
-    pool_size=settings.db_pool_size,
-    max_overflow=settings.db_max_overflow,
-    pool_timeout=settings.db_pool_timeout,
-    pool_recycle=settings.db_pool_recycle,
-    connect_args={"options": "-c timezone=UTC"},
+    **_engine_kwargs,
 )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
@@ -219,15 +230,21 @@ def _readonly_engine():
 
     if not READONLY_DATABASE_URL:
         return None
+    _ro_kwargs: dict = {
+        "echo": settings.echo_sql,
+        "pool_pre_ping": True,
+    }
+    if str(READONLY_DATABASE_URL).startswith(("postgresql://", "postgres://", "postgresql+psycopg://", "postgres+psycopg://")):
+        _ro_kwargs.update(
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+            pool_timeout=settings.db_pool_timeout,
+            pool_recycle=settings.db_pool_recycle,
+            connect_args={"options": "-c timezone=UTC"},
+        )
     return create_engine(
         normalize_database_url(READONLY_DATABASE_URL),
-        echo=settings.echo_sql,
-        pool_pre_ping=True,
-        pool_size=settings.db_pool_size,
-        max_overflow=settings.db_max_overflow,
-        pool_timeout=settings.db_pool_timeout,
-        pool_recycle=settings.db_pool_recycle,
-        connect_args={"options": "-c timezone=UTC"},
+        **_ro_kwargs,
     )
 
 
@@ -371,10 +388,16 @@ def _alembic_has_run() -> bool:
     """
     try:
         with engine.begin() as conn:
-            result = conn.exec_driver_sql(
-                "SELECT 1 FROM information_schema.tables "
-                "WHERE table_name = 'alembic_version'"
-            )
+            if engine.dialect.name == "postgresql":
+                result = conn.exec_driver_sql(
+                    "SELECT 1 FROM information_schema.tables "
+                    "WHERE table_name = 'alembic_version'"
+                )
+            else:
+                # SQLite
+                result = conn.exec_driver_sql(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='alembic_version'"
+                )
             if result.fetchone():
                 count = conn.exec_driver_sql(
                     "SELECT count(*) FROM alembic_version"
