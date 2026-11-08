@@ -1073,6 +1073,16 @@ HSTS_MAX_AGE = int(os.environ.get("BARAQ_HSTS_MAX_AGE", str(60 * 60 * 24 * 180))
 #: with a burst allowance before the fixed window kicks in. 0 disables.
 API_RATE_LIMIT = int(os.environ.get("BARAQ_API_RATE_LIMIT", "600"))
 API_RATE_BURST = int(os.environ.get("BARAQ_API_RATE_BURST", "900"))
+#: Trusted reverse-proxy CIDRs. When set, the first X-Forwarded-For hop is
+#: used as the client IP for rate limiting and IP ACLs. Only set this when
+#: BARAQ sits behind a trusted proxy (nginx, Caddy, etc.) and set
+#: uvicorn's --forwarded-allow-ips to the same CIDRs. Without this,
+#: X-Forwarded-For is ignored and the direct socket peer is used.
+API_TRUSTED_PROXIES = [
+    p.strip()
+    for p in os.environ.get("BARAQ_API_TRUSTED_PROXIES", "").split(",")
+    if p.strip()
+]
 #: Optional network ACLs: comma-separated CIDRs. An empty whitelist means
 #: "allow everyone" (normal operation); when set, only those networks may
 #: reach the API (agents must be inside them). The blocklist is applied
@@ -1355,6 +1365,14 @@ OIDC_GROUP_CLAIM = os.environ.get("BARAQ_OIDC_GROUP_CLAIM", "groups")
 OIDC_NAME_CLAIM = os.environ.get("BARAQ_OIDC_NAME_CLAIM", "full_name")
 #: Clock-skew allowed when validating id_token "exp"/"iat"/"nbf" (seconds).
 OIDC_CLOCK_SKEW = int(os.environ.get("BARAQ_OIDC_CLOCK_SKEW", "30"))
+#: Allowed email domains for OIDC provisioning. Empty = allow all domains
+#: (not recommended). When set, only users whose email domain matches are
+#: provisioned, preventing username-collision account takeover.
+OIDC_ALLOWED_DOMAINS = [
+    d.strip().lower()
+    for d in os.environ.get("BARAQ_OIDC_ALLOWED_DOMAINS", "").split(",")
+    if d.strip()
+]
 
 # --------------------------------------------------------------------------
 # Centralized logging / SIEM forwarding
