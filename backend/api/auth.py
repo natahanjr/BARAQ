@@ -45,6 +45,7 @@ from backend.auth import (
     verify_mfa_challenge,
     verify_password,
     verify_refresh_token,
+    verify_reset_token,
     verify_token,
 )
 from backend.config import (
@@ -316,6 +317,47 @@ def password_reset_request(body: PasswordResetRequest, request: Request, db: Ses
         log_action(db, user.username, "password_reset_requested", "user", str(user.id), "reset token generated", client_ip(request))
         logger.info("Password reset token generated for %s", user.username)
     return {"ok": True, "message": "If this account exists, a reset link has been sent."}
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(min_length=1)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
+@router.post("/password-reset/confirm")
+def password_reset_confirm(
+    body: PasswordResetConfirm, request: Request, db: Session = Depends(get_db)
+):
+    """Redeem a password-reset token and set a new password.
+
+    The token is single-use: it is revoked immediately after a successful
+    reset so it cannot be replayed.
+    """
+    payload = verify_reset_token(body.token)
+    if not payload:
+        raise HTTPException(400, "Invalid or expired reset token")
+    user = db.get(User, payload.get("uid"))
+    if not user or not user.is_active:
+        raise HTTPException(400, "Invalid or expired reset token")
+    _validate_password_strength(body.new_password)
+    user.password_hash = hash_password(body.new_password)
+    user.password_changed_at = datetime.now(UTC)
+    # Revoke the reset token so it cannot be reused.
+    if payload.get("jti"):
+        revoke_token(payload["jti"], username=user.username, reason="reset_used")
+    # Invalidate all other sessions for this user.
+    revoke_all_sessions(user, reason="password_reset")
+    db.commit()
+    log_action(
+        db,
+        user.username,
+        "password_reset_completed",
+        "user",
+        str(user.id),
+        "password reset via token",
+        client_ip(request),
+    )
+    return {"ok": True, "message": "Password reset successfully."}
 
 
 def _ldap_login_fallback(
@@ -1214,44 +1256,50 @@ def verify_audit_chain(db: Session = Depends(get_db)):
 @router.post("/audit/clear", dependencies=[Depends(require_admin)])
 def clear_audit(
     request: Request,
-    approver: str | None = None,
+    admin_user: str = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """Delete the entire audit trail, force-generating an executive report first.
 
-    Two-person rule: ``approver`` must be the username of a *different*
-    administrator, and both the requesting actor and the approver must be
-    active admins. Without a valid approver the request returns 202 pending.
+    Two-person rule: the requesting admin creates an approval request, and a
+    *different* admin must explicitly approve it via
+    ``POST /api/approval/{request_id}/approve`` before the trail is deleted.
+    The approver never merely appears in a query string — they must consent.
     """
+    from backend.response.approval import (
+        ApprovalRequest,
+        workflow,
+    )
     from backend.reports.generator import generate_report
 
-    actor = _actor(request)
-
-    # Resolve and validate both parties before doing anything destructive.
-    actor_user = db.scalar(select(User).where(User.username == actor))
+    # Resolve and validate the requesting actor.
+    actor_user = db.scalar(select(User).where(User.username == admin_user))
     if not actor_user or actor_user.role != "admin" or not actor_user.is_active:
         raise HTTPException(403, "Only active administrators can clear the audit trail")
 
-    if not approver:
+    action_params = {"action": "audit_clear", "target": "all"}
+
+    # Require explicit two-person approval before clearing.
+    if not workflow.is_approved("audit_clear", action_params):
+        existing = workflow.pending_for("audit_clear", action_params)
+        if existing is None:
+            existing = workflow.create_request(
+                ApprovalRequest(
+                    action_type="audit_clear",
+                    action_params=action_params,
+                    requested_by=admin_user,
+                    justification="Clear entire audit trail",
+                    approvers_required=1,
+                )
+            )
         return {
             "cleared": 0,
             "status": "pending_approval",
-            "message": "Audit clear requires a second admin approver. "
-            "Resubmit with ?approver=<other-admin-username>.",
+            "request_id": existing.id,
+            "message": "Audit clear requires explicit approval from a second "
+            "administrator via POST /api/approval/{request_id}/approve.",
             "report": None,
         }
-
-    approver_user = db.scalar(select(User).where(User.username == approver.strip()))
-    if (
-        not approver_user
-        or approver_user.role != "admin"
-        or not approver_user.is_active
-        or approver_user.username == actor_user.username
-    ):
-        raise HTTPException(
-            400,
-            "approver must be a different active administrator",
-        )
 
     count = len(db.scalars(select(AuditLog)).all())
     if not count:
@@ -1266,11 +1314,11 @@ def clear_audit(
     db.commit()
     log_action(
         db,
-        actor,
+        admin_user,
         "audit.clear",
         "audit",
         "-",
-        f"deleted {count} record(s) approved by {approver_user.username}; report={report['file_path']}",
+        f"deleted {count} record(s); report={report['file_path']}",
         client_ip(request),
     )
     logger.info(

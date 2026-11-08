@@ -690,12 +690,25 @@ def _execute_action(action: str, target: str) -> tuple[str, str]:
 
 @router.post("/{alert_id}/actions", dependencies=[Depends(require_admin)])
 def take_action(
-    alert_id: int, body: ActionRequest, request: Request, db: Session = Depends(get_db)
+    alert_id: int,
+    body: ActionRequest,
+    request: Request,
+    admin_user: str = Depends(require_admin),
+    db: Session = Depends(get_db),
 ):
     alert = _scoped_alert(request, alert_id, db)
     action = body.action.value
 
-    target = body.target or _extract_target(alert, action)
+    # Destructive actions require an explicit operator-supplied target. Never
+    # auto-derive the target from alert evidence text, which an attacker can
+    # forge via ingested telemetry (see pentest finding 3.11).
+    target = body.target.strip() if body.target else ""
+    if action in DESTRUCTIVE_ACTIONS and not target:
+        raise HTTPException(
+            400,
+            f"Destructive action '{action}' requires an explicit target; "
+            "targets are not derived from alert evidence.",
+        )
 
     # ── SOAR approval gate (P1) ────────────────────────────────────────────
     # Destructive actions cannot execute until an APPROVED request exists for
@@ -715,7 +728,7 @@ def take_action(
                     ApprovalRequest(
                         action_type=action,
                         action_params=action_params,
-                        requested_by=actor_name(request),
+                        requested_by=admin_user,
                         justification=body.note or "",
                         approvers_required=1,
                     )
