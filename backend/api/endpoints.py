@@ -124,7 +124,10 @@ def ingest(
         raise HTTPException(401, "Missing or invalid agent key (X-Agent-Key header)")
 
     _validate_ingest_records(body.records)
-    host = (body.host or agent_id)[:128]
+    # Bind host to the agent key server-side. Never trust body.host — a
+    # leaked agent key could otherwise forge telemetry for any hostname in
+    # the fleet (see pentest finding 3.5).
+    host = agent_id
     org = agent_org(agent_id)
     for record in body.records:
         record["host"] = host
@@ -148,7 +151,10 @@ def ingest(
             alerts_total=0,
         )
         db.add(endpoint)
-    endpoint.host = host
+    # Endpoint.host is immutable after first registration; only an admin may
+    # change it via the fleet management API.
+    if endpoint.host == agent_id or endpoint.host == "":
+        endpoint.host = host
     endpoint.org = org
     endpoint.last_seen = datetime.now(UTC)
     endpoint.records_total += len(body.records)

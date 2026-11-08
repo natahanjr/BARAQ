@@ -1330,6 +1330,7 @@ class DataQualityRepairRequest(BaseModel):
 def data_quality_repair(
     body: DataQualityRepairRequest,
     request: Request,
+    admin_user: str = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """Run the repair sequence: clear logs, restart EventLog service, retrain.
@@ -1337,10 +1338,41 @@ def data_quality_repair(
     Auto-triggered when the corruption rate crosses the CRITICAL threshold;
     this endpoint allows a manual run (admin only). Every step is isolated
     so privilege failures never abort the remaining steps.
+
+    Clearing event logs is a destructive action and requires two-person
+    approval via the SOAR workflow before execution.
     """
     from backend.audit import client_ip, log_action
     from backend.collectors.repair import run_repair
-    from backend.security import actor_name
+    from backend.response.approval import (
+        ApprovalRequest,
+        workflow,
+    )
+
+    # Clearing event logs is destructive: require two-person approval.
+    if body.clear_logs:
+        action_params = {"action": "clear_logs", "target": "Security+System"}
+        if not workflow.is_approved("clear_logs", action_params):
+            existing = workflow.pending_for("clear_logs", action_params)
+            if existing is None:
+                existing = workflow.create_request(
+                    ApprovalRequest(
+                        action_type="clear_logs",
+                        action_params=action_params,
+                        requested_by=admin_user,
+                        justification=body.reason or "Manual data-quality repair",
+                        approvers_required=1,
+                    )
+                )
+            return JSONResponse(
+                {
+                    "status": "pending_approval",
+                    "request_id": existing.id,
+                    "message": "Event-log clearing requires approval before execution. "
+                    "A second admin must approve the request.",
+                },
+                status_code=202,
+            )
 
     result = run_repair(
         db,
@@ -1351,7 +1383,7 @@ def data_quality_repair(
     )
     log_action(
         db,
-        actor_name(request),
+        admin_user,
         "data_quality.repair",
         "system",
         "data-quality",
