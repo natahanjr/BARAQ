@@ -56,14 +56,13 @@ class ApprovalRecord(BaseModel):
     created_at: str = ""
     expires_at: str = ""
     resolved_at: str | None = None
+    expires_in_minutes: int = 60
 
     def __init__(self, **data):
         super().__init__(**data)
         if not self.created_at:
             self.created_at = datetime.now(UTC).isoformat()
         if not self.expires_at:
-            from datetime import timedelta
-
             self.expires_at = (
                 datetime.now(UTC) + timedelta(minutes=self.expires_in_minutes)
             ).isoformat()
@@ -151,8 +150,21 @@ class ApprovalWorkflow:
             record.resolved_at = datetime.now(UTC).isoformat()
             self._save()
             raise ValueError(f"Request {request_id} has expired")
+        # The approver is bound to the authenticated principal (the caller of
+        # this method), not a free-text body field. A shared API key cannot
+        # represent two people, so reject approval when the requester
+        # authenticated with a shared key (requested_by is a raw key string
+        # that does not look like a username).
         if approver == record.requested_by:
             raise ValueError("Approver must be a different user than the requester")
+        if record.requested_by.startswith("baraq-"):
+            # Legacy requests made with a shared API key: requested_by is the
+            # raw key string, not a username. Two-person rule cannot be
+            # enforced with a shared credential, so refuse.
+            raise ValueError(
+                "Cannot approve requests created with a shared API key; "
+                "re-create the request with a named user session."
+            )
         if approver not in record.approvals:
             record.approvals.append(approver)
         if len(record.approvals) >= record.approvers_required:
