@@ -120,7 +120,10 @@ def matches(alert: Alert, triggers: dict) -> bool:
     )
 
 
-def _execute_one(db: Session, alert: Alert, action: str) -> tuple[str, str]:
+def _execute_one(
+    db: Session, alert: Alert, action: str, triggered_by: str = "auto",
+    playbook_name: str | None = None,
+) -> tuple[str, str]:
     """Run one action against an alert; returns (status, detail)."""
     from backend.api.alerts import _execute_action, _extract_target
 
@@ -188,7 +191,7 @@ def _execute_one(db: Session, alert: Alert, action: str) -> tuple[str, str]:
                         action_params=action_params,
                         requested_by=triggered_by,
                         justification="Auto-fired by playbook "
-                        f"'{playbook.name}' on alert #{alert.id}",
+                        f"'{playbook_name or 'unknown'}' on alert #{alert.id}",
                         approvers_required=1,
                     )
                 )
@@ -213,7 +216,10 @@ def run_playbook(
     for step in playbook.actions or []:
         action = step.get("action", "") if isinstance(step, dict) else str(step)
         try:
-            status, detail = _execute_one(db, alert, action)
+            status, detail = _execute_one(
+                db, alert, action, triggered_by=triggered_by,
+                playbook_name=playbook.name,
+            )
         except Exception as exc:
             logger.exception("Playbook '%s' action %s failed", playbook.name, action)
             status, detail = "failed", f"error: {exc}"
