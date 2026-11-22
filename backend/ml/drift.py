@@ -260,7 +260,13 @@ def check_drift(session=None, hours: int = 12) -> dict:
             score_psi = psi(baseline, np.asarray(scores))
 
             # Feature-level PSI
-            feature_psi_values = feature_psi(baseline, X) if len(X) > 10 else []
+            # NOTE: detector.baselines stores score CDFs (1-D), not feature
+            # matrices (2-D), so feature_psi(baseline, X) would always compare
+            # mismatched dimensions and return [].  Feature-level drift
+            # detection requires stored feature baselines, which training does
+            # not yet persist.  Score-level PSI (above) already detects
+            # distribution drift; per-feature drift needs feature baselines.
+            feature_psi_values: list[float] = []
             feature_drift = [i for i, p in enumerate(feature_psi_values) if p > 0.25]
 
             streams[behavior] = {
@@ -290,9 +296,12 @@ def check_drift(session=None, hours: int = 12) -> dict:
                 score_psi = psi(net_baseline, np.asarray(scores))
 
                 # Feature-level PSI for network
-                feature_psi_values = (
-                    feature_psi(net_baseline, net_X) if len(net_X) > 10 else []
-                )
+                # NOTE: detector.baselines stores score CDFs (1-D), not feature
+                # matrices (2-D), so feature_psi(net_baseline, net_X) would
+                # always compare mismatched dimensions and return [].
+                # Feature-level drift detection requires stored feature
+                # baselines, which training does not yet persist.
+                feature_psi_values: list[float] = []
                 feature_drift = [
                     i for i, p in enumerate(feature_psi_values) if p > 0.25
                 ]

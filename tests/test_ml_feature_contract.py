@@ -8,7 +8,8 @@ in the ML assessment:
   ML-3  no feature may be derived from the ground-truth labeler
   ML-4  no bare /8 may be treated as an attack prefix
   ML-5  is_attack_ip_offline must not use bare /8 prefixes either
-  ML-6  declared dimensions must match what the builders actually emit
+  ML-6  feature_psi must not crash on dimension mismatch
+  ML-7  declared dimensions must match what the builders actually emit
 
 Run:
     python -m pytest tests/test_ml_feature_contract.py -q
@@ -211,3 +212,40 @@ def test_is_attack_ip_offline_no_bare_octet():
     assert is_attack_ip_offline("203.0.113.66") is True
     assert is_attack_ip_offline("198.51.100.66") is True
     assert is_attack_ip_offline("192.0.2.66") is True
+
+
+# ---------------------------------------------------------------------------
+# ML-6: feature_psi must not crash on dimension mismatch
+# ---------------------------------------------------------------------------
+def test_feature_psi_dimension_mismatch_returns_empty():
+    """feature_psi compares feature distributions. If reference and current
+    have different column counts (e.g. score CDF vs feature matrix), it must
+    return [] rather than crash or silently produce wrong results.
+
+    This guards the drift detector: detector.baselines stores score CDFs
+    (1-D), while live features are 2-D matrices. Calling feature_psi(baseline,
+    X) with mismatched dimensions must return [] so check_drift doesn't
+    report false "no feature drift" results.
+    """
+    from backend.ml.drift import feature_psi
+    import numpy as np
+
+    rng = np.random.RandomState(42)
+
+    # 1-D reference (score CDF) vs 2-D current (feature matrix): dimensions
+    # don't match, must return []
+    ref_1d = rng.normal(0.5, 0.1, 100)
+    cur_2d = rng.normal(0.5, 0.1, (50, 7))
+    assert feature_psi(ref_1d, cur_2d) == []
+
+    # 2-D reference with different column count vs 2-D current: also []
+    ref_2d = rng.normal(0.5, 0.1, (100, 3))
+    cur_2d = rng.normal(0.5, 0.1, (50, 7))
+    assert feature_psi(ref_2d, cur_2d) == []
+
+    # Matching dimensions: should return per-feature PSI values
+    ref_match = rng.normal(0.5, 0.1, (100, 3))
+    cur_match = rng.normal(0.5, 0.1, (50, 3))
+    result = feature_psi(ref_match, cur_match)
+    assert len(result) == 3
+    assert all(isinstance(p, float) for p in result)
