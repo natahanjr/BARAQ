@@ -923,14 +923,39 @@ RATE_WINDOW_SECONDS = 60
 def _client_identity(request: Request) -> str:
     """Rate-limit identity: client IP first (hard to spoof), API key second.
 
-    The IP is always part of the identity so that spoofing X-API-Key or
-    Authorization headers cannot be used to obtain a separate rate-limit
-    bucket.
+    When BARAQ sits behind a trusted reverse proxy (BARAQ_API_TRUSTED_PROXIES
+    set and uvicorn --forwarded-allow-ips configured), the first
+    X-Forwarded-For hop is used as the client IP. Otherwise the direct socket
+    peer is used, so a client cannot bypass per-IP limits by forging headers.
+
+    The authenticated principal (API key or Bearer token subject) is always
+    folded into the identity so that key-based callers cannot share a bucket
+    with anonymous callers, and authenticated callers are keyed by their
+    principal rather than a shared proxy IP.
     """
-    ip = client_ip(request)
+    from backend.config import API_TRUSTED_PROXIES
+
+    direct = client_ip(request)
+    ip = direct
+    # Honor X-Forwarded-For only when the direct peer is a trusted proxy.
+    if API_TRUSTED_PROXIES and direct:
+        try:
+            import ipaddress
+
+            addr = ipaddress.ip_address(direct)
+            for proxy in API_TRUSTED_PROXIES:
+                if addr in ipaddress.ip_network(proxy, strict=False):
+                    fwd = request.headers.get("x-forwarded-for", "")
+                    if fwd:
+                        ip = fwd.split(",")[0].strip()
+                    break
+        except ValueError:
+            pass
     key = request.headers.get("X-API-Key", "") or (
         request.headers.get("Authorization", "")[:32]
     )
+    # Always include the authenticated principal so key/token callers are
+    # keyed by their identity, not a shared proxy IP.
     if key:
         return f"{ip}:{key[:16]}"
     return ip

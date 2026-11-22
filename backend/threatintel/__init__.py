@@ -219,40 +219,105 @@ def _http_json(
     import ipaddress
     import socket
     import urllib.request
-    from urllib.parse import urlparse
+    from urllib.parse import urlparse, urlunparse
 
     parsed = urlparse(url)
     if parsed.scheme not in ("https",):
         logger.debug("Threat-intel: skipping non-HTTPS URL: %s", url)
         return None
 
-    # SSRF protection: reject private/reserved IP addresses as the target host
+    # SSRF protection: resolve the hostname once and connect to the resolved
+    # IP with the original Host header preserved. This prevents DNS rebinding
+    # (guard resolves public, connection resolves private) and ensures the
+    # guard sees the actual target address.
     hostname = parsed.hostname
-    if hostname:
-        try:
-            ip = ipaddress.ip_address(socket.gethostbyname(hostname))
-            if (
-                ip.is_private
-                or ip.is_loopback
-                or ip.is_link_local
-                or ip.is_reserved
-                or ip.is_multicast
-            ):
-                logger.debug(
-                    "Threat-intel: skipping private/resolved host: %s (%s)",
-                    hostname,
-                    ip,
-                )
-                return None
-        except socket.gaierror:
-            # Cannot resolve - let the request attempt fail naturally
-            pass
-        except ValueError:
-            pass
-
-    req = urllib.request.Request(url, headers=headers or {})
+    if not hostname:
+        return None
     try:
-        with _urlopen(req, timeout=timeout) as resp:
+        ip = ipaddress.ip_address(socket.gethostbyname(hostname))
+    except socket.gaierror:
+        # Cannot resolve - let the request attempt fail naturally
+        return None
+    if (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+    ):
+        logger.debug(
+            "Threat-intel: skipping private/resolved host: %s (%s)",
+            hostname,
+            ip,
+        )
+        return None
+
+    # Rebuild the URL connecting to the resolved IP; keep the original Host
+    # header so the server sees the correct virtual host.
+    connect_netloc = f"{ip}:{parsed.port or 443}"
+    connect_url = urlunparse(
+        (
+            parsed.scheme,
+            connect_netloc,
+            parsed.path or "/",
+            parsed.params,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
+
+    # Custom redirect handler: re-run the SSRF guard on every redirect hop so
+    # an attacker-controlled public HTTPS host cannot redirect to a private
+    # address (e.g. 169.254.169.254).
+    class _SsrfRedirectHandler(urllib.request.HTTPRedirectHandler):
+        def redirect_request(
+            self, req, fp, code, msg, headers, newurl
+        ):
+            new_parsed = urlparse(newurl)
+            if new_parsed.scheme not in ("https",):
+                return None  # block non-HTTPS redirects
+            new_hostname = new_parsed.hostname
+            if new_hostname:
+                try:
+                    new_ip = ipaddress.ip_address(
+                        socket.gethostbyname(new_hostname)
+                    )
+                    if (
+                        new_ip.is_private
+                        or new_ip.is_loopback
+                        or new_ip.is_link_local
+                        or new_ip.is_reserved
+                        or new_ip.is_multicast
+                    ):
+                        logger.debug(
+                            "Threat-intel: blocking redirect to %s (%s)",
+                            new_hostname,
+                            new_ip,
+                        )
+                        return None
+                except socket.gaierror:
+                    return None
+            # Rebuild redirect URL to the resolved IP with original Host.
+            connect_netloc = f"{new_ip}:{new_parsed.port or 443}"
+            newurl = urlunparse(
+                (
+                    new_parsed.scheme,
+                    connect_netloc,
+                    new_parsed.path or "/",
+                    new_parsed.params,
+                    new_parsed.query,
+                    new_parsed.fragment,
+                )
+            )
+            return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+    req = urllib.request.Request(
+        connect_url,
+        headers={**(headers or {}), "Host": hostname},
+    )
+    opener = urllib.request.build_opener(_SsrfRedirectHandler)
+    try:
+        with opener.open(req, timeout=timeout) as resp:
             return resp.read().decode("utf-8")
     except Exception as exc:
         logger.debug("Threat-intel request failed for %s: %s", url, exc)

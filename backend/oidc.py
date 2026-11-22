@@ -28,6 +28,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 
 from backend.config import (
     LDAP_ADMIN_GROUPS,
+    OIDC_ALLOWED_DOMAINS,
     OIDC_CLIENT_ID,
     OIDC_CLIENT_SECRET,
     OIDC_CLOCK_SKEW,
@@ -285,9 +286,31 @@ def validate_id_token(
 
 
 def profile_from_claims(claims: dict[str, Any]) -> dict[str, Any]:
-    """Map validated OIDC claims onto a BARAQ operator profile."""
+    """Map validated OIDC claims onto a BARAQ operator profile.
+
+    Security checks before provisioning:
+      * ``email_verified`` must be true (prevents unverified email takeover).
+      * When ``OIDC_ALLOWED_DOMAINS`` is set, the email domain must match
+        (prevents username-collision account takeover from external IdPs).
+    The subject ``sub`` and issuer ``iss`` are returned so the caller can key
+    provisioning on (iss, sub) rather than on a human-editable username claim.
+    """
+    # email_verified gate
+    if not claims.get("email_verified", False):
+        raise OIDCError("id_token email is not verified")
+    email = str(claims.get("email", "")).strip().lower()
+    if not email:
+        raise OIDCError("id_token carries no verified email")
+    # Domain allowlist
+    if OIDC_ALLOWED_DOMAINS:
+        domain = email.rsplit("@", 1)[-1] if "@" in email else ""
+        if domain not in OIDC_ALLOWED_DOMAINS:
+            raise OIDCError(f"email domain '{domain}' is not allowed")
+    # Username from claims (lowercased for consistent lookups)
     username = (
-        claims.get("preferred_username") or claims.get("sub") or claims.get("email")
+        claims.get("preferred_username")
+        or claims.get("email")
+        or claims.get("sub")
     )
     if not username:
         raise OIDCError("id_token carries no usable username claim")
@@ -304,4 +327,8 @@ def profile_from_claims(claims: dict[str, Any]) -> dict[str, Any]:
         "full_name": str(full_name),
         "role": role,
         "groups": [str(g) for g in groups],
+        # Key provisioning on (iss, sub) rather than a human-editable username.
+        "sub": claims.get("sub", ""),
+        "iss": claims.get("iss", ""),
+        "email": email,
     }
