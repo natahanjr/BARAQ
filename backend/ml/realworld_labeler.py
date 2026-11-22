@@ -38,7 +38,7 @@ from __future__ import annotations
 import logging
 import time
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from backend.database.models import ThreatIntelRecord, Verdict
 
@@ -139,8 +139,10 @@ def is_attack_ip_offline(ip: str) -> bool:
     # Fallback: legacy test-net ranges (safe default for offline scripts)
     if ip.startswith(("203.0.113.", "198.51.100.", "192.0.2.")):
         return True
-    # Documentation/malicious prefix used by network fixtures (45.x C2 ranges)
-    return ip.startswith("45.")
+    # Bare /8 prefixes (e.g. "45.") deliberately excluded: they label 16.7M
+    # addresses, including large parts of OVH and Linode, as malicious.
+    # Use specific CIDRs from threat intel instead.
+    return False
 
 
 def get_analyst_labels(session) -> dict[int, int]:
@@ -199,7 +201,7 @@ def hybrid_label_event(
 def get_threat_intel_stats(session) -> dict:
     """Return stats about the threat-intel labeling data for monitoring."""
     try:
-        total = session.scalar(select(ThreatIntelRecord.indicator)) or 0
+        total = session.scalar(select(func.count(ThreatIntelRecord.indicator))) or 0
         verdicts = session.execute(select(Verdict.verdict)).all()
         tp = sum(1 for v in verdicts if v[0] == "true_positive")
         fp = sum(1 for v in verdicts if v[0] == "false_positive")

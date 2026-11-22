@@ -259,7 +259,7 @@ def _background_samples(
                 code = (
                     1.0
                     if (r.remote_ip or "").startswith(
-                        ("203.0.113.", "198.51.100.", "45.")
+                        ("203.0.113.", "198.51.100.")
                     )
                     else 0.0
                 )

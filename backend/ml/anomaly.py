@@ -133,9 +133,47 @@ _NIGHT_HOURS = {22, 23, 0, 1, 2, 3, 4, 5}
 #: Remote IP prefixes treated as *attack* for the network supervised layer
 #: (documentation/test ranges used by scripted attack ground truth; real
 #: production deployments would extend this with threat-intel subnets).
-_NET_ATTACK_PREFIXES = ("203.0.113.", "198.51.100.", "45.")
+#:
+#: Only the IANA documentation ranges belong here. A bare /8 such as "45."
+#: labels 16.7M addresses - including large parts of OVH and Linode - as
+#: malicious, which both trains the model on a false premise and generates
+#: systematic false positives at inference. Add specific CIDRs from threat
+#: intel instead, never a bare first octet.
+_NET_ATTACK_PREFIXES = ("203.0.113.", "198.51.100.")
 
 _DEFAULT_THRESHOLDS = {"login": 0.5, "process": 0.5, "network": 0.5}
+
+#: Declared feature-space width per stream. These are the single source of
+#: truth for what the LIVE builders emit; the model bundle must match them.
+#: A test asserts ``len(event_feature_vector(ev)) == FEATURE_DIM[stream]`` and
+#: ``model.n_features_in_ == FEATURE_DIM[stream]`` for the shipped artifact,
+#: which is the check that would have caught the v3-vs-v7 bundle mismatch.
+FEATURE_DIM: dict[str, int] = {"login": 37, "process": 48, "network": 29}
+NETWORK_FEATURE_DIM = FEATURE_DIM["network"]
+
+#: Monotonic counter of scoring calls that could not run because the feature
+#: vector width did not match the model. Exposed via ``feature_mismatch_count``
+#: and surfaced on /api/system/ml/status. A silent zero here previously made a
+#: completely dead detector look like a calm network.
+_FEATURE_MISMATCH_COUNT = 0
+
+
+def feature_mismatch_count() -> int:
+    """Number of scoring calls rejected for a feature-width mismatch."""
+    return _FEATURE_MISMATCH_COUNT
+
+
+def _record_feature_mismatch(stream: str, got: int, want: int) -> None:
+    """Record a feature/model width mismatch. Loud on purpose: a detector that
+    cannot score must never look like a detector that found nothing."""
+    global _FEATURE_MISMATCH_COUNT
+    _FEATURE_MISMATCH_COUNT += 1
+    logger.error(
+        "ML feature mismatch on stream %r: builder produced %d features but the "
+        "model expects %d. Scoring is DISABLED for this stream until the bundle "
+        "is retrained against FEATURE_DIM. (#%d)",
+        stream, got, want, _FEATURE_MISMATCH_COUNT,
+    )
 
 #: Minimum labelled rows before gradient boosting beats a random forest on
 #: generalization (see :meth:`MLAnomalyDetector._build_classifier`).
@@ -1141,8 +1179,10 @@ def _get_threat_intel_score(event) -> float:
             return 0.9
 
         # Known malicious patterns (from _NET_ATTACK_PREFIXES used elsewhere)
-        if src_ip.startswith(("45.",)):
-            return 0.85
+        # NOTE: bare /8 prefixes such as "45." were removed because they label
+        # 16.7M addresses (incl. OVH/Linode) as malicious. Use specific CIDRs
+        # from threat intel instead.
+        pass
 
         # High-risk ports暗示 scanning if combined with login failures
         logon_type = _fact(event, "logon_type")
@@ -5201,11 +5241,14 @@ class MLAnomalyDetector:
         count: int = 1,
         distinct_ports: int = 1,
     ) -> list[float]:
-        """v11 26-dim network feature row matching _load_network_features."""
-        from backend.ml.realworld_labeler import is_attack_ip_offline
-        import math
+        """Network feature row for a single connection.
 
-        is_atk = 1.0 if is_attack_ip_offline(remote_ip) else 0.0
+        The row length is :data:`NETWORK_FEATURE_DIM`; the docstring used to
+        claim 26 while the function returned 29, which is how the live vector
+        drifted away from the shipped model unnoticed. Assert against the
+        constant rather than restating a number here.
+        """
+        import math
 
         def _ip_num(ip: str) -> float:
             try:
@@ -5228,6 +5271,11 @@ class MLAnomalyDetector:
         def _is_lb(ip: str) -> bool:
             return ip in ("127.0.0.1", "::1")
 
+        # NOTE: ``is_attack_ip_offline`` is deliberately NOT imported or used
+        # here. It is the function that produces the training labels, so
+        # exposing its output as a feature lets a supervised model learn the
+        # label instead of the behaviour (label leakage). Any accuracy figure
+        # measured on a vector containing it is not trustworthy.
         now = datetime.now(UTC)
         hour = now.hour
         hour_sin = math.sin(2 * math.pi * hour / 24)
@@ -5259,7 +5307,11 @@ class MLAnomalyDetector:
             0.5,
             min(count / 100.0, 1.0),
             0.0,
-            is_atk, 0.0,
+            # Slot 21 previously carried ``is_atk`` - the ground-truth label
+            # exposed as a feature. Removed (label leakage). The slot is kept
+            # as a constant so downstream index positions do not shift; it is
+            # a candidate for removal at the next feature-space revision.
+            0.0, 0.0,
             0.5,
             0.0,
             min(count / 50.0, 1.0),
@@ -5302,7 +5354,12 @@ class MLAnomalyDetector:
         boundary onto 0.5 (matches sklearn's ``predict`` semantics).
         """
         arr = np.array([features], dtype=float)
-        if arr.shape[1] != model.n_features_in_:
+        if arr.ndim != 2 or arr.shape[1] != model.n_features_in_:
+            _record_feature_mismatch(
+                getattr(model, "_baraq_stream", "unknown"),
+                arr.shape[1] if arr.ndim == 2 else -1,
+                model.n_features_in_,
+            )
             return 0.0
         decision = float(model.decision_function(arr)[0])
         return float(max(0.0, min(1.0, 0.5 - decision)))
@@ -5322,6 +5379,11 @@ class MLAnomalyDetector:
         if arr.ndim == 1:
             arr = arr.reshape(1, -1)
         if arr.ndim != 2 or arr.shape[1] != model.n_features_in_:
+            _record_feature_mismatch(
+                getattr(model, "_baraq_stream", "unknown"),
+                arr.shape[1] if arr.ndim == 2 else -1,
+                model.n_features_in_,
+            )
             return np.zeros(len(arr), dtype=float)
         decision = np.asarray(model.decision_function(arr), dtype=float)
         return np.clip(0.5 - decision, 0.0, 1.0)
