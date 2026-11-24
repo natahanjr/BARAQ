@@ -3493,7 +3493,10 @@ class MLAnomalyDetector:
             cfar = float(np.quantile(score_baseline, 1.0 - target_fpr))
         else:
             cfar = 0.5
-        cfar = float(np.clip(cfar, 0.05, 0.98))
+        # NOTE: do NOT clamp cfar to [0.05, 0.98].  Probability-calibrated
+        # scores cluster near 1e-3 for benign events; clamping the CFAR
+        # quantile up to 0.05 raises the threshold 50x and silently disables
+        # the stream.  The quantile is the honest boundary.
         if y is None or len(np.unique(y)) < 2:
             return cfar, baseline
         # The F1 grid may only lower the boundary while keeping the
@@ -3507,15 +3510,18 @@ class MLAnomalyDetector:
         if len(benign) > 0:
             floor = float(np.quantile(benign, 1.0 - target_fpr))
         else:
-            floor = 0.05
-        floor = float(np.clip(floor, 0.05, 0.98))
+            floor = 0.0
+        # NOTE: do NOT clamp floor to [0.05, 0.98] for the same reason as
+        # cfar above — calibrated benign scores sit near 1e-3, and clamping
+        # to 0.05 would skip the entire score range where attacks live.
         # best_j must start as a *metric* sentinel (not floor): initializing
         # it to floor made `best_j > 0` true even when no Youden candidate
         # was ever accepted, returning the untouched best_j_t = -1.0 and
         # flagging every event (score > -1).
         best_t, best_f1 = floor, -1.0
         best_j, best_j_t = -1.0, floor
-        for t in np.linspace(floor, 0.98, 47):
+        grid_top = max(float(score_baseline.max()) if len(score_baseline) else 1.0, floor + 1e-6)
+        for t in np.linspace(floor, grid_top, 47):
             pred = scores_arr > t
             tp = int(((pred) & (y_arr == 1)).sum())
             fp = int(((pred) & (y_arr == 0)).sum())
@@ -5152,21 +5158,66 @@ class MLAnomalyDetector:
                 for features in features_list
             ]
 
-    def score_event(self, features: list[float]) -> float:
-        """Anomaly score in [0,1]; higher = more anomalous.
+    def _behavior_for_vector(self, features: list[float]) -> str:
+        """Route a feature vector to the behavior model that can score it.
 
-        Routes to the per-behavior model via the event_id carried in the
-        first feature (login/process vectors both start with it), falling
-        back to the login model for generic callers.
+        ``features[0]`` is the event ID **only** for process vectors: login
+        vectors start with ``logon_type`` (see ``event_feature_vector``).  The
+        process stream legitimately contains event IDs ``10`` and ``11``,
+        which are also the RDP and cached logon types, so routing on the
+        first value alone sends a real login vector beginning with
+        ``logon_type=10`` into the 48-dim process model.  The dimension
+        mismatch then silently scores ``0.0`` and the login can never alert.
+
+        Feature width is unambiguous for these streams (login=37, process=48,
+        network=29), so it decides first; the event ID is only consulted when
+        two models share a width.
         """
-        if not self.is_ready:
-            return 0.0
+        by_dim: dict[int, list[str]] = {}
+        for name, model in self.models.items():
+            width = int(getattr(model, "n_features_in_", -1))
+            by_dim.setdefault(width, []).append(name)
+
+        candidates = by_dim.get(len(features), [])
+        if len(candidates) == 1:
+            return candidates[0]
+        if len(candidates) > 1:
+            try:
+                by_id = _behavior_of(int(features[0]))
+            except (TypeError, ValueError, IndexError):
+                by_id = None
+            if by_id in candidates:
+                return by_id
+            return "login" if "login" in candidates else sorted(candidates)[0]
+
+        # No model matches this width: keep the historical event-ID routing so
+        # a partial bundle still scores what it can, but say so out loud.
         try:
             behavior = _behavior_of(int(features[0]))
         except (TypeError, ValueError, IndexError):
             behavior = "login"
         if behavior not in self.models:
             behavior = "login" if "login" in self.models else next(iter(self.models))
+        logger.warning(
+            "No stream model accepts a %d-feature vector (models: %s); "
+            "routing by event ID to %s",
+            len(features),
+            {k: int(getattr(m, "n_features_in_", -1)) for k, m in self.models.items()},
+            behavior,
+        )
+        return behavior
+
+    def score_event(self, features: list[float]) -> float:
+        """Anomaly score in [0,1]; higher = more anomalous.
+
+        Routes to the per-behavior model via :meth:`_behavior_for_vector`,
+        which uses feature width before event ID so login vectors starting
+        with ``logon_type=10`` (an RDP logon type that is also a process
+        event ID) are not misrouted into the 48-dim process model.
+        """
+        if not self.is_ready:
+            return 0.0
+        behavior = self._behavior_for_vector(features)
         model = self.models.get(behavior)
         return self._weighted_score(
             behavior, self._combined_score(behavior, model, features)
@@ -5182,14 +5233,7 @@ class MLAnomalyDetector:
         out: list[float] = [0.0] * len(features_list)
         groups: dict[str, list[int]] = {}
         for idx, features in enumerate(features_list):
-            try:
-                behavior = _behavior_of(int(features[0]))
-            except (TypeError, ValueError, IndexError):
-                behavior = "login"
-            if behavior not in self.models:
-                behavior = (
-                    "login" if "login" in self.models else next(iter(self.models))
-                )
+            behavior = self._behavior_for_vector(features)
             groups.setdefault(behavior, []).append(idx)
         for behavior, idxs in groups.items():
             model = self.models.get(behavior)

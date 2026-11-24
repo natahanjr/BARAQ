@@ -10,6 +10,7 @@ in the ML assessment:
   ML-5  is_attack_ip_offline must not use bare /8 prefixes either
   ML-6  feature_psi must not crash on dimension mismatch
   ML-7  declared dimensions must match what the builders actually emit
+  ML-8  _tune_threshold must not clamp CFAR to [0.05, 0.98]
 
 Run:
     python -m pytest tests/test_ml_feature_contract.py -q
@@ -249,3 +250,45 @@ def test_feature_psi_dimension_mismatch_returns_empty():
     result = feature_psi(ref_match, cur_match)
     assert len(result) == 3
     assert all(isinstance(p, float) for p in result)
+
+
+# ---------------------------------------------------------------------------
+# ML-8: _tune_threshold must not clamp CFAR to [0.05, 0.98]
+# ---------------------------------------------------------------------------
+def test_tune_threshold_does_not_clamp_low_scores():
+    """Probability-calibrated scores cluster near 1e-3 for benign events.
+    The old code clamped the CFAR quantile to [0.05, 0.98], raising the
+    threshold 50x and silently disabling the stream.  The quantile must be
+    returned as-is, even when far below 0.05.
+    """
+    from backend.ml.anomaly import MLAnomalyDetector
+    import numpy as np
+
+    rng = np.random.RandomState(7)
+
+    # Benign scores clustered near 1e-3 (typical for calibrated models),
+    # attacks near 0.9.
+    benign = rng.normal(0.001, 0.0005, 400)
+    attacks = rng.normal(0.9, 0.05, 20)
+    scores = np.concatenate([benign, attacks])
+    labels = np.array([0] * 400 + [1] * 20)
+
+    # Mock model whose decision_function returns the raw scores directly.
+    class _MockModel:
+        def decision_function(self, X):
+            return np.asarray(X).ravel()
+
+    model = _MockModel()
+    X = scores.reshape(-1, 1)
+    threshold, _ = MLAnomalyDetector._tune_threshold(
+        model, X, labels, target_fpr=0.05, stream_name="login"
+    )
+
+    # With benign at ~0.001, the 95th percentile of benign is ~0.0018 — well
+    # below the old clamp floor of 0.05.  The threshold must stay low, not
+    # be clamped up to 0.05.
+    assert threshold < 0.05, (
+        f"threshold {threshold:.4f} was clamped to the old 0.05 floor; "
+        "calibrated benign scores near 1e-3 must not be clamped"
+    )
+    assert threshold > 0.0, "threshold should be positive, not zero"
