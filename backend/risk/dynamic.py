@@ -105,11 +105,48 @@ def _event_ids(events: list) -> list[str]:
     return [_event_id(ev) for ev in events or []]
 
 
+#: RFC1918 / loopback / link-local / multicast / reserved ranges.
+#: Kept in sync with backend/risk/engine._PRIVATE_PREFIXES.
+_PRIVATE_IP_PREFIXES = (
+    "10.",
+    "172.16.",
+    "172.17.",
+    "172.18.",
+    "172.19.",
+    "172.20.",
+    "172.21.",
+    "172.22.",
+    "172.23.",
+    "172.24.",
+    "172.25.",
+    "172.26.",
+    "172.27.",
+    "172.28.",
+    "172.29.",
+    "172.30.",
+    "172.31.",
+    "192.168.",
+    "169.254.",
+    "127.",
+    "100.64.",
+    "192.0.0.",
+    "224.",
+    "240.",
+    "0.",
+)
+
+
 def _external_ips(facts) -> list[str]:
+    """Return IPs that are truly external (non-RFC1918, non-loopback, etc.).
+
+    Uses the same private-prefix list as backend/risk/engine so internal
+    addresses are never misclassified as external and wrongly flagged as
+    suspicious network activity.
+    """
     return [
         ip
         for ip in facts.ips
-        if ip and not ip.startswith(("127.", "10.0.", "10.1.", "169.254."))
+        if ip and not ip.startswith(_PRIVATE_IP_PREFIXES)
     ]
 
 
@@ -187,12 +224,18 @@ def adjust_risk(
             SUSPICIOUS_NETWORK_BONUS,
             "external destination(s): " + ", ".join(_external_ips(facts)[:3]),
         )
-    elif any(p in event_ids for p in SUSPICIOUS_PORTS):
-        apply(
-            "suspicious_network",
-            SUSPICIOUS_NETWORK_BONUS,
-            "suspicious port in evidence",
-        )
+    elif _PORT_RE.search(facts.evidence_text or ""):
+        # Check whether any extracted port is in the suspicious set
+        suspicious_ports = {
+            m.group(1) for m in _PORT_RE.finditer(facts.evidence_text or "")
+        }
+        if suspicious_ports & SUSPICIOUS_PORTS:
+            apply(
+                "suspicious_network",
+                SUSPICIOUS_NETWORK_BONUS,
+                "suspicious port in evidence: "
+                + ", ".join(sorted(suspicious_ports & SUSPICIOUS_PORTS)),
+            )
 
     if any(eid in event_ids for eid in PERSISTENCE_EVENT_IDS) or _RUNKEY_RE.search(
         facts.evidence_text
