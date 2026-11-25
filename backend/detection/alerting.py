@@ -189,15 +189,16 @@ class AlertingService:
                 if features is not None:
                     needs_live.append((ev, features))
         if needs_live and detector.is_ready:
-            for ev, _ in needs_live:
-                for score in detector.score_events([f for _, f in needs_live]):
-                    if score > 0:
-                        # Persist the live score back on the event so every
-                        # later computation (risk payload, drift stats) sees
-                        # the same ML signal the hybrid score used.
-                        ev.ml_score = round(float(score), 4)
-                        anomaly_scores.append(ev)
-                        ml_present = True
+            features_list = [f for _, f in needs_live]
+            scores = detector.score_events(features_list)
+            for (ev, _), score in zip(needs_live, scores):
+                if score > 0:
+                    # Persist the live score back on the event so every
+                    # later computation (risk payload, drift stats) sees
+                    # the same ML signal the hybrid score used.
+                    ev.ml_score = round(float(score), 4)
+                    anomaly_scores.append(ev)
+                    ml_present = True
         final, level = hybrid_risk(
             severity=severity or result.severity,
             confidence=result.confidence,
